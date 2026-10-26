@@ -1,0 +1,25 @@
+# Compiled binaries & objects
+*.o
+*.stripped
+amiga-client/VortexBrowse
+amiga-client/VortexBrowse.stripped
+*.so
+!fast_pixconv_aarch64.so
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# Archives & Packages
+*.tar.gz
+*.tar
+*.zip
+
+# Temporary & Editor files
+*.log
+.DS_Store
+Thumbs.db
+*.swp
+*~

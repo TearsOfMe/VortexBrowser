@@ -1,0 +1,17 @@
+[Unit]
+Description=VortexBrowse Remote Web Rendering Server for AmigaOS 4 (Raspberry Pi 4)
+After=network.target sound.target pipewire.service pulseaudio.service
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/vortexbrowse
+ExecStartPre=+/bin/sh -c 'for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo performance > "$g" 2>/dev/null || true; done'
+ExecStart=/home/pi/vortexbrowse/run_rpi4.sh
+ExecStopPost=+/bin/sh -c 'for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo schedutil > "$g" 2>/dev/null || true; done'
+Restart=always
+RestartSec=3
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
