@@ -295,6 +295,10 @@ int main(int argc, char **argv)
     while (g_app.running) {
         /* Drain any pending Intuition/Reaction events first */
         gui_handle_events(&g_app);
+        uint32 pre_win_sig = gui_get_signal_mask(&g_app);
+        if (pre_win_sig) {
+            IExec->SetSignal(0, pre_win_sig);
+        }
         if (g_app.reopen_screen_needed && g_app.running) {
             g_app.reopen_screen_needed = FALSE;
             g_app.reopen_gui_needed    = FALSE;
@@ -305,7 +309,6 @@ int main(int argc, char **argv)
         }
         /* Send debounced/throttled mouse move to remote browser outside the IDCMP input task */
         if (g_app.connected && g_app.pending_mouse_move) {
-            g_app.pending_mouse_move = FALSE;
             int16_t rx = 0, ry = 0;
             if (renderer_map_window_to_remote(&g_app, g_app.pending_win_mouse_x, g_app.pending_win_mouse_y, &rx, &ry)) {
                 uint32 s = 0, us = 0;
@@ -314,14 +317,18 @@ int main(int argc, char **argv)
                                 ((int32)us - (int32)g_app.last_move_micros);
                 int16_t dx = rx - g_app.last_remote_x;
                 int16_t dy = ry - g_app.last_remote_y;
-                if ((diff_us >= 33000 || diff_us < 0) && (dx * dx + dy * dy >= 4)) {
-                    g_app.last_move_secs   = s;
-                    g_app.last_move_micros = us;
-                    g_app.last_remote_x    = rx;
-                    g_app.last_remote_y    = ry;
-                    net_send_move(&g_app, rx, ry);
+                if (diff_us >= 33000 || diff_us < 0) {
+                    g_app.pending_mouse_move = FALSE;
+                    if (dx * dx + dy * dy >= 4) {
+                        g_app.last_move_secs   = s;
+                        g_app.last_move_micros = us;
+                        g_app.last_remote_x    = rx;
+                        g_app.last_remote_y    = ry;
+                        net_send_move(&g_app, rx, ry);
+                    }
                 }
             } else {
+                g_app.pending_mouse_move = FALSE;
                 if (g_app.is_hovering_link && g_app.win) {
                     g_app.is_hovering_link = FALSE;
                     IIntuition->SetWindowPointer(g_app.win, WA_PointerType, POINTERTYPE_NORMAL, TAG_DONE);
@@ -393,6 +400,10 @@ int main(int argc, char **argv)
 
         /* Always drain GUI events and reap AHI audio after WaitSelect */
         gui_handle_events(&g_app);
+        uint32 post_win_sig = gui_get_signal_mask(&g_app);
+        if (post_win_sig) {
+            IExec->SetSignal(0, post_win_sig);
+        }
         audio_poll(&g_app);
 
         if (g_app.autotest) {

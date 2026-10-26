@@ -2153,6 +2153,10 @@ BOOL gui_init(VortexApp *app)
         return FALSE;
     }
 
+    if (app->win) {
+        IIntuition->SetMouseQueue(app->win, 1);
+    }
+
     if (app->custom_screen) {
         IIntuition->ScreenToFront(app->custom_screen);
     }
@@ -2430,6 +2434,9 @@ void gui_handle_events(VortexApp *app)
                 if (app->win && app->gad_space) {
                     renderer_sync_viewport_size(app);
                 }
+                break;
+
+            case WMHI_MOUSEMOVE:
                 break;
 
             case WMHI_MOUSEBUTTONS: {
