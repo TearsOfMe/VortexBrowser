@@ -134,6 +134,11 @@ void audio_poll(VortexApp *app)
 
     /* Immediately feed next queued software slot(s) into AHI double-buffer */
     submit_pending_to_hardware(a);
+
+    /* Clear any lingering signal on the MsgPort so WaitSelect will sleep */
+    if (a->ahi_mp) {
+        IExec->SetSignal(0, 1UL << a->ahi_mp->mp_SigBit);
+    }
 }
 
 void audio_handle_packet(

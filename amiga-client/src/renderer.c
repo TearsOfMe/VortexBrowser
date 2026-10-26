@@ -1043,55 +1043,9 @@ void renderer_present(VortexApp *app, struct RastPort *rp, struct IBox *area)
         return;
     }
 
-    /* DIRECT HARDWARE OVERLAY / GPU COMPOSITING (PRIMARY PATH - 0% CPU):
-     * CompositeTags directly from front_bm into rp->BitMap at (dst_x, dst_y)!
-     * The Radeon GPU texture units scale, filter, and format-convert in hardware in VRAM. */
-    if (rp->BitMap) {
-        int32 scr_x = 0, scr_y = 0;
-        if (rp->Layer) {
-            scr_x = (int32)rp->Layer->bounds.MinX;
-            scr_y = (int32)rp->Layer->bounds.MinY;
-        } else if (app->win) {
-            scr_x = (int32)app->win->LeftEdge;
-            scr_y = (int32)app->win->TopEdge;
-        }
-        int32 dst_x = scr_x + (int32)area->Left;
-        int32 dst_y = scr_y + (int32)area->Top;
-
-        int32 scale_x = is_1to1 ? COMP_FLOAT_TO_FIX(1.0f) : COMP_FLOAT_TO_FIX((float)dw / (float)r->src_width);
-        int32 scale_y = is_1to1 ? COMP_FLOAT_TO_FIX(1.0f) : COMP_FLOAT_TO_FIX((float)dh / (float)r->src_height);
-        uint32 flags = COMPFLAG_IgnoreDestAlpha | (is_1to1 ? 0 : COMPFLAG_SrcFilter);
-        uint32 op = r->src_bm_is_yuv ? COMPOSITE_Src_Over_Dest : COMPOSITE_Src;
-        uint32 yuv_tag = r->src_bm_is_yuv ? COMPTAG_SrcYUVStandard : TAG_IGNORE;
-        uint32 yuv_val = r->src_bm_is_yuv ? COMPYUV_BT601 : 0;
-
-        uint32 comp_err = IGraphics->CompositeTags(
-            op,
-            front_bm,
-            rp->BitMap,
-            COMPTAG_SrcX,           0,
-            COMPTAG_SrcY,           0,
-            COMPTAG_SrcWidth,       (uint32)r->src_width,
-            COMPTAG_SrcHeight,      (uint32)r->src_height,
-            COMPTAG_ScaleX,         scale_x,
-            COMPTAG_ScaleY,         scale_y,
-            COMPTAG_OffsetX,        dst_x,
-            COMPTAG_OffsetY,        dst_y,
-            COMPTAG_DestX,          (uint32)dst_x,
-            COMPTAG_DestY,          (uint32)dst_y,
-            COMPTAG_DestWidth,      (uint32)dw,
-            COMPTAG_DestHeight,     (uint32)dh,
-            yuv_tag,                yuv_val,
-            COMPTAG_Flags,          flags,
-            TAG_DONE);
-
-        r->last_comp_err = comp_err;
-        if (comp_err == COMPERR_Success) {
-            return;
-        }
-    }
-
-    /* Fallback: GPU-composite offscreen into comp_bm and blit through the layered RastPort */
+    /* Scaled or YUV BitMap: GPU-composite offscreen into comp_bm (VRAM->VRAM),
+     * then blit the result through the layered RastPort.
+     * This guarantees 100% correct window layer positioning, clipping, no flicker, and hardware color conversion! */
     if (ensure_comp_bitmap(app, dw, dh)) {
         int32 scale_x = is_1to1 ? COMP_FLOAT_TO_FIX(1.0f) : COMP_FLOAT_TO_FIX((float)dw / (float)r->src_width);
         int32 scale_y = is_1to1 ? COMP_FLOAT_TO_FIX(1.0f) : COMP_FLOAT_TO_FIX((float)dh / (float)r->src_height);

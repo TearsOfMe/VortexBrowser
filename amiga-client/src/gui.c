@@ -352,7 +352,6 @@ static uint32 s_last_click_micros  = 0;
 static uint16 s_last_click_btn     = 0;
 static BOOL   s_last_click_is_down = FALSE;
 static BOOL   s_mouse_lmb_down     = FALSE;
-static BOOL   s_rmb_trap_active    = FALSE;
 static BOOL   s_got_extended_wheel = FALSE;
 static int32  s_wheel_accum_dy     = 0;
 static int16  s_wheel_win_x        = 640;
@@ -499,34 +498,10 @@ static uint32 idcmp_hook_func(struct Hook *hook, Object *win_obj, struct IntuiMe
         }
 
         case IDCMP_MOUSEMOVE: {
-            if (!app->connected) break;
-            int16_t rx = 0, ry = 0;
-            BOOL in_viewport = renderer_map_window_to_remote(app, imsg->MouseX, imsg->MouseY, &rx, &ry);
-            if (app->win) {
-                BOOL should_trap = (in_viewport && app->is_hovering_link);
-                if (should_trap != s_rmb_trap_active) {
-                    s_rmb_trap_active = should_trap;
-                    IIntuition->SetWindowAttrs(app->win, WA_RMBTrap, should_trap, TAG_DONE);
-                }
-            }
-            if (in_viewport) {
-                int16_t dx = rx - app->last_remote_x;
-                int16_t dy = ry - app->last_remote_y;
-                if ((dx * dx + dy * dy) >= 4) {
-                    app->pending_mouse_x = rx;
-                    app->pending_mouse_y = ry;
-                    app->pending_mouse_move = TRUE;
-                }
-            } else {
-                if (app->is_hovering_link && app->win) {
-                    app->is_hovering_link = FALSE;
-                    IIntuition->SetWindowPointer(app->win, WA_PointerType, POINTERTYPE_NORMAL, TAG_DONE);
-                    if (s_rmb_trap_active) {
-                        s_rmb_trap_active = FALSE;
-                        IIntuition->SetWindowAttrs(app->win, WA_RMBTrap, FALSE, TAG_DONE);
-                    }
-                    app_set_status("Bereit");
-                }
+            if (app->connected) {
+                app->pending_win_mouse_x = imsg->MouseX;
+                app->pending_win_mouse_y = imsg->MouseY;
+                app->pending_mouse_move  = TRUE;
             }
             break;
         }
