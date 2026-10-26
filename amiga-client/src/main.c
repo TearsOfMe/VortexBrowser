@@ -317,7 +317,7 @@ int main(int argc, char **argv)
                                 ((int32)us - (int32)g_app.last_move_micros);
                 int16_t dx = rx - g_app.last_remote_x;
                 int16_t dy = ry - g_app.last_remote_y;
-                if (diff_us >= 33000 || diff_us < 0) {
+                if (diff_us >= 50000 || diff_us < 0) {
                     g_app.pending_mouse_move = FALSE;
                     if (dx * dx + dy * dy >= 4) {
                         g_app.last_move_secs   = s;

@@ -3118,7 +3118,7 @@ void gui_update_url_bar(VortexApp *app, const char *url)
     }
     struct Gadget *gad = (struct Gadget *)app->gad_url;
     /* Do not overwrite URL bar while user is actively typing inside it */
-    if (gad->Flags & GFLG_SELECTED) {
+    if (gad->Activation & GACT_ACTIVEGADGET) {
         return;
     }
     const char *disp = url ? url : "";
@@ -3179,10 +3179,17 @@ void gui_update_url_bar(VortexApp *app, const char *url)
 
 void app_set_status(const char *fmt, ...)
 {
+    char new_status[256];
     va_list args;
     va_start(args, fmt);
-    vsnprintf(g_app.status_text, sizeof(g_app.status_text), fmt, args);
+    vsnprintf(new_status, sizeof(new_status), fmt, args);
     va_end(args);
+
+    if (strcmp(g_app.status_text, new_status) == 0) {
+        return; /* No change, skip all expensive gadget and title redraws */
+    }
+    strncpy(g_app.status_text, new_status, sizeof(g_app.status_text) - 1);
+    g_app.status_text[sizeof(g_app.status_text) - 1] = '\0';
 
     if (g_app.gad_status && g_app.win && g_app.prefs.show_status_bar) {
         IIntuition->SetGadgetAttrs((struct Gadget *)g_app.gad_status,
@@ -3206,6 +3213,12 @@ void app_set_gauge(int percent)
 {
     if (percent < 0)   percent = 0;
     if (percent > 100) percent = 100;
+
+    static int s_last_gauge_pct = -1;
+    if (s_last_gauge_pct == percent) {
+        return;
+    }
+    s_last_gauge_pct = percent;
 
     if (g_app.gad_gauge && g_app.win) {
         IIntuition->SetGadgetAttrs((struct Gadget *)g_app.gad_gauge,

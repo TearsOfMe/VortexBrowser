@@ -1300,6 +1300,7 @@ class AmigaClientSession:
         self.soft_scroll: bool = True
         self.last_hover_url: Optional[str] = None
         self.last_hover_time: float = 0.0
+        self.hover_task: Optional[asyncio.Task] = None
 
         # Explicit Navigation History Stack (immune to HTTP/JS redirect loops)
         self.nav_history: List[str] = []
@@ -2355,7 +2356,7 @@ class AmigaClientSession:
                 idle_ticks = 0
 
             prev_hash = self.last_frame_hash
-            await self._capture_and_send_frame(force=forced)
+            await self._capture_and_send_frame(force=self.force_full_frame)
 
             # A frame was actually sent if the content hash changed
             if self.last_frame_hash != prev_hash:
@@ -2645,35 +2646,38 @@ class AmigaClientSession:
                 except Exception:
                     pass
                 now = time.monotonic()
-                if (now - self.last_hover_time) >= 0.12:
-                    self.last_hover_time = now
-                    async def _check_hover_async(hx: int, hy: int):
-                        if not self.page:
-                            return
-                        try:
-                            hover_url = await asyncio.wait_for(
-                                self.page.evaluate(
-                                    """([x, y]) => {
-                                        const el = document.elementFromPoint(x, y);
-                                        if (!el) return null;
-                                        const a = el.closest('a');
-                                        return (a && a.href) ? a.href : null;
-                                    }""",
-                                    [hx, hy],
-                                ),
-                                timeout=0.08,
-                            )
-                            if hover_url != self.last_hover_url:
-                                self.last_hover_url = hover_url
-                                if hover_url:
-                                    self._send_progress(100, f"Link: {hover_url[:55]}")
-                                else:
-                                    self._send_progress(100, "Bereit")
-                        except Exception:
-                            pass
-                    t_hov = asyncio.create_task(_check_hover_async(cx, cy))
-                    self.background_tasks.add(t_hov)
-                    t_hov.add_done_callback(self.background_tasks.discard)
+                if (now - self.last_hover_time) >= 0.15:
+                    if self.hover_task and not self.hover_task.done():
+                        pass
+                    else:
+                        self.last_hover_time = now
+                        async def _check_hover_async(hx: int, hy: int):
+                            if not self.page:
+                                return
+                            try:
+                                hover_url = await asyncio.wait_for(
+                                    self.page.evaluate(
+                                        """([x, y]) => {
+                                            const el = document.elementFromPoint(x, y);
+                                            if (!el) return null;
+                                            const a = el.closest('a');
+                                            return (a && a.href) ? a.href : null;
+                                        }""",
+                                        [hx, hy],
+                                    ),
+                                    timeout=0.08,
+                                )
+                                if hover_url != self.last_hover_url:
+                                    self.last_hover_url = hover_url
+                                    if hover_url:
+                                        self._send_progress(100, f"Link: {hover_url[:55]}")
+                                    else:
+                                        self._send_progress(100, "Bereit")
+                            except Exception:
+                                pass
+                        self.hover_task = asyncio.create_task(_check_hover_async(cx, cy))
+                        self.background_tasks.add(self.hover_task)
+                        self.hover_task.add_done_callback(self.background_tasks.discard)
 
             elif event_type == INPUT_WHEEL:
                 dy = max(-960, min(960, int(delta_y)))
@@ -2747,7 +2751,7 @@ class AmigaClientSession:
             elif event_type == INPUT_KEY_DOWN:
                 await self._handle_key_down(key_code, text_or_url)
                 self.force_frame_event.set()
-                self._schedule_delayed_frames()
+                self.active_until = time.monotonic() + 1.5
 
             elif event_type == INPUT_KEY_UP:
                 pass
