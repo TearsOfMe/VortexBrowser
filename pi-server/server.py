@@ -2646,7 +2646,7 @@ class AmigaClientSession:
                 except Exception:
                     pass
                 now = time.monotonic()
-                if (now - self.last_hover_time) >= 0.15:
+                if (now - self.last_hover_time) >= 0.25:
                     if self.hover_task and not self.hover_task.done():
                         pass
                     else:

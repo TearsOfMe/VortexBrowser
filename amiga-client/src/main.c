@@ -325,10 +325,8 @@ int main(int argc, char **argv)
                 }
             } else {
                 g_app.pending_mouse_move = FALSE;
-                if (g_app.is_hovering_link && g_app.win) {
+                if (g_app.is_hovering_link) {
                     g_app.is_hovering_link = FALSE;
-                    IIntuition->SetWindowPointer(g_app.win, WA_PointerType, POINTERTYPE_NORMAL, TAG_DONE);
-                    app_set_status("Bereit");
                 }
             }
         }

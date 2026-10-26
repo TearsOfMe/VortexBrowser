@@ -375,17 +375,9 @@ BOOL net_handle_incoming(VortexApp *app)
             app_set_gauge(prog.percent);
             if (prog.status[0] != '\0') {
                 if (strncmp(prog.status, "Link: ", 6) == 0) {
-                    if (!app->is_hovering_link) {
-                        app->is_hovering_link = TRUE;
-                        if (app->win) {
-                            IIntuition->SetWindowPointer(app->win, WA_PointerType, POINTERTYPE_LINK, TAG_DONE);
-                        }
-                    }
-                } else if (app->is_hovering_link) {
+                    app->is_hovering_link = TRUE;
+                } else {
                     app->is_hovering_link = FALSE;
-                    if (app->win) {
-                        IIntuition->SetWindowPointer(app->win, WA_PointerType, POINTERTYPE_NORMAL, TAG_DONE);
-                    }
                 }
                 if (app->prefs.show_status_bar) {
                     app_set_status("%s", prog.status);

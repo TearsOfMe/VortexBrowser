@@ -2098,7 +2098,6 @@ BOOL gui_init(VortexApp *app)
         WA_NewLookMenus,      TRUE,
         WA_AutoAdjust,        TRUE,
         WA_ReportMouse,       TRUE,
-        WA_RMBTrap,           TRUE,
         WA_Left,              (uint32)win_left,
         WA_Top,               (uint32)win_top,
         WA_Width,             (uint32)win_w,
