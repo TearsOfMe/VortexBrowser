@@ -2356,7 +2356,7 @@ class AmigaClientSession:
                 idle_ticks = 0
 
             prev_hash = self.last_frame_hash
-            await self._capture_and_send_frame(force=self.force_full_frame)
+            await self._capture_and_send_frame(force=forced)
 
             # A frame was actually sent if the content hash changed
             if self.last_frame_hash != prev_hash:

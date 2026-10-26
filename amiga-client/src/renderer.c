@@ -1043,7 +1043,7 @@ static ULONG composite_hook_func(struct Hook *hook, struct RastPort *rastPort, s
     }
 
     hd->retCode = IGraphics->CompositeTags(
-        COMPOSITE_Src,
+        COMPOSITE_Src_Over_Dest,
         hd->srcBitMap,
         rastPort->BitMap,
         COMPTAG_SrcWidth,   hd->srcWidth,
