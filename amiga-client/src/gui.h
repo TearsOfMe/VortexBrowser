@@ -100,6 +100,7 @@ void gui_handle_events(VortexApp *app);
 void gui_poll_mouse(VortexApp *app);
 uint32 gui_get_signal_mask(VortexApp *app);
 void gui_update_url_bar(VortexApp *app, const char *url);
+void app_update_fps_title(VortexApp *app);
 void gui_tab_add(VortexApp *app, const char *title, const char *url, BOOL switch_to);
 void gui_tab_switch(VortexApp *app, uint16 idx);
 void gui_tab_close(VortexApp *app, uint16 idx);

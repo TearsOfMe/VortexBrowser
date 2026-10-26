@@ -115,6 +115,10 @@ typedef struct RendererState {
     BOOL           resize_pending; /* TRUE if debounced resize needs to be sent */
 
     uint32_t       frames_decoded; /* Total frames decoded */
+    uint32_t       fps_frames;     /* Frame count for FPS measurement */
+    uint32_t       fps_last_secs;  /* Last FPS timestamp seconds */
+    uint32_t       fps_last_micros;/* Last FPS timestamp micros */
+    float          current_fps;    /* Measured frames per second */
     uint32_t       last_comp_err;  /* Result of last IGraphics->CompositeTags call */
 } RendererState;
 

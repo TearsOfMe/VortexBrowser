@@ -355,7 +355,8 @@ int main(int argc, char **argv)
 
             struct timeval tv;
             tv.tv_sec  = 0;
-            tv.tv_usec = 20000; /* 20ms tick for low-latency audio & video */
+            /* When audio is actively playing, poll at 20ms; when idle, sleep 100ms to keep CPU at 0% */
+            tv.tv_usec = (g_app.audio.device_open && g_app.audio.hw_in_flight > 0) ? 20000 : 100000;
 
             LONG sel = ISocket->WaitSelect(g_app.sock_fd + 1, &rfds, NULL, NULL, &tv, &sigs);
             ULONG got_sigs = sigs & (win_sig | audio_sig);
@@ -370,7 +371,7 @@ int main(int argc, char **argv)
                         break;
                     }
                     batch++;
-                } while (batch < 2 && g_app.connected && net_has_pending_data(&g_app));
+                } while (batch < 4 && g_app.connected && net_has_pending_data(&g_app));
 
                 /* Blit accumulated dirty scanlines once after draining pending packets */
                 renderer_flush_dirty(&g_app);

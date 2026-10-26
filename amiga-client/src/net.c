@@ -239,18 +239,37 @@ BOOL net_handle_incoming(VortexApp *app)
                     if (app->win && app->gad_space) {
                         IIntuition->RefreshGList((struct Gadget *)app->gad_space, app->win, NULL, 1);
                     }
-                }
-                if (!app->download.active && (r->frames_decoded == 1 || (r->frames_decoded % 10) == 0)) {
                     const char *fmt_name = (hdr.format == FMT_YUV420P)
                         ? (r->src_bm_is_yuv ? "YUV420 HW-GPU 12bpp" : "YUV420 SW 12bpp")
                         : ((hdr.format == FMT_RGB565) ? "RGB565 16bpp" : "ARGB32");
-                    app_set_status("Verbunden (%ux%u %s LZ4, %u KB/Frame, Frame #%u) | %s",
+                    app_set_status("Verbunden (%ux%u %s LZ4, %u KB/Frame) | %s",
                                    (unsigned)VB_BE16(hdr.width),
                                    (unsigned)VB_BE16(hdr.height),
                                    fmt_name,
                                    (unsigned)(payload_len / 1024U),
-                                   (unsigned)r->frames_decoded,
                                    app->current_url[0] ? app->current_url : "Portal");
+                }
+
+                /* Real-time FPS calculation updated once per second */
+                r->fps_frames++;
+                uint32 cur_s = 0, cur_us = 0;
+                IIntuition->CurrentTime(&cur_s, &cur_us);
+                if (r->fps_last_secs == 0) {
+                    r->fps_last_secs   = cur_s;
+                    r->fps_last_micros = cur_us;
+                } else {
+                    int32 diff_us = ((int32)cur_s - (int32)r->fps_last_secs) * 1000000 +
+                                    ((int32)cur_us - (int32)r->fps_last_micros);
+                    if (diff_us >= 1000000) {
+                        r->current_fps     = ((float)r->fps_frames * 1000000.0f) / (float)diff_us;
+                        r->fps_frames      = 0;
+                        r->fps_last_secs   = cur_s;
+                        r->fps_last_micros = cur_us;
+
+                        if (!app->is_hovering_link) {
+                            app_update_fps_title(app);
+                        }
+                    }
                 }
             }
             break;
@@ -392,6 +411,7 @@ BOOL net_handle_incoming(VortexApp *app)
                         IIntuition->SetWindowPointer(app->win, WA_PointerType, POINTERTYPE_NORMAL, TAG_DONE);
                         IIntuition->SetWindowAttrs(app->win, WA_RMBTrap, FALSE, TAG_DONE);
                     }
+                    app_update_fps_title(app);
                 }
                 app_set_status("%s", prog.status);
             }

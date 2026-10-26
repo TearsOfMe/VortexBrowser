@@ -2098,6 +2098,7 @@ BOOL gui_init(VortexApp *app)
         WA_NewLookMenus,      TRUE,
         WA_AutoAdjust,        TRUE,
         WA_ReportMouse,       TRUE,
+        WA_MouseQueue,        1,
         WA_Left,              (uint32)win_left,
         WA_Top,               (uint32)win_top,
         WA_Width,             (uint32)win_w,
@@ -3177,6 +3178,31 @@ void gui_update_url_bar(VortexApp *app, const char *url)
     }
 }
 
+void app_update_fps_title(VortexApp *app)
+{
+    if (!app || !app->win) return;
+
+    const char *fmt_name = (app->renderer.src_format == FMT_YUV420P)
+        ? (app->renderer.src_bm_is_yuv ? "YUV420 HW-GPU" : "YUV420 SW")
+        : ((app->renderer.src_format == FMT_RGB565) ? "RGB565" : "ARGB32");
+
+    const char *u = app->current_url[0] ? app->current_url : "";
+    if (strncmp(u, "http://127.0.0.1:", 17) == 0) u = "";
+
+    if (u[0] != '\0') {
+        snprintf(app->win_title, sizeof(app->win_title),
+                 "VortexBrowse: %.200s [%.1f FPS | %s]",
+                 u, app->renderer.current_fps, fmt_name);
+    } else {
+        snprintf(app->win_title, sizeof(app->win_title),
+                 "VortexBrowse [%.1f FPS | %s]",
+                 app->renderer.current_fps, fmt_name);
+    }
+
+    STRPTR scr_title = (app->custom_screen != NULL) ? (STRPTR)"VortexBrowse 2.0 (AmigaOS 4.1)" : (STRPTR)~0;
+    IIntuition->SetWindowTitles(app->win, app->win_title, scr_title);
+}
+
 void app_set_status(const char *fmt, ...)
 {
     char new_status[256];
@@ -3197,15 +3223,15 @@ void app_set_status(const char *fmt, ...)
                                    GA_Text, g_app.status_text,
                                    TAG_DONE);
     } else if (g_app.win && !g_app.prefs.show_status_bar) {
-        const char *u = g_app.current_url[0] ? g_app.current_url : "";
-        if (strncmp(u, "http://127.0.0.1:", 17) == 0) u = "";
-        if (u[0] != '\0') {
-            snprintf(g_app.win_title, sizeof(g_app.win_title), "VortexBrowse: %.256s [%.128s]", u, g_app.status_text);
+        if (g_app.is_hovering_link) {
+            snprintf(g_app.win_title, sizeof(g_app.win_title),
+                     "VortexBrowse: %s [%.1f FPS]",
+                     g_app.status_text, (double)g_app.renderer.current_fps);
+            STRPTR scr_title = (g_app.custom_screen != NULL) ? (STRPTR)"VortexBrowse 2.0 (AmigaOS 4.1)" : (STRPTR)~0;
+            IIntuition->SetWindowTitles(g_app.win, g_app.win_title, scr_title);
         } else {
-            snprintf(g_app.win_title, sizeof(g_app.win_title), "VortexBrowse [%.128s]", g_app.status_text);
+            app_update_fps_title(&g_app);
         }
-        STRPTR scr_title = (g_app.custom_screen != NULL) ? (STRPTR)"VortexBrowse 2.0 (AmigaOS 4.1)" : (STRPTR)~0;
-        IIntuition->SetWindowTitles(g_app.win, g_app.win_title, scr_title);
     }
 }
 
