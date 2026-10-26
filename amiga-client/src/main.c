@@ -302,6 +302,22 @@ int main(int argc, char **argv)
             g_app.reopen_gui_needed = FALSE;
             gui_rebuild_window(&g_app);
         }
+        /* Send debounced/throttled mouse move to remote browser outside the IDCMP input task */
+        if (g_app.connected && g_app.pending_mouse_move) {
+            uint32 s = 0, us = 0;
+            IIntuition->CurrentTime(&s, &us);
+            int32 diff_us = ((int32)s - (int32)g_app.last_move_secs) * 1000000 +
+                            ((int32)us - (int32)g_app.last_move_micros);
+            if (diff_us >= 33000 || diff_us < 0) { /* ~30 Hz max */
+                g_app.last_move_secs   = s;
+                g_app.last_move_micros = us;
+                g_app.last_remote_x    = g_app.pending_mouse_x;
+                g_app.last_remote_y    = g_app.pending_mouse_y;
+                g_app.pending_mouse_move = FALSE;
+                net_send_move(&g_app, g_app.pending_mouse_x, g_app.pending_mouse_y);
+            }
+        }
+
         /* If a frame is dirty or waiting to be blitted, flush it now */
         if (g_app.renderer.dirty && g_app.renderer.has_frame) {
             renderer_flush_dirty(&g_app);

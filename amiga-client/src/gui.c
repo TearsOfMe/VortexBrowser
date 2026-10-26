@@ -510,21 +510,12 @@ static uint32 idcmp_hook_func(struct Hook *hook, Object *win_obj, struct IntuiMe
                 }
             }
             if (in_viewport) {
-                uint32 s = imsg->Seconds;
-                uint32 us = imsg->Micros;
-                int32 diff_us = ((int32)s - (int32)app->last_move_secs) * 1000000 +
-                                ((int32)us - (int32)app->last_move_micros);
-                int32 throttle = s_mouse_lmb_down ? 18000 : 35000;
-                if (diff_us >= throttle || diff_us < 0) {
-                    int16_t dx = rx - app->last_remote_x;
-                    int16_t dy = ry - app->last_remote_y;
-                    if ((dx * dx + dy * dy) >= 4) {
-                        app->last_move_secs = s;
-                        app->last_move_micros = us;
-                        app->last_remote_x = rx;
-                        app->last_remote_y = ry;
-                        net_send_move(app, rx, ry);
-                    }
+                int16_t dx = rx - app->last_remote_x;
+                int16_t dy = ry - app->last_remote_y;
+                if ((dx * dx + dy * dy) >= 4) {
+                    app->pending_mouse_x = rx;
+                    app->pending_mouse_y = ry;
+                    app->pending_mouse_move = TRUE;
                 }
             } else {
                 if (app->is_hovering_link && app->win) {

@@ -1043,9 +1043,55 @@ void renderer_present(VortexApp *app, struct RastPort *rp, struct IBox *area)
         return;
     }
 
-    /* Scaled or YUV BitMap: GPU-composite offscreen into comp_bm (VRAM->VRAM),
-     * then blit the result through the layered RastPort.
-     * This guarantees 100% correct window layer positioning, clipping, and hardware color conversion! */
+    /* DIRECT HARDWARE OVERLAY / GPU COMPOSITING (PRIMARY PATH - 0% CPU):
+     * CompositeTags directly from front_bm into rp->BitMap at (dst_x, dst_y)!
+     * The Radeon GPU texture units scale, filter, and format-convert in hardware in VRAM. */
+    if (rp->BitMap) {
+        int32 scr_x = 0, scr_y = 0;
+        if (rp->Layer) {
+            scr_x = (int32)rp->Layer->bounds.MinX;
+            scr_y = (int32)rp->Layer->bounds.MinY;
+        } else if (app->win) {
+            scr_x = (int32)app->win->LeftEdge;
+            scr_y = (int32)app->win->TopEdge;
+        }
+        int32 dst_x = scr_x + (int32)area->Left;
+        int32 dst_y = scr_y + (int32)area->Top;
+
+        int32 scale_x = is_1to1 ? COMP_FLOAT_TO_FIX(1.0f) : COMP_FLOAT_TO_FIX((float)dw / (float)r->src_width);
+        int32 scale_y = is_1to1 ? COMP_FLOAT_TO_FIX(1.0f) : COMP_FLOAT_TO_FIX((float)dh / (float)r->src_height);
+        uint32 flags = COMPFLAG_IgnoreDestAlpha | (is_1to1 ? 0 : COMPFLAG_SrcFilter);
+        uint32 op = r->src_bm_is_yuv ? COMPOSITE_Src_Over_Dest : COMPOSITE_Src;
+        uint32 yuv_tag = r->src_bm_is_yuv ? COMPTAG_SrcYUVStandard : TAG_IGNORE;
+        uint32 yuv_val = r->src_bm_is_yuv ? COMPYUV_BT601 : 0;
+
+        uint32 comp_err = IGraphics->CompositeTags(
+            op,
+            front_bm,
+            rp->BitMap,
+            COMPTAG_SrcX,           0,
+            COMPTAG_SrcY,           0,
+            COMPTAG_SrcWidth,       (uint32)r->src_width,
+            COMPTAG_SrcHeight,      (uint32)r->src_height,
+            COMPTAG_ScaleX,         scale_x,
+            COMPTAG_ScaleY,         scale_y,
+            COMPTAG_OffsetX,        dst_x,
+            COMPTAG_OffsetY,        dst_y,
+            COMPTAG_DestX,          (uint32)dst_x,
+            COMPTAG_DestY,          (uint32)dst_y,
+            COMPTAG_DestWidth,      (uint32)dw,
+            COMPTAG_DestHeight,     (uint32)dh,
+            yuv_tag,                yuv_val,
+            COMPTAG_Flags,          flags,
+            TAG_DONE);
+
+        r->last_comp_err = comp_err;
+        if (comp_err == COMPERR_Success) {
+            return;
+        }
+    }
+
+    /* Fallback: GPU-composite offscreen into comp_bm and blit through the layered RastPort */
     if (ensure_comp_bitmap(app, dw, dh)) {
         int32 scale_x = is_1to1 ? COMP_FLOAT_TO_FIX(1.0f) : COMP_FLOAT_TO_FIX((float)dw / (float)r->src_width);
         int32 scale_y = is_1to1 ? COMP_FLOAT_TO_FIX(1.0f) : COMP_FLOAT_TO_FIX((float)dh / (float)r->src_height);
@@ -1081,39 +1127,6 @@ void renderer_present(VortexApp *app, struct RastPort *rp, struct IBox *area)
         }
     }
 
-    /* Fallback: Direct composite to screen RastPort BitMap if offscreen comp_bm fails */
-    if (rp->BitMap) {
-        int32 scale_x = is_1to1 ? COMP_FLOAT_TO_FIX(1.0f) : COMP_FLOAT_TO_FIX((float)dw / (float)r->src_width);
-        int32 scale_y = is_1to1 ? COMP_FLOAT_TO_FIX(1.0f) : COMP_FLOAT_TO_FIX((float)dh / (float)r->src_height);
-        uint32 flags = COMPFLAG_IgnoreDestAlpha | (is_1to1 ? 0 : COMPFLAG_SrcFilter);
-        uint32 yuv_tag = r->src_bm_is_yuv ? COMPTAG_SrcYUVStandard : TAG_IGNORE;
-        uint32 yuv_val = r->src_bm_is_yuv ? COMPYUV_BT601 : 0;
-
-        uint32 comp_err = IGraphics->CompositeTags(
-            COMPOSITE_Src,
-            front_bm,
-            rp->BitMap,
-            COMPTAG_SrcX,           0,
-            COMPTAG_SrcY,           0,
-            COMPTAG_SrcWidth,       (uint32)r->src_width,
-            COMPTAG_SrcHeight,      (uint32)r->src_height,
-            COMPTAG_ScaleX,         scale_x,
-            COMPTAG_ScaleY,         scale_y,
-            COMPTAG_OffsetX,        (int32)area->Left,
-            COMPTAG_OffsetY,        (int32)area->Top,
-            COMPTAG_DestX,          (uint32)area->Left,
-            COMPTAG_DestY,          (uint32)area->Top,
-            COMPTAG_DestWidth,      (uint32)dw,
-            COMPTAG_DestHeight,     (uint32)dh,
-            yuv_tag,                yuv_val,
-            COMPTAG_Flags,          flags,
-            TAG_DONE);
-
-        if (comp_err == COMPERR_Success) {
-            return;
-        }
-    }
-
     /* Last resort: unscaled blit (RGB only) */
     if (!r->src_bm_is_yuv) {
         IGraphics->BltBitMapRastPort(
@@ -1138,6 +1151,7 @@ void renderer_sync_viewport_size(VortexApp *app)
     if (area && area->Width >= 320 && area->Height >= 200) {
         w = (uint16_t)(area->Width  & ~1);
         h = (uint16_t)(area->Height & ~1);
+        app->cached_space_box = *area;
     } else if (app->win) {
         /* Accurate fallback calculation from actual window geometry before Reaction first layout pass */
         int16 calc_w = (int16)app->win->Width - (int16)app->win->BorderLeft - (int16)app->win->BorderRight;
@@ -1206,25 +1220,31 @@ BOOL renderer_map_window_to_remote(
     if (!app->gad_space) {
         return FALSE;
     }
-    struct IBox *area = NULL;
-    IIntuition->GetAttr(SPACE_AreaBox, app->gad_space, (uint32 *)&area);
-    if (!area || area->Width <= 0 || area->Height <= 0) {
+    struct IBox area = app->cached_space_box;
+    if (area.Width <= 0 || area.Height <= 0) {
+        struct IBox *p_area = NULL;
+        IIntuition->GetAttr(SPACE_AreaBox, app->gad_space, (uint32 *)&p_area);
+        if (p_area && p_area->Width > 0 && p_area->Height > 0) {
+            app->cached_space_box = *p_area;
+            area = *p_area;
+        } else {
+            return FALSE;
+        }
+    }
+
+    if (win_mouse_x < area.Left || win_mouse_x >= (area.Left + area.Width) ||
+        win_mouse_y < area.Top  || win_mouse_y >= (area.Top + area.Height)) {
         return FALSE;
     }
 
-    if (win_mouse_x < area->Left || win_mouse_x >= (area->Left + area->Width) ||
-        win_mouse_y < area->Top  || win_mouse_y >= (area->Top + area->Height)) {
-        return FALSE;
-    }
-
-    int32_t rel_x = (int32_t)(win_mouse_x - area->Left);
-    int32_t rel_y = (int32_t)(win_mouse_y - area->Top);
+    int32_t rel_x = (int32_t)(win_mouse_x - area.Left);
+    int32_t rel_y = (int32_t)(win_mouse_y - area.Top);
 
     uint16_t sw = app->renderer.src_width  ? app->renderer.src_width  : VORTEXBROWSE_DEFAULT_WIDTH;
     uint16_t sh = app->renderer.src_height ? app->renderer.src_height : VORTEXBROWSE_DEFAULT_HEIGHT;
 
-    int32_t rx = (rel_x * (int32_t)sw) / (int32_t)area->Width;
-    int32_t ry = (rel_y * (int32_t)sh) / (int32_t)area->Height;
+    int32_t rx = (rel_x * (int32_t)sw) / (int32_t)area.Width;
+    int32_t ry = (rel_y * (int32_t)sh) / (int32_t)area.Height;
 
     if (rx < 0) rx = 0;
     if (rx >= sw) rx = sw - 1;
