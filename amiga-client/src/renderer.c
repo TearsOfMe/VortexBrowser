@@ -1145,7 +1145,7 @@ void renderer_present(VortexApp *app, struct RastPort *rp, struct IBox *area)
         uint32 yuv_val = r->src_bm_is_yuv ? COMPYUV_BT601 : 0;
 
         uint32 comp_err = IGraphics->CompositeTags(
-            COMPOSITE_Src,
+            COMPOSITE_Src_Over_Dest,
             front_bm,
             r->comp_bm,
             COMPTAG_SrcWidth,       (uint32)r->src_width,

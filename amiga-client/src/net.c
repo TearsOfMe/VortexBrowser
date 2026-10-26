@@ -379,14 +379,12 @@ BOOL net_handle_incoming(VortexApp *app)
                         app->is_hovering_link = TRUE;
                         if (app->win) {
                             IIntuition->SetWindowPointer(app->win, WA_PointerType, POINTERTYPE_LINK, TAG_DONE);
-                            IIntuition->SetWindowAttrs(app->win, WA_RMBTrap, TRUE, TAG_DONE);
                         }
                     }
                 } else if (app->is_hovering_link) {
                     app->is_hovering_link = FALSE;
                     if (app->win) {
                         IIntuition->SetWindowPointer(app->win, WA_PointerType, POINTERTYPE_NORMAL, TAG_DONE);
-                        IIntuition->SetWindowAttrs(app->win, WA_RMBTrap, FALSE, TAG_DONE);
                     }
                 }
                 if (app->prefs.show_status_bar) {

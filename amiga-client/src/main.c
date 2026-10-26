@@ -295,10 +295,6 @@ int main(int argc, char **argv)
     while (g_app.running) {
         /* Drain any pending Intuition/Reaction events first */
         gui_handle_events(&g_app);
-        uint32 pre_win_sig = gui_get_signal_mask(&g_app);
-        if (pre_win_sig) {
-            IExec->SetSignal(0, pre_win_sig);
-        }
         if (g_app.reopen_screen_needed && g_app.running) {
             g_app.reopen_screen_needed = FALSE;
             g_app.reopen_gui_needed    = FALSE;
@@ -400,10 +396,6 @@ int main(int argc, char **argv)
 
         /* Always drain GUI events and reap AHI audio after WaitSelect */
         gui_handle_events(&g_app);
-        uint32 post_win_sig = gui_get_signal_mask(&g_app);
-        if (post_win_sig) {
-            IExec->SetSignal(0, post_win_sig);
-        }
         audio_poll(&g_app);
 
         if (g_app.autotest) {
