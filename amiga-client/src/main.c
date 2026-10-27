@@ -305,6 +305,7 @@ int main(int argc, char **argv)
         }
         /* Send debounced/throttled mouse move to remote browser outside the IDCMP input task */
         if (g_app.connected && g_app.pending_mouse_move) {
+            g_app.pending_mouse_move = FALSE;
             int16_t rx = 0, ry = 0;
             if (renderer_map_window_to_remote(&g_app, g_app.pending_win_mouse_x, g_app.pending_win_mouse_y, &rx, &ry)) {
                 uint32 s = 0, us = 0;
@@ -313,18 +314,14 @@ int main(int argc, char **argv)
                                 ((int32)us - (int32)g_app.last_move_micros);
                 int16_t dx = rx - g_app.last_remote_x;
                 int16_t dy = ry - g_app.last_remote_y;
-                if (diff_us >= 50000 || diff_us < 0) {
-                    g_app.pending_mouse_move = FALSE;
-                    if (dx * dx + dy * dy >= 4) {
-                        g_app.last_move_secs   = s;
-                        g_app.last_move_micros = us;
-                        g_app.last_remote_x    = rx;
-                        g_app.last_remote_y    = ry;
-                        net_send_move(&g_app, rx, ry);
-                    }
+                if ((diff_us >= 33000 || diff_us < 0) && (dx * dx + dy * dy >= 4)) {
+                    g_app.last_move_secs   = s;
+                    g_app.last_move_micros = us;
+                    g_app.last_remote_x    = rx;
+                    g_app.last_remote_y    = ry;
+                    net_send_move(&g_app, rx, ry);
                 }
             } else {
-                g_app.pending_mouse_move = FALSE;
                 if (g_app.is_hovering_link) {
                     g_app.is_hovering_link = FALSE;
                 }
@@ -352,10 +349,6 @@ int main(int argc, char **argv)
             tv.tv_usec = 20000; /* 20ms tick for low-latency audio & video */
 
             LONG sel = ISocket->WaitSelect(g_app.sock_fd + 1, &rfds, NULL, NULL, &tv, &sigs);
-            ULONG got_sigs = sigs & (win_sig | audio_sig);
-            if (got_sigs) {
-                IExec->SetSignal(0, got_sigs);
-            }
 
             if (sel > 0 && g_app.sock_fd >= 0 && FD_ISSET(g_app.sock_fd, &rfds)) {
                 int batch = 0;
@@ -374,10 +367,6 @@ int main(int argc, char **argv)
             tv_retry.tv_sec  = 1;
             tv_retry.tv_usec = 500000;
             ISocket->WaitSelect(0, NULL, NULL, NULL, &tv_retry, &sigs);
-            ULONG got_sigs = sigs & (win_sig | audio_sig);
-            if (got_sigs) {
-                IExec->SetSignal(0, got_sigs);
-            }
             if (g_app.running && !g_app.connected) {
                 if (net_connect(&g_app, g_app.server_host, g_app.server_port)) {
                     if (g_app.current_url[0] != '\0' && g_app.current_url[0] != '@') {

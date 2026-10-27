@@ -2395,19 +2395,19 @@ class AmigaClientSession:
                 frames_in_sec = 0
                 self._sec_start_time = now_tick
 
-            # Dynamic Video & Motion Detection:
-            # 1. Real audio streaming active (zero CPU check)
-            audio_active = (getattr(self, "last_audio_time", 0.0) > now_tick - 1.5)
+            # Dynamic Video Detection:
+            # 1. Real audio streaming active (e.g. YouTube, Twitch)
+            audio_active = (getattr(self, "last_audio_time", 0.0) > now_tick - 2.0)
 
-            # 2. Query HTML5 <video> element playback state asynchronously every 1.5 seconds
-            if self.page and (now_tick - self._last_video_eval_time) >= 1.5:
+            # 2. Query HTML5 <video> element playback state asynchronously every 2.0 seconds
+            if self.page and (now_tick - self._last_video_eval_time) >= 2.0:
                 self._last_video_eval_time = now_tick
                 async def _eval_video():
                     try:
                         if self.page and self.running:
                             is_playing = await asyncio.wait_for(
                                 self.page.evaluate(
-                                    "() => Array.from(document.querySelectorAll('video')).some(v => !v.paused && !v.ended && v.readyState >= 2)"
+                                    "() => Array.from(document.querySelectorAll('video')).some(v => !v.paused && !v.ended && v.currentTime > 0)"
                                 ),
                                 timeout=0.08,
                             )
@@ -2418,20 +2418,16 @@ class AmigaClientSession:
                 self.background_tasks.add(t_vid)
                 t_vid.add_done_callback(self.background_tasks.discard)
 
-            # 3. High motion (e.g. muted video or rapid animation)
-            high_motion = (self._frames_last_sec >= 12)
-
-            if audio_active or self._video_element_playing or high_motion:
+            if audio_active or self._video_element_playing:
                 self._last_video_state_time = now_tick
                 if not self.is_video_mode:
                     self.is_video_mode = True
                     await self._set_screencast_quality(self.video_jpeg_quality)
             elif self.is_video_mode:
-                # Video ended/paused; wait 2.5s of static/quiet before restoring crisp high quality (e.g. q80)
-                if (now_tick - self._last_video_state_time) >= 2.5:
+                # Video ended/paused; wait 3.0s of static/quiet before restoring crisp high quality (e.g. q80)
+                if (now_tick - self._last_video_state_time) >= 3.0:
                     self.is_video_mode = False
                     await self._set_screencast_quality(self.base_jpeg_quality)
-                    self._trigger_full_refresh(True)
 
             t0 = time.monotonic()
             forced = self.force_frame_event.is_set()
@@ -2600,6 +2596,16 @@ class AmigaClientSession:
                             delta_y += ndy
                         except Exception:
                             break
+                elif event_type == INPUT_MOUSE_MOVE:
+                    pkt_len = 1 + STRUCT_MSG_INPUT_BODY.size
+                    buf = getattr(self.reader, "_buffer", None)
+                    while buf is not None and len(buf) >= pkt_len and buf[0] == MSG_INPUT and buf[1] == INPUT_MOUSE_MOVE:
+                        try:
+                            nxt = await self.reader.readexactly(pkt_len)
+                            _, nx, ny, _, _, _ = STRUCT_MSG_INPUT_BODY.unpack(nxt[1:])
+                            x, y = nx, ny
+                        except Exception:
+                            break
                 text_str = raw_text.split(b"\x00", 1)[0].decode("utf-8", errors="replace")
                 await self._handle_input(event_type, x, y, delta_y, key_code, text_str)
 
@@ -2636,7 +2642,7 @@ class AmigaClientSession:
                 await asyncio.sleep(delay)
                 if not self.running:
                     break
-                self._trigger_full_refresh(True)
+                self.force_frame_event.set()
         t = asyncio.create_task(_follow_up())
         self.background_tasks.add(t)
         t.add_done_callback(self.background_tasks.discard)
