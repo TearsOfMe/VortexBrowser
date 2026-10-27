@@ -1278,7 +1278,16 @@ class AmigaClientSession:
         self.start_url = start_url
         self.portal_url = portal_url
         self.audio_enabled = audio_enabled
-        self.jpeg_quality = max(20, min(98, jpeg_quality))
+        self.base_jpeg_quality: int = max(20, min(98, jpeg_quality))
+        self.video_jpeg_quality: int = min(self.base_jpeg_quality, 60)
+        self.current_screencast_quality: int = self.base_jpeg_quality
+        self.jpeg_quality: int = self.base_jpeg_quality
+        self.is_video_mode: bool = False
+        self._last_video_eval_time: float = 0.0
+        self._last_video_state_time: float = 0.0
+        self._video_element_playing: bool = False
+        self._frames_last_sec: int = 0
+        self._sec_start_time: float = time.monotonic()
         self.codec_mode: str = codec_mode
 
         self.write_lock = asyncio.Lock()
@@ -1890,6 +1899,36 @@ class AmigaClientSession:
             self._screencast_handler = None
             self.screencast_queue = None
 
+    async def _set_screencast_quality(self, new_quality: int) -> None:
+        """Dynamically adjusts CDP screencast JPEG quality (e.g. q60 during video, q80 for crisp text)."""
+        new_quality = max(20, min(98, int(new_quality)))
+        if new_quality == self.current_screencast_quality:
+            return
+        self.current_screencast_quality = new_quality
+        self.jpeg_quality = new_quality
+        if self.cdp and self.screencast_active and self._screencast_handler:
+            try:
+                # Stop and immediately restart screencast with new quality.
+                # Event listener remains attached and receives frames seamlessly.
+                await self.cdp.send("Page.stopScreencast")
+                await self.cdp.send(
+                    "Page.startScreencast",
+                    {
+                        "format": "jpeg",
+                        "quality": new_quality,
+                        "everyNthFrame": 1,
+                        "maxWidth": self.width,
+                        "maxHeight": self.height,
+                    },
+                )
+                logger.info(
+                    "Dynamic JPEG quality switched to %d (Video mode: %s)",
+                    new_quality,
+                    new_quality < self.base_jpeg_quality,
+                )
+            except Exception as exc:
+                logger.debug("Failed updating screencast quality: %s", exc)
+
     async def send_clipboard_to_amiga(self, text: str) -> bool:
         if not text or not self.running:
             return False
@@ -2343,11 +2382,56 @@ class AmigaClientSession:
 
         idle_ticks = 0
         frames_sent = 0
+        frames_in_sec = 0
         fps_report_time = time.monotonic()
         while self.running:
             if time.monotonic() < self.pause_frames_until:
                 await asyncio.sleep(0.04)
                 continue
+
+            now_tick = time.monotonic()
+            if now_tick - self._sec_start_time >= 1.0:
+                self._frames_last_sec = frames_in_sec
+                frames_in_sec = 0
+                self._sec_start_time = now_tick
+
+            # Dynamic Video & Motion Detection:
+            # 1. Real audio streaming active (zero CPU check)
+            audio_active = (getattr(self, "last_audio_time", 0.0) > now_tick - 1.5)
+
+            # 2. Query HTML5 <video> element playback state asynchronously every 1.5 seconds
+            if self.page and (now_tick - self._last_video_eval_time) >= 1.5:
+                self._last_video_eval_time = now_tick
+                async def _eval_video():
+                    try:
+                        if self.page and self.running:
+                            is_playing = await asyncio.wait_for(
+                                self.page.evaluate(
+                                    "() => Array.from(document.querySelectorAll('video')).some(v => !v.paused && !v.ended && v.readyState >= 2)"
+                                ),
+                                timeout=0.08,
+                            )
+                            self._video_element_playing = bool(is_playing)
+                    except Exception:
+                        pass
+                t_vid = asyncio.create_task(_eval_video())
+                self.background_tasks.add(t_vid)
+                t_vid.add_done_callback(self.background_tasks.discard)
+
+            # 3. High motion (e.g. muted video or rapid animation)
+            high_motion = (self._frames_last_sec >= 12)
+
+            if audio_active or self._video_element_playing or high_motion:
+                self._last_video_state_time = now_tick
+                if not self.is_video_mode:
+                    self.is_video_mode = True
+                    await self._set_screencast_quality(self.video_jpeg_quality)
+            elif self.is_video_mode:
+                # Video ended/paused; wait 2.5s of static/quiet before restoring crisp high quality (e.g. q80)
+                if (now_tick - self._last_video_state_time) >= 2.5:
+                    self.is_video_mode = False
+                    await self._set_screencast_quality(self.base_jpeg_quality)
+                    self._trigger_full_refresh(True)
 
             t0 = time.monotonic()
             forced = self.force_frame_event.is_set()
@@ -2361,6 +2445,7 @@ class AmigaClientSession:
             # A frame was actually sent if the content hash changed
             if self.last_frame_hash != prev_hash:
                 frames_sent += 1
+                frames_in_sec += 1
                 idle_ticks = 0
             else:
                 now_loop = time.monotonic()
@@ -2976,8 +3061,11 @@ class AmigaClientSession:
         if cmd.upper().startswith("@JPEG_QUALITY:"):
             try:
                 q = int(cmd.split(":", 1)[1].strip())
-                self.jpeg_quality = max(20, min(98, q))
-                logger.info("Set JPEG/MJPEG quality to %d", self.jpeg_quality)
+                self.base_jpeg_quality = max(20, min(98, q))
+                self.video_jpeg_quality = min(self.base_jpeg_quality, 60)
+                target_q = self.video_jpeg_quality if self.is_video_mode else self.base_jpeg_quality
+                await self._set_screencast_quality(target_q)
+                logger.info("Set JPEG/MJPEG base quality to %d (current=%d)", self.base_jpeg_quality, self.jpeg_quality)
             except Exception:
                 pass
             return

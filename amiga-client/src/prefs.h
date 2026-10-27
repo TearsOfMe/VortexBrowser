@@ -74,6 +74,11 @@ typedef struct FontConfig {
     uint8_t  web_font_family;   /* 0 = Sans-Serif, 1 = Serif, 2 = Monospace */
 } FontConfig;
 
+#define STREAM_RES_NATIVE 0  /* 1:1 Window Size (native) */
+#define STREAM_RES_720P   1  /* 1280x720 HD (30-50 FPS) */
+#define STREAM_RES_540P   2  /* 960x540 qHD (Turbo) */
+#define STREAM_RES_1080P  3  /* 1920x1080 Full HD */
+
 typedef struct VortexPrefs {
     ResolutionConfig resolution;
     FontConfig       font;
@@ -84,6 +89,7 @@ typedef struct VortexPrefs {
     BOOL             save_last_url;     /* TRUE = Automatisch letzte Seite als Startseite speichern */
     QuickLinkItem    quick_links[VB_MAX_QUICKLINKS];
     uint16_t         num_quick_links;
+    uint8_t          stream_res_mode;   /* STREAM_RES_NATIVE, STREAM_RES_720P, etc. */
 } VortexPrefs;
 
 struct VortexApp;

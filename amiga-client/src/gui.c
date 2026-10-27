@@ -76,16 +76,25 @@ static struct NewMenu s_main_menu[] = {
     { NM_ITEM,  (STRPTR)"Kopieren",                                    (STRPTR)"C", 0, 0, (APTR)MID_EDIT_COPY },
     { NM_ITEM,  (STRPTR)"Einfuegen",                                   (STRPTR)"V", 0, 0, (APTR)MID_EDIT_PASTE },
 
+    { NM_TITLE, (STRPTR)"Ansicht",                                     NULL,        0, 0, NULL },
+    { NM_ITEM,  (STRPTR)"Stream: 1:1 Nativ (Fenster-Groesse)",         NULL,        0, 0, (APTR)MID_STREAM_RES_NATIVE },
+    { NM_ITEM,  (STRPTR)"Stream: 720p HD (1280x720) [30-50 FPS]",      NULL,        0, 0, (APTR)MID_STREAM_RES_720P },
+    { NM_ITEM,  (STRPTR)"Stream: 540p qHD (960x540) [Turbo]",          NULL,        0, 0, (APTR)MID_STREAM_RES_540P },
+    { NM_ITEM,  (STRPTR)"Stream: 1080p FHD (1920x1080)",               NULL,        0, 0, (APTR)MID_STREAM_RES_1080P },
+    { NM_ITEM,  NM_BARLABEL,                                           NULL,        0, 0, NULL },
+    { NM_ITEM,  (STRPTR)"Vollbild / Bildschirm umschalten",            (STRPTR)"F11", 0, 0, (APTR)MID_TOGGLE_SCREEN },
+    { NM_ITEM,  (STRPTR)"Statusleiste umschalten",                     NULL,        0, 0, (APTR)MID_TOGGLE_STATUSBAR },
+    { NM_ITEM,  NM_BARLABEL,                                           NULL,        0, 0, NULL },
+    { NM_ITEM,  (STRPTR)"Schrift groesser (+)",                        (STRPTR)"+", 0, 0, (APTR)MID_FONT_LARGER },
+    { NM_ITEM,  (STRPTR)"Schrift kleiner (-)",                         (STRPTR)"-", 0, 0, (APTR)MID_FONT_SMALLER },
+    { NM_ITEM,  (STRPTR)"Standard-Schriftgroesse (16px)",              (STRPTR)"0", 0, 0, (APTR)MID_FONT_RESET },
+
     { NM_TITLE, (STRPTR)"Navigation",                                  NULL,        0, 0, NULL },
     { NM_ITEM,  (STRPTR)"Zurueck",                                     (STRPTR)"B", 0, 0, (APTR)MID_NAV_BACK },
     { NM_ITEM,  (STRPTR)"Vorwaerts",                                   (STRPTR)"F", 0, 0, (APTR)MID_NAV_FORWARD },
     { NM_ITEM,  (STRPTR)"Neu laden",                                   (STRPTR)"R", 0, 0, (APTR)MID_NAV_RELOAD },
     { NM_ITEM,  (STRPTR)"Stopp",                                       (STRPTR)"S", 0, 0, (APTR)MID_NAV_STOP },
     { NM_ITEM,  (STRPTR)"Startseite",                                  (STRPTR)"H", 0, 0, (APTR)MID_NAV_HOME },
-    { NM_ITEM,  NM_BARLABEL,                                           NULL,        0, 0, NULL },
-    { NM_ITEM,  (STRPTR)"Schrift groesser (+)",                        (STRPTR)"+", 0, 0, (APTR)MID_FONT_LARGER },
-    { NM_ITEM,  (STRPTR)"Schrift kleiner (-)",                         (STRPTR)"-", 0, 0, (APTR)MID_FONT_SMALLER },
-    { NM_ITEM,  (STRPTR)"Standard-Schriftgroesse (16px)",              (STRPTR)"0", 0, 0, (APTR)MID_FONT_RESET },
 
     { NM_TITLE, (STRPTR)"Lesezeichen",                                 NULL,        0, 0, NULL },
     { NM_ITEM,  (STRPTR)"Lesezeichen hinzufuegen",                     (STRPTR)"A", 0, 0, (APTR)MID_FAV_ADD },
@@ -809,6 +818,48 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
             app->prefs.resolution.use_custom_screen = !app->prefs.resolution.use_custom_screen;
             prefs_save(app, TRUE);
             app->reopen_screen_needed = TRUE;
+            break;
+
+        case MID_STREAM_RES_NATIVE:
+            app->prefs.stream_res_mode = STREAM_RES_NATIVE;
+            prefs_save(app, TRUE);
+            app->renderer.reported_w = 0;
+            app->renderer.reported_h = 0;
+            renderer_sync_viewport_size(app);
+            app_set_status("Stream-Aufloesung: 1:1 Nativ (Fenster-Groesse)");
+            break;
+
+        case MID_STREAM_RES_720P:
+            app->prefs.stream_res_mode = STREAM_RES_720P;
+            prefs_save(app, TRUE);
+            app->renderer.reported_w = 0;
+            app->renderer.reported_h = 0;
+            renderer_sync_viewport_size(app);
+            app_set_status("Stream-Aufloesung: 1280x720 (720p HD - 30-50 FPS)");
+            break;
+
+        case MID_STREAM_RES_540P:
+            app->prefs.stream_res_mode = STREAM_RES_540P;
+            prefs_save(app, TRUE);
+            app->renderer.reported_w = 0;
+            app->renderer.reported_h = 0;
+            renderer_sync_viewport_size(app);
+            app_set_status("Stream-Aufloesung: 960x540 (540p qHD - Turbo)");
+            break;
+
+        case MID_STREAM_RES_1080P:
+            app->prefs.stream_res_mode = STREAM_RES_1080P;
+            prefs_save(app, TRUE);
+            app->renderer.reported_w = 0;
+            app->renderer.reported_h = 0;
+            renderer_sync_viewport_size(app);
+            app_set_status("Stream-Aufloesung: 1920x1080 (1080p Full HD)");
+            break;
+
+        case MID_TOGGLE_STATUSBAR:
+            app->prefs.show_status_bar = !app->prefs.show_status_bar;
+            prefs_save(app, TRUE);
+            app->reopen_gui_needed = TRUE;
             break;
 
         case MID_QUICK_ADD_CURRENT:
@@ -1760,8 +1811,17 @@ BOOL gui_init(VortexApp *app)
         app->gad_quick_del[i] = NULL;
     }
 
-    const char *c_add_quick[] = { "list_add", "add", "plus", "new" };
-    app->gad_quick_add = create_toolbar_button(GID_QUICK_ADD, c_add_quick, 4, "+", "Schnellwahl-Button hinzufuegen", pub_scr);
+    app->gad_quick_add = IIntuition->NewObject(NULL, "button.gadget",
+        GA_ID,                 GID_QUICK_ADD,
+        GA_RelVerify,          TRUE,
+        GA_Text,               (Tag)" + ",
+        BUTTON_BevelStyle,     BVS_THIN,
+        BUTTON_Justification,  BCJ_CENTER,
+        BUTTON_HorizAlignment, BALIGN_CENTER,
+        BUTTON_VertAlignment,  BALIGN_CENTER,
+        BUTTON_DomainString,   (Tag)" + ",
+        GA_HintInfo,           (Tag)"Schnellwahl-Button hinzufuegen",
+        TAG_DONE);
 
     Object *btn_add_fav = create_toolbar_button(GID_ADD_FAV, c_add_fav, 3, "+Lesez.", "Zu Lesezeichen hinzufuegen", pub_scr);
 
@@ -1868,14 +1928,8 @@ BOOL gui_init(VortexApp *app)
     }
 
     if (app->gad_quick_add) {
-        int add_w = 32;
-        if (row_item_count[cur_row] > 0 && (cur_w + add_w > cur_limit) && cur_row < MAX_QL_ROWS - 1) {
-            cur_row++;
-            cur_w = 0;
-            cur_limit = next_row_limit;
-        }
+        /* Always place '+' directly adjacent to the last quicklink button */
         row_items[cur_row][row_item_count[cur_row]++] = app->gad_quick_add;
-        cur_w += add_w;
     }
 
     int ql_row_count = cur_row + 1;

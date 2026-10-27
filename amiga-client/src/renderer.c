@@ -1217,6 +1217,25 @@ void renderer_sync_viewport_size(VortexApp *app)
         }
     }
 
+    /* Apply stream resolution mode if set to fixed preset (720p HD, 540p qHD, etc.) */
+    switch (app->prefs.stream_res_mode) {
+        case STREAM_RES_720P:
+            w = 1280;
+            h = 720;
+            break;
+        case STREAM_RES_540P:
+            w = 960;
+            h = 540;
+            break;
+        case STREAM_RES_1080P:
+            w = 1920;
+            h = 1080;
+            break;
+        case STREAM_RES_NATIVE:
+        default:
+            break;
+    }
+
     if (w > 1920) w = 1920;
     if (h > 1080) h = 1080;
 

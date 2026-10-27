@@ -24,6 +24,7 @@
 #include "prefs.h"
 #include "favorites.h"
 #include "net.h"
+#include "renderer.h"
 
 enum {
     GID_P_TAB = 1,
@@ -45,6 +46,7 @@ enum {
     /* Tab 1: Bildschirm & Aufloesung */
     GID_P_SCREEN_CHOOSER = 25,
     GID_P_RES_CHOOSER,
+    GID_P_STREAM_RES_CHOOSER,
     GID_P_RES_W,
     GID_P_RES_H,
     GID_P_SCREEN_MODE_REQ,
@@ -86,6 +88,15 @@ static const char *const s_res_labels[] = {
     "1280 x 1024 (SXGA)",
     "Automatisch anpassen (Fenstergroesse)",
     "Benutzerdefiniert (Eigene B x H)",
+    NULL
+};
+
+/* Stream Resolution (Server stream resolution scaled by GPU) */
+static const char *const s_stream_res_labels[] = {
+    "1:1 Fenster-Groesse (Standard / Nativ)",
+    "720p HD (1280x720) [30-50 FPS / Video-Boost]",
+    "540p qHD (960x540) [Turbo]",
+    "1080p Full HD (1920x1080)",
     NULL
 };
 
@@ -485,6 +496,15 @@ void gui_prefs_open(VortexApp *app)
         CHOOSER_Selected,   init_res_sel,
         TAG_DONE);
 
+    uint16 init_stream_sel = app->prefs.stream_res_mode;
+    if (init_stream_sel > 3) init_stream_sel = 0;
+    Object *gad_stream_res_chooser = IIntuition->NewObject(NULL, "chooser.gadget",
+        GA_ID,              GID_P_STREAM_RES_CHOOSER,
+        GA_RelVerify,       TRUE,
+        CHOOSER_LabelArray, s_stream_res_labels,
+        CHOOSER_Selected,   init_stream_sel,
+        TAG_DONE);
+
     char custom_w_str[16];
     char custom_h_str[16];
     snprintf(custom_w_str, sizeof(custom_w_str), "%u", (unsigned)app->prefs.resolution.custom_w);
@@ -601,6 +621,18 @@ void gui_prefs_open(VortexApp *app)
                                   CHILD_WeightedWidth,  15,
                                   LAYOUT_AddChild,      gad_res_h,
                                   CHILD_WeightedWidth,  25,
+                                  TAG_DONE),
+        CHILD_WeightedHeight, 0,
+        LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
+                                  LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
+                                  LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
+                                                            GA_Text,              (Tag)"Stream-Aufloesung:",
+                                                            GA_ReadOnly,          TRUE,
+                                                            BUTTON_Justification, BCJ_LEFT,
+                                                            TAG_DONE),
+                                  CHILD_WeightedWidth,  30,
+                                  LAYOUT_AddChild,      gad_stream_res_chooser,
+                                  CHILD_WeightedWidth,  70,
                                   TAG_DONE),
         CHILD_WeightedHeight, 0,
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
@@ -1268,6 +1300,11 @@ void gui_prefs_open(VortexApp *app)
         IIntuition->GetAttr(CHECKBOX_Checked, gad_softscroll, &soft_val);
         app->prefs.soft_scroll = (soft_val != 0);
 
+        uint32 stream_sel = 0;
+        IIntuition->GetAttr(CHOOSER_Selected, gad_stream_res_chooser, &stream_sel);
+        BOOL stream_res_changed = ((uint8_t)stream_sel != app->prefs.stream_res_mode);
+        app->prefs.stream_res_mode = (uint8_t)stream_sel;
+
         BOOL old_status_bar = app->prefs.show_status_bar;
         uint32 status_val = 0;
         IIntuition->GetAttr(CHECKBOX_Checked, gad_show_status, &status_val);
@@ -1323,6 +1360,11 @@ void gui_prefs_open(VortexApp *app)
         } else {
             prefs_apply(app);
             favorites_rebuild_chooser_list(app);
+            if (stream_res_changed) {
+                app->renderer.reported_w = 0;
+                app->renderer.reported_h = 0;
+                renderer_sync_viewport_size(app);
+            }
         }
     }
 
