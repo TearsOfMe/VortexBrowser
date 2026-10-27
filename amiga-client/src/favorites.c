@@ -9,6 +9,7 @@
 #include <gadgets/chooser.h>
 
 #include "favorites.h"
+#include "gui.h"
 
 static void ensure_dir_exists(const char *dir_path)
 {
@@ -169,11 +170,16 @@ void favorites_rebuild_chooser_list(VortexApp *app)
 
     favorites_free_chooser_list(app);
 
+    int32 bg_pen = gui_get_dark_btn_bg();
+    int32 txt_pen = gui_get_dark_txt_pen();
+
     for (int i = 0; i < app->num_favorites; i++) {
         struct Node *node = IChooser->AllocChooserNode(
             CNA_CopyText, TRUE,
             CNA_Text,     app->favorites[i].title,
             CNA_UserData, (APTR)(uintptr_t)i,
+            (bg_pen >= 0) ? CNA_BGPen : TAG_IGNORE, (WORD)bg_pen,
+            (txt_pen >= 0) ? CNA_FGPen : TAG_IGNORE, (WORD)txt_pen,
             TAG_DONE);
         if (node) {
             IExec->AddTail(&app->fav_chooser_list, node);

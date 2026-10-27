@@ -112,6 +112,8 @@ void gui_tab_add(VortexApp *app, const char *title, const char *url, BOOL switch
 void gui_tab_switch(VortexApp *app, uint16 idx);
 void gui_tab_close(VortexApp *app, uint16 idx);
 void gui_tab_set_title(VortexApp *app, uint16 idx, const char *title);
+int32 gui_get_dark_btn_bg(void);
+int32 gui_get_dark_txt_pen(void);
 
 #endif /* VORTEXBROWSE_GUI_H */
 

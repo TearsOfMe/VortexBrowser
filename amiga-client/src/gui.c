@@ -30,6 +30,7 @@
 #include <sys/time.h>
 
 #include <proto/clicktab.h>
+#include <proto/layers.h>
 
 #include <images/bitmap.h>
 #include <images/label.h>
@@ -328,6 +329,73 @@ static void gui_free_dark_pens(void)
     s_dark_pens.raw_txt        = -1;
     s_dark_pens.raw_inp_bg     = -1;
     s_dark_pens.raw_gauge_fill = -1;
+}
+
+int32 gui_get_dark_btn_bg(void) {
+    return (s_dark_pens.allocated ? s_dark_pens.btn_bg_pen : -1);
+}
+int32 gui_get_dark_txt_pen(void) {
+    return (s_dark_pens.allocated ? s_dark_pens.txt_pen : -1);
+}
+
+static struct Hook s_spacer_render_hook;
+
+static uint32 spacer_render_func(struct Hook *hook, Object *space_obj, struct gpRender *gpr)
+{
+    (void)hook;
+    if (!gpr || !gpr->gpr_RPort) return 0;
+
+    struct IBox *area = NULL;
+    IIntuition->GetAttr(SPACE_AreaBox, space_obj, (uint32 *)&area);
+    if (area && area->Width > 0 && area->Height > 0) {
+        uint32 pen = (s_dark_pens.allocated && s_dark_pens.bg_pen >= 0) ? (uint32)s_dark_pens.bg_pen : 0;
+        IGraphics->SetAPen(gpr->gpr_RPort, pen);
+        IGraphics->RectFill(gpr->gpr_RPort, area->Left, area->Top, area->Left + area->Width - 1, area->Top + area->Height - 1);
+    }
+    return 0;
+}
+
+static void gui_paint_titlebar_dark(VortexApp *app)
+{
+    if (!app || !app->win || !s_dark_pens.allocated) return;
+    struct RastPort *rp = app->win->RPort;
+    if (!rp) return;
+
+    int16 x1 = app->win->BorderLeft;
+    int16 x2 = app->win->Width - app->win->BorderRight - 1;
+    int16 y1 = 0;
+    int16 y2 = app->win->BorderTop - 1;
+
+    if (x2 > x1 && y2 > y1) {
+        int16 title_x1 = x1 + 24;
+        int16 title_x2 = x2 - 50;
+        if (title_x2 > title_x1) {
+            IGraphics->SetAPen(rp, (uint32)s_dark_pens.bg_pen);
+            IGraphics->RectFill(rp, title_x1, y1 + 1, title_x2, y2 - 1);
+
+            IGraphics->SetAPen(rp, (uint32)s_dark_pens.txt_pen);
+            IGraphics->SetBPen(rp, (uint32)s_dark_pens.bg_pen);
+            IGraphics->SetDrMd(rp, JAM2);
+            int16 tx_y = y1 + ((y2 - y1 + rp->TxHeight) / 2) - 1;
+            IGraphics->Move(rp, title_x1 + 8, tx_y);
+            const char *title = app->win_title[0] ? app->win_title : "VortexBrowse";
+            IGraphics->Text(rp, (CONST_STRPTR)title, strlen(title));
+        }
+    }
+}
+
+static struct Hook s_post_refresh_hook;
+
+static uint32 post_refresh_func(struct Hook *hook, Object *win_obj, struct Gadget *gad)
+{
+    (void)hook;
+    (void)win_obj;
+    (void)gad;
+    VortexApp *app = (VortexApp *)hook->h_Data;
+    if (app && app->win && s_dark_pens.allocated) {
+        gui_paint_titlebar_dark(app);
+    }
+    return 0;
 }
 
 static Object *create_toolbar_button(uint32 gid, const char *const candidates[], int num_candidates,
@@ -634,6 +702,9 @@ static uint32 idcmp_hook_func(struct Hook *hook, Object *win_obj, struct IntuiMe
 
     if (imsg->Class == IDCMP_CHANGEWINDOW) {
         prefs_capture_window_box(app);
+        if (s_dark_pens.allocated) {
+            gui_paint_titlebar_dark(app);
+        }
         return 0;
     }
 
@@ -768,25 +839,92 @@ static void parse_host_port(const char *input, char *out_host, size_t host_cap, 
     }
 }
 
+static const char *const s_search_engine_labels[] = {
+    "DuckDuckGo",
+    "Google",
+    "Bing",
+    "Startpage",
+    "Ecosia",
+    "Wikipedia",
+    "YouTube",
+    "Aminet",
+    "OS4Depot",
+    NULL
+};
+
+static struct List s_search_chooser_list;
+static BOOL s_search_chooser_list_inited = FALSE;
+
+static void search_chooser_init_list(void)
+{
+    if (s_search_chooser_list_inited) {
+        struct Node *n = IExec->RemHead(&s_search_chooser_list);
+        while (n) {
+            IChooser->FreeChooserNode(n);
+            n = IExec->RemHead(&s_search_chooser_list);
+        }
+    } else {
+        IExec->NewList(&s_search_chooser_list);
+        s_search_chooser_list_inited = TRUE;
+    }
+
+    if (!IChooser) return;
+
+    int32 bg_pen = gui_get_dark_btn_bg();
+    int32 txt_pen = gui_get_dark_txt_pen();
+
+    for (int i = 0; s_search_engine_labels[i] != NULL; i++) {
+        struct Node *node = IChooser->AllocChooserNode(
+            CNA_CopyText, TRUE,
+            CNA_Text,     (STRPTR)s_search_engine_labels[i],
+            (bg_pen >= 0) ? CNA_BGPen : TAG_IGNORE, (WORD)bg_pen,
+            (txt_pen >= 0) ? CNA_FGPen : TAG_IGNORE, (WORD)txt_pen,
+            TAG_DONE);
+        if (node) {
+            IExec->AddTail(&s_search_chooser_list, node);
+        }
+    }
+}
+
+static void search_chooser_free_list(void)
+{
+    if (!s_search_chooser_list_inited) return;
+    struct Node *n = IExec->RemHead(&s_search_chooser_list);
+    while (n) {
+        IChooser->FreeChooserNode(n);
+        n = IExec->RemHead(&s_search_chooser_list);
+    }
+    s_search_chooser_list_inited = FALSE;
+}
+
 static void init_server_chooser(VortexApp *app)
 {
     IExec->NewList(&app->server_chooser_list);
 
+    int32 bg_pen = gui_get_dark_btn_bg();
+    int32 txt_pen = gui_get_dark_txt_pen();
+
     struct Node *n0 = IChooser->AllocChooserNode(
         CNA_CopyText, TRUE,
         CNA_Text,     "RasPi 4 (192.168.178.2:7788)",
+        (bg_pen >= 0) ? CNA_BGPen : TAG_IGNORE, (WORD)bg_pen,
+        (txt_pen >= 0) ? CNA_FGPen : TAG_IGNORE, (WORD)txt_pen,
         TAG_DONE);
     if (n0) IExec->AddTail(&app->server_chooser_list, n0);
 
     struct Node *n1 = IChooser->AllocChooserNode(
         CNA_CopyText, TRUE,
         CNA_Text,     "Host-PC (192.168.178.60:9757)",
+        (bg_pen >= 0) ? CNA_BGPen : TAG_IGNORE, (WORD)bg_pen,
+        (txt_pen >= 0) ? CNA_FGPen : TAG_IGNORE, (WORD)txt_pen,
         TAG_DONE);
     if (n1) IExec->AddTail(&app->server_chooser_list, n1);
 
     struct Node *n2 = IChooser->AllocChooserNode(
         CNA_CopyText, TRUE,
         CNA_Text,     "Server manuell...",
+        (bg_pen >= 0) ? CNA_BGPen : TAG_IGNORE, (WORD)bg_pen,
+        (txt_pen >= 0) ? CNA_FGPen : TAG_IGNORE, (WORD)txt_pen,
         TAG_DONE);
     if (n2) IExec->AddTail(&app->server_chooser_list, n2);
 }
@@ -1708,6 +1846,14 @@ BOOL gui_init(VortexApp *app)
     s_idcmp_hook.h_Entry = (HOOKFUNC)idcmp_hook_func;
     s_idcmp_hook.h_Data  = app;
 
+    memset(&s_spacer_render_hook, 0, sizeof(struct Hook));
+    s_spacer_render_hook.h_Entry = (HOOKFUNC)spacer_render_func;
+    s_spacer_render_hook.h_Data  = app;
+
+    memset(&s_post_refresh_hook, 0, sizeof(struct Hook));
+    s_post_refresh_hook.h_Entry = (HOOKFUNC)post_refresh_func;
+    s_post_refresh_hook.h_Data  = app;
+
     /* 0. Open custom Public Screen if configured */
     if (app->prefs.resolution.use_custom_screen) {
         if (!app->custom_screen) {
@@ -1921,19 +2067,6 @@ BOOL gui_init(VortexApp *app)
     Object *btn_clear_url = create_toolbar_button(GID_CLEAR_URL, c_clear, 3, "X", "Adresseingabe leeren", pub_scr);
     Object *btn_go = create_toolbar_button(GID_GO, c_go, 3, "Los", "URL aufrufen", pub_scr);
 
-    static const char *const s_search_engine_labels[] = {
-        "DuckDuckGo",
-        "Google",
-        "Bing",
-        "Startpage",
-        "Ecosia",
-        "Wikipedia",
-        "YouTube",
-        "Aminet",
-        "OS4Depot",
-        NULL
-    };
-
     Object *lbl_search = IIntuition->NewObject(NULL, "button.gadget",
         GA_Text,              (Tag)"Suche:",
         GA_ReadOnly,          TRUE,
@@ -1943,6 +2076,8 @@ BOOL gui_init(VortexApp *app)
         s_dark_pens.allocated ? BUTTON_TextPen : TAG_IGNORE, (uint32)s_dark_pens.txt_pen,
         TAG_DONE);
 
+    search_chooser_init_list();
+
     uint16 init_se_sel = app->prefs.search_engine;
     if (init_se_sel >= NUM_SEARCH_ENGINES) init_se_sel = 0;
 
@@ -1950,10 +2085,11 @@ BOOL gui_init(VortexApp *app)
         GA_ID,              GID_SEARCH_CHOOSER,
         GA_RelVerify,       TRUE,
         CHOOSER_PopUp,      TRUE,
-        CHOOSER_LabelArray, s_search_engine_labels,
+        CHOOSER_Labels,     &s_search_chooser_list,
         CHOOSER_Selected,   init_se_sel,
         CHOOSER_MaxLabels,  NUM_SEARCH_ENGINES,
         GA_HintInfo,        "Suchmaschine waehlen (Standard: DuckDuckGo)",
+        s_dark_pens.allocated ? GA_BackFill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
         TAG_DONE);
 
     app->gad_search = IIntuition->NewObject(NULL, "string.gadget",
@@ -1973,7 +2109,6 @@ BOOL gui_init(VortexApp *app)
 
     Object *nav_row1 = IIntuition->NewObject(NULL, "layout.gadget",
         LAYOUT_Orientation,  LAYOUT_ORIENT_HORIZ,
-        s_dark_pens.allocated ? LAYOUT_LayoutBackFill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
         LAYOUT_AddChild,     btn_back,
         CHILD_WeightedWidth, 0,
         LAYOUT_AddChild,     btn_fwd,
@@ -2000,6 +2135,8 @@ BOOL gui_init(VortexApp *app)
         CHILD_WeightedWidth, 20,
         LAYOUT_AddChild,     btn_search_go,
         CHILD_WeightedWidth, 0,
+        s_dark_pens.allocated ? LAYOUT_BackFill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
+        s_dark_pens.allocated ? LAYOUT_LayoutBackFill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
         TAG_DONE);
 
     /* ------------------------------------------------------------------------
@@ -2045,6 +2182,7 @@ BOOL gui_init(VortexApp *app)
         CHOOSER_Title,     "Lesezeichen",
         CHOOSER_Labels,    &app->fav_chooser_list,
         CHOOSER_MaxLabels, 32,
+        s_dark_pens.allocated ? GA_BackFill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
         TAG_DONE);
 
     init_server_chooser(app);
@@ -2064,6 +2202,7 @@ BOOL gui_init(VortexApp *app)
         CHOOSER_Selected,  init_server_sel,
         CHOOSER_MaxLabels, 8,
         GA_HintInfo,       "Server waehlen: Raspberry Pi 4 (192.168.178.2:7788), Host-PC oder manuell",
+        s_dark_pens.allocated ? GA_BackFill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
         TAG_DONE);
 
     Object *btn_connect = create_toolbar_button(GID_CONNECT, c_connect, 2, "Verbinden", "Mit Server verbinden", pub_scr);
@@ -2167,6 +2306,7 @@ BOOL gui_init(VortexApp *app)
         if (r > 0) {
             /* Overflow rows get a trailing spacer so items remain left-aligned */
             Object *sp = IIntuition->NewObject(NULL, "space.gadget",
+                s_dark_pens.allocated ? SPACE_RenderHook : TAG_IGNORE, (Tag)&s_spacer_render_hook,
                 SPACE_Transparent, TRUE,
                 SPACE_MinWidth,    4,
                 TAG_DONE);
@@ -2179,6 +2319,8 @@ BOOL gui_init(VortexApp *app)
         }
 
         if (s_dark_pens.allocated) {
+            row_tags[t].ti_Tag = LAYOUT_BackFill;
+            row_tags[t++].ti_Data = (Tag)&s_dark_backfill_hook;
             row_tags[t].ti_Tag = LAYOUT_LayoutBackFill;
             row_tags[t++].ti_Data = (Tag)&s_dark_backfill_hook;
         }
@@ -2190,13 +2332,13 @@ BOOL gui_init(VortexApp *app)
     }
 
     Object *row2_spacer = IIntuition->NewObject(NULL, "space.gadget",
+        s_dark_pens.allocated ? SPACE_RenderHook : TAG_IGNORE, (Tag)&s_spacer_render_hook,
         SPACE_Transparent, TRUE,
         SPACE_MinWidth,    4,
         TAG_DONE);
 
     Object *nav_row2 = IIntuition->NewObject(NULL, "layout.gadget",
         LAYOUT_Orientation,  LAYOUT_ORIENT_HORIZ,
-        s_dark_pens.allocated ? LAYOUT_LayoutBackFill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
         LAYOUT_SpaceInner,   TRUE,
         LAYOUT_SpaceOuter,   FALSE,
         LAYOUT_AddChild,     ql_row_objs[0],
@@ -2211,6 +2353,8 @@ BOOL gui_init(VortexApp *app)
         CHILD_WeightedWidth, 0,
         LAYOUT_AddChild,     btn_connect,
         CHILD_WeightedWidth, 0,
+        s_dark_pens.allocated ? LAYOUT_BackFill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
+        s_dark_pens.allocated ? LAYOUT_LayoutBackFill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
         TAG_DONE);
 
     /* ------------------------------------------------------------------------
@@ -2256,7 +2400,6 @@ BOOL gui_init(VortexApp *app)
 
         status_group = IIntuition->NewObject(NULL, "layout.gadget",
             LAYOUT_Orientation,  LAYOUT_ORIENT_HORIZ,
-            s_dark_pens.allocated ? LAYOUT_LayoutBackFill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
             LAYOUT_SpaceInner,   FALSE,
             LAYOUT_SpaceOuter,   FALSE,
             LAYOUT_AddChild,     app->gad_status,
@@ -2264,6 +2407,8 @@ BOOL gui_init(VortexApp *app)
             LAYOUT_AddChild,     app->gad_gauge,
             CHILD_WeightedWidth, 20,
             CHILD_MaxWidth,      120,
+            s_dark_pens.allocated ? LAYOUT_BackFill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
+            s_dark_pens.allocated ? LAYOUT_LayoutBackFill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
             TAG_DONE);
     } else {
         app->gad_status = NULL;
@@ -2281,6 +2426,8 @@ BOOL gui_init(VortexApp *app)
         CLICKTAB_Labels,    (Tag)&app->tab_list,
         CLICKTAB_Current,   (uint32)app->active_tab_idx,
         CLICKTAB_AutoFit,   TRUE,
+        s_dark_pens.allocated ? GA_BackFill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
+        s_dark_pens.allocated ? CLICKTAB_PageGroupBackFill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
         TAG_DONE);
 
     const char *c_add_tab[] = { "add", "plus", "new" };
@@ -2288,13 +2435,14 @@ BOOL gui_init(VortexApp *app)
 
     Object *tab_row = IIntuition->NewObject(NULL, "layout.gadget",
         LAYOUT_Orientation,  LAYOUT_ORIENT_HORIZ,
-        s_dark_pens.allocated ? LAYOUT_LayoutBackFill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
         LAYOUT_SpaceInner,   FALSE,
         LAYOUT_SpaceOuter,   FALSE,
         LAYOUT_AddChild,     app->gad_clicktab,
         CHILD_WeightedWidth, 100,
         LAYOUT_AddChild,     app->gad_tab_new,
         CHILD_WeightedWidth, 0,
+        s_dark_pens.allocated ? LAYOUT_BackFill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
+        s_dark_pens.allocated ? LAYOUT_LayoutBackFill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
         TAG_DONE);
 
     struct TagItem root_tags[48];
@@ -2344,6 +2492,8 @@ BOOL gui_init(VortexApp *app)
     }
 
     if (s_dark_pens.allocated) {
+        root_tags[rt].ti_Tag = LAYOUT_BackFill;
+        root_tags[rt++].ti_Data = (Tag)&s_dark_backfill_hook;
         root_tags[rt].ti_Tag = LAYOUT_LayoutBackFill;
         root_tags[rt++].ti_Data = (Tag)&s_dark_backfill_hook;
     }
@@ -2375,6 +2525,9 @@ BOOL gui_init(VortexApp *app)
         (app->custom_screen != NULL) ? WA_ScreenTitle : TAG_IGNORE,
         (app->custom_screen != NULL) ? (Tag)"VortexBrowse 2.0 (AmigaOS 4.1)" : 0,
         s_dark_pens.allocated ? WA_BackFill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
+        s_dark_pens.allocated ? WA_DetailPen : TAG_IGNORE, (s_dark_pens.allocated && s_dark_pens.txt_pen >= 0) ? (uint32)s_dark_pens.txt_pen : 0,
+        s_dark_pens.allocated ? WA_BlockPen : TAG_IGNORE,  (s_dark_pens.allocated && s_dark_pens.bg_pen >= 0) ? (uint32)s_dark_pens.bg_pen : 1,
+        s_dark_pens.allocated ? WINDOW_PostRefreshHook : TAG_IGNORE, (Tag)&s_post_refresh_hook,
         WA_Activate,          TRUE,
         WA_DragBar,           TRUE,
         WA_DepthGadget,       TRUE,
@@ -2442,6 +2595,9 @@ BOOL gui_init(VortexApp *app)
     }
 
     if (app->win) {
+        if (s_dark_pens.allocated) {
+            ILayers->InstallLayerHook(app->win->RPort->Layer, &s_dark_backfill_hook);
+        }
         IIntuition->SetMouseQueue(app->win, 1);
         s_current_rmb_trap = TRUE;
     }
@@ -2452,6 +2608,10 @@ BOOL gui_init(VortexApp *app)
 
     /* Perform immediate initial Reaction layout pass */
     IIntuition->IDoMethod(app->win_obj, WM_RETHINK);
+
+    if (app->win && s_dark_pens.allocated) {
+        gui_paint_titlebar_dark(app);
+    }
 
     /* If a decoded frame already exists in memory (rebuild/reopen), paint it immediately */
     if (app->win && app->gad_space && app->renderer.has_frame) {
@@ -2486,8 +2646,16 @@ void gui_cleanup_window(VortexApp *app)
     if (app->gad_server_chooser) {
         IIntuition->SetAttrs(app->gad_server_chooser, CHOOSER_Labels, (Tag)NULL, TAG_DONE);
     }
+    if (app->gad_search_chooser) {
+        IIntuition->SetAttrs(app->gad_search_chooser, CHOOSER_Labels, (Tag)NULL, TAG_DONE);
+    }
+    search_chooser_free_list();
     app->gad_clicktab = NULL;
     app->gad_tab_new  = NULL;
+
+    if (app->win && s_dark_pens.allocated) {
+        ILayers->InstallLayerHook(app->win->RPort->Layer, LAYERS_BACKFILL);
+    }
 
     if (app->win_obj) {
         IIntuition->DisposeObject(app->win_obj);
@@ -3496,6 +3664,9 @@ void gui_update_url_bar(VortexApp *app, const char *url)
     if (app->win) {
         STRPTR scr_title = (app->custom_screen != NULL) ? (STRPTR)"VortexBrowse 2.0 (AmigaOS 4.1)" : (STRPTR)~0;
         IIntuition->SetWindowTitles(app->win, app->win_title, scr_title);
+        if (s_dark_pens.allocated) {
+            gui_paint_titlebar_dark(app);
+        }
     }
 }
 
