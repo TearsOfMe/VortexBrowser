@@ -36,6 +36,8 @@
 #include <libraries/gadtools.h>
 #include <graphics/modeid.h>
 #include <graphics/displayinfo.h>
+#include <graphics/layers.h>
+#include <graphics/view.h>
 
 #include "gui.h"
 #include "net.h"
@@ -197,6 +199,137 @@ static struct Image *load_aiss_image(const char *const candidates[], int num_can
     return NULL;
 }
 
+/* ------------------------------------------------------------------------
+ * AmigaOS 4 Dark Theme Pens & Dynamic BackFill Hook
+ * ------------------------------------------------------------------------ */
+typedef struct {
+    BOOL             allocated;
+    struct ColorMap *cm;
+    int32            bg_pen;
+    int32            btn_bg_pen;
+    int32            btn_sel_pen;
+    int32            txt_pen;
+    int32            inp_bg_pen;
+    int32            gauge_fill_pen;
+    int32            raw_bg;
+    int32            raw_btn_bg;
+    int32            raw_btn_sel;
+    int32            raw_txt;
+    int32            raw_inp_bg;
+    int32            raw_gauge_fill;
+} DarkPens;
+
+static DarkPens s_dark_pens = { FALSE, NULL, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+static struct Hook s_dark_backfill_hook;
+
+static uint32 dark_backfill_hook_func(struct Hook *hook, struct RastPort *rp, struct BackFillMessage *msg)
+{
+    (void)hook;
+    if (!rp || !msg) return 0;
+
+    struct RastPort crp = *rp;
+    crp.Layer = NULL;
+    uint32 fill_pen = (s_dark_pens.allocated && s_dark_pens.bg_pen >= 0) ? (uint32)s_dark_pens.bg_pen : 1;
+    IGraphics->SetAPen(&crp, fill_pen);
+    IGraphics->RectFill(&crp, msg->Bounds.MinX, msg->Bounds.MinY, msg->Bounds.MaxX, msg->Bounds.MaxY);
+    return 0;
+}
+
+static void gui_alloc_dark_pens(struct Screen *scr)
+{
+    if (s_dark_pens.allocated || !scr) return;
+
+    memset(&s_dark_pens, 0, sizeof(s_dark_pens));
+    s_dark_pens.bg_pen         = -1;
+    s_dark_pens.btn_bg_pen     = -1;
+    s_dark_pens.btn_sel_pen    = -1;
+    s_dark_pens.txt_pen        = -1;
+    s_dark_pens.inp_bg_pen     = -1;
+    s_dark_pens.gauge_fill_pen = -1;
+    s_dark_pens.raw_bg         = -1;
+    s_dark_pens.raw_btn_bg     = -1;
+    s_dark_pens.raw_btn_sel    = -1;
+    s_dark_pens.raw_txt        = -1;
+    s_dark_pens.raw_inp_bg     = -1;
+    s_dark_pens.raw_gauge_fill = -1;
+
+    struct ColorMap *cm = scr->ViewPort.ColorMap;
+    s_dark_pens.cm = cm;
+
+    if (cm && IGraphics) {
+        s_dark_pens.raw_bg = IGraphics->ObtainBestPen(cm,
+            0x22222222UL, 0x24242424UL, 0x28282828UL,
+            OBP_Precision, PRECISION_GUI,
+            TAG_DONE);
+
+        s_dark_pens.raw_btn_bg = IGraphics->ObtainBestPen(cm,
+            0x34343434UL, 0x38383838UL, 0x3F3F3F3FUL,
+            OBP_Precision, PRECISION_GUI,
+            TAG_DONE);
+
+        s_dark_pens.raw_btn_sel = IGraphics->ObtainBestPen(cm,
+            0x4A4A4A4AUL, 0x50505050UL, 0x5B5B5B5BUL,
+            OBP_Precision, PRECISION_GUI,
+            TAG_DONE);
+
+        s_dark_pens.raw_txt = IGraphics->ObtainBestPen(cm,
+            0xE4E4E4E4UL, 0xE6E6E6E6UL, 0xEBEBEBEBUL,
+            OBP_Precision, PRECISION_GUI,
+            TAG_DONE);
+
+        s_dark_pens.raw_inp_bg = IGraphics->ObtainBestPen(cm,
+            0x18181818UL, 0x19191919UL, 0x1C1C1C1CUL,
+            OBP_Precision, PRECISION_GUI,
+            TAG_DONE);
+
+        s_dark_pens.raw_gauge_fill = IGraphics->ObtainBestPen(cm,
+            0x3A3A3A3AUL, 0x8E8E8E8EUL, 0xE6E6E6E6UL,
+            OBP_Precision, PRECISION_GUI,
+            TAG_DONE);
+    }
+
+    s_dark_pens.bg_pen         = (s_dark_pens.raw_bg >= 0)         ? s_dark_pens.raw_bg         : 1;
+    s_dark_pens.btn_bg_pen     = (s_dark_pens.raw_btn_bg >= 0)     ? s_dark_pens.raw_btn_bg     : 1;
+    s_dark_pens.btn_sel_pen    = (s_dark_pens.raw_btn_sel >= 0)    ? s_dark_pens.raw_btn_sel    : 2;
+    s_dark_pens.txt_pen        = (s_dark_pens.raw_txt >= 0)        ? s_dark_pens.raw_txt        : 2;
+    s_dark_pens.inp_bg_pen     = (s_dark_pens.raw_inp_bg >= 0)     ? s_dark_pens.raw_inp_bg     : 1;
+    s_dark_pens.gauge_fill_pen = (s_dark_pens.raw_gauge_fill >= 0) ? s_dark_pens.raw_gauge_fill : 3;
+
+    memset(&s_dark_backfill_hook, 0, sizeof(struct Hook));
+    s_dark_backfill_hook.h_Entry = (HOOKFUNC)dark_backfill_hook_func;
+
+    s_dark_pens.allocated = TRUE;
+}
+
+static void gui_free_dark_pens(void)
+{
+    if (!s_dark_pens.allocated) return;
+
+    if (s_dark_pens.cm && IGraphics) {
+        if (s_dark_pens.raw_bg >= 0)         IGraphics->ReleasePen(s_dark_pens.cm, s_dark_pens.raw_bg);
+        if (s_dark_pens.raw_btn_bg >= 0)     IGraphics->ReleasePen(s_dark_pens.cm, s_dark_pens.raw_btn_bg);
+        if (s_dark_pens.raw_btn_sel >= 0)    IGraphics->ReleasePen(s_dark_pens.cm, s_dark_pens.raw_btn_sel);
+        if (s_dark_pens.raw_txt >= 0)        IGraphics->ReleasePen(s_dark_pens.cm, s_dark_pens.raw_txt);
+        if (s_dark_pens.raw_inp_bg >= 0)     IGraphics->ReleasePen(s_dark_pens.cm, s_dark_pens.raw_inp_bg);
+        if (s_dark_pens.raw_gauge_fill >= 0) IGraphics->ReleasePen(s_dark_pens.cm, s_dark_pens.raw_gauge_fill);
+    }
+
+    s_dark_pens.allocated = FALSE;
+    s_dark_pens.cm = NULL;
+    s_dark_pens.bg_pen         = -1;
+    s_dark_pens.btn_bg_pen     = -1;
+    s_dark_pens.btn_sel_pen    = -1;
+    s_dark_pens.txt_pen        = -1;
+    s_dark_pens.inp_bg_pen     = -1;
+    s_dark_pens.gauge_fill_pen = -1;
+    s_dark_pens.raw_bg         = -1;
+    s_dark_pens.raw_btn_bg     = -1;
+    s_dark_pens.raw_btn_sel    = -1;
+    s_dark_pens.raw_txt        = -1;
+    s_dark_pens.raw_inp_bg     = -1;
+    s_dark_pens.raw_gauge_fill = -1;
+}
+
 static Object *create_toolbar_button(uint32 gid, const char *const candidates[], int num_candidates,
                                      const char *fallback_text, const char *hint, struct Screen *scr)
 {
@@ -207,6 +340,10 @@ static Object *create_toolbar_button(uint32 gid, const char *const candidates[],
             GA_RelVerify, TRUE,
             GA_Image,     (Object *)img,
             GA_HintInfo,  hint,
+            s_dark_pens.allocated ? BUTTON_BackgroundPen : TAG_IGNORE, (uint32)s_dark_pens.btn_bg_pen,
+            s_dark_pens.allocated ? BUTTON_TextPen : TAG_IGNORE,       (uint32)s_dark_pens.txt_pen,
+            s_dark_pens.allocated ? BUTTON_FillPen : TAG_IGNORE,       (uint32)s_dark_pens.btn_sel_pen,
+            s_dark_pens.allocated ? BUTTON_FillTextPen : TAG_IGNORE,   (uint32)s_dark_pens.txt_pen,
             TAG_DONE);
     } else {
         return IIntuition->NewObject(NULL, "button.gadget",
@@ -214,6 +351,10 @@ static Object *create_toolbar_button(uint32 gid, const char *const candidates[],
             GA_RelVerify, TRUE,
             GA_Text,      fallback_text,
             GA_HintInfo,  hint,
+            s_dark_pens.allocated ? BUTTON_BackgroundPen : TAG_IGNORE, (uint32)s_dark_pens.btn_bg_pen,
+            s_dark_pens.allocated ? BUTTON_TextPen : TAG_IGNORE,       (uint32)s_dark_pens.txt_pen,
+            s_dark_pens.allocated ? BUTTON_FillPen : TAG_IGNORE,       (uint32)s_dark_pens.btn_sel_pen,
+            s_dark_pens.allocated ? BUTTON_FillTextPen : TAG_IGNORE,   (uint32)s_dark_pens.txt_pen,
             TAG_DONE);
     }
 }
@@ -340,6 +481,10 @@ static Object *create_quicklink_button(uint32 gid, const char *label, const char
         BUTTON_VertAlignment,  BALIGN_CENTER,
         BUTTON_DomainString,   (Tag)s_quick_btn_labels[idx],
         GA_HintInfo,           (Tag)s_quick_btn_hints[idx],
+        s_dark_pens.allocated ? BUTTON_BackgroundPen : TAG_IGNORE, (uint32)s_dark_pens.btn_bg_pen,
+        s_dark_pens.allocated ? BUTTON_TextPen : TAG_IGNORE,       (uint32)s_dark_pens.txt_pen,
+        s_dark_pens.allocated ? BUTTON_FillPen : TAG_IGNORE,       (uint32)s_dark_pens.btn_sel_pen,
+        s_dark_pens.allocated ? BUTTON_FillTextPen : TAG_IGNORE,   (uint32)s_dark_pens.txt_pen,
         TAG_DONE);
 }
 
@@ -470,7 +615,7 @@ static uint32 space_render_func(struct Hook *hook, Object *space_obj, struct gpR
         if (app->renderer.has_frame && app->renderer.src_bm[0]) {
             renderer_present(app, gpr->gpr_RPort, area);
         } else {
-            uint32 pen = (app->prefs.dark_theme == 1) ? 1 : 0;
+            uint32 pen = (app->prefs.dark_theme == 1) ? ((s_dark_pens.allocated && s_dark_pens.bg_pen >= 0) ? (uint32)s_dark_pens.bg_pen : 1) : 0;
             IGraphics->SetAPen(gpr->gpr_RPort, pen);
             IGraphics->RectFill(gpr->gpr_RPort, area->Left, area->Top, area->Left + area->Width - 1, area->Top + area->Height - 1);
         }
@@ -897,9 +1042,7 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
                 snprintf(dcmd, sizeof(dcmd), "@DARKMODE:%u", (unsigned)app->prefs.dark_theme);
                 net_send_url(app, dcmd);
             }
-            if (app->win && app->gad_space) {
-                IIntuition->RefreshGList((struct Gadget *)app->gad_space, app->win, NULL, 1);
-            }
+            app->reopen_gui_needed = TRUE;
             app_set_status("Farbschema: %s", (app->prefs.dark_theme == 1) ? "Dunkel (Dark Mode)" : "Hell (Standard)");
             break;
 
@@ -1357,6 +1500,7 @@ static void tabs_build_list(VortexApp *app, struct List *out)
             TNA_Text,        (Tag)app->tabs[i].title,
             TNA_Number,      (uint16)i,
             TNA_CloseGadget, (app->num_tabs > 1),
+            s_dark_pens.allocated ? TNA_TextPen : TAG_IGNORE, (uint32)s_dark_pens.txt_pen,
             TAG_DONE);
         if (n && n == s_handled_close_node) {
             /* Allocator handed us the stale address: keep it aside, get another */
@@ -1365,6 +1509,7 @@ static void tabs_build_list(VortexApp *app, struct List *out)
                 TNA_Text,        (Tag)app->tabs[i].title,
                 TNA_Number,      (uint16)i,
                 TNA_CloseGadget, (app->num_tabs > 1),
+                s_dark_pens.allocated ? TNA_TextPen : TAG_IGNORE, (uint32)s_dark_pens.txt_pen,
                 TAG_DONE);
             IClickTab->FreeClickTabNode(quarantine);
         }
@@ -1723,6 +1868,12 @@ BOOL gui_init(VortexApp *app)
         unlock_pub_scr = TRUE;
     }
 
+    if (app->prefs.dark_theme == 1) {
+        gui_alloc_dark_pens(pub_scr);
+    } else {
+        gui_free_dark_pens();
+    }
+
     /* AISS candidate lists */
     static const char *const c_back[]    = { "arrowleft", "arrowleftcolored", "arrowleftfilled", "previous", "back", "left" };
     static const char *const c_fwd[]     = { "arrowright", "arrowrightcolored", "arrowrightfilled", "next", "forward", "right" };
@@ -1761,6 +1912,10 @@ BOOL gui_init(VortexApp *app)
         GA_HintInfo,      "Webadresse (URL) eingeben und Enter druecken",
         STRINGA_MaxChars, VB_MAX_URL_LEN - 1,
         STRINGA_TextVal,  app->current_url[0] ? app->current_url : "",
+        s_dark_pens.allocated ? STRINGA_Pens : TAG_IGNORE,
+            (uint32)((s_dark_pens.inp_bg_pen << 16) | (s_dark_pens.txt_pen & 0xFFFF)),
+        s_dark_pens.allocated ? STRINGA_ActivePens : TAG_IGNORE,
+            (uint32)((s_dark_pens.inp_bg_pen << 16) | (s_dark_pens.txt_pen & 0xFFFF)),
         TAG_DONE);
 
     Object *btn_clear_url = create_toolbar_button(GID_CLEAR_URL, c_clear, 3, "X", "Adresseingabe leeren", pub_scr);
@@ -1785,6 +1940,7 @@ BOOL gui_init(VortexApp *app)
         BUTTON_BevelStyle,    BVS_NONE,
         BUTTON_Transparent,   TRUE,
         BUTTON_Justification, BCJ_RIGHT,
+        s_dark_pens.allocated ? BUTTON_TextPen : TAG_IGNORE, (uint32)s_dark_pens.txt_pen,
         TAG_DONE);
 
     uint16 init_se_sel = app->prefs.search_engine;
@@ -1807,12 +1963,17 @@ BOOL gui_init(VortexApp *app)
         GA_HintInfo,      "Suchbegriff eingeben und Enter druecken",
         STRINGA_MaxChars, 128,
         STRINGA_TextVal,  "",
+        s_dark_pens.allocated ? STRINGA_Pens : TAG_IGNORE,
+            (uint32)((s_dark_pens.inp_bg_pen << 16) | (s_dark_pens.txt_pen & 0xFFFF)),
+        s_dark_pens.allocated ? STRINGA_ActivePens : TAG_IGNORE,
+            (uint32)((s_dark_pens.inp_bg_pen << 16) | (s_dark_pens.txt_pen & 0xFFFF)),
         TAG_DONE);
 
     Object *btn_search_go = create_toolbar_button(GID_SEARCH_GO, c_search, 2, "Los", "Web mit gewaehlter Suchmaschine durchsuchen", pub_scr);
 
     Object *nav_row1 = IIntuition->NewObject(NULL, "layout.gadget",
         LAYOUT_Orientation,  LAYOUT_ORIENT_HORIZ,
+        s_dark_pens.allocated ? LAYOUT_LayoutBackFill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
         LAYOUT_AddChild,     btn_back,
         CHILD_WeightedWidth, 0,
         LAYOUT_AddChild,     btn_fwd,
@@ -1869,6 +2030,10 @@ BOOL gui_init(VortexApp *app)
         BUTTON_VertAlignment,  BALIGN_CENTER,
         BUTTON_DomainString,   (Tag)" + ",
         GA_HintInfo,           (Tag)"Schnellwahl-Button hinzufuegen",
+        s_dark_pens.allocated ? BUTTON_BackgroundPen : TAG_IGNORE, (uint32)s_dark_pens.btn_bg_pen,
+        s_dark_pens.allocated ? BUTTON_TextPen : TAG_IGNORE,       (uint32)s_dark_pens.txt_pen,
+        s_dark_pens.allocated ? BUTTON_FillPen : TAG_IGNORE,       (uint32)s_dark_pens.btn_sel_pen,
+        s_dark_pens.allocated ? BUTTON_FillTextPen : TAG_IGNORE,   (uint32)s_dark_pens.txt_pen,
         TAG_DONE);
 
     Object *btn_add_fav = create_toolbar_button(GID_ADD_FAV, c_add_fav, 3, "+Lesez.", "Zu Lesezeichen hinzufuegen", pub_scr);
@@ -2013,6 +2178,11 @@ BOOL gui_init(VortexApp *app)
             }
         }
 
+        if (s_dark_pens.allocated) {
+            row_tags[t].ti_Tag = LAYOUT_LayoutBackFill;
+            row_tags[t++].ti_Data = (Tag)&s_dark_backfill_hook;
+        }
+
         row_tags[t].ti_Tag = TAG_DONE;
         row_tags[t++].ti_Data = 0;
 
@@ -2026,6 +2196,7 @@ BOOL gui_init(VortexApp *app)
 
     Object *nav_row2 = IIntuition->NewObject(NULL, "layout.gadget",
         LAYOUT_Orientation,  LAYOUT_ORIENT_HORIZ,
+        s_dark_pens.allocated ? LAYOUT_LayoutBackFill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
         LAYOUT_SpaceInner,   TRUE,
         LAYOUT_SpaceOuter,   FALSE,
         LAYOUT_AddChild,     ql_row_objs[0],
@@ -2066,6 +2237,8 @@ BOOL gui_init(VortexApp *app)
             GA_Text,              app->status_text,
             BUTTON_Justification, BCJ_LEFT,
             BUTTON_BevelStyle,    BVS_THIN,
+            s_dark_pens.allocated ? BUTTON_BackgroundPen : TAG_IGNORE, (uint32)s_dark_pens.bg_pen,
+            s_dark_pens.allocated ? BUTTON_TextPen : TAG_IGNORE,       (uint32)s_dark_pens.txt_pen,
             TAG_DONE);
 
         app->gad_gauge = IIntuition->NewObject(NULL, "fuelgauge.gadget",
@@ -2076,10 +2249,14 @@ BOOL gui_init(VortexApp *app)
             FUELGAUGE_Percent,     TRUE,
             FUELGAUGE_Ticks,       0,
             FUELGAUGE_Orientation, FGORIENT_HORIZ,
+            s_dark_pens.allocated ? FUELGAUGE_EmptyPen : TAG_IGNORE,   (uint32)s_dark_pens.inp_bg_pen,
+            s_dark_pens.allocated ? FUELGAUGE_FillPen : TAG_IGNORE,    (uint32)s_dark_pens.gauge_fill_pen,
+            s_dark_pens.allocated ? FUELGAUGE_PercentPen : TAG_IGNORE, (uint32)s_dark_pens.txt_pen,
             TAG_DONE);
 
         status_group = IIntuition->NewObject(NULL, "layout.gadget",
             LAYOUT_Orientation,  LAYOUT_ORIENT_HORIZ,
+            s_dark_pens.allocated ? LAYOUT_LayoutBackFill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
             LAYOUT_SpaceInner,   FALSE,
             LAYOUT_SpaceOuter,   FALSE,
             LAYOUT_AddChild,     app->gad_status,
@@ -2111,6 +2288,7 @@ BOOL gui_init(VortexApp *app)
 
     Object *tab_row = IIntuition->NewObject(NULL, "layout.gadget",
         LAYOUT_Orientation,  LAYOUT_ORIENT_HORIZ,
+        s_dark_pens.allocated ? LAYOUT_LayoutBackFill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
         LAYOUT_SpaceInner,   FALSE,
         LAYOUT_SpaceOuter,   FALSE,
         LAYOUT_AddChild,     app->gad_clicktab,
@@ -2165,6 +2343,11 @@ BOOL gui_init(VortexApp *app)
         root_tags[rt++].ti_Data = 0;
     }
 
+    if (s_dark_pens.allocated) {
+        root_tags[rt].ti_Tag = LAYOUT_LayoutBackFill;
+        root_tags[rt++].ti_Data = (Tag)&s_dark_backfill_hook;
+    }
+
     root_tags[rt].ti_Tag = TAG_DONE;
     root_tags[rt++].ti_Data = 0;
 
@@ -2191,6 +2374,7 @@ BOOL gui_init(VortexApp *app)
         WA_Title,             app->win_title,
         (app->custom_screen != NULL) ? WA_ScreenTitle : TAG_IGNORE,
         (app->custom_screen != NULL) ? (Tag)"VortexBrowse 2.0 (AmigaOS 4.1)" : 0,
+        s_dark_pens.allocated ? WA_BackFill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
         WA_Activate,          TRUE,
         WA_DragBar,           TRUE,
         WA_DepthGadget,       TRUE,
@@ -2339,6 +2523,8 @@ void gui_cleanup_window(VortexApp *app)
     app->gad_space     = NULL;
     app->gad_status    = NULL;
     app->gad_gauge     = NULL;
+
+    gui_free_dark_pens();
 }
 
 void gui_cleanup(VortexApp *app)

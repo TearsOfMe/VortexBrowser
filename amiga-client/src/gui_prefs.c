@@ -1390,13 +1390,11 @@ void gui_prefs_open(VortexApp *app)
 
         if (screen_reopen_needed) {
             app->reopen_screen_needed = TRUE;
-        } else if (ql_changed || status_bar_changed) {
+        } else if (ql_changed || status_bar_changed || theme_changed) {
+            prefs_apply(app);
             app->reopen_gui_needed = TRUE;
         } else {
             prefs_apply(app);
-            if (theme_changed && app->win && app->gad_space) {
-                IIntuition->RefreshGList((struct Gadget *)app->gad_space, app->win, NULL, 1);
-            }
             favorites_rebuild_chooser_list(app);
             if (stream_res_changed) {
                 app->renderer.reported_w = 0;
