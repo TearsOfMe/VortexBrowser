@@ -304,14 +304,17 @@ int main(int argc, char **argv)
             gui_rebuild_window(&g_app);
         }
         /* Send debounced/throttled mouse move to remote browser outside the IDCMP input task */
-        if (g_app.connected && g_app.pending_mouse_move) {
+        if (g_app.pending_mouse_move) {
             g_app.pending_mouse_move = FALSE;
             int16_t rx = 0, ry = 0;
-            if (renderer_map_window_to_remote(&g_app, g_app.pending_win_mouse_x, g_app.pending_win_mouse_y, &rx, &ry)) {
+            BOOL inside_viewport = renderer_map_window_to_remote(&g_app, g_app.pending_win_mouse_x, g_app.pending_win_mouse_y, &rx, &ry);
+            gui_set_rmb_trap(&g_app, inside_viewport);
+
+            if (g_app.connected && inside_viewport) {
                 uint32 s = 0, us = 0;
                 IIntuition->CurrentTime(&s, &us);
-                int32 diff_us = ((int32)s - (int32)g_app.last_move_secs) * 1000000 +
-                                ((int32)us - (int32)g_app.last_move_micros);
+                int32 diff_s  = (int32)s - (int32)g_app.last_move_secs;
+                int32 diff_us = diff_s * 1000000 + ((int32)us - (int32)g_app.last_move_micros);
                 int16_t dx = rx - g_app.last_remote_x;
                 int16_t dy = ry - g_app.last_remote_y;
                 if ((diff_us >= 33000 || diff_us < 0) && (dx * dx + dy * dy >= 4)) {
@@ -324,6 +327,7 @@ int main(int argc, char **argv)
             } else {
                 if (g_app.is_hovering_link) {
                     g_app.is_hovering_link = FALSE;
+                    g_app.hover_url[0]     = '\0';
                 }
             }
         }

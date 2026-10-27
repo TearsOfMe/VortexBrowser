@@ -376,8 +376,11 @@ BOOL net_handle_incoming(VortexApp *app)
             if (prog.status[0] != '\0') {
                 if (strncmp(prog.status, "Link: ", 6) == 0) {
                     app->is_hovering_link = TRUE;
+                    strncpy(app->hover_url, prog.status + 6, sizeof(app->hover_url) - 1);
+                    app->hover_url[sizeof(app->hover_url) - 1] = '\0';
                 } else {
                     app->is_hovering_link = FALSE;
+                    app->hover_url[0]     = '\0';
                 }
                 if (app->prefs.show_status_bar) {
                     app_set_status("%s", prog.status);

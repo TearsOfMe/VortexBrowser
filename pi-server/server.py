@@ -2494,7 +2494,9 @@ class AmigaClientSession:
                         """([x, y]) => {
                             const probePoints = [
                                 [0, 0], [0, -3], [0, 3], [-4, 0], [4, 0],
-                                [0, -7], [0, 7], [-8, 0], [8, 0], [-12, 0], [12, 0]
+                                [-4, -4], [4, -4], [-4, 4], [4, 4],
+                                [0, -7], [0, 7], [-8, 0], [8, 0],
+                                [-12, 0], [12, 0], [-16, 0], [16, 0]
                             ];
                             let foundA = null;
                             let foundImg = null;
@@ -2503,11 +2505,22 @@ class AmigaClientSession:
                             for (const [dx, dy] of probePoints) {
                                 const px = Math.max(0, x + dx);
                                 const py = Math.max(0, y + dy);
-                                const el = document.elementFromPoint(px, py);
+                                let el = document.elementFromPoint(px, py);
                                 if (!el) continue;
+                                while (el && el.shadowRoot && el.shadowRoot.elementFromPoint) {
+                                    const inner = el.shadowRoot.elementFromPoint(px, py);
+                                    if (!inner || inner === el) break;
+                                    el = inner;
+                                }
                                 if (!foundA) {
-                                    const a = el.closest ? el.closest('a[href]') : (el.tagName === 'A' && el.href ? el : null);
-                                    if (a && a.href && !a.href.startsWith('javascript:')) foundA = a;
+                                    const a = el.closest ? el.closest('a[href], a[xlink\\\\:href], [role="link"]') : (el.tagName === 'A' ? el : null);
+                                    if (a) {
+                                        let h = '';
+                                        if (typeof a.href === 'string' && a.href) h = a.href;
+                                        else if (a.href && typeof a.href.baseVal === 'string') h = a.href.baseVal;
+                                        else h = a.getAttribute('href') || a.getAttribute('xlink:href') || '';
+                                        if (h && !h.startsWith('javascript:')) foundA = a;
+                                    }
                                 }
                                 if (!foundImg) {
                                     const img = (el.tagName === 'IMG') ? el : (el.closest ? el.closest('img[src]') : null);
@@ -2523,8 +2536,20 @@ class AmigaClientSession:
                             let linkHref = '';
                             let linkLabel = '';
                             if (foundA) {
-                                linkHref = foundA.href || '';
-                                linkLabel = (foundA.innerText || foundA.getAttribute('title') || foundA.getAttribute('aria-label') || foundA.href || '').trim().replace(/\\s+/g, ' ').slice(0, 72);
+                                let rawHref = '';
+                                if (typeof foundA.href === 'string' && foundA.href) {
+                                    rawHref = foundA.href;
+                                } else if (foundA.href && typeof foundA.href.baseVal === 'string') {
+                                    rawHref = foundA.href.baseVal;
+                                } else {
+                                    rawHref = foundA.getAttribute('href') || foundA.getAttribute('xlink:href') || '';
+                                }
+                                try {
+                                    linkHref = new URL(rawHref, document.baseURI).href;
+                                } catch (e) {
+                                    linkHref = rawHref;
+                                }
+                                linkLabel = (foundA.innerText || foundA.textContent || foundA.getAttribute('title') || foundA.getAttribute('aria-label') || linkHref || '').trim().replace(/\\s+/g, ' ').slice(0, 72);
                             }
 
                             let mSrc = '';
@@ -2536,6 +2561,11 @@ class AmigaClientSession:
                                     const s = foundMedia.querySelector('source[src]');
                                     if (s) mSrc = s.src || '';
                                 }
+                            }
+                            if (mSrc) {
+                                try {
+                                    mSrc = new URL(mSrc, document.baseURI).href;
+                                } catch (e) {}
                             }
                             return { linkHref, linkLabel, mSrc };
                         }""",
@@ -2553,6 +2583,8 @@ class AmigaClientSession:
             if not link_url and self.last_hover_url:
                 link_url = self.last_hover_url
                 logger.info("Using last_hover_url fallback for context menu: %s", link_url)
+                if not link_text:
+                    link_text = link_url.split("/")[-1] or link_url
 
         logger.info(
             "Sending Native AmigaOS 4 Context Menu for (%d, %d): link=%r text=%r media=%r",

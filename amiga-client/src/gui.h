@@ -104,6 +104,7 @@ void gui_reopen_screen(VortexApp *app);
 void prompt_add_quicklink(VortexApp *app);
 void gui_handle_events(VortexApp *app);
 void gui_poll_mouse(VortexApp *app);
+void gui_set_rmb_trap(VortexApp *app, BOOL trap);
 uint32 gui_get_signal_mask(VortexApp *app);
 void gui_update_url_bar(VortexApp *app, const char *url);
 void gui_tab_add(VortexApp *app, const char *title, const char *url, BOOL switch_to);

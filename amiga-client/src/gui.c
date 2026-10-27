@@ -365,11 +365,36 @@ static BOOL   s_got_extended_wheel = FALSE;
 static int32  s_wheel_accum_dy     = 0;
 static int16  s_wheel_win_x        = 640;
 static int16  s_wheel_win_y        = 360;
+static BOOL   s_current_rmb_trap   = TRUE;
+
+void gui_set_rmb_trap(VortexApp *app, BOOL trap)
+{
+    if (!app || !app->win) return;
+    if (trap != s_current_rmb_trap) {
+        s_current_rmb_trap = trap;
+        IIntuition->SetWindowAttrs(app->win,
+            WA_RMBTrap, trap,
+            TAG_DONE);
+        if (trap) {
+            app->win->Flags |= WFLG_RMBTRAP;
+        } else {
+            app->win->Flags &= ~WFLG_RMBTRAP;
+        }
+    }
+}
 
 static void dispatch_viewport_mouse_btn(VortexApp *app, int16_t win_x, int16_t win_y, uint16_t btn, BOOL is_down,
                                         uint32 secs, uint32 micros)
 {
-    if (!app || !app->connected) {
+    if (!app) {
+        return;
+    }
+
+    if (!app->connected) {
+        if (btn == 3 && is_down) {
+            gui_set_rmb_trap(app, FALSE);
+            open_main_menu_popup(app, win_x, win_y);
+        }
         return;
     }
 
@@ -378,6 +403,10 @@ static void dispatch_viewport_mouse_btn(VortexApp *app, int16_t win_x, int16_t w
         if (!is_down && s_mouse_lmb_down && btn == 1) {
             s_mouse_lmb_down = FALSE;
             net_send_mouse_button(app, rx, ry, 1, FALSE);
+        }
+        if (btn == 3 && is_down) {
+            gui_set_rmb_trap(app, FALSE);
+            open_main_menu_popup(app, win_x, win_y);
         }
         return;
     }
@@ -395,12 +424,15 @@ static void dispatch_viewport_mouse_btn(VortexApp *app, int16_t win_x, int16_t w
         s_last_click_is_down = is_down;
     }
 
-    if (btn == 3 && is_down) {
-        memset(&app->ctx_menu, 0, sizeof(MsgContextMenu));
-        app->ctx_menu_ready   = FALSE;
-        app->ctx_menu_pending = TRUE;
-        app_set_status("Kontextmenue wird geoeffnet (%d, %d)...", (int)rx, (int)ry);
-        net_send_click(app, rx, ry, 3);
+    if (btn == 3) {
+        if (is_down) {
+            gui_set_rmb_trap(app, TRUE);
+            memset(&app->ctx_menu, 0, sizeof(MsgContextMenu));
+            app->ctx_menu_ready   = FALSE;
+            app->ctx_menu_pending = TRUE;
+            app_set_status("Kontextmenue wird geoeffnet (%d, %d)...", (int)rx, (int)ry);
+            net_send_click(app, rx, ry, 3);
+        }
         return;
     }
 
@@ -507,11 +539,9 @@ static uint32 idcmp_hook_func(struct Hook *hook, Object *win_obj, struct IntuiMe
         }
 
         case IDCMP_MOUSEMOVE: {
-            if (app->connected) {
-                app->pending_win_mouse_x = imsg->MouseX;
-                app->pending_win_mouse_y = imsg->MouseY;
-                app->pending_mouse_move  = TRUE;
-            }
+            app->pending_win_mouse_x = imsg->MouseX;
+            app->pending_win_mouse_y = imsg->MouseY;
+            app->pending_mouse_move  = TRUE;
             break;
         }
 
@@ -2153,6 +2183,7 @@ BOOL gui_init(VortexApp *app)
         WA_AutoAdjust,        TRUE,
         WA_ReportMouse,       TRUE,
         WA_MouseQueue,        1,
+        WA_RMBTrap,           TRUE,
         WA_Left,              (uint32)win_left,
         WA_Top,               (uint32)win_top,
         WA_Width,             (uint32)win_w,
@@ -2210,6 +2241,7 @@ BOOL gui_init(VortexApp *app)
 
     if (app->win) {
         IIntuition->SetMouseQueue(app->win, 1);
+        s_current_rmb_trap = TRUE;
     }
 
     if (app->custom_screen) {
@@ -2926,6 +2958,15 @@ void gui_handle_events(VortexApp *app)
         renderer_flush_dirty(app);
 
         if (app->win) {
+            if (app->ctx_menu.link_url[0] == '\0' && app->hover_url[0] != '\0') {
+                strncpy(app->ctx_menu.link_url, app->hover_url, sizeof(app->ctx_menu.link_url) - 1);
+                app->ctx_menu.link_url[sizeof(app->ctx_menu.link_url) - 1] = '\0';
+                if (app->ctx_menu.link_text[0] == '\0') {
+                    strncpy(app->ctx_menu.link_text, app->hover_url, sizeof(app->ctx_menu.link_text) - 1);
+                    app->ctx_menu.link_text[sizeof(app->ctx_menu.link_text) - 1] = '\0';
+                }
+            }
+
             enum {
                 CTX_NONE = 0,
                 CTX_OPEN_LINK = 1,
@@ -2943,7 +2984,8 @@ void gui_handle_events(VortexApp *app)
                 CTX_DOWNLOAD_PAGE,
                 CTX_NEW_TAB,
                 CTX_CLOSE_TAB,
-                CTX_AUTOLOGIN
+                CTX_AUTOLOGIN,
+                CTX_MAIN_MENU
             };
 
             BOOL has_link  = (app->ctx_menu.link_url[0] != '\0');
@@ -2985,6 +3027,8 @@ void gui_handle_events(VortexApp *app)
                         PMITEM("Vorwaerts"), PMIA_ID, CTX_FORWARD, PMEND,
                         PMITEM("Seite neu laden"), PMIA_ID, CTX_RELOAD, PMEND,
                         PMITEM("Startseite (Speed-Dial)"), PMIA_ID, CTX_HOME, PMEND,
+                        PMBAR(), PMEND,
+                        PMITEM("VortexBrowse Hauptmenue..."), PMIA_ID, CTX_MAIN_MENU, PMEND,
                     PMEND;
                 } else if (has_media) {
                     menu_obj = PMMENU(hdr_buf),
@@ -3000,6 +3044,8 @@ void gui_handle_events(VortexApp *app)
                         PMITEM("Vorwaerts"), PMIA_ID, CTX_FORWARD, PMEND,
                         PMITEM("Seite neu laden"), PMIA_ID, CTX_RELOAD, PMEND,
                         PMITEM("Startseite (Speed-Dial)"), PMIA_ID, CTX_HOME, PMEND,
+                        PMBAR(), PMEND,
+                        PMITEM("VortexBrowse Hauptmenue..."), PMIA_ID, CTX_MAIN_MENU, PMEND,
                     PMEND;
                 } else {
                     menu_obj = PMMENU(hdr_buf),
@@ -3015,6 +3061,8 @@ void gui_handle_events(VortexApp *app)
                         PMITEM("Auto-Login (Zugangsdaten ausfuellen)"), PMIA_ID, CTX_AUTOLOGIN, PMEND,
                         PMITEM("Aktuelle Seite zu Lesezeichen (+Fav)"), PMIA_ID, CTX_FAV_PAGE, PMEND,
                         PMITEM("Aktuelle Adresse herunterladen (ASL)..."), PMIA_ID, CTX_DOWNLOAD_PAGE, PMEND,
+                        PMBAR(), PMEND,
+                        PMITEM("VortexBrowse Hauptmenue..."), PMIA_ID, CTX_MAIN_MENU, PMEND,
                     PMEND;
                 }
 
@@ -3038,7 +3086,7 @@ void gui_handle_events(VortexApp *app)
                 es.es_Title        = (STRPTR)"Odyssey / VortexBrowse Kontextmenue";
                 if (has_link) {
                     es.es_TextFormat   = (STRPTR)"Link: %s";
-                    es.es_GadgetFormat = (STRPTR)"Link oeffnen|Neuer Tab|Tab schliessen|Auto-Login|Herunterladen (ASL)|In URL-Leiste|Zurueck|Abbrechen";
+                    es.es_GadgetFormat = (STRPTR)"Link oeffnen|Neuer Tab|Tab schliessen|Auto-Login|Herunterladen (ASL)|In URL kopieren|Hauptmenue|Zurueck|Abbrechen";
                     LONG choice = IIntuition->EasyRequest(app->win, &es, NULL, app->ctx_menu.link_url);
                     if (choice == 1) selected_id = CTX_OPEN_LINK;
                     else if (choice == 2) selected_id = CTX_OPEN_NEW_WIN;
@@ -3046,10 +3094,11 @@ void gui_handle_events(VortexApp *app)
                     else if (choice == 4) selected_id = CTX_AUTOLOGIN;
                     else if (choice == 5) selected_id = CTX_DOWNLOAD_LINK;
                     else if (choice == 6) selected_id = CTX_COPY_LINK_URL;
-                    else if (choice == 7) selected_id = CTX_BACK;
+                    else if (choice == 7) selected_id = CTX_MAIN_MENU;
+                    else if (choice == 8) selected_id = CTX_BACK;
                 } else {
                     es.es_TextFormat   = (STRPTR)"Seiten-Aktion waehlen:";
-                    es.es_GadgetFormat = (STRPTR)"Zurueck|Vorwaerts|Neu laden|Startseite|Neuer Tab|Tab schliessen|Auto-Login|Abbrechen";
+                    es.es_GadgetFormat = (STRPTR)"Zurueck|Vorwaerts|Neu laden|Startseite|Neuer Tab|Tab schliessen|Auto-Login|Hauptmenue|Abbrechen";
                     LONG choice = IIntuition->EasyRequest(app->win, &es, NULL);
                     if (choice == 1) selected_id = CTX_BACK;
                     else if (choice == 2) selected_id = CTX_FORWARD;
@@ -3058,10 +3107,15 @@ void gui_handle_events(VortexApp *app)
                     else if (choice == 5) selected_id = CTX_NEW_TAB;
                     else if (choice == 6) selected_id = CTX_CLOSE_TAB;
                     else if (choice == 7) selected_id = CTX_AUTOLOGIN;
+                    else if (choice == 8) selected_id = CTX_MAIN_MENU;
                 }
             }
 
             switch (selected_id) {
+                case CTX_MAIN_MENU:
+                    open_main_menu_popup(app, app->win ? app->win->MouseX : 300, app->win ? app->win->MouseY : 200);
+                    break;
+
                 case CTX_NEW_TAB:
                     gui_tab_add(app, "Neuer Tab", "", TRUE);
                     break;
@@ -3095,7 +3149,8 @@ void gui_handle_events(VortexApp *app)
 
                 case CTX_COPY_LINK_URL:
                     gui_update_url_bar(app, app->ctx_menu.link_url);
-                    app_set_status("Link in URL-Leiste kopiert: %s", app->ctx_menu.link_url);
+                    clipboard_write_text(app->ctx_menu.link_url);
+                    app_set_status("Link in Zwischenablage kopiert: %s", app->ctx_menu.link_url);
                     break;
 
                 case CTX_FAV_LINK: {
