@@ -416,6 +416,19 @@ def find_ublock_extension_path() -> Optional[str]:
     return exts[0] if exts else None
 
 
+DARKREADER_JS: str = ""
+try:
+    dr_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "darkreader.js")
+    if os.path.exists(dr_path):
+        with open(dr_path, "r", encoding="utf-8") as f:
+            DARKREADER_JS = f.read()
+        logger.info("Loaded DarkReader engine (%d bytes)", len(DARKREADER_JS))
+    else:
+        logger.warning("darkreader.js not found at %s", dr_path)
+except Exception as exc:
+    logger.warning("Could not read darkreader.js: %s", exc)
+
+
 # ============================================================================
 # Built-in Local Portal & Test HTTP Server
 # ============================================================================
@@ -1494,6 +1507,11 @@ class AmigaClientSession:
         self.nav_times.append(now)
         self.nav_idx = len(self.nav_history) - 1
         logger.info("History push [%d/%d]: %s", self.nav_idx, len(self.nav_history), url)
+
+        if self.dark_mode == 1 and self.page:
+            t = asyncio.create_task(self._apply_dark_mode(self.page))
+            self.background_tasks.add(t)
+            t.add_done_callback(self.background_tasks.discard)
 
     def _on_popup_page(self, new_page: Page) -> None:
         """Redirects any target='_blank' or window.open popup into the main streamed page."""
@@ -3069,6 +3087,45 @@ class AmigaClientSession:
             except Exception as exc:
                 logger.debug("Emulation.setAutoDarkModeOverride error: %s", exc)
 
+        if DARKREADER_JS:
+            try:
+                if is_dark:
+                    js = (
+                        "(() => {"
+                        "try {"
+                        "if (typeof DarkReader === 'undefined') {"
+                        + DARKREADER_JS +
+                        "\n}"
+                        "if (typeof DarkReader !== 'undefined') {"
+                        "DarkReader.enable({ brightness: 100, contrast: 90, sepia: 10 });"
+                        "}"
+                        "let s = document.getElementById('__vb_dark_flash');"
+                        "if (!s && document.head) {"
+                        "s = document.createElement('style');"
+                        "s.id = '__vb_dark_flash';"
+                        "document.head.appendChild(s);"
+                        "}"
+                        "if (s) s.textContent = 'html, body { background-color: #18181b !important; color: #f4f4f5 !important; }';"
+                        "} catch (e) {}"
+                        "})();"
+                    )
+                    await target_page.evaluate(js)
+                else:
+                    js = """
+                    (() => {
+                        try {
+                            if (typeof DarkReader !== 'undefined') {
+                                DarkReader.disable();
+                            }
+                            let s = document.getElementById('__vb_dark_flash');
+                            if (s) s.remove();
+                        } catch (e) {}
+                    })();
+                    """
+                    await target_page.evaluate(js)
+            except Exception as exc:
+                logger.debug("DarkReader evaluate error: %s", exc)
+
         await self._apply_web_styling(target_page)
 
     async def _apply_web_styling(self, page=None) -> None:
@@ -3099,7 +3156,7 @@ class AmigaClientSession:
 
             dark_css = ""
             if self.dark_mode == 1:
-                dark_css = ":root, html { color-scheme: dark !important; }"
+                dark_css = ":root, html { color-scheme: dark !important; } html, body { background-color: #18181b !important; color: #f4f4f5 !important; }"
             elif self.dark_mode == 0:
                 dark_css = ":root, html { color-scheme: light !important; }"
 
@@ -3129,7 +3186,9 @@ class AmigaClientSession:
     def _on_page_updated(self) -> None:
         self._trigger_full_refresh()
         if self.page and self.running:
-            t = asyncio.create_task(self._apply_web_styling())
+            t = asyncio.create_task(self._apply_dark_mode(self.page))
+            self.background_tasks.add(t)
+            t.add_done_callback(self.background_tasks.discard)
             self.background_tasks.add(t)
             t.add_done_callback(self.background_tasks.discard)
 
