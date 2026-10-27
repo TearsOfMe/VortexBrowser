@@ -82,6 +82,8 @@ static struct NewMenu s_main_menu[] = {
     { NM_ITEM,  (STRPTR)"Stream: 540p qHD (960x540) [Turbo]",          NULL,        0, 0, (APTR)MID_STREAM_RES_540P },
     { NM_ITEM,  (STRPTR)"Stream: 1080p FHD (1920x1080)",               NULL,        0, 0, (APTR)MID_STREAM_RES_1080P },
     { NM_ITEM,  NM_BARLABEL,                                           NULL,        0, 0, NULL },
+    { NM_ITEM,  (STRPTR)"Dunkles Theme (Dark Mode) an/aus",            (STRPTR)"M", 0, 0, (APTR)MID_TOGGLE_DARK_THEME },
+    { NM_ITEM,  NM_BARLABEL,                                           NULL,        0, 0, NULL },
     { NM_ITEM,  (STRPTR)"Vollbild / Bildschirm umschalten",            (STRPTR)"F11", 0, 0, (APTR)MID_TOGGLE_SCREEN },
     { NM_ITEM,  (STRPTR)"Statusleiste umschalten",                     NULL,        0, 0, (APTR)MID_TOGGLE_STATUSBAR },
     { NM_ITEM,  NM_BARLABEL,                                           NULL,        0, 0, NULL },
@@ -468,7 +470,8 @@ static uint32 space_render_func(struct Hook *hook, Object *space_obj, struct gpR
         if (app->renderer.has_frame && app->renderer.src_bm[0]) {
             renderer_present(app, gpr->gpr_RPort, area);
         } else {
-            IGraphics->SetAPen(gpr->gpr_RPort, 0);
+            uint32 pen = (app->prefs.dark_theme == 1) ? 1 : 0;
+            IGraphics->SetAPen(gpr->gpr_RPort, pen);
             IGraphics->RectFill(gpr->gpr_RPort, area->Left, area->Top, area->Left + area->Width - 1, area->Top + area->Height - 1);
         }
     }
@@ -886,6 +889,20 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
             app_set_status("Stream-Aufloesung: 1920x1080 (1080p Full HD)");
             break;
 
+        case MID_TOGGLE_DARK_THEME:
+            app->prefs.dark_theme = (app->prefs.dark_theme == 1) ? 0 : 1;
+            prefs_save(app, TRUE);
+            if (app->connected) {
+                char dcmd[32];
+                snprintf(dcmd, sizeof(dcmd), "@DARKMODE:%u", (unsigned)app->prefs.dark_theme);
+                net_send_url(app, dcmd);
+            }
+            if (app->win && app->gad_space) {
+                IIntuition->RefreshGList((struct Gadget *)app->gad_space, app->win, NULL, 1);
+            }
+            app_set_status("Farbschema: %s", (app->prefs.dark_theme == 1) ? "Dunkel (Dark Mode)" : "Hell (Standard)");
+            break;
+
         case MID_TOGGLE_STATUSBAR:
             app->prefs.show_status_bar = !app->prefs.show_status_bar;
             prefs_save(app, TRUE);
@@ -1189,6 +1206,7 @@ static void open_main_menu_popup(VortexApp *app, int16_t mx, int16_t my)
             PMITEM("YouTube"),                        PMIA_ID, MID_FAV_YOUTUBE, PMEND,
             PMITEM("Wikipedia"),                      PMIA_ID, MID_FAV_WIKIPEDIA, PMEND,
             PMBAR(), PMEND,
+            PMITEM(app->prefs.dark_theme ? "Helles Theme (Standard)" : "Dunkles Theme (Dark Mode)"), PMIA_ID, MID_TOGGLE_DARK_THEME, PMEND,
             PMITEM("Voreinstellungen..."),            PMIA_ID, MID_SETTINGS, PMEND,
             PMITEM("Einstellungen speichern"),        PMIA_ID, MID_SET_SAVE, PMEND,
             PMITEM("Ueber VortexBrowse..."),          PMIA_ID, MID_PROJ_ABOUT, PMEND,
@@ -2985,7 +3003,8 @@ void gui_handle_events(VortexApp *app)
                 CTX_NEW_TAB,
                 CTX_CLOSE_TAB,
                 CTX_AUTOLOGIN,
-                CTX_MAIN_MENU
+                CTX_MAIN_MENU,
+                CTX_TOGGLE_DARK_THEME
             };
 
             BOOL has_link  = (app->ctx_menu.link_url[0] != '\0');
@@ -3028,6 +3047,7 @@ void gui_handle_events(VortexApp *app)
                         PMITEM("Seite neu laden"), PMIA_ID, CTX_RELOAD, PMEND,
                         PMITEM("Startseite (Speed-Dial)"), PMIA_ID, CTX_HOME, PMEND,
                         PMBAR(), PMEND,
+                        PMITEM(app->prefs.dark_theme ? "Helles Theme" : "Dunkles Theme"), PMIA_ID, CTX_TOGGLE_DARK_THEME, PMEND,
                         PMITEM("VortexBrowse Hauptmenue..."), PMIA_ID, CTX_MAIN_MENU, PMEND,
                     PMEND;
                 } else if (has_media) {
@@ -3045,6 +3065,7 @@ void gui_handle_events(VortexApp *app)
                         PMITEM("Seite neu laden"), PMIA_ID, CTX_RELOAD, PMEND,
                         PMITEM("Startseite (Speed-Dial)"), PMIA_ID, CTX_HOME, PMEND,
                         PMBAR(), PMEND,
+                        PMITEM(app->prefs.dark_theme ? "Helles Theme" : "Dunkles Theme"), PMIA_ID, CTX_TOGGLE_DARK_THEME, PMEND,
                         PMITEM("VortexBrowse Hauptmenue..."), PMIA_ID, CTX_MAIN_MENU, PMEND,
                     PMEND;
                 } else {
@@ -3062,6 +3083,7 @@ void gui_handle_events(VortexApp *app)
                         PMITEM("Aktuelle Seite zu Lesezeichen (+Fav)"), PMIA_ID, CTX_FAV_PAGE, PMEND,
                         PMITEM("Aktuelle Adresse herunterladen (ASL)..."), PMIA_ID, CTX_DOWNLOAD_PAGE, PMEND,
                         PMBAR(), PMEND,
+                        PMITEM(app->prefs.dark_theme ? "Helles Theme (Light Mode)" : "Dunkles Theme (Dark Mode)"), PMIA_ID, CTX_TOGGLE_DARK_THEME, PMEND,
                         PMITEM("VortexBrowse Hauptmenue..."), PMIA_ID, CTX_MAIN_MENU, PMEND,
                     PMEND;
                 }
@@ -3112,6 +3134,10 @@ void gui_handle_events(VortexApp *app)
             }
 
             switch (selected_id) {
+                case CTX_TOGGLE_DARK_THEME:
+                    handle_menu_command(app, MID_TOGGLE_DARK_THEME);
+                    break;
+
                 case CTX_MAIN_MENU:
                     open_main_menu_popup(app, app->win ? app->win->MouseX : 300, app->win ? app->win->MouseY : 200);
                     break;

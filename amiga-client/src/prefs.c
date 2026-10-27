@@ -87,6 +87,7 @@ void prefs_init(VortexApp *app)
     app->prefs.soft_scroll                  = TRUE;
     app->prefs.show_status_bar              = FALSE; /* Default: OFF */
     app->prefs.stream_res_mode              = STREAM_RES_NATIVE; /* Default: 1:1 Window Size */
+    app->prefs.dark_theme                   = 0; /* Default: Hell (Standard) */
     strncpy(app->prefs.start_url, "https://www.amiga-news.de", sizeof(app->prefs.start_url) - 1);
     app->prefs.start_url[sizeof(app->prefs.start_url) - 1] = '\0';
     app->prefs.save_last_url                = TRUE; /* Default: ON (letzte Seite speichern) */
@@ -226,6 +227,8 @@ static BOOL load_from_file(VortexApp *app, const char *path)
             app->prefs.show_status_bar = (atoi(val) != 0);
         } else if (strcmp(key, "stream_res_mode") == 0) {
             app->prefs.stream_res_mode = (uint8_t)atoi(val);
+        } else if (strcmp(key, "dark_theme") == 0) {
+            app->prefs.dark_theme = (uint8_t)atoi(val);
         } else if (strcmp(key, "start_url") == 0) {
             strncpy(app->prefs.start_url, val, sizeof(app->prefs.start_url) - 1);
             app->prefs.start_url[sizeof(app->prefs.start_url) - 1] = '\0';
@@ -338,6 +341,7 @@ static BOOL save_to_file(const VortexApp *app, const char *path)
     fprintf(fp, "soft_scroll=%d\n",       app->prefs.soft_scroll ? 1 : 0);
     fprintf(fp, "show_status_bar=%d\n",   app->prefs.show_status_bar ? 1 : 0);
     fprintf(fp, "stream_res_mode=%u\n",   (unsigned)app->prefs.stream_res_mode);
+    fprintf(fp, "dark_theme=%u\n",         (unsigned)app->prefs.dark_theme);
     fprintf(fp, "start_url=%s\n",         app->prefs.start_url);
     fprintf(fp, "save_last_url=%d\n\n",   app->prefs.save_last_url ? 1 : 0);
 
@@ -499,6 +503,11 @@ void prefs_apply(VortexApp *app)
         char ccmd[48];
         snprintf(ccmd, sizeof(ccmd), "@CHARSET:%s", enc);
         net_send_url(app, ccmd);
+
+        /* Dark Theme / Dark Mode */
+        char dcmd[32];
+        snprintf(dcmd, sizeof(dcmd), "@DARKMODE:%u", (unsigned)app->prefs.dark_theme);
+        net_send_url(app, dcmd);
     }
 }
 

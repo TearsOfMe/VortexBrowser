@@ -90,6 +90,7 @@ typedef struct VortexPrefs {
     QuickLinkItem    quick_links[VB_MAX_QUICKLINKS];
     uint16_t         num_quick_links;
     uint8_t          stream_res_mode;   /* STREAM_RES_NATIVE, STREAM_RES_720P, etc. */
+    uint8_t          dark_theme;        /* 0 = Hell (Standard), 1 = Dunkel (Dark Mode), 2 = Auto */
 } VortexPrefs;
 
 struct VortexApp;

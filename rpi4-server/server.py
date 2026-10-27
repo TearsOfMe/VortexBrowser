@@ -596,6 +596,61 @@ PORTAL_HTML = """<!DOCTYPE html>
     font-weight: bold;
     font-size: 11.5px;
   }
+  @media (prefers-color-scheme: dark) {
+    body {
+      background: linear-gradient(180deg, #18181b 0%, #09090b 100%);
+      color: #f4f4f5;
+    }
+    .header {
+      background: linear-gradient(180deg, #27272a 0%, #18181b 100%);
+      border-color: #3f3f46;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    }
+    .title-box p {
+      color: #a1a1aa;
+    }
+    .search-bar {
+      background: #27272a;
+      border-color: #3f3f46;
+      box-shadow: inset 0 1px 3px rgba(0,0,0,0.4);
+    }
+    .search-bar input {
+      background: #18181b;
+      color: #fafafa;
+      border-color: #3f3f46;
+    }
+    .search-bar input:focus {
+      border-color: #3b82f6;
+    }
+    .btn-search, .btn-odyssey {
+      background: linear-gradient(180deg, #3f3f46 0%, #27272a 100%);
+      border-color: #52525b;
+      color: #f4f4f5;
+    }
+    .btn-search:hover, .btn-odyssey:hover {
+      background: linear-gradient(180deg, #52525b 0%, #3f3f46 100%);
+    }
+    .card {
+      background: #27272a;
+      border-color: #3f3f46;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+    }
+    .card-body h3 {
+      color: #60a5fa;
+    }
+    .card-body p {
+      color: #a1a1aa;
+    }
+    .dl-strip {
+      background: #27272a;
+      border-color: #3f3f46;
+      border-left: 5px solid #d97706;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+    }
+    .dl-strip p {
+      color: #a1a1aa;
+    }
+  }
 </style>
 <script>
 function playAmigaSynth() {
@@ -1325,6 +1380,7 @@ class AmigaClientSession:
         self.web_font_size: int = 16
         self.web_font_family: str = "sans-serif"
         self.web_charset: str = "utf-8"
+        self.dark_mode: int = 0  # 0 = Light, 1 = Dark, 2 = Auto
 
         try:
             sock = self.writer.get_extra_info("socket")
@@ -1706,6 +1762,7 @@ class AmigaClientSession:
                 self.cdp = None
 
             self._setup_page_listeners(self.page)
+            await self._apply_dark_mode(self.page)
 
             # Pre-allocate pixel conversion buffers (reused across frames to avoid alloc churn)
             num_pixels = self.width * self.height
@@ -2995,8 +3052,28 @@ class AmigaClientSession:
             kname = AMIGA_RAWKEY_MAP[key_code]
             await self.page.keyboard.press(" " if kname == "Space" else kname)
 
-    async def _apply_web_styling(self) -> None:
-        if not self.page:
+    async def _apply_dark_mode(self, page=None) -> None:
+        target_page = page or self.page
+        if not target_page:
+            return
+        is_dark = (self.dark_mode == 1)
+        color_scheme = "dark" if is_dark else ("light" if self.dark_mode == 0 else "no-preference")
+        try:
+            await target_page.emulate_media(color_scheme=color_scheme)
+        except Exception as exc:
+            logger.debug("emulate_media color_scheme error: %s", exc)
+
+        if self.cdp is not None and self.engine == "chromium":
+            try:
+                await self.cdp.send("Emulation.setAutoDarkModeOverride", {"enabled": is_dark})
+            except Exception as exc:
+                logger.debug("Emulation.setAutoDarkModeOverride error: %s", exc)
+
+        await self._apply_web_styling(target_page)
+
+    async def _apply_web_styling(self, page=None) -> None:
+        target_page = page or self.page
+        if not target_page:
             return
         try:
             css_font = self.web_font_family if self.web_font_family in ("serif", "monospace") else "sans-serif"
@@ -3020,6 +3097,12 @@ class AmigaClientSession:
                 except Exception:
                     pass
 
+            dark_css = ""
+            if self.dark_mode == 1:
+                dark_css = ":root, html { color-scheme: dark !important; }"
+            elif self.dark_mode == 0:
+                dark_css = ":root, html { color-scheme: light !important; }"
+
             js = f"""
             (() => {{
                 try {{
@@ -3034,12 +3117,12 @@ class AmigaClientSession:
                         document.head.appendChild(style);
                     }}
                     if (style) {{
-                        style.textContent = 'html {{ font-size: {effective_px}px !important; scroll-behavior: auto !important; }} body {{ font-size: {effective_px}px; }} * {{ font-family: {css_font} !important; }}';
+                        style.textContent = 'html {{ font-size: {effective_px}px !important; scroll-behavior: auto !important; }} body {{ font-size: {effective_px}px; }} * {{ font-family: {css_font} !important; }} {dark_css}';
                     }}
                 }} catch (e) {{}}
             }})();
             """
-            await self.page.evaluate(js)
+            await target_page.evaluate(js)
         except Exception:
             pass
 
@@ -3199,6 +3282,22 @@ class AmigaClientSession:
                 logger.warning("Charset error: %s", exc)
             return
 
+        if cmd.upper().startswith("@DARKMODE:") or cmd.upper().startswith("@THEME:"):
+            try:
+                val = cmd.split(":", 1)[1].strip()
+                if val in ("1", "dark", "dunkel", "true"):
+                    self.dark_mode = 1
+                elif val in ("2", "auto"):
+                    self.dark_mode = 2
+                else:
+                    self.dark_mode = 0
+                logger.info("Setting Dark Mode to %d (0=Light, 1=Dark, 2=Auto)", self.dark_mode)
+                await self._apply_dark_mode()
+                self._trigger_full_refresh(True)
+            except Exception as exc:
+                logger.warning("DarkMode error: %s", exc)
+            return
+
         if cmd.upper().startswith("@DOWNLOAD:"):
             dl_url = cmd.split(":", 1)[1].strip()
             if dl_url:
@@ -3236,6 +3335,7 @@ class AmigaClientSession:
                     else:
                         self.cdp = None
                     await self.page.set_viewport_size({"width": self.width, "height": self.height})
+                    await self._apply_dark_mode(new_page)
                     self._send_progress(20, f"Lade {target}...")
                     await self.page.goto(target, wait_until="commit", timeout=15000)
                     self._send_nav_update(self.page.url or target)
@@ -3260,6 +3360,7 @@ class AmigaClientSession:
                             self.cdp = None
                     else:
                         self.cdp = None
+                    await self._apply_dark_mode(self.page)
                     self._send_nav_update(self.page.url or "")
                     self._trigger_full_refresh(True)
             except Exception as exc:
@@ -3285,6 +3386,7 @@ class AmigaClientSession:
                             self.cdp = None
                     else:
                         self.cdp = None
+                    await self._apply_dark_mode(self.page)
                     self._send_nav_update(self.page.url or "")
                     self._trigger_full_refresh(True)
             except Exception as exc:

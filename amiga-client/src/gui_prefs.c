@@ -52,6 +52,7 @@ enum {
     GID_P_SCREEN_MODE_REQ,
     GID_P_SOFTSCROLL,
     GID_P_STATUS_BAR,
+    GID_P_THEME_CHOOSER,
 
     /* Tab 2: Schrift & Zeichensatz */
     GID_P_FONT_GUI_CHARSET = 35,
@@ -97,6 +98,14 @@ static const char *const s_stream_res_labels[] = {
     "720p HD (1280x720) [30-50 FPS / Video-Boost]",
     "540p qHD (960x540) [Turbo]",
     "1080p Full HD (1920x1080)",
+    NULL
+};
+
+/* Color Theme (Light, Dark, Auto) */
+static const char *const s_theme_labels[] = {
+    "Hell (Standard / Light)",
+    "Dunkel (Dark Mode)",
+    "Automatisch (System)",
     NULL
 };
 
@@ -555,6 +564,15 @@ void gui_prefs_open(VortexApp *app)
         CHECKBOX_Checked, app->prefs.show_status_bar,
         TAG_DONE);
 
+    uint16 init_theme_sel = app->prefs.dark_theme;
+    if (init_theme_sel > 2) init_theme_sel = 0;
+    Object *gad_theme_chooser = IIntuition->NewObject(NULL, "chooser.gadget",
+        GA_ID,              GID_P_THEME_CHOOSER,
+        GA_RelVerify,       TRUE,
+        CHOOSER_LabelArray, s_theme_labels,
+        CHOOSER_Selected,   init_theme_sel,
+        TAG_DONE);
+
     Object *res_vlayout = IIntuition->NewObject(NULL, "layout.gadget",
         LAYOUT_Orientation,   LAYOUT_ORIENT_VERT,
         LAYOUT_BevelStyle,    BVS_GROUP,
@@ -656,6 +674,18 @@ void gui_prefs_open(VortexApp *app)
                                                             TAG_DONE),
                                   CHILD_WeightedWidth,  30,
                                   LAYOUT_AddChild,      gad_show_status,
+                                  CHILD_WeightedWidth,  70,
+                                  TAG_DONE),
+        CHILD_WeightedHeight, 0,
+        LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
+                                  LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
+                                  LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
+                                                            GA_Text,              (Tag)"Farbschema (Theme):",
+                                                            GA_ReadOnly,          TRUE,
+                                                            BUTTON_Justification, BCJ_LEFT,
+                                                            TAG_DONE),
+                                  CHILD_WeightedWidth,  30,
+                                  LAYOUT_AddChild,      gad_theme_chooser,
                                   CHILD_WeightedWidth,  70,
                                   TAG_DONE),
         CHILD_WeightedHeight, 0,
@@ -1311,6 +1341,11 @@ void gui_prefs_open(VortexApp *app)
         app->prefs.show_status_bar = (status_val != 0);
         BOOL status_bar_changed = (app->prefs.show_status_bar != old_status_bar);
 
+        uint32 theme_sel = 0;
+        IIntuition->GetAttr(CHOOSER_Selected, gad_theme_chooser, &theme_sel);
+        BOOL theme_changed = ((uint8_t)theme_sel != app->prefs.dark_theme);
+        app->prefs.dark_theme = (uint8_t)theme_sel;
+
         BOOL mode_id_changed = (app->prefs.resolution.mode_id != old_mode_id);
         BOOL screen_reopen_needed = screen_mode_changed || (new_use_custom && (res_changed || mode_id_changed));
         app->prefs.resolution.screen_mode       = new_screen_mode;
@@ -1359,6 +1394,9 @@ void gui_prefs_open(VortexApp *app)
             app->reopen_gui_needed = TRUE;
         } else {
             prefs_apply(app);
+            if (theme_changed && app->win && app->gad_space) {
+                IIntuition->RefreshGList((struct Gadget *)app->gad_space, app->win, NULL, 1);
+            }
             favorites_rebuild_chooser_list(app);
             if (stream_res_changed) {
                 app->renderer.reported_w = 0;
