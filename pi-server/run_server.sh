@@ -23,8 +23,8 @@ ENGINE="${VORTEX_ENGINE:-chromium}"
 # Default arguments if none provided:
 # Binds to 0.0.0.0:7788 (and server.py auto-binds secondary port 9757 for LAN)
 if [ $# -eq 0 ]; then
-    echo "[VortexBrowse] Starting server on CachyOS (Ports 7788 & 9757, Engine: ${ENGINE}, 30fps, Auto MJPEG/LZ4, Quality 75, TurboJPEG, Extensions)..."
-    exec .venv/bin/python server.py --host 0.0.0.0 --port 7788 --width 1024 --height 768 --fps 30 --format yuv420p --jpeg-quality 75 --codec auto --engine "$ENGINE"
+    echo "[VortexBrowse] Starting server on CachyOS (Ports 7788 & 9757, Engine: ${ENGINE}, 30fps, Auto MJPEG/LZ4, Quality 100, TurboJPEG, Extensions)..."
+    exec .venv/bin/python server.py --host 0.0.0.0 --port 7788 --width 1024 --height 768 --fps 30 --format yuv420p --jpeg-quality 100 --codec auto --engine "$ENGINE"
 else
     exec .venv/bin/python server.py "$@"
 fi

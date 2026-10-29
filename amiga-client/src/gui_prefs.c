@@ -15,6 +15,7 @@
 #include <gadgets/string.h>
 #include <gadgets/chooser.h>
 #include <gadgets/checkbox.h>
+#include <gadgets/slider.h>
 #include <images/bevel.h>
 
 #include <proto/asl.h>
@@ -25,6 +26,7 @@
 #include "favorites.h"
 #include "net.h"
 #include "renderer.h"
+#include "gui_download.h"
 
 enum {
     GID_P_TAB = 1,
@@ -32,8 +34,17 @@ enum {
     GID_P_USE,
     GID_P_CANCEL,
 
-    /* Tab 0: Schnellwahl (Odyssey) */
-    GID_P_QL_CHOOSER = 10,
+    /* Tab 0: Server & Streaming */
+    GID_P_SERVER_PRESET = 5,
+    GID_P_SERVER_HOST,
+    GID_P_SERVER_PORT,
+    GID_P_SERVER_STREAM_RES,
+    GID_P_SERVER_JPEG_QUALITY,
+    GID_P_SERVER_DYN_VIDEO,
+    GID_P_SERVER_SAVE_EXIT,
+
+    /* Tab 1: Schnellwahl (Odyssey) */
+    GID_P_QL_CHOOSER = 15,
     GID_P_QL_LBL,
     GID_P_QL_URL,
     GID_P_QL_ICON,
@@ -43,10 +54,9 @@ enum {
     GID_P_QL_UP,
     GID_P_QL_DOWN,
 
-    /* Tab 1: Bildschirm & Aufloesung */
-    GID_P_SCREEN_CHOOSER = 25,
+    /* Tab 2: Bildschirm & Aufloesung */
+    GID_P_SCREEN_CHOOSER = 30,
     GID_P_RES_CHOOSER,
-    GID_P_STREAM_RES_CHOOSER,
     GID_P_RES_W,
     GID_P_RES_H,
     GID_P_SCREEN_MODE_REQ,
@@ -54,8 +64,8 @@ enum {
     GID_P_STATUS_BAR,
     GID_P_THEME_CHOOSER,
 
-    /* Tab 2: Schrift & Zeichensatz */
-    GID_P_FONT_GUI_CHARSET = 35,
+    /* Tab 3: Schrift & Zeichensatz */
+    GID_P_FONT_GUI_CHARSET = 45,
     GID_P_FONT_GUI_SIZE,
     GID_P_FONT_WEB_CHARSET,
     GID_P_FONT_WEB_SIZE,
@@ -63,20 +73,35 @@ enum {
     GID_P_FONT_WEB_FAMILY,
     GID_P_SEARCH_ENGINE,
 
-    /* Tab 3: Lesezeichen */
-    GID_P_FAV_CHOOSER = 50,
+    /* Tab 4: Lesezeichen */
+    GID_P_FAV_CHOOSER = 60,
     GID_P_FAV_TITLE,
     GID_P_FAV_URL,
     GID_P_FAV_ADD,
     GID_P_FAV_UPDATE,
-    GID_P_FAV_DELETE
+    GID_P_FAV_DELETE,
+
+    /* Tab 5: Downloads */
+    GID_P_DL_DIR = 90,
+    GID_P_DL_DIR_REQ,
+    GID_P_DL_ALWAYS_ASK,
+    GID_P_DL_OPEN_MGR
 };
 
 static const char *const s_tab_labels[] = {
+    "Server & Streaming",
     "Schnellwahl (Odyssey)",
     "Bildschirm & Aufloesung",
     "Schrift & Zeichensatz",
     "Lesezeichen",
+    "Downloads",
+    NULL
+};
+
+static const char *const s_server_preset_labels[] = {
+    "Host-PC (192.168.178.60:9757)",
+    "Raspberry Pi 4 (192.168.178.2:7788)",
+    "Benutzerdefiniert (Manuelle Adresse)",
     NULL
 };
 
@@ -350,7 +375,191 @@ void gui_prefs_open(VortexApp *app)
     uint16 temp_depth       = app->prefs.resolution.depth ? app->prefs.resolution.depth : 24;
 
     /* ------------------------------------------------------------------------
-     * Tab 0: Schnellwahl-Buttons (Odyssey-Leiste)
+     * Tab 0: Server & Streaming
+     * ------------------------------------------------------------------------ */
+    const char *cur_host = app->server_host[0] ? app->server_host :
+                          (app->prefs.server_host[0] ? app->prefs.server_host : VORTEXBROWSE_HOSTPC_HOST);
+    uint16 cur_port = app->server_port ? app->server_port :
+                     (app->prefs.server_port ? app->prefs.server_port : VORTEXBROWSE_HOSTPC_PORT);
+
+    uint16 init_srv_preset = 2; /* Custom */
+    if (strcmp(cur_host, VORTEXBROWSE_HOSTPC_HOST) == 0 && cur_port == VORTEXBROWSE_HOSTPC_PORT) {
+        init_srv_preset = 0;
+    } else if (strcmp(cur_host, VORTEXBROWSE_RPI_HOST) == 0 && cur_port == VORTEXBROWSE_RPI_PORT) {
+        init_srv_preset = 1;
+    }
+
+    Object *gad_srv_preset = IIntuition->NewObject(NULL, "chooser.gadget",
+        GA_ID,              GID_P_SERVER_PRESET,
+        GA_RelVerify,       TRUE,
+        CHOOSER_LabelArray, s_server_preset_labels,
+        CHOOSER_Selected,   init_srv_preset,
+        GA_HintInfo,        "Vorkonfigurierten Server waehlen oder manuell anpassen",
+        TAG_DONE);
+
+    char host_str[128];
+    char port_str[16];
+    snprintf(host_str, sizeof(host_str), "%s", cur_host);
+    snprintf(port_str, sizeof(port_str), "%u", (unsigned)cur_port);
+
+    Object *gad_srv_host = IIntuition->NewObject(NULL, "string.gadget",
+        GA_ID,            GID_P_SERVER_HOST,
+        GA_RelVerify,     TRUE,
+        GA_TabCycle,      TRUE,
+        STRINGA_MaxChars, sizeof(host_str) - 1,
+        STRINGA_TextVal,  (Tag)host_str,
+        GA_HintInfo,      "IP-Adresse oder Hostname des Streaming-Servers",
+        TAG_DONE);
+
+    Object *gad_srv_port = IIntuition->NewObject(NULL, "string.gadget",
+        GA_ID,            GID_P_SERVER_PORT,
+        GA_RelVerify,     TRUE,
+        GA_TabCycle,      TRUE,
+        STRINGA_MaxChars, sizeof(port_str) - 1,
+        STRINGA_TextVal,  (Tag)port_str,
+        GA_HintInfo,      "TCP-Port des Streaming-Servers (z.B. 9757 oder 7788)",
+        TAG_DONE);
+
+    uint16 init_stream_sel = app->prefs.stream_res_mode;
+    if (init_stream_sel > 3) init_stream_sel = 0;
+    Object *gad_stream_res_chooser = IIntuition->NewObject(NULL, "chooser.gadget",
+        GA_ID,              GID_P_SERVER_STREAM_RES,
+        GA_RelVerify,       TRUE,
+        CHOOSER_LabelArray, s_stream_res_labels,
+        CHOOSER_Selected,   init_stream_sel,
+        GA_HintInfo,        "Server-Aufloesung waehlen (wird per GPU/Composite skaliert)",
+        TAG_DONE);
+
+    uint32 cur_q = app->prefs.jpeg_quality ? app->prefs.jpeg_quality : 100;
+    if (cur_q < 20 || cur_q > 100) cur_q = 100;
+
+    Object *gad_jpeg_quality = IIntuition->NewObject(NULL, "slider.gadget",
+        GA_ID,              GID_P_SERVER_JPEG_QUALITY,
+        GA_RelVerify,       TRUE,
+        SLIDER_Min,         20,
+        SLIDER_Max,         100,
+        SLIDER_Level,       cur_q,
+        SLIDER_Orientation, SLIDER_HORIZONTAL,
+        SLIDER_Ticks,       9,
+        SLIDER_ShortTicks,  TRUE,
+        SLIDER_LevelFormat, (Tag)"%ld %%",
+        SLIDER_LevelPlace,  PLACETEXT_RIGHT,
+        SLIDER_LevelDomain, (Tag)"100 %",
+        GA_HintInfo,        "JPEG-Stream-Qualitaet (Standard: 100%% = maximale Bildschaerfe)",
+        TAG_DONE);
+
+    Object *gad_dyn_video = IIntuition->NewObject(NULL, "checkbox.gadget",
+        GA_ID,            GID_P_SERVER_DYN_VIDEO,
+        GA_RelVerify,     TRUE,
+        GA_Text,          (Tag)"Dynamische JPEG-Qualitaet bei Video (Video-Boost)",
+        CHECKBOX_Checked, app->prefs.dynamic_video_quality,
+        GA_HintInfo,      "Bei Video-Wiedergabe Qualitaet temporaer auf 60%% fuer 30-50 FPS anpassen",
+        TAG_DONE);
+
+    Object *gad_save_exit = IIntuition->NewObject(NULL, "checkbox.gadget",
+        GA_ID,            GID_P_SERVER_SAVE_EXIT,
+        GA_RelVerify,     TRUE,
+        GA_Text,          (Tag)"Aktuellen Server beim Beenden automatisch speichern",
+        CHECKBOX_Checked, app->prefs.save_server_on_exit,
+        GA_HintInfo,      "Zuletzt genutzten Server fuer den naechsten Start merken",
+        TAG_DONE);
+
+    Object *server_vlayout = IIntuition->NewObject(NULL, "layout.gadget",
+        LAYOUT_Orientation,   LAYOUT_ORIENT_VERT,
+        LAYOUT_BevelStyle,    BVS_GROUP,
+        LAYOUT_Label,         (Tag)"Streaming Server & Verbindungsoptionen",
+        LAYOUT_SpaceOuter,    TRUE,
+        LAYOUT_DeferLayout,   TRUE,
+        LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
+                                  LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
+                                  LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
+                                                            GA_Text,              (Tag)"Server-Auswahl:",
+                                                            GA_ReadOnly,          TRUE,
+                                                            BUTTON_Justification, BCJ_RIGHT,
+                                                            TAG_DONE),
+                                  CHILD_WeightedWidth,  28,
+                                  LAYOUT_AddChild,      gad_srv_preset,
+                                  CHILD_WeightedWidth,  72,
+                                  TAG_DONE),
+        CHILD_WeightedHeight, 0,
+        LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
+                                  LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
+                                  LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
+                                                            GA_Text,              (Tag)"Server IP / Host:",
+                                                            GA_ReadOnly,          TRUE,
+                                                            BUTTON_Justification, BCJ_RIGHT,
+                                                            TAG_DONE),
+                                  CHILD_WeightedWidth,  28,
+                                  LAYOUT_AddChild,      gad_srv_host,
+                                  CHILD_WeightedWidth,  44,
+                                  LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
+                                                            GA_Text,              (Tag)"Port:",
+                                                            GA_ReadOnly,          TRUE,
+                                                            BUTTON_Justification, BCJ_RIGHT,
+                                                            TAG_DONE),
+                                  CHILD_WeightedWidth,  12,
+                                  LAYOUT_AddChild,      gad_srv_port,
+                                  CHILD_WeightedWidth,  16,
+                                  TAG_DONE),
+        CHILD_WeightedHeight, 0,
+        LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
+                                  LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
+                                  LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
+                                                            GA_Text,              (Tag)"Stream-Aufloesung:",
+                                                            GA_ReadOnly,          TRUE,
+                                                            BUTTON_Justification, BCJ_RIGHT,
+                                                            TAG_DONE),
+                                  CHILD_WeightedWidth,  28,
+                                  LAYOUT_AddChild,      gad_stream_res_chooser,
+                                  CHILD_WeightedWidth,  72,
+                                  TAG_DONE),
+        CHILD_WeightedHeight, 0,
+        LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
+                                  LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
+                                  LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
+                                                            GA_Text,              (Tag)"JPEG-Qualitaet:",
+                                                            GA_ReadOnly,          TRUE,
+                                                            BUTTON_Justification, BCJ_RIGHT,
+                                                            TAG_DONE),
+                                  CHILD_WeightedWidth,  28,
+                                  LAYOUT_AddChild,      gad_jpeg_quality,
+                                  CHILD_WeightedWidth,  72,
+                                  TAG_DONE),
+        CHILD_WeightedHeight, 0,
+        LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
+                                  LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
+                                  LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
+                                                            GA_Text,              (Tag)"Video-Optimierung:",
+                                                            GA_ReadOnly,          TRUE,
+                                                            BUTTON_Justification, BCJ_RIGHT,
+                                                            TAG_DONE),
+                                  CHILD_WeightedWidth,  28,
+                                  LAYOUT_AddChild,      gad_dyn_video,
+                                  CHILD_WeightedWidth,  72,
+                                  TAG_DONE),
+        CHILD_WeightedHeight, 0,
+        LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
+                                  LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
+                                  LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
+                                                            GA_Text,              (Tag)"Beim Beenden:",
+                                                            GA_ReadOnly,          TRUE,
+                                                            BUTTON_Justification, BCJ_RIGHT,
+                                                            TAG_DONE),
+                                  CHILD_WeightedWidth,  28,
+                                  LAYOUT_AddChild,      gad_save_exit,
+                                  CHILD_WeightedWidth,  72,
+                                  TAG_DONE),
+        CHILD_WeightedHeight, 0,
+        LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
+                                  GA_Text,              (Tag)"Standard-Qualitaet ist 100% (Verlustfrei). 720p/540p erhoeht FPS deutlich.",
+                                  GA_ReadOnly,          TRUE,
+                                  BUTTON_Justification, BCJ_LEFT,
+                                  TAG_DONE),
+        CHILD_WeightedHeight, 0,
+        TAG_DONE);
+
+    /* ------------------------------------------------------------------------
+     * Tab 1: Schnellwahl-Buttons (Odyssey-Leiste)
      * ------------------------------------------------------------------------ */
     struct List ql_list;
     IExec->NewList(&ql_list);
@@ -505,15 +714,6 @@ void gui_prefs_open(VortexApp *app)
         CHOOSER_Selected,   init_res_sel,
         TAG_DONE);
 
-    uint16 init_stream_sel = app->prefs.stream_res_mode;
-    if (init_stream_sel > 3) init_stream_sel = 0;
-    Object *gad_stream_res_chooser = IIntuition->NewObject(NULL, "chooser.gadget",
-        GA_ID,              GID_P_STREAM_RES_CHOOSER,
-        GA_RelVerify,       TRUE,
-        CHOOSER_LabelArray, s_stream_res_labels,
-        CHOOSER_Selected,   init_stream_sel,
-        TAG_DONE);
-
     char custom_w_str[16];
     char custom_h_str[16];
     snprintf(custom_w_str, sizeof(custom_w_str), "%u", (unsigned)app->prefs.resolution.custom_w);
@@ -639,18 +839,6 @@ void gui_prefs_open(VortexApp *app)
                                   CHILD_WeightedWidth,  15,
                                   LAYOUT_AddChild,      gad_res_h,
                                   CHILD_WeightedWidth,  25,
-                                  TAG_DONE),
-        CHILD_WeightedHeight, 0,
-        LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
-                                  LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
-                                  LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"Stream-Aufloesung:",
-                                                            GA_ReadOnly,          TRUE,
-                                                            BUTTON_Justification, BCJ_LEFT,
-                                                            TAG_DONE),
-                                  CHILD_WeightedWidth,  30,
-                                  LAYOUT_AddChild,      gad_stream_res_chooser,
-                                  CHILD_WeightedWidth,  70,
                                   TAG_DONE),
         CHILD_WeightedHeight, 0,
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
@@ -980,14 +1168,102 @@ void gui_prefs_open(VortexApp *app)
         TAG_DONE);
 
     /* ------------------------------------------------------------------------
+     * Tab 5: Downloads (Download-Manager & Speicherort)
+     * ------------------------------------------------------------------------ */
+    const char *init_dl_dir = app->prefs.download_dir[0] ? app->prefs.download_dir : "RAM:";
+
+    Object *gad_dl_dir = IIntuition->NewObject(NULL, "string.gadget",
+        GA_ID,            GID_P_DL_DIR,
+        GA_RelVerify,     TRUE,
+        GA_TabCycle,      TRUE,
+        STRINGA_MaxChars, 255,
+        STRINGA_TextVal,  (Tag)init_dl_dir,
+        TAG_DONE);
+
+    Object *btn_dl_dir_req = IIntuition->NewObject(NULL, "button.gadget",
+        GA_ID,        GID_P_DL_DIR_REQ,
+        GA_RelVerify, TRUE,
+        GA_Text,      "Ordner waehlen...",
+        GA_HintInfo,  "Download-Verzeichnis ueber Dateidialog auswaehlen",
+        TAG_DONE);
+
+    Object *gad_dl_always_ask = IIntuition->NewObject(NULL, "checkbox.gadget",
+        GA_ID,            GID_P_DL_ALWAYS_ASK,
+        GA_RelVerify,     TRUE,
+        GA_Text,          "Immer nach Zielordner fragen (ASL-Requester)",
+        CHECKBOX_Checked, app->prefs.always_ask_download,
+        TAG_DONE);
+
+    Object *btn_dl_open_mgr = IIntuition->NewObject(NULL, "button.gadget",
+        GA_ID,        GID_P_DL_OPEN_MGR,
+        GA_RelVerify, TRUE,
+        GA_Text,      "Download-Manager jetzt oeffnen...",
+        GA_HintInfo,  "Oeffnet das Odyssey/IBrowse-Download-Fenster",
+        TAG_DONE);
+
+    Object *dl_vlayout = IIntuition->NewObject(NULL, "layout.gadget",
+        LAYOUT_Orientation,   LAYOUT_ORIENT_VERT,
+        LAYOUT_BevelStyle,    BVS_GROUP,
+        LAYOUT_Label,         (Tag)"Download-Einstellungen",
+        LAYOUT_SpaceOuter,    TRUE,
+        LAYOUT_DeferLayout,   TRUE,
+        LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
+                                  LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
+                                  LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
+                                                            GA_Text,              (Tag)"Standard-Ordner:",
+                                                            GA_ReadOnly,          TRUE,
+                                                            BUTTON_Justification, BCJ_RIGHT,
+                                                            TAG_DONE),
+                                  CHILD_WeightedWidth,  25,
+                                  LAYOUT_AddChild,      gad_dl_dir,
+                                  CHILD_WeightedWidth,  55,
+                                  LAYOUT_AddChild,      btn_dl_dir_req,
+                                  CHILD_WeightedWidth,  20,
+                                  TAG_DONE),
+        CHILD_WeightedHeight, 0,
+        LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
+                                  LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
+                                  LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
+                                                            GA_Text,              (Tag)"Dateidialog:",
+                                                            GA_ReadOnly,          TRUE,
+                                                            BUTTON_Justification, BCJ_RIGHT,
+                                                            TAG_DONE),
+                                  CHILD_WeightedWidth,  25,
+                                  LAYOUT_AddChild,      gad_dl_always_ask,
+                                  CHILD_WeightedWidth,  75,
+                                  TAG_DONE),
+        CHILD_WeightedHeight, 0,
+        LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
+                                  LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
+                                  LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
+                                                            GA_Text,              (Tag)"Download-Manager:",
+                                                            GA_ReadOnly,          TRUE,
+                                                            BUTTON_Justification, BCJ_RIGHT,
+                                                            TAG_DONE),
+                                  CHILD_WeightedWidth,  25,
+                                  LAYOUT_AddChild,      btn_dl_open_mgr,
+                                  CHILD_WeightedWidth,  75,
+                                  TAG_DONE),
+        CHILD_WeightedHeight, 0,
+        LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
+                                  GA_Text,              (Tag)"Dateien werden bei deaktivierter Abfrage direkt in den Standard-Ordner geladen.",
+                                  GA_ReadOnly,          TRUE,
+                                  BUTTON_Justification, BCJ_LEFT,
+                                  TAG_DONE),
+        CHILD_WeightedHeight, 0,
+        TAG_DONE);
+
+    /* ------------------------------------------------------------------------
      * Pages & ClickTabs
      * ------------------------------------------------------------------------ */
     Object *gad_pages = IIntuition->NewObject(NULL, "page.gadget",
         PAGE_Current, 0,
+        PAGE_Add,     server_vlayout,
         PAGE_Add,     ql_vlayout,
         PAGE_Add,     res_vlayout,
         PAGE_Add,     font_vlayout,
         PAGE_Add,     fav_vlayout,
+        PAGE_Add,     dl_vlayout,
         TAG_DONE);
 
     Object *gad_tabs = IIntuition->NewObject(NULL, "clicktab.gadget",
@@ -1060,8 +1336,8 @@ void gui_prefs_open(VortexApp *app)
         WA_DragBar,           TRUE,
         WA_Activate,          TRUE,
         WA_SmartRefresh,      TRUE,
-        WA_InnerWidth,        540,
-        WA_InnerHeight,       360,
+        WA_InnerWidth,        560,
+        WA_InnerHeight,       390,
         WA_IDCMP,             IDCMP_CLOSEWINDOW | IDCMP_GADGETUP | IDCMP_VANILLAKEY,
         WINDOW_Position,      WPOS_CENTERSCREEN,
         WINDOW_ParentGroup,   root_prefs_layout,
@@ -1126,7 +1402,36 @@ void gui_prefs_open(VortexApp *app)
                     } else if (gid == GID_P_CANCEL) {
                         done = TRUE;
                     }
-                    /* Tab 0: Schnellwahl Events */
+                    /* Tab 0: Server & Streaming Events */
+                    else if (gid == GID_P_SERVER_PRESET) {
+                        uint32 p_sel = 0;
+                        IIntuition->GetAttr(CHOOSER_Selected, gad_srv_preset, &p_sel);
+                        if (p_sel == 0) { /* Host-PC */
+                            char p_str[16];
+                            snprintf(p_str, sizeof(p_str), "%u", (unsigned)VORTEXBROWSE_HOSTPC_PORT);
+                            set_string_text(gad_srv_host, win, VORTEXBROWSE_HOSTPC_HOST);
+                            set_string_text(gad_srv_port, win, p_str);
+                        } else if (p_sel == 1) { /* Raspberry Pi 4 */
+                            char p_str[16];
+                            snprintf(p_str, sizeof(p_str), "%u", (unsigned)VORTEXBROWSE_RPI_PORT);
+                            set_string_text(gad_srv_host, win, VORTEXBROWSE_RPI_HOST);
+                            set_string_text(gad_srv_port, win, p_str);
+                        }
+                    } else if (gid == GID_P_SERVER_HOST || gid == GID_P_SERVER_PORT) {
+                        char h_buf[128], p_buf[16];
+                        get_string_text(gad_srv_host, h_buf, sizeof(h_buf));
+                        get_string_text(gad_srv_port, p_buf, sizeof(p_buf));
+                        uint32 p_sel = 2; /* Custom */
+                        if (strcmp(h_buf, VORTEXBROWSE_HOSTPC_HOST) == 0 && atoi(p_buf) == VORTEXBROWSE_HOSTPC_PORT) {
+                            p_sel = 0;
+                        } else if (strcmp(h_buf, VORTEXBROWSE_RPI_HOST) == 0 && atoi(p_buf) == VORTEXBROWSE_RPI_PORT) {
+                            p_sel = 1;
+                        }
+                        IIntuition->SetGadgetAttrs((struct Gadget *)gad_srv_preset, win, NULL,
+                                                   CHOOSER_Selected, p_sel,
+                                                   TAG_DONE);
+                    }
+                    /* Tab 1: Schnellwahl Events */
                     else if (gid == GID_P_QL_CHOOSER) {
                         uint32 sel = 0;
                         IIntuition->GetAttr(CHOOSER_Selected, gad_ql_chooser, &sel);
@@ -1264,6 +1569,30 @@ void gui_prefs_open(VortexApp *app)
                             }
                         }
                     }
+                    /* Tab 5: Downloads Events */
+                    else if (gid == GID_P_DL_DIR_REQ) {
+                        char cur_dir[256];
+                        get_string_text(gad_dl_dir, cur_dir, sizeof(cur_dir));
+                        struct FileRequester *freq = (struct FileRequester *)IAsl->AllocAslRequestTags(
+                            ASL_FileRequest,
+                            ASLFR_Window,        win,
+                            ASLFR_SleepWindow,   TRUE,
+                            ASLFR_TitleText,     "Download-Verzeichnis waehlen",
+                            ASLFR_PositiveText,  "Auswaehlen",
+                            ASLFR_DrawersOnly,   TRUE,
+                            ASLFR_InitialDrawer, (Tag)(cur_dir[0] ? cur_dir : "RAM:"),
+                            TAG_DONE);
+                        if (freq) {
+                            if (IAsl->AslRequest(freq, NULL)) {
+                                if (freq->fr_Drawer && freq->fr_Drawer[0] != '\0') {
+                                    set_string_text(gad_dl_dir, win, freq->fr_Drawer);
+                                }
+                            }
+                            IAsl->FreeAslRequest(freq);
+                        }
+                    } else if (gid == GID_P_DL_OPEN_MGR) {
+                        gui_open_download_manager(app);
+                    }
                     break;
                 }
 
@@ -1274,6 +1603,67 @@ void gui_prefs_open(VortexApp *app)
     }
 
     if (apply_save || apply_use) {
+        /* 0. Commit Server & Streaming Settings */
+        char new_host[128] = {0};
+        char new_port_str[16] = {0};
+        get_string_text(gad_srv_host, new_host, sizeof(new_host));
+        get_string_text(gad_srv_port, new_port_str, sizeof(new_port_str));
+        int new_port = atoi(new_port_str);
+        if (new_port <= 0 || new_port > 65535) new_port = VORTEXBROWSE_HOSTPC_PORT;
+
+        uint32 stream_sel = 0;
+        IIntuition->GetAttr(CHOOSER_Selected, gad_stream_res_chooser, &stream_sel);
+        BOOL stream_res_changed = ((uint8_t)stream_sel != app->prefs.stream_res_mode);
+        app->prefs.stream_res_mode = (uint8_t)stream_sel;
+
+        uint32 q_val = 100;
+        IIntuition->GetAttr(SLIDER_Level, gad_jpeg_quality, &q_val);
+        if (q_val < 20) q_val = 20;
+        if (q_val > 100) q_val = 100;
+        BOOL jpeg_q_changed = (app->prefs.jpeg_quality != (uint16_t)q_val);
+        app->prefs.jpeg_quality = (uint16_t)q_val;
+
+        uint32 dyn_v = 0;
+        IIntuition->GetAttr(CHECKBOX_Checked, gad_dyn_video, &dyn_v);
+        app->prefs.dynamic_video_quality = (dyn_v != 0);
+
+        uint32 s_exit = 0;
+        IIntuition->GetAttr(CHECKBOX_Checked, gad_save_exit, &s_exit);
+        app->prefs.save_server_on_exit = (s_exit != 0);
+
+        BOOL server_changed = FALSE;
+        if (new_host[0] != '\0') {
+            if (strcmp(app->server_host, new_host) != 0 || app->server_port != (uint16_t)new_port) {
+                server_changed = TRUE;
+                strncpy(app->server_host, new_host, sizeof(app->server_host) - 1);
+                app->server_host[sizeof(app->server_host) - 1] = '\0';
+                app->server_port = (uint16_t)new_port;
+            }
+            strncpy(app->prefs.server_host, new_host, sizeof(app->prefs.server_host) - 1);
+            app->prefs.server_host[sizeof(app->prefs.server_host) - 1] = '\0';
+            app->prefs.server_port = (uint16_t)new_port;
+        }
+
+        if (app->gad_server_chooser && app->win) {
+            uint32 s_sel = 2; /* Custom */
+            if (strcmp(app->server_host, VORTEXBROWSE_RPI_HOST) == 0 && app->server_port == VORTEXBROWSE_RPI_PORT) {
+                s_sel = 0;
+            } else if (strcmp(app->server_host, VORTEXBROWSE_HOSTPC_HOST) == 0 && app->server_port == VORTEXBROWSE_HOSTPC_PORT) {
+                s_sel = 1;
+            }
+            IIntuition->SetGadgetAttrs((struct Gadget *)app->gad_server_chooser, app->win, NULL,
+                                       CHOOSER_Selected, s_sel,
+                                       TAG_DONE);
+        }
+
+        if (server_changed) {
+            net_connect(app, app->server_host, app->server_port);
+        } else if (jpeg_q_changed && app->connected) {
+            char qcmd[32];
+            snprintf(qcmd, sizeof(qcmd), "@JPEG_QUALITY:%u", (unsigned)app->prefs.jpeg_quality);
+            net_send_url(app, qcmd);
+        }
+
         /* 1. Commit Schnellwahl items */
         BOOL ql_changed = (app->prefs.num_quick_links != temp_num_ql);
         app->prefs.num_quick_links = temp_num_ql;
@@ -1330,11 +1720,6 @@ void gui_prefs_open(VortexApp *app)
         IIntuition->GetAttr(CHECKBOX_Checked, gad_softscroll, &soft_val);
         app->prefs.soft_scroll = (soft_val != 0);
 
-        uint32 stream_sel = 0;
-        IIntuition->GetAttr(CHOOSER_Selected, gad_stream_res_chooser, &stream_sel);
-        BOOL stream_res_changed = ((uint8_t)stream_sel != app->prefs.stream_res_mode);
-        app->prefs.stream_res_mode = (uint8_t)stream_sel;
-
         BOOL old_status_bar = app->prefs.show_status_bar;
         uint32 status_val = 0;
         IIntuition->GetAttr(CHECKBOX_Checked, gad_show_status, &status_val);
@@ -1376,6 +1761,17 @@ void gui_prefs_open(VortexApp *app)
                                            TAG_DONE);
             }
         }
+
+        /* 4. Read Download Settings */
+        char dl_dir_buf[256];
+        get_string_text(gad_dl_dir, dl_dir_buf, sizeof(dl_dir_buf));
+        if (dl_dir_buf[0] != '\0') {
+            strncpy(app->prefs.download_dir, dl_dir_buf, sizeof(app->prefs.download_dir) - 1);
+            app->prefs.download_dir[sizeof(app->prefs.download_dir) - 1] = '\0';
+        }
+        uint32 dl_ask_val = 0;
+        IIntuition->GetAttr(CHECKBOX_Checked, gad_dl_always_ask, &dl_ask_val);
+        app->prefs.always_ask_download = (dl_ask_val != 0);
 
         /* If user explicitly picked a fixed window resolution preset, resize window now */
         if (!screen_reopen_needed && res_changed && res_sel != 5) {

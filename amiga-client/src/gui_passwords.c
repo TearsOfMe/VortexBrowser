@@ -501,8 +501,9 @@ void gui_do_autologin_current_domain(VortexApp *app)
         passwords_init(app);
     }
 
-    const char *url = app->current_url;
-    if (!url || url[0] == '\0') {
+    const char *url = app->current_url[0] ? app->current_url :
+                      (app->num_tabs > 0 ? app->tabs[app->active_tab_idx].url : "");
+    if (!url || url[0] == '\0' || url[0] == '@') {
         app_set_status("Keine aktive Webseite fuer Auto-Login.");
         gui_open_password_manager(app);
         return;

@@ -19,6 +19,10 @@ extern "C" {
  * ============================================================================ */
 
 #define VORTEXBROWSE_DEFAULT_PORT   7788
+#define VORTEXBROWSE_RPI_HOST       "192.168.178.2"
+#define VORTEXBROWSE_RPI_PORT       7788
+#define VORTEXBROWSE_HOSTPC_HOST    "192.168.178.60"
+#define VORTEXBROWSE_HOSTPC_PORT    9757
 #define VORTEXBROWSE_DEFAULT_WIDTH  1024
 #define VORTEXBROWSE_DEFAULT_HEIGHT 768
 #define VORTEXBROWSE_DOWNLOAD_CHUNK_SIZE (64 * 1024)

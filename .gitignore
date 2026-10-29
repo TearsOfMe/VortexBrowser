@@ -23,3 +23,8 @@ __pycache__/
 Thumbs.db
 *.swp
 *~
+
+# Release staging & clib4 binary
+dist/
+amiga-client/VortexBrowse.clib4
+*.lha

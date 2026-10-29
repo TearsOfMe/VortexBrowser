@@ -1330,7 +1330,7 @@ class AmigaClientSession:
         start_url: str,
         portal_url: str,
         audio_enabled: bool = True,
-        jpeg_quality: int = 80,
+        jpeg_quality: int = 100,
         codec_mode: str = "auto",
         engine: str = "chromium",
     ):
@@ -1346,7 +1346,7 @@ class AmigaClientSession:
         self.start_url = start_url
         self.portal_url = portal_url
         self.audio_enabled = audio_enabled
-        self.base_jpeg_quality: int = max(20, min(98, jpeg_quality))
+        self.base_jpeg_quality: int = max(20, min(100, jpeg_quality))
         self.video_jpeg_quality: int = min(self.base_jpeg_quality, 60)
         self.current_screencast_quality: int = self.base_jpeg_quality
         self.jpeg_quality: int = self.base_jpeg_quality
@@ -1975,8 +1975,8 @@ class AmigaClientSession:
             self.screencast_queue = None
 
     async def _set_screencast_quality(self, new_quality: int) -> None:
-        """Dynamically adjusts CDP screencast JPEG quality (e.g. q60 during video, q80 for crisp text)."""
-        new_quality = max(20, min(98, int(new_quality)))
+        """Dynamically adjusts CDP screencast JPEG quality (e.g. q60 during video, q100 for crisp text)."""
+        new_quality = max(20, min(100, int(new_quality)))
         if new_quality == self.current_screencast_quality:
             return
         self.current_screencast_quality = new_quality
@@ -2379,12 +2379,30 @@ class AmigaClientSession:
 
             if pixel_format == FMT_YUV420P:
                 # 12 bpp Planar YUV420: Stream Y, U, V planes compressed with LZ4
-                # Dirty-rect optimization is supported for YUV420P too (bpp==1 in fast_pixconv.c)
-                if not force_full and prev_buf is not None and len(prev_buf) == len(raw_bytes):
-                    if prev_buf.raw == raw_bytes:
+                if not force_full and _FAST_PIXCONV is not None and prev_buf is not None:
+                    rx = ctypes.c_int(0)
+                    ry = ctypes.c_int(0)
+                    rw = ctypes.c_int(0)
+                    rh = ctypes.c_int(0)
+                    changed = _FAST_PIXCONV.find_and_update_dirty_rect(
+                        raw_bytes,
+                        prev_buf,
+                        width,
+                        height,
+                        1,
+                        ctypes.byref(rx),
+                        ctypes.byref(ry),
+                        ctypes.byref(rw),
+                        ctypes.byref(rh),
+                    )
+                    if changed == 0:
                         return None
-                if prev_buf is not None and len(prev_buf) == len(raw_bytes):
-                    ctypes.memmove(prev_buf, raw_bytes, len(raw_bytes))
+                else:
+                    if not force_full and prev_buf is not None and len(prev_buf) == len(raw_bytes):
+                        if prev_buf.raw == raw_bytes:
+                            return None
+                    if prev_buf is not None and len(prev_buf) == len(raw_bytes):
+                        ctypes.memmove(prev_buf, raw_bytes, len(raw_bytes))
                 compressed = lz4.block.compress(raw_bytes, store_size=False)
                 hdr = STRUCT_MSG_FRAME.pack(
                     MSG_FRAME,
@@ -3241,7 +3259,7 @@ class AmigaClientSession:
         if cmd.upper().startswith("@JPEG_QUALITY:"):
             try:
                 q = int(cmd.split(":", 1)[1].strip())
-                self.base_jpeg_quality = max(20, min(98, q))
+                self.base_jpeg_quality = max(20, min(100, q))
                 self.video_jpeg_quality = min(self.base_jpeg_quality, 60)
                 target_q = self.video_jpeg_quality if self.is_video_mode else self.base_jpeg_quality
                 await self._set_screencast_quality(target_q)
@@ -3472,6 +3490,19 @@ class AmigaClientSession:
                     logger.warning("Error applying twitch token: %s", exc)
             return
 
+        if cmd.upper().startswith("@AUTOLOGIN:"):
+            payload = cmd.split(":", 1)[1]
+            user = ""
+            pwd = ""
+            if "\t" in payload:
+                user, pwd = payload.split("\t", 1)
+            elif " " in payload:
+                user, pwd = payload.split(" ", 1)
+            else:
+                user = payload
+            await self._perform_auto_login(user, pwd)
+            return
+
         logger.info("INPUT_GOTO_URL: %s (history idx=%d/%d)", cmd, self.nav_idx, len(self.nav_history))
         self._trigger_full_refresh()
         self._schedule_delayed_frames()
@@ -3548,6 +3579,153 @@ class AmigaClientSession:
         t = asyncio.create_task(_nav_bg())
         self.background_tasks.add(t)
         t.add_done_callback(self.background_tasks.discard)
+
+    async def _perform_auto_login(self, username: str, password: str) -> None:
+        if not self.page:
+            return
+        logger.info("Executing Auto-Login for user: %r", username)
+        self._send_progress(50, f"Auto-Login fuer '{username}'...")
+
+        js_script = """
+        ([user, pass]) => {
+            function isVisible(el) {
+                if (!el) return false;
+                const style = window.getComputedStyle(el);
+                if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+                const rect = el.getBoundingClientRect();
+                return rect.width > 0 && rect.height > 0;
+            }
+
+            function setVal(elem, val) {
+                if (!elem) return false;
+                elem.focus();
+                const valueSetter = Object.getOwnPropertyDescriptor(elem, 'value')?.set;
+                const prototype = Object.getPrototypeOf(elem);
+                const protoSetter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+                if (protoSetter && valueSetter !== protoSetter) {
+                    protoSetter.call(elem, val);
+                } else if (valueSetter) {
+                    valueSetter.call(elem, val);
+                } else {
+                    elem.value = val;
+                }
+                elem.dispatchEvent(new Event('focus', { bubbles: true }));
+                elem.dispatchEvent(new Event('input', { bubbles: true }));
+                elem.dispatchEvent(new Event('change', { bubbles: true }));
+                elem.dispatchEvent(new Event('blur', { bubbles: true }));
+                return true;
+            }
+
+            const doc = document;
+            // 1. Password input detection
+            let pwInputs = Array.from(doc.querySelectorAll('input[type="password"]')).filter(isVisible);
+            if (pwInputs.length === 0) {
+                pwInputs = Array.from(doc.querySelectorAll('input[name*="pass" i], input[id*="pass" i]')).filter(isVisible);
+            }
+            if (pwInputs.length === 0) {
+                pwInputs = Array.from(doc.querySelectorAll('input[type="password"]'));
+            }
+            const pwInput = pwInputs[0] || null;
+
+            // 2. Username / Email input detection
+            let userInputs = Array.from(doc.querySelectorAll(
+                'input[autocomplete="username"], input[autocomplete="email"], input[type="email"], ' +
+                'input[name*="user" i], input[name*="login" i], input[name*="email" i], input[name*="account" i], ' +
+                'input[id*="user" i], input[id*="login" i], input[id*="email" i], input[id*="account" i], ' +
+                'input[placeholder*="user" i], input[placeholder*="benutzer" i], input[placeholder*="login" i], ' +
+                'input[placeholder*="e-mail" i], input[placeholder*="email" i], ' +
+                'input[aria-label*="user" i], input[aria-label*="benutzer" i], input[aria-label*="login" i], input[aria-label*="email" i]'
+            )).filter(isVisible);
+
+            let userInput = userInputs[0] || null;
+            if (!userInput && pwInput) {
+                const form = pwInput.closest('form') || doc;
+                const textInputs = Array.from(form.querySelectorAll('input[type="text"], input:not([type])')).filter(isVisible);
+                if (textInputs.length > 0) {
+                    userInput = textInputs[0];
+                }
+            }
+            if (!userInput && !pwInput) {
+                const anyText = Array.from(doc.querySelectorAll('input[type="text"], input[type="email"], input:not([type])')).filter(isVisible);
+                if (anyText.length > 0) userInput = anyText[0];
+            }
+
+            let userFilled = false;
+            let passFilled = false;
+            if (userInput && user) {
+                userFilled = setVal(userInput, user);
+            }
+            if (pwInput && pass) {
+                passFilled = setVal(pwInput, pass);
+            }
+
+            // 3. Submit button detection
+            let submitBtn = null;
+            const form = (pwInput && pwInput.closest('form')) || (userInput && userInput.closest('form'));
+            if (form) {
+                submitBtn = form.querySelector('button[type="submit"], input[type="submit"]');
+            }
+            if (!submitBtn) {
+                const allButtons = Array.from(doc.querySelectorAll('button, input[type="submit"], input[type="button"], a[role="button"]')).filter(isVisible);
+                for (const btn of allButtons) {
+                    const txt = (btn.innerText || btn.value || btn.getAttribute('aria-label') || '').trim().toLowerCase();
+                    if (txt.includes('login') || txt.includes('log in') || txt.includes('sign in') || txt.includes('signin') ||
+                        txt.includes('anmelden') || txt.includes('einloggen') || txt.includes('weiter') || txt.includes('next')) {
+                        submitBtn = btn;
+                        break;
+                    }
+                }
+            }
+
+            let submitted = false;
+            if (submitBtn) {
+                try {
+                    submitBtn.click();
+                    submitted = true;
+                } catch (e) {}
+            } else if (form && (userFilled || passFilled)) {
+                try {
+                    form.submit();
+                    submitted = true;
+                } catch (e) {}
+            }
+
+            return {
+                userFilled,
+                passFilled,
+                submitted,
+                foundUser: !!userInput,
+                foundPass: !!pwInput,
+                foundSubmit: !!submitBtn
+            };
+        }
+        """
+        try:
+            frames = [self.page] + list(self.page.frames)
+            res = None
+            for frame in frames:
+                try:
+                    res = await frame.evaluate(js_script, [username, password])
+                    if res and (res.get("userFilled") or res.get("passFilled")):
+                        break
+                except Exception:
+                    continue
+
+            logger.info("Auto-Login execution result: %s", res)
+            if res and not res.get("submitted") and (res.get("userFilled") or res.get("passFilled")):
+                await self.page.keyboard.press("Enter")
+
+            if res and (res.get("userFilled") or res.get("passFilled")):
+                self._send_progress(100, f"Auto-Login ausgefuehrt ({username})")
+            else:
+                self._send_progress(100, "Keine Login-Felder gefunden")
+        except Exception as exc:
+            logger.warning("Auto-Login error: %s", exc)
+            self._send_progress(100, "Auto-Login fehlgeschlagen")
+        finally:
+            self.active_until = time.monotonic() + 3.0
+            self._trigger_full_refresh(True)
+            self._schedule_delayed_frames()
 
     # ------------------------------------------------------------------------
     # Download Interceptor & Direct URL ASL Download Streamer (Server -> Amiga)
@@ -3995,7 +4173,7 @@ async def run_server(args: argparse.Namespace) -> None:
                         start_url=args.url,
                         portal_url=portal_url,
                         audio_enabled=audio_ready,
-                        jpeg_quality=getattr(args, "jpeg_quality", 80),
+                        jpeg_quality=getattr(args, "jpeg_quality", 100),
                         codec_mode=getattr(args, "codec", "auto"),
                         engine=engine,
                     )
@@ -4057,12 +4235,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--portal-port", type=int, default=8089, help="Local start portal HTTP port")
     parser.add_argument("--width", type=int, default=1024, help="Initial browser width (default: 1024)")
     parser.add_argument("--height", type=int, default=768, help="Initial browser height (default: 768)")
-    parser.add_argument("--format", choices=["argb32", "rgb565", "yuv420p", "yuv"], default="yuv420p", help="Wire pixel format (default: yuv420p — GPU-native YUV, lowest bandwidth)")
+    parser.add_argument("--format", choices=["argb32", "rgb565", "yuv420p", "yuv"], default="rgb565", help="Wire pixel format (default: rgb565 — 16-bit low Amiga CPU, or argb32)")
     parser.add_argument("--fps", type=int, default=25, help="Max target FPS (default: 25)")
     parser.add_argument("--url", default="", help="Optional initial URL (default: built-in Amiga portal)")
     parser.add_argument("--browser-bin", default=None, help="Explicit path to Chromium or Ungoogled-Chromium executable")
     parser.add_argument("--codec", choices=["auto", "jpeg", "lz4"], default="auto", help="Streaming codec (default: auto)")
-    parser.add_argument("--jpeg-quality", type=int, default=75, help="JPEG capture quality 20-98 (default: 75 for optimal speed and bandwidth)")
+    parser.add_argument("--jpeg-quality", type=int, default=100, help="JPEG capture quality 20-100 (default: 100 for maximum clarity)")
     parser.add_argument("--enable-extensions", dest="enable_extensions", action="store_true", default=True, help="Enable browser extensions (uBlock, h264ify) [default: enabled]")
     parser.add_argument("--disable-extensions", dest="enable_extensions", action="store_false", help="Disable all browser extensions")
     parser.add_argument("--disable-gpu", action="store_true", help="Disable GPU hardware acceleration (forces CPU software rasterization)")

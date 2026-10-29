@@ -3,10 +3,12 @@
 
 #include "app.h"
 
+#ifndef VORTEXBROWSE_RPI_HOST
 #define VORTEXBROWSE_RPI_HOST       "192.168.178.2"
 #define VORTEXBROWSE_RPI_PORT       7788
 #define VORTEXBROWSE_HOSTPC_HOST    "192.168.178.60"
 #define VORTEXBROWSE_HOSTPC_PORT    9757
+#endif
 
 /* Reaction Gadget IDs (Odyssey Web Browser Layout) */
 enum {
@@ -35,6 +37,7 @@ enum {
     GID_QUICK_ADD,
     GID_CLICKTAB = 40,
     GID_TAB_NEW,
+    GID_DOWNLOADS,
     GID_URL_FAVICON = 45,
     GID_QUICK_BASE = 50,     /* 50 .. 50 + VB_MAX_QUICKLINKS - 1 */
     GID_QUICK_DEL_BASE = 70  /* 70 .. 70 + VB_MAX_QUICKLINKS - 1 */
@@ -50,6 +53,7 @@ enum {
     MID_PROJ_ABOUT,
     MID_PROJ_PASSWORDS,
     MID_PROJ_AUTOLOGIN,
+    MID_PROJ_DOWNLOADS,
     MID_TAB_NEW,
     MID_TAB_CLOSE,
     MID_PROJ_QUIT,
@@ -105,15 +109,13 @@ void gui_reopen_screen(VortexApp *app);
 void prompt_add_quicklink(VortexApp *app);
 void gui_handle_events(VortexApp *app);
 void gui_poll_mouse(VortexApp *app);
-void gui_set_rmb_trap(VortexApp *app, BOOL trap);
 uint32 gui_get_signal_mask(VortexApp *app);
 void gui_update_url_bar(VortexApp *app, const char *url);
 void gui_tab_add(VortexApp *app, const char *title, const char *url, BOOL switch_to);
 void gui_tab_switch(VortexApp *app, uint16 idx);
 void gui_tab_close(VortexApp *app, uint16 idx);
 void gui_tab_set_title(VortexApp *app, uint16 idx, const char *title);
-int32 gui_get_dark_btn_bg(void);
-int32 gui_get_dark_txt_pen(void);
+void gui_set_rmb_trap(VortexApp *app, BOOL trap);
 
 #endif /* VORTEXBROWSE_GUI_H */
 

@@ -1243,6 +1243,9 @@ void renderer_sync_viewport_size(VortexApp *app)
 
     if (!r->format_sent) {
         net_send_url(app, "@FORMAT:yuv420");
+        char q_cmd[32];
+        snprintf(q_cmd, sizeof(q_cmd), "@JPEG_QUALITY:%u", (unsigned)(app->prefs.jpeg_quality ? app->prefs.jpeg_quality : 100));
+        net_send_url(app, q_cmd);
         r->format_sent = TRUE;
     }
 

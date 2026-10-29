@@ -88,6 +88,15 @@ void prefs_init(VortexApp *app)
     app->prefs.show_status_bar              = FALSE; /* Default: OFF */
     app->prefs.stream_res_mode              = STREAM_RES_NATIVE; /* Default: 1:1 Window Size */
     app->prefs.dark_theme                   = 0; /* Default: Hell (Standard) */
+    strncpy(app->prefs.server_host, VORTEXBROWSE_HOSTPC_HOST, sizeof(app->prefs.server_host) - 1);
+    app->prefs.server_host[sizeof(app->prefs.server_host) - 1] = '\0';
+    app->prefs.server_port                  = VORTEXBROWSE_HOSTPC_PORT;
+    app->prefs.jpeg_quality                 = 100; /* Default: 100% */
+    app->prefs.dynamic_video_quality        = TRUE;
+    app->prefs.save_server_on_exit          = TRUE;
+    strncpy(app->prefs.download_dir, "RAM:", sizeof(app->prefs.download_dir) - 1);
+    app->prefs.download_dir[sizeof(app->prefs.download_dir) - 1] = '\0';
+    app->prefs.always_ask_download          = TRUE;
     strncpy(app->prefs.start_url, "https://www.amiga-news.de", sizeof(app->prefs.start_url) - 1);
     app->prefs.start_url[sizeof(app->prefs.start_url) - 1] = '\0';
     app->prefs.save_last_url                = TRUE; /* Default: ON (letzte Seite speichern) */
@@ -229,11 +238,29 @@ static BOOL load_from_file(VortexApp *app, const char *path)
             app->prefs.stream_res_mode = (uint8_t)atoi(val);
         } else if (strcmp(key, "dark_theme") == 0) {
             app->prefs.dark_theme = (uint8_t)atoi(val);
+        } else if (strcmp(key, "server_host") == 0) {
+            strncpy(app->prefs.server_host, val, sizeof(app->prefs.server_host) - 1);
+            app->prefs.server_host[sizeof(app->prefs.server_host) - 1] = '\0';
+        } else if (strcmp(key, "server_port") == 0) {
+            int p = atoi(val);
+            if (p > 0 && p <= 65535) app->prefs.server_port = (uint16_t)p;
+        } else if (strcmp(key, "jpeg_quality") == 0) {
+            int q = atoi(val);
+            if (q >= 20 && q <= 100) app->prefs.jpeg_quality = (uint8_t)q;
+        } else if (strcmp(key, "dynamic_video_quality") == 0) {
+            app->prefs.dynamic_video_quality = (atoi(val) != 0);
+        } else if (strcmp(key, "save_server_on_exit") == 0) {
+            app->prefs.save_server_on_exit = (atoi(val) != 0);
         } else if (strcmp(key, "start_url") == 0) {
             strncpy(app->prefs.start_url, val, sizeof(app->prefs.start_url) - 1);
             app->prefs.start_url[sizeof(app->prefs.start_url) - 1] = '\0';
         } else if (strcmp(key, "save_last_url") == 0) {
             app->prefs.save_last_url = (atoi(val) != 0);
+        } else if (strcmp(key, "download_dir") == 0) {
+            strncpy(app->prefs.download_dir, val, sizeof(app->prefs.download_dir) - 1);
+            app->prefs.download_dir[sizeof(app->prefs.download_dir) - 1] = '\0';
+        } else if (strcmp(key, "always_ask_download") == 0) {
+            app->prefs.always_ask_download = (atoi(val) != 0);
         }
         /* Font & Charset */
         else if (strcmp(key, "gui_charset") == 0) {
@@ -284,6 +311,12 @@ static BOOL load_from_file(VortexApp *app, const char *path)
     if (app->prefs.font.web_zoom_pct == 0)  app->prefs.font.web_zoom_pct  = 100;
     if (app->prefs.font.web_font_size == 0) app->prefs.font.web_font_size = 16;
     if (app->prefs.search_engine >= NUM_SEARCH_ENGINES) app->prefs.search_engine = 0;
+    if (app->prefs.jpeg_quality == 0) app->prefs.jpeg_quality = 100;
+    if (app->prefs.server_host[0] == '\0') {
+        strncpy(app->prefs.server_host, VORTEXBROWSE_HOSTPC_HOST, sizeof(app->prefs.server_host) - 1);
+        app->prefs.server_host[sizeof(app->prefs.server_host) - 1] = '\0';
+        app->prefs.server_port = VORTEXBROWSE_HOSTPC_PORT;
+    }
 
     fclose(fp);
     return TRUE;
@@ -345,6 +378,19 @@ static BOOL save_to_file(const VortexApp *app, const char *path)
     fprintf(fp, "start_url=%s\n",         app->prefs.start_url);
     fprintf(fp, "save_last_url=%d\n\n",   app->prefs.save_last_url ? 1 : 0);
 
+    /* Server & Streaming */
+    fprintf(fp, "# Server & Streaming Configuration\n");
+    fprintf(fp, "server_host=%s\n", app->prefs.server_host[0] ? app->prefs.server_host : VORTEXBROWSE_HOSTPC_HOST);
+    fprintf(fp, "server_port=%u\n", (unsigned)(app->prefs.server_port ? app->prefs.server_port : VORTEXBROWSE_HOSTPC_PORT));
+    fprintf(fp, "jpeg_quality=%u\n", (unsigned)(app->prefs.jpeg_quality ? app->prefs.jpeg_quality : 100));
+    fprintf(fp, "dynamic_video_quality=%d\n", app->prefs.dynamic_video_quality ? 1 : 0);
+    fprintf(fp, "save_server_on_exit=%d\n\n", app->prefs.save_server_on_exit ? 1 : 0);
+
+    /* Download Manager */
+    fprintf(fp, "# Download Manager Configuration\n");
+    fprintf(fp, "download_dir=%s\n", app->prefs.download_dir[0] ? app->prefs.download_dir : "RAM:");
+    fprintf(fp, "always_ask_download=%d\n\n", app->prefs.always_ask_download ? 1 : 0);
+
     /* Font & Charset */
     fprintf(fp, "# Font & Charset Configuration\n");
     fprintf(fp, "gui_charset=%u\n",     (unsigned)app->prefs.font.gui_charset);
@@ -381,6 +427,13 @@ BOOL prefs_save(const VortexApp *app, BOOL permanent)
     if (permanent) {
         ensure_dir_exists(VB_PREFS_ENVARC_DIR);
         ok_arc = save_to_file(app, VB_PREFS_ENVARC_FILE);
+    }
+
+    if (app->prefs.server_host[0] != '\0') {
+        char port_str[16];
+        snprintf(port_str, sizeof(port_str), "%u", (unsigned)app->prefs.server_port);
+        IDOS->SetVar("VortexBrowse/server_host", (STRPTR)app->prefs.server_host, -1, GVF_GLOBAL_ONLY | (permanent ? GVF_SAVE_VAR : 0));
+        IDOS->SetVar("VortexBrowse/server_port", port_str, -1, GVF_GLOBAL_ONLY | (permanent ? GVF_SAVE_VAR : 0));
     }
 
     return ok_env && ok_arc;
@@ -508,6 +561,11 @@ void prefs_apply(VortexApp *app)
         char dcmd[32];
         snprintf(dcmd, sizeof(dcmd), "@DARKMODE:%u", (unsigned)app->prefs.dark_theme);
         net_send_url(app, dcmd);
+
+        /* JPEG Quality */
+        char qcmd[32];
+        snprintf(qcmd, sizeof(qcmd), "@JPEG_QUALITY:%u", (unsigned)(app->prefs.jpeg_quality ? app->prefs.jpeg_quality : 100));
+        net_send_url(app, qcmd);
     }
 }
 

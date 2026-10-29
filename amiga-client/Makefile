@@ -25,7 +25,7 @@ LDFLAGS = -L$(SDK)/local/newlib/lib -llz4 -ljpeg -lauto
 SRCS_COMMON = src/net.c src/renderer.c src/favorites.c src/download.c src/audio.c src/prefs.c src/clipboard.c src/passwords.c
 OBJS_COMMON = $(SRCS_COMMON:.c=.o)
 
-OBJS_RX     = src/main.o src/gui.o src/gui_prefs.o src/gui_passwords.o $(OBJS_COMMON)
+OBJS_RX     = src/main.o src/gui.o src/gui_prefs.o src/gui_passwords.o src/gui_download.o $(OBJS_COMMON)
 TARGET_RX   = VortexBrowse
 
 all: $(TARGET_RX)

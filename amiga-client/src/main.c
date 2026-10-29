@@ -11,6 +11,8 @@
 #include <proto/bsdsocket.h>
 #include <proto/chooser.h>
 #include <proto/popupmenu.h>
+#include <proto/listbrowser.h>
+#include <gadgets/listbrowser.h>
 
 #include <sys/select.h>
 #include <sys/time.h>
@@ -44,10 +46,12 @@ static struct ClassLibrary *s_FuelGaugeBase     = NULL;
 static struct ClassLibrary *s_ClickTabBase      = NULL;
 static struct ClassLibrary *s_BitMapBase        = NULL;
 static struct ClassLibrary *s_LabelBase         = NULL;
+static struct ClassLibrary *s_ListBrowserBase   = NULL;
 static struct ClassLibrary *s_PopupMenuClassLib = NULL;
 
-struct ChooserIFace  *IChooser  = NULL;
-struct ClickTabIFace *IClickTab = NULL;
+struct ChooserIFace     *IChooser     = NULL;
+struct ClickTabIFace    *IClickTab    = NULL;
+struct ListBrowserIFace *IListBrowser = NULL;
 
 static BOOL open_libs_and_classes(void)
 {
@@ -76,6 +80,8 @@ static BOOL open_libs_and_classes(void)
     if (!s_BitMapBase) s_BitMapBase = IIntuition->OpenClass("bitmap.image", 0, &dummy);
     s_LabelBase     = IIntuition->OpenClass("images/label.image", 53, &dummy);
     if (!s_LabelBase)  s_LabelBase  = IIntuition->OpenClass("label.image", 0, &dummy);
+    s_ListBrowserBase = IIntuition->OpenClass("gadgets/listbrowser.gadget", 53, &dummy);
+    if (!s_ListBrowserBase) s_ListBrowserBase = IIntuition->OpenClass("listbrowser.gadget", 0, &dummy);
 
     if (!s_WindowBase || !s_LayoutBase || !s_ButtonBase || !s_StringBase ||
         !s_SpaceBase || !s_ChooserBase || !s_FuelGaugeBase) {
@@ -96,6 +102,14 @@ static BOOL open_libs_and_classes(void)
     }
     if (!IClickTab) {
         DBG_LOG("[Main] WARNING: Could not obtain IClickTab interface from clicktab.gadget!\n");
+    }
+
+    if (s_ListBrowserBase) {
+        IListBrowser = (struct ListBrowserIFace *)IExec->GetInterface(
+            (struct Library *)s_ListBrowserBase, "main", 1, NULL);
+    }
+    if (!IListBrowser) {
+        DBG_LOG("[Main] WARNING: Could not obtain IListBrowser interface from listbrowser.gadget!\n");
     }
 
     PopupMenuBase = IExec->OpenLibrary("popupmenu.class", 0);
@@ -128,6 +142,14 @@ static void close_libs_and_classes(void)
     if (IClickTab) {
         IExec->DropInterface((struct Interface *)IClickTab);
         IClickTab = NULL;
+    }
+    if (IListBrowser) {
+        IExec->DropInterface((struct Interface *)IListBrowser);
+        IListBrowser = NULL;
+    }
+    if (s_ListBrowserBase) {
+        IIntuition->CloseClass(s_ListBrowserBase);
+        s_ListBrowserBase = NULL;
     }
     if (s_ClickTabBase) {
         IIntuition->CloseClass(s_ClickTabBase);
@@ -304,17 +326,14 @@ int main(int argc, char **argv)
             gui_rebuild_window(&g_app);
         }
         /* Send debounced/throttled mouse move to remote browser outside the IDCMP input task */
-        if (g_app.pending_mouse_move) {
+        if (g_app.connected && g_app.pending_mouse_move) {
             g_app.pending_mouse_move = FALSE;
             int16_t rx = 0, ry = 0;
-            BOOL inside_viewport = renderer_map_window_to_remote(&g_app, g_app.pending_win_mouse_x, g_app.pending_win_mouse_y, &rx, &ry);
-            gui_set_rmb_trap(&g_app, inside_viewport);
-
-            if (g_app.connected && inside_viewport) {
+            if (renderer_map_window_to_remote(&g_app, g_app.pending_win_mouse_x, g_app.pending_win_mouse_y, &rx, &ry)) {
                 uint32 s = 0, us = 0;
                 IIntuition->CurrentTime(&s, &us);
-                int32 diff_s  = (int32)s - (int32)g_app.last_move_secs;
-                int32 diff_us = diff_s * 1000000 + ((int32)us - (int32)g_app.last_move_micros);
+                int32 diff_us = ((int32)s - (int32)g_app.last_move_secs) * 1000000 +
+                                ((int32)us - (int32)g_app.last_move_micros);
                 int16_t dx = rx - g_app.last_remote_x;
                 int16_t dy = ry - g_app.last_remote_y;
                 if ((diff_us >= 33000 || diff_us < 0) && (dx * dx + dy * dy >= 4)) {
@@ -327,7 +346,6 @@ int main(int argc, char **argv)
             } else {
                 if (g_app.is_hovering_link) {
                     g_app.is_hovering_link = FALSE;
-                    g_app.hover_url[0]     = '\0';
                 }
             }
         }

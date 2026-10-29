@@ -37,6 +37,36 @@ typedef struct BrowserTab {
     char     url[VB_MAX_URL_LEN];
 } BrowserTab;
 
+#define VB_MAX_DOWNLOADS 32
+
+typedef enum {
+    DL_STATUS_DOWNLOADING = 0,
+    DL_STATUS_COMPLETED,
+    DL_STATUS_CANCELLED,
+    DL_STATUS_ERROR
+} DownloadStatus;
+
+typedef struct DownloadEntry {
+    uint32_t       id;
+    char           filename[256];
+    char           dest_path[512];
+    uint64_t       total_size;
+    uint64_t       received_size;
+    uint32_t       start_seconds;
+    uint32_t       last_calc_secs;
+    uint64_t       last_calc_bytes;
+    uint32_t       speed_bps;
+    char           eta_str[32];
+    DownloadStatus status;
+    BPTR           file_handle;
+    struct Node   *lb_node;
+} DownloadEntry;
+
+typedef struct DownloadManager {
+    DownloadEntry entries[VB_MAX_DOWNLOADS];
+    int           count;
+} DownloadManager;
+
 typedef struct DownloadState {
     BOOL     active;
     uint32_t download_id;
@@ -154,9 +184,10 @@ typedef struct VortexApp {
     struct Screen *custom_screen;
 
     /* Subsystems */
-    RendererState  renderer;
-    DownloadState  download;
-    AudioState     audio;
+    RendererState   renderer;
+    DownloadState   download;
+    DownloadManager download_mgr;
+    AudioState      audio;
 
     /* Favorites */
     FavoriteItem   favorites[VB_MAX_FAVORITES];
@@ -177,6 +208,21 @@ typedef struct VortexApp {
     int            pw_cur_sel;
     BOOL           pw_show_plaintext;
     char           pw_real_pass[128];
+
+    /* Modeless Download Manager Window (Odyssey / IBrowse style listbrowser) */
+    Object             *dl_win_obj;
+    struct Window      *dl_win;
+    Object             *dl_gad_listbrowser;
+    struct ColumnInfo  *dl_col_info;
+    struct List         dl_node_list;
+    Object             *dl_gad_status_txt;
+    Object             *dl_gad_btn_open_file;
+    Object             *dl_gad_btn_open_dir;
+    Object             *dl_gad_btn_cancel;
+    Object             *dl_gad_btn_remove;
+    Object             *dl_gad_btn_clear;
+    Object             *dl_gad_btn_close;
+    int                 dl_cur_sel;
 
     /* Mouse throttling */
     uint32_t       last_move_secs;

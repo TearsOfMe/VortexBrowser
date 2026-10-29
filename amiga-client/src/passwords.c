@@ -646,13 +646,44 @@ BOOL passwords_remove(VortexApp *app, int index)
     return TRUE;
 }
 
+static const char *vb_strcasestr(const char *haystack, const char *needle)
+{
+    if (!haystack || !needle) return NULL;
+    if (!*needle) return haystack;
+    size_t nlen = strlen(needle);
+    for (; *haystack; haystack++) {
+        if (strncasecmp(haystack, needle, nlen) == 0) {
+            return haystack;
+        }
+    }
+    return NULL;
+}
+
 const PasswordEntry *passwords_find_by_domain(VortexApp *app, const char *domain)
 {
     if (!app || !app->password_store || !domain || domain[0] == '\0') return NULL;
 
+    /* Extract clean host from URL (strip http://, https://, www., path, port) */
+    char clean_host[256];
+    const char *p = domain;
+    if (strncmp(p, "http://", 7) == 0) p += 7;
+    else if (strncmp(p, "https://", 8) == 0) p += 8;
+    if (strncmp(p, "www.", 4) == 0) p += 4;
+    strncpy(clean_host, p, sizeof(clean_host) - 1);
+    clean_host[sizeof(clean_host) - 1] = '\0';
+    char *slash = strchr(clean_host, '/');
+    if (slash) *slash = '\0';
+    char *colon = strchr(clean_host, ':');
+    if (colon) *colon = '\0';
+
     for (int i = 0; i < app->password_store->count; i++) {
-        if (strstr(domain, app->password_store->entries[i].domain) != NULL ||
-            strstr(app->password_store->entries[i].domain, domain) != NULL) {
+        const char *entry_dom = app->password_store->entries[i].domain;
+        if (!entry_dom || entry_dom[0] == '\0') continue;
+
+        if (vb_strcasestr(domain, entry_dom) != NULL ||
+            vb_strcasestr(entry_dom, domain) != NULL ||
+            (clean_host[0] != '\0' && (vb_strcasestr(clean_host, entry_dom) != NULL ||
+                                      vb_strcasestr(entry_dom, clean_host) != NULL))) {
             return &app->password_store->entries[i];
         }
     }
