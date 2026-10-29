@@ -239,9 +239,8 @@ static void run_autotest_step(VortexApp *app)
 int main(int argc, char **argv)
 {
     memset(&g_app, 0, sizeof(VortexApp));
-    /* Default to CachyOS Host-PC on port 9757 */
-    strncpy(g_app.server_host, VORTEXBROWSE_HOSTPC_HOST, sizeof(g_app.server_host) - 1);
-    g_app.server_port = VORTEXBROWSE_HOSTPC_PORT;
+    g_app.server_host[0] = '\0';
+    g_app.server_port    = DEFAULT_SERVER_PORT;
     g_app.sock_fd     = -1;
     g_app.running     = TRUE;
     strncpy(g_app.status_text, "Bereit.", sizeof(g_app.status_text) - 1);
@@ -304,13 +303,18 @@ int main(int argc, char **argv)
         g_app.current_url[sizeof(g_app.current_url) - 1] = '\0';
     }
 
-    /* Connect automatically on startup */
-    if (net_connect(&g_app, g_app.server_host, g_app.server_port)) {
-        renderer_sync_viewport_size(&g_app);
-        net_send_url(&g_app, "@REFRESH");
-        const char *su = (g_app.current_url[0] && g_app.current_url[0] != '@') ? g_app.current_url : "@HOME";
-        gui_update_url_bar(&g_app, (su[0] != '@') ? su : "");
-        net_send_url(&g_app, su);
+    /* Connect automatically on startup if a server address is configured */
+    if (g_app.server_host[0] != '\0') {
+        if (net_connect(&g_app, g_app.server_host, g_app.server_port)) {
+            renderer_sync_viewport_size(&g_app);
+            net_send_url(&g_app, "@REFRESH");
+            const char *su = (g_app.current_url[0] && g_app.current_url[0] != '@') ? g_app.current_url : "@HOME";
+            gui_update_url_bar(&g_app, (su[0] != '@') ? su : "");
+            net_send_url(&g_app, su);
+        }
+    } else {
+        /* Clean start / fresh installation: prompt user for server address */
+        prompt_server_address(&g_app);
     }
 
     /* Main Multiplexed Event Loop (bsdsocket WaitSelect + Reaction WINDOW_SigMask) */
@@ -385,17 +389,11 @@ int main(int argc, char **argv)
                 renderer_flush_dirty(&g_app);
             }
         } else {
-            struct timeval tv_retry;
-            tv_retry.tv_sec  = 1;
-            tv_retry.tv_usec = 500000;
-            ISocket->WaitSelect(0, NULL, NULL, NULL, &tv_retry, &sigs);
-            if (g_app.running && !g_app.connected) {
-                if (net_connect(&g_app, g_app.server_host, g_app.server_port)) {
-                    if (g_app.current_url[0] != '\0' && g_app.current_url[0] != '@') {
-                        net_send_url(&g_app, g_app.current_url);
-                    }
-                }
-            }
+            /* Disconnected: wait for GUI events with 100ms idle tick, NO blocking reconnect loop */
+            struct timeval tv_idle;
+            tv_idle.tv_sec  = 0;
+            tv_idle.tv_usec = 100000; /* 100ms idle tick */
+            ISocket->WaitSelect(0, NULL, NULL, NULL, &tv_idle, &sigs);
         }
 
         if (sigs & SIGBREAKF_CTRL_C) {

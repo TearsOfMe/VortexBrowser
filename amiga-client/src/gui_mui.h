@@ -3,7 +3,7 @@
 
 #include "app.h"
 
-/* MUI Gadget & Action IDs (Odyssey Web Browser Layout) */
+/* MUI Gadget & Action IDs */
 enum {
     GID_BACK = 1,
     GID_FORWARD,

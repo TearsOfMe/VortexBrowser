@@ -35,8 +35,10 @@ enum {
     GID_STATUS,
     GID_GAUGE,
     GID_QUICK_ADD,
+    GID_QUICK_REMOVE,
     GID_CLICKTAB = 40,
     GID_TAB_NEW,
+    GID_TAB_CLOSE,
     GID_DOWNLOADS,
     GID_URL_FAVICON = 45,
     GID_QUICK_BASE = 50,     /* 50 .. 50 + VB_MAX_QUICKLINKS - 1 */
@@ -47,6 +49,7 @@ enum {
 enum {
     MID_PROJ_NEW = 100,
     MID_PROJ_OPEN,
+    MID_PROJ_CONNECT,
     MID_PROJ_CONNECT_RPI4,
     MID_PROJ_CONNECT_HOSTPC,
     MID_PROJ_DISCONNECT,
@@ -106,6 +109,7 @@ BOOL gui_init(VortexApp *app);
 void gui_cleanup(VortexApp *app);
 void gui_rebuild_window(VortexApp *app);
 void gui_reopen_screen(VortexApp *app);
+void prompt_server_address(VortexApp *app);
 void prompt_add_quicklink(VortexApp *app);
 void gui_handle_events(VortexApp *app);
 void gui_poll_mouse(VortexApp *app);

@@ -7,6 +7,7 @@
 #include <proto/dos.h>
 #include <proto/intuition.h>
 #include <proto/graphics.h>
+#include <proto/layers.h>
 #include <proto/utility.h>
 #include <proto/chooser.h>
 #include <proto/bsdsocket.h>
@@ -22,6 +23,7 @@
 #include <gadgets/fuelgauge.h>
 #include <gadgets/clicktab.h>
 #include <images/bevel.h>
+#include <intuition/gui.h>
 #include <intuition/gadgetclass.h>
 #include <intuition/icclass.h>
 #include <intuition/pointerclass.h>
@@ -40,6 +42,7 @@
 #include <graphics/view.h>
 
 #include "gui.h"
+#include "prefs.h"
 #include "net.h"
 #include "renderer.h"
 #include "favorites.h"
@@ -53,7 +56,6 @@ extern struct SocketIFace *ISocket;
 static void handle_menu_command(VortexApp *app, uint32 item_id);
 static void open_main_menu_popup(VortexApp *app, int16_t mx, int16_t my);
 static void open_quicklink_popup(VortexApp *app, int qidx, int16_t mx, int16_t my);
-static void prompt_server_address(VortexApp *app);
 
 /* Amiga Standard Pull-Down Menu definition */
 static struct NewMenu s_main_menu[] = {
@@ -67,12 +69,12 @@ static struct NewMenu s_main_menu[] = {
     { NM_ITEM,  (STRPTR)"Auto-Login fuer Seite...",                    (STRPTR)"L", 0, 0, (APTR)MID_PROJ_AUTOLOGIN },
     { NM_ITEM,  (STRPTR)"Download-Manager...",                         (STRPTR)"D", 0, 0, (APTR)MID_PROJ_DOWNLOADS },
     { NM_ITEM,  NM_BARLABEL,                                           NULL,        0, 0, NULL },
-    { NM_ITEM,  (STRPTR)"Mit Raspberry Pi verbinden (192.168.178.2:7788)", NULL,   0, 0, (APTR)MID_SET_SERVER_RPI4 },
-    { NM_ITEM,  (STRPTR)"Mit Host-PC verbinden (192.168.178.60:9757)", NULL,       0, 0, (APTR)MID_SET_SERVER_HOSTPC },
+    { NM_ITEM,  (STRPTR)"Server konfigurieren...",                     (STRPTR)"1", 0, 0, (APTR)MID_SET_SERVER_CUSTOM },
+    { NM_ITEM,  (STRPTR)"Mit Server verbinden",                        (STRPTR)"2", 0, 0, (APTR)MID_PROJ_CONNECT },
     { NM_ITEM,  (STRPTR)"Verbindung trennen",                          NULL,        0, 0, (APTR)MID_PROJ_DISCONNECT },
     { NM_ITEM,  NM_BARLABEL,                                           NULL,        0, 0, NULL },
     { NM_ITEM,  (STRPTR)"Einstellungen...",                            (STRPTR)"E", 0, 0, (APTR)MID_SETTINGS },
-    { NM_ITEM,  (STRPTR)"Ueber VortexBrowse...",                       (STRPTR)"?", 0, 0, (APTR)MID_PROJ_ABOUT },
+    { NM_ITEM,  (STRPTR)"Ueber VortexBrowser...",                      (STRPTR)"?", 0, 0, (APTR)MID_PROJ_ABOUT },
     { NM_ITEM,  NM_BARLABEL,                                           NULL,        0, 0, NULL },
     { NM_ITEM,  (STRPTR)"Beenden",                                     (STRPTR)"Q", 0, 0, (APTR)MID_PROJ_QUIT },
 
@@ -224,6 +226,21 @@ typedef struct {
 
 static DarkPens s_dark_pens = { FALSE, NULL, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
 static struct Hook s_dark_backfill_hook;
+static struct Hook s_space_dark_render_hook;
+static struct Hook s_dark_winbar_active_hook;
+static struct Hook s_dark_winbar_inact_hook;
+static struct Hook s_dark_screenbar_hook;
+
+static BOOL s_orig_gui_attrs_saved = FALSE;
+static struct Screen *s_orig_gui_screen = NULL;
+static ULONG s_orig_winbar_active_hook = 0;
+static ULONG s_orig_winbar_inact_hook = 0;
+static ULONG s_orig_winborder_active_hook = 0;
+static ULONG s_orig_winborder_inact_hook = 0;
+static ULONG s_orig_tab_title_hook = 0;
+static ULONG s_orig_tab_active_hook = 0;
+static ULONG s_orig_tab_inact_hook = 0;
+static ULONG s_orig_winborder_look = 0;
 
 static uint32 dark_backfill_hook_func(struct Hook *hook, struct RastPort *rp, struct BackFillMessage *msg)
 {
@@ -235,6 +252,236 @@ static uint32 dark_backfill_hook_func(struct Hook *hook, struct RastPort *rp, st
     uint32 fill_pen = (s_dark_pens.allocated && s_dark_pens.bg_pen >= 0) ? (uint32)s_dark_pens.bg_pen : 1;
     IGraphics->SetAPen(&crp, fill_pen);
     IGraphics->RectFill(&crp, msg->Bounds.MinX, msg->Bounds.MinY, msg->Bounds.MaxX, msg->Bounds.MaxY);
+    return 0;
+}
+
+static uint32 space_dark_render_hook_func(struct Hook *hook, APTR obj, struct gpRender *msg)
+{
+    (void)hook;
+    if (!obj || !msg || !msg->gpr_RPort || !s_dark_pens.allocated) return 0;
+    struct RastPort *rp = msg->gpr_RPort;
+    struct Gadget *g = (struct Gadget *)obj;
+    uint32 fill_pen = (s_dark_pens.bg_pen >= 0) ? (uint32)s_dark_pens.bg_pen : 1;
+    IGraphics->SetAPen(rp, fill_pen);
+    IGraphics->RectFill(rp, g->LeftEdge, g->TopEdge, g->LeftEdge + g->Width - 1, g->TopEdge + g->Height - 1);
+    return 0;
+}
+
+static uint32 dark_winbar_active_hook_func(struct Hook *hook, struct RastPort *rp, struct BackFillMessage *msg)
+{
+    (void)hook;
+    if (!rp || !msg) return 0;
+
+    struct RastPort crp = *rp;
+    crp.Layer = NULL;
+    uint32 fill_pen = (s_dark_pens.allocated && s_dark_pens.btn_bg_pen >= 0) ? (uint32)s_dark_pens.btn_bg_pen
+                    : ((s_dark_pens.allocated && s_dark_pens.bg_pen >= 0) ? (uint32)s_dark_pens.bg_pen : 1);
+    IGraphics->SetAPen(&crp, fill_pen);
+    IGraphics->RectFill(&crp, msg->Bounds.MinX, msg->Bounds.MinY, msg->Bounds.MaxX, msg->Bounds.MaxY);
+    return 0;
+}
+
+static uint32 dark_winbar_inact_hook_func(struct Hook *hook, struct RastPort *rp, struct BackFillMessage *msg)
+{
+    (void)hook;
+    if (!rp || !msg) return 0;
+
+    struct RastPort crp = *rp;
+    crp.Layer = NULL;
+    uint32 fill_pen = (s_dark_pens.allocated && s_dark_pens.bg_pen >= 0) ? (uint32)s_dark_pens.bg_pen : 1;
+    IGraphics->SetAPen(&crp, fill_pen);
+    IGraphics->RectFill(&crp, msg->Bounds.MinX, msg->Bounds.MinY, msg->Bounds.MaxX, msg->Bounds.MaxY);
+    return 0;
+}
+
+static uint32 dark_screenbar_hook_func(struct Hook *hook, struct RastPort *rp, struct BackFillMessage *msg)
+{
+    (void)hook;
+    if (!rp || !msg) return 0;
+
+    struct RastPort crp = *rp;
+    crp.Layer = NULL;
+    uint32 fill_pen = (s_dark_pens.allocated && s_dark_pens.inp_bg_pen >= 0) ? (uint32)s_dark_pens.inp_bg_pen : 1;
+    IGraphics->SetAPen(&crp, fill_pen);
+    IGraphics->RectFill(&crp, msg->Bounds.MinX, msg->Bounds.MinY, msg->Bounds.MaxX, msg->Bounds.MaxY);
+    return 0;
+}
+
+static struct Hook s_post_refresh_hook;
+
+void gui_draw_dark_titlebar(VortexApp *app)
+{
+    if (!app || !app->win || app->prefs.dark_theme != 1) return;
+    struct Window *win = app->win;
+    struct RastPort *rp = win->RPort;
+    if (!rp || !s_dark_pens.allocated) return;
+
+    int top_h = win->BorderTop;
+    int win_w = win->Width;
+    int win_h = win->Height;
+    if (top_h <= 2 || win_w <= 20) return;
+
+    BOOL active = (win->Flags & WFLG_WINDOWACTIVE) != 0;
+
+    struct Layer *layer = win->WLayer;
+    if (layer && ILayers) {
+        ILayers->LockLayer(0, layer);
+    }
+
+    uint32 bar_pen  = (active && s_dark_pens.btn_bg_pen >= 0) ? (uint32)s_dark_pens.btn_bg_pen
+                     : ((s_dark_pens.bg_pen >= 0) ? (uint32)s_dark_pens.bg_pen : 1);
+    uint32 edge_pen = (s_dark_pens.btn_sel_pen >= 0) ? (uint32)s_dark_pens.btn_sel_pen : bar_pen;
+    uint32 dark_pen = (s_dark_pens.inp_bg_pen >= 0) ? (uint32)s_dark_pens.inp_bg_pen : 1;
+    uint32 text_pen = active ? ((s_dark_pens.txt_pen >= 0) ? (uint32)s_dark_pens.txt_pen : 2)
+                             : ((s_dark_pens.btn_sel_pen >= 0) ? (uint32)s_dark_pens.btn_sel_pen : 1);
+
+    /* 1. Fill entire top border / title bar */
+    IGraphics->SetAPen(rp, bar_pen);
+    IGraphics->RectFill(rp, 0, 0, win_w - 1, top_h - 1);
+
+    /* 2. Top and bottom accent lines */
+    IGraphics->SetAPen(rp, edge_pen);
+    IGraphics->Move(rp, 0, 0);
+    IGraphics->Draw(rp, win_w - 1, 0);
+
+    IGraphics->SetAPen(rp, dark_pen);
+    IGraphics->Move(rp, 0, top_h - 1);
+    IGraphics->Draw(rp, win_w - 1, top_h - 1);
+
+    /* Also darken the left, right, and bottom window borders if present */
+    if (win->BorderLeft > 0) {
+        IGraphics->SetAPen(rp, bar_pen);
+        IGraphics->RectFill(rp, 0, top_h, win->BorderLeft - 1, win_h - 1);
+    }
+    if (win->BorderRight > 0) {
+        IGraphics->SetAPen(rp, bar_pen);
+        IGraphics->RectFill(rp, win_w - win->BorderRight, top_h, win_w - 1, win_h - 1);
+    }
+    if (win->BorderBottom > 0) {
+        IGraphics->SetAPen(rp, bar_pen);
+        IGraphics->RectFill(rp, 0, win_h - win->BorderBottom, win_w - 1, win_h - 1);
+    }
+
+    /* 3. Close button [X] at the left */
+    int btn_h = top_h - 6;
+    if (btn_h < 12) btn_h = 12;
+    if (btn_h > 18) btn_h = 18;
+    int btn_w = btn_h;
+    int btn_x = 5;
+    int btn_y = (top_h - btn_h) / 2;
+
+    /* Close button box */
+    IGraphics->SetAPen(rp, dark_pen);
+    IGraphics->RectFill(rp, btn_x, btn_y, btn_x + btn_w - 1, btn_y + btn_h - 1);
+    IGraphics->SetAPen(rp, edge_pen);
+    IGraphics->Move(rp, btn_x, btn_y);
+    IGraphics->Draw(rp, btn_x + btn_w - 1, btn_y);
+    IGraphics->Draw(rp, btn_x + btn_w - 1, btn_y + btn_h - 1);
+    IGraphics->Draw(rp, btn_x, btn_y + btn_h - 1);
+    IGraphics->Draw(rp, btn_x, btn_y);
+
+    /* Close cross 'X' */
+    IGraphics->SetAPen(rp, text_pen);
+    int pad = 3;
+    IGraphics->Move(rp, btn_x + pad, btn_y + pad);
+    IGraphics->Draw(rp, btn_x + btn_w - 1 - pad, btn_y + btn_h - 1 - pad);
+    IGraphics->Move(rp, btn_x + btn_w - 1 - pad, btn_y + pad);
+    IGraphics->Draw(rp, btn_x + pad, btn_y + btn_h - 1 - pad);
+
+    /* 4. Right side gadgets: Depth, Zoom, Iconify */
+    int rx = win_w - 5 - btn_w;
+    int ry = btn_y;
+
+    /* Depth gadget */
+    IGraphics->SetAPen(rp, dark_pen);
+    IGraphics->RectFill(rp, rx, ry, rx + btn_w - 1, ry + btn_h - 1);
+    IGraphics->SetAPen(rp, edge_pen);
+    IGraphics->Move(rp, rx, ry);
+    IGraphics->Draw(rp, rx + btn_w - 1, ry);
+    IGraphics->Draw(rp, rx + btn_w - 1, ry + btn_h - 1);
+    IGraphics->Draw(rp, rx, ry + btn_h - 1);
+    IGraphics->Draw(rp, rx, ry);
+    IGraphics->SetAPen(rp, text_pen);
+    IGraphics->Move(rp, rx + 3, ry + 3);
+    IGraphics->Draw(rp, rx + btn_w - 4, ry + 3);
+    IGraphics->Draw(rp, rx + btn_w - 4, ry + btn_h - 4);
+    IGraphics->Draw(rp, rx + 3, ry + btn_h - 4);
+    IGraphics->Draw(rp, rx + 3, ry + 3);
+
+    /* Zoom gadget [+] */
+    rx -= (btn_w + 4);
+    IGraphics->SetAPen(rp, dark_pen);
+    IGraphics->RectFill(rp, rx, ry, rx + btn_w - 1, ry + btn_h - 1);
+    IGraphics->SetAPen(rp, edge_pen);
+    IGraphics->Move(rp, rx, ry);
+    IGraphics->Draw(rp, rx + btn_w - 1, ry);
+    IGraphics->Draw(rp, rx + btn_w - 1, ry + btn_h - 1);
+    IGraphics->Draw(rp, rx, ry + btn_h - 1);
+    IGraphics->Draw(rp, rx, ry);
+    IGraphics->SetAPen(rp, text_pen);
+    int mid_x = rx + btn_w / 2;
+    int mid_y = ry + btn_h / 2;
+    IGraphics->Move(rp, mid_x, ry + 3);
+    IGraphics->Draw(rp, mid_x, ry + btn_h - 4);
+    IGraphics->Move(rp, rx + 3, mid_y);
+    IGraphics->Draw(rp, rx + btn_w - 4, mid_y);
+
+    /* Iconify gadget [_] */
+    rx -= (btn_w + 4);
+    IGraphics->SetAPen(rp, dark_pen);
+    IGraphics->RectFill(rp, rx, ry, rx + btn_w - 1, ry + btn_h - 1);
+    IGraphics->SetAPen(rp, edge_pen);
+    IGraphics->Move(rp, rx, ry);
+    IGraphics->Draw(rp, rx + btn_w - 1, ry);
+    IGraphics->Draw(rp, rx + btn_w - 1, ry + btn_h - 1);
+    IGraphics->Draw(rp, rx, ry + btn_h - 1);
+    IGraphics->Draw(rp, rx, ry);
+    IGraphics->SetAPen(rp, text_pen);
+    IGraphics->Move(rp, rx + 3, ry + btn_h - 4);
+    IGraphics->Draw(rp, rx + btn_w - 4, ry + btn_h - 4);
+
+    /* 5. Window Title Text */
+    int title_x = btn_x + btn_w + 8;
+    int title_max_x = rx - 8;
+    int avail_txt_w = title_max_x - title_x;
+
+    if (avail_txt_w > 20 && app->win_title[0] != '\0') {
+        struct TextFont *tf = rp->Font;
+        int font_h = tf ? tf->tf_YSize : 12;
+        int base_y = tf ? tf->tf_Baseline : (font_h - 2);
+        int txt_y = (top_h - font_h) / 2 + base_y;
+
+        char title_buf[512];
+        snprintf(title_buf, sizeof(title_buf), "%s", app->win_title);
+
+        if (IGraphics->TextLength(rp, title_buf, strlen(title_buf)) > avail_txt_w) {
+            size_t tlen = strlen(title_buf);
+            while (tlen > 4 && IGraphics->TextLength(rp, title_buf, tlen) > avail_txt_w - 16) {
+                tlen--;
+            }
+            title_buf[tlen] = '\0';
+            strcat(title_buf, "...");
+        }
+
+        IGraphics->SetDrMd(rp, JAM1);
+        IGraphics->SetAPen(rp, text_pen);
+        IGraphics->Move(rp, title_x, txt_y);
+        IGraphics->Text(rp, title_buf, strlen(title_buf));
+    }
+
+    if (layer && ILayers) {
+        ILayers->UnlockLayer(layer);
+    }
+}
+
+static uint32 post_refresh_hook_func(struct Hook *hook, APTR win_obj, struct Gadget *gadget)
+{
+    (void)win_obj;
+    (void)gadget;
+    VortexApp *app = (VortexApp *)hook->h_Data;
+    if (app && app->prefs.dark_theme == 1) {
+        gui_draw_dark_titlebar(app);
+    }
     return 0;
 }
 
@@ -286,8 +533,8 @@ static void gui_alloc_dark_pens(struct Screen *scr)
             TAG_DONE);
 
         s_dark_pens.raw_gauge_fill = IGraphics->ObtainBestPen(cm,
-            0x3A3A3A3AUL, 0x8E8E8E8EUL, 0xE6E6E6E6UL,
-            OBP_Precision, PRECISION_GUI,
+            0x3A3A3A3AUL, 0x44444444UL, 0x54545454UL,
+            OBP_Precision, PRECISION_IMAGE,
             TAG_DONE);
     }
 
@@ -296,10 +543,22 @@ static void gui_alloc_dark_pens(struct Screen *scr)
     s_dark_pens.btn_sel_pen    = (s_dark_pens.raw_btn_sel >= 0)    ? s_dark_pens.raw_btn_sel    : 2;
     s_dark_pens.txt_pen        = (s_dark_pens.raw_txt >= 0)        ? s_dark_pens.raw_txt        : 2;
     s_dark_pens.inp_bg_pen     = (s_dark_pens.raw_inp_bg >= 0)     ? s_dark_pens.raw_inp_bg     : 1;
-    s_dark_pens.gauge_fill_pen = (s_dark_pens.raw_gauge_fill >= 0) ? s_dark_pens.raw_gauge_fill : 3;
+    s_dark_pens.gauge_fill_pen = (s_dark_pens.raw_gauge_fill >= 0) ? s_dark_pens.raw_gauge_fill : s_dark_pens.btn_sel_pen;
 
     memset(&s_dark_backfill_hook, 0, sizeof(struct Hook));
     s_dark_backfill_hook.h_Entry = (HOOKFUNC)dark_backfill_hook_func;
+
+    memset(&s_space_dark_render_hook, 0, sizeof(struct Hook));
+    s_space_dark_render_hook.h_Entry = (HOOKFUNC)space_dark_render_hook_func;
+
+    memset(&s_dark_winbar_active_hook, 0, sizeof(struct Hook));
+    s_dark_winbar_active_hook.h_Entry = (HOOKFUNC)dark_winbar_active_hook_func;
+
+    memset(&s_dark_winbar_inact_hook, 0, sizeof(struct Hook));
+    s_dark_winbar_inact_hook.h_Entry = (HOOKFUNC)dark_winbar_inact_hook_func;
+
+    memset(&s_dark_screenbar_hook, 0, sizeof(struct Hook));
+    s_dark_screenbar_hook.h_Entry = (HOOKFUNC)dark_screenbar_hook_func;
 
     s_dark_pens.allocated = TRUE;
 }
@@ -470,7 +729,7 @@ static Object *create_quicklink_button(uint32 gid, const char *label, const char
     int idx = (int)(gid - GID_QUICK_BASE);
     if (idx < 0 || idx >= VB_MAX_QUICKLINKS) idx = 0;
 
-    /* Clean horizontal button padding for text, matching Odyssey Web Browser */
+    /* Clean horizontal button padding for text */
     snprintf(s_quick_btn_labels[idx], sizeof(s_quick_btn_labels[idx]), "  %s  ", label ? label : "");
     snprintf(s_quick_btn_hints[idx], sizeof(s_quick_btn_hints[idx]), "%s", url ? url : "");
 
@@ -515,7 +774,7 @@ static BOOL   s_got_extended_wheel = FALSE;
 static int32  s_wheel_accum_dy     = 0;
 static int16  s_wheel_win_x        = 640;
 static int16  s_wheel_win_y        = 360;
-static BOOL   s_current_rmb_trap   = TRUE;
+static BOOL   s_current_rmb_trap   = FALSE;
 
 void gui_set_rmb_trap(VortexApp *app, BOOL trap)
 {
@@ -552,16 +811,14 @@ static void dispatch_viewport_mouse_btn(VortexApp *app, int16_t win_x, int16_t w
 
     if (!app->connected) {
         if ((btn == 3 || btn == 2) && is_down) {
-            gui_set_rmb_trap(app, FALSE);
             if (hit_ql >= 0) {
                 if (btn == 2) {
                     gui_tab_add(app, (char *)(app->prefs.quick_links[hit_ql].label[0] ? app->prefs.quick_links[hit_ql].label : "Neuer Tab"),
                                 (char *)app->prefs.quick_links[hit_ql].url, TRUE);
                 } else {
                     open_quicklink_popup(app, hit_ql, win_x, win_y);
+                    gui_set_rmb_trap(app, FALSE);
                 }
-            } else if (btn == 3) {
-                open_main_menu_popup(app, win_x, win_y);
             }
         }
         return;
@@ -574,16 +831,14 @@ static void dispatch_viewport_mouse_btn(VortexApp *app, int16_t win_x, int16_t w
             net_send_mouse_button(app, rx, ry, 1, FALSE);
         }
         if ((btn == 3 || btn == 2) && is_down) {
-            gui_set_rmb_trap(app, FALSE);
             if (hit_ql >= 0) {
                 if (btn == 2) {
                     gui_tab_add(app, (char *)(app->prefs.quick_links[hit_ql].label[0] ? app->prefs.quick_links[hit_ql].label : "Neuer Tab"),
                                 (char *)app->prefs.quick_links[hit_ql].url, TRUE);
                 } else {
                     open_quicklink_popup(app, hit_ql, win_x, win_y);
+                    gui_set_rmb_trap(app, FALSE);
                 }
-            } else if (btn == 3) {
-                open_main_menu_popup(app, win_x, win_y);
             }
         }
         return;
@@ -654,7 +909,7 @@ static uint32 space_render_func(struct Hook *hook, Object *space_obj, struct gpR
     return 0;
 }
 
-/* WINDOW_IDCMPHook callback: captures mouse buttons, Odyssey mouse wheel, and window geometry inside viewport */
+/* WINDOW_IDCMPHook callback: captures mouse buttons, mouse wheel, and window geometry inside viewport */
 static uint32 idcmp_hook_func(struct Hook *hook, Object *win_obj, struct IntuiMessage *imsg)
 {
     (void)win_obj;
@@ -663,8 +918,13 @@ static uint32 idcmp_hook_func(struct Hook *hook, Object *win_obj, struct IntuiMe
         return 0;
     }
 
-    if (imsg->Class == IDCMP_CHANGEWINDOW) {
-        prefs_capture_window_box(app);
+    if (imsg->Class == IDCMP_CHANGEWINDOW || imsg->Class == IDCMP_ACTIVEWINDOW || imsg->Class == IDCMP_INACTIVEWINDOW) {
+        if (imsg->Class == IDCMP_CHANGEWINDOW) {
+            prefs_capture_window_box(app);
+        }
+        if (app->prefs.dark_theme == 1) {
+            gui_draw_dark_titlebar(app);
+        }
         return 0;
     }
 
@@ -689,7 +949,7 @@ static uint32 idcmp_hook_func(struct Hook *hook, Object *win_obj, struct IntuiMe
         }
 
         case IDCMP_EXTENDEDMOUSE: {
-            /* Odyssey Web Browser (owbbrowserclass.cpp + BCPlatformWheelEventMorphOS.cpp):
+            /* Mouse wheel handling:
              * Convert IntuiWheelData->WheelY (<0 = RAWKEY_NM_WHEEL_UP, >0 = RAWKEY_NM_WHEEL_DOWN)
              * into 3 lines * Scrollbar::pixelsPerLineStep() (3 * 40 = 120px) when inside browser view. */
             if (imsg->Code & IMSGCODE_INTUIWHEELDATA) {
@@ -721,6 +981,22 @@ static uint32 idcmp_hook_func(struct Hook *hook, Object *win_obj, struct IntuiMe
             app->pending_win_mouse_x = imsg->MouseX;
             app->pending_win_mouse_y = imsg->MouseY;
             app->pending_mouse_move  = TRUE;
+            if (app->mouse_sig_mask && app->main_task) {
+                IExec->Signal(app->main_task, app->mouse_sig_mask);
+            }
+
+            int16_t rx = 0, ry = 0;
+            BOOL in_viewport = renderer_map_window_to_remote(app, imsg->MouseX, imsg->MouseY, &rx, &ry);
+            BOOL in_quicklink = FALSE;
+            for (int i = 0; i < app->prefs.num_quick_links && i < VB_MAX_QUICKLINKS; i++) {
+                struct Gadget *g = (struct Gadget *)app->gad_quick_btn[i];
+                if (g && imsg->MouseX >= g->LeftEdge && imsg->MouseX < g->LeftEdge + g->Width &&
+                         imsg->MouseY >= g->TopEdge  && imsg->MouseY < g->TopEdge  + g->Height) {
+                    in_quicklink = TRUE;
+                    break;
+                }
+            }
+            gui_set_rmb_trap(app, in_viewport || in_quicklink);
             break;
         }
 
@@ -799,45 +1075,20 @@ static void parse_host_port(const char *input, char *out_host, size_t host_cap, 
     }
 }
 
-static void init_server_chooser(VortexApp *app)
-{
-    IExec->NewList(&app->server_chooser_list);
-
-    struct Node *n0 = IChooser->AllocChooserNode(
-        CNA_CopyText, TRUE,
-        CNA_Text,     "RasPi 4 (192.168.178.2:7788)",
-        TAG_DONE);
-    if (n0) IExec->AddTail(&app->server_chooser_list, n0);
-
-    struct Node *n1 = IChooser->AllocChooserNode(
-        CNA_CopyText, TRUE,
-        CNA_Text,     "Host-PC (192.168.178.60:9757)",
-        TAG_DONE);
-    if (n1) IExec->AddTail(&app->server_chooser_list, n1);
-
-    struct Node *n2 = IChooser->AllocChooserNode(
-        CNA_CopyText, TRUE,
-        CNA_Text,     "Server manuell...",
-        TAG_DONE);
-    if (n2) IExec->AddTail(&app->server_chooser_list, n2);
-}
-
-static void free_server_chooser(VortexApp *app)
-{
-    struct Node *node = IExec->RemHead(&app->server_chooser_list);
-    while (node) {
-        IChooser->FreeChooserNode(node);
-        node = IExec->RemHead(&app->server_chooser_list);
-    }
-}
-
-static void prompt_server_address(VortexApp *app)
+void prompt_server_address(VortexApp *app)
 {
     if (!app) return;
 
     char current_addr[160];
-    snprintf(current_addr, sizeof(current_addr), "%s:%u",
-             app->server_host, (unsigned)app->server_port);
+    const char *cur_h = app->server_host[0] ? app->server_host :
+                       (app->prefs.server_host[0] ? app->prefs.server_host : "");
+    uint16_t cur_p    = app->server_port ? app->server_port :
+                       (app->prefs.server_port ? app->prefs.server_port : DEFAULT_SERVER_PORT);
+    if (cur_h[0] != '\0') {
+        snprintf(current_addr, sizeof(current_addr), "%s:%u", cur_h, (unsigned)cur_p);
+    } else {
+        snprintf(current_addr, sizeof(current_addr), "192.168.178.:%u", (unsigned)cur_p);
+    }
 
     Object *gad_addr = IIntuition->NewObject(NULL, "string.gadget",
         GA_ID,            1,
@@ -865,7 +1116,7 @@ static void prompt_server_address(VortexApp *app)
         LAYOUT_SpaceOuter,    TRUE,
         LAYOUT_DeferLayout,   TRUE,
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                  GA_Text,              (Tag)"VortexBrowse Server-Adresse eingeben (IP:Port):",
+                                  GA_Text,              (Tag)"VortexBrowser Server-Adresse eingeben (IP:Port):",
                                   GA_ReadOnly,          TRUE,
                                   BUTTON_Justification, BCJ_LEFT,
                                   TAG_DONE),
@@ -884,7 +1135,7 @@ static void prompt_server_address(VortexApp *app)
 
     Object *req_win_obj = IIntuition->NewObject(NULL, "window.class",
         WA_Title,             "Server konfigurieren",
-        WA_ScreenTitle,       "VortexBrowse Einstellungen",
+        WA_ScreenTitle,       "VortexBrowser Einstellungen",
         WA_CloseGadget,       TRUE,
         WA_DepthGadget,       TRUE,
         WA_DragBar,           TRUE,
@@ -955,16 +1206,17 @@ static void prompt_server_address(VortexApp *app)
         get_string_gadget_text(gad_addr, buf, sizeof(buf));
         if (buf[0] != '\0') {
             parse_host_port(buf, app->server_host, sizeof(app->server_host), &app->server_port);
-            if (app->gad_server_chooser && app->win) {
-                uint16 sel = 2; /* manual */
-                if (strcmp(app->server_host, VORTEXBROWSE_RPI_HOST) == 0 && app->server_port == VORTEXBROWSE_RPI_PORT) sel = 0;
-                else if (strcmp(app->server_host, VORTEXBROWSE_HOSTPC_HOST) == 0 && app->server_port == VORTEXBROWSE_HOSTPC_PORT) sel = 1;
-                IIntuition->SetGadgetAttrs((struct Gadget *)app->gad_server_chooser,
-                                           app->win, NULL,
-                                           CHOOSER_Selected, sel,
-                                           TAG_DONE);
+            strncpy(app->prefs.server_host, app->server_host, sizeof(app->prefs.server_host) - 1);
+            app->prefs.server_host[sizeof(app->prefs.server_host) - 1] = '\0';
+            app->prefs.server_port = app->server_port;
+            prefs_save(app, TRUE);
+            if (net_connect(app, app->server_host, app->server_port)) {
+                renderer_sync_viewport_size(app);
+                net_send_url(app, "@REFRESH");
+                const char *su = (app->current_url[0] && app->current_url[0] != '@') ? app->current_url : "@HOME";
+                gui_update_url_bar(app, (su[0] != '@') ? su : "");
+                net_send_url(app, su);
             }
-            net_connect(app, app->server_host, app->server_port);
         }
     }
 
@@ -988,30 +1240,22 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
             }
             break;
 
-        case MID_SET_SERVER_RPI4:
-            strncpy(app->server_host, VORTEXBROWSE_RPI_HOST, sizeof(app->server_host) - 1);
-            app->server_port = VORTEXBROWSE_RPI_PORT;
-            if (app->gad_server_chooser && app->win) {
-                IIntuition->SetGadgetAttrs((struct Gadget *)app->gad_server_chooser, app->win, NULL,
-                                           CHOOSER_Selected, 0,
-                                           TAG_DONE);
-            }
-            net_connect(app, app->server_host, app->server_port);
-            break;
-
-        case MID_SET_SERVER_HOSTPC:
-            strncpy(app->server_host, VORTEXBROWSE_HOSTPC_HOST, sizeof(app->server_host) - 1);
-            app->server_port = VORTEXBROWSE_HOSTPC_PORT;
-            if (app->gad_server_chooser && app->win) {
-                IIntuition->SetGadgetAttrs((struct Gadget *)app->gad_server_chooser, app->win, NULL,
-                                           CHOOSER_Selected, 1,
-                                           TAG_DONE);
-            }
-            net_connect(app, app->server_host, app->server_port);
-            break;
-
         case MID_SET_SERVER_CUSTOM:
             prompt_server_address(app);
+            break;
+
+        case MID_PROJ_CONNECT:
+            if (app->server_host[0] == '\0') {
+                prompt_server_address(app);
+            } else {
+                if (net_connect(app, app->server_host, app->server_port)) {
+                    renderer_sync_viewport_size(app);
+                    net_send_url(app, "@REFRESH");
+                    const char *su = (app->current_url[0] && app->current_url[0] != '@') ? app->current_url : "@HOME";
+                    gui_update_url_bar(app, (su[0] != '@') ? su : "");
+                    net_send_url(app, su);
+                }
+            }
             break;
 
         case MID_PROJ_DISCONNECT:
@@ -1068,12 +1312,33 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
         case MID_TOGGLE_DARK_THEME:
             app->prefs.dark_theme = (app->prefs.dark_theme == 1) ? 0 : 1;
             prefs_save(app, TRUE);
+            if (app->prefs.dark_theme == 0 && s_orig_gui_attrs_saved && s_orig_gui_screen) {
+                struct DrawInfo *dri = IIntuition->GetScreenDrawInfo(s_orig_gui_screen);
+                if (dri) {
+                    IIntuition->SetGUIAttrs(NULL, dri,
+                        GUIA_WindowBarBackfill,        (Tag)s_orig_winbar_active_hook,
+                        GUIA_WindowBarInactBackfill,    (Tag)s_orig_winbar_inact_hook,
+                        GUIA_WindowBorderBackfill,      (Tag)s_orig_winborder_active_hook,
+                        GUIA_WindowBorderInactBackfill, (Tag)s_orig_winborder_inact_hook,
+                        GUIA_WindowBorderLook,          (Tag)s_orig_winborder_look,
+                        GUIA_TabTitleBackfill,          (Tag)s_orig_tab_title_hook,
+                        GUIA_TabActiveBackfill,         (Tag)s_orig_tab_active_hook,
+                        GUIA_TabInactiveBackfill,       (Tag)s_orig_tab_inact_hook,
+                        TAG_DONE);
+                    IIntuition->FreeScreenDrawInfo(s_orig_gui_screen, dri);
+                }
+                s_orig_gui_attrs_saved = FALSE;
+            }
             if (app->connected) {
                 char dcmd[32];
                 snprintf(dcmd, sizeof(dcmd), "@DARKMODE:%u", (unsigned)app->prefs.dark_theme);
                 net_send_url(app, dcmd);
             }
-            app->reopen_gui_needed = TRUE;
+            if (app->custom_screen) {
+                app->reopen_screen_needed = TRUE;
+            } else {
+                app->reopen_gui_needed = TRUE;
+            }
             app_set_status("Farbschema: %s", (app->prefs.dark_theme == 1) ? "Dunkel (Dark Mode)" : "Hell (Standard)");
             break;
 
@@ -1111,8 +1376,8 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
             const char *scr_type = app->custom_screen ? "Eigener RTG-Bildschirm" : "Workbench-Bildschirm";
 
             snprintf(about_buf, sizeof(about_buf),
-                "VortexBrowse fuer AmigaOS 4\n"
-                "Version 2.0 (Odyssey Edition)\n\n"
+                "VortexBrowser fuer AmigaOS 4\n"
+                "Version 0.99 RC1\n\n"
                 "=== SERVER-INFORMATIONEN ===\n"
                 "Server-Adresse: %s:%u\n"
                 "Verbindungsstatus: %s\n"
@@ -1139,7 +1404,7 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
             struct EasyStruct es;
             memset(&es, 0, sizeof(es));
             es.es_StructSize   = sizeof(struct EasyStruct);
-            es.es_Title        = (STRPTR)"Ueber VortexBrowse";
+            es.es_Title        = (STRPTR)"Ueber VortexBrowser";
             es.es_TextFormat   = (STRPTR)"%s";
             es.es_GadgetFormat = (STRPTR)"OK";
             IIntuition->EasyRequest(app->win, &es, NULL, about_buf);
@@ -1355,7 +1620,7 @@ static void open_main_menu_popup(VortexApp *app, int16_t mx, int16_t my)
         pm_hook.h_Entry = (HOOKFUNC)ctx_menu_hook_func;
         pm_hook.h_Data  = &selected_id;
 
-        Object *menu_obj = PMMENU("VortexBrowse Menue"),
+        Object *menu_obj = PMMENU("VortexBrowser Menue"),
             PMA_MenuHandler, &pm_hook,
             PMITEM("Startseite / Neu"),               PMIA_ID, MID_PROJ_NEW, PMEND,
             PMITEM("URL oeffnen..."),                 PMIA_ID, MID_PROJ_OPEN, PMEND,
@@ -1366,9 +1631,8 @@ static void open_main_menu_popup(VortexApp *app, int16_t mx, int16_t my)
             PMITEM("Auto-Login fuer Seite..."),       PMIA_ID, MID_PROJ_AUTOLOGIN, PMEND,
             PMITEM("Download-Manager..."),            PMIA_ID, MID_PROJ_DOWNLOADS, PMEND,
             PMBAR(), PMEND,
-            PMITEM("Server: Raspberry Pi 4 (192.168.178.2:7788)"),  PMIA_ID, MID_SET_SERVER_RPI4, PMEND,
-            PMITEM("Server: Host-PC (192.168.178.60:9757)"),       PMIA_ID, MID_SET_SERVER_HOSTPC, PMEND,
-            PMITEM("Server manuell konfigurieren..."), PMIA_ID, MID_SET_SERVER_CUSTOM, PMEND,
+            PMITEM("Server konfigurieren..."),        PMIA_ID, MID_SET_SERVER_CUSTOM, PMEND,
+            PMITEM("Mit Server verbinden"),           PMIA_ID, MID_PROJ_CONNECT, PMEND,
             PMITEM("Verbindung trennen"),             PMIA_ID, MID_PROJ_DISCONNECT, PMEND,
             PMBAR(), PMEND,
             PMITEM("Zurueck"),                        PMIA_ID, MID_NAV_BACK, PMEND,
@@ -1388,7 +1652,7 @@ static void open_main_menu_popup(VortexApp *app, int16_t mx, int16_t my)
             PMITEM(app->prefs.dark_theme ? "Helles Theme (Standard)" : "Dunkles Theme (Dark Mode)"), PMIA_ID, MID_TOGGLE_DARK_THEME, PMEND,
             PMITEM("Voreinstellungen..."),            PMIA_ID, MID_SETTINGS, PMEND,
             PMITEM("Einstellungen speichern"),        PMIA_ID, MID_SET_SAVE, PMEND,
-            PMITEM("Ueber VortexBrowse..."),          PMIA_ID, MID_PROJ_ABOUT, PMEND,
+            PMITEM("Ueber VortexBrowser..."),         PMIA_ID, MID_PROJ_ABOUT, PMEND,
             PMITEM("Beenden"),                        PMIA_ID, MID_PROJ_QUIT, PMEND,
         PMEND;
 
@@ -1407,13 +1671,13 @@ static void open_main_menu_popup(VortexApp *app, int16_t mx, int16_t my)
         struct EasyStruct es;
         memset(&es, 0, sizeof(es));
         es.es_StructSize   = sizeof(struct EasyStruct);
-        es.es_Title        = (STRPTR)"VortexBrowse Optionen";
+        es.es_Title        = (STRPTR)"VortexBrowser Optionen";
         es.es_TextFormat   = (STRPTR)"Aktion waehlen:";
-        es.es_GadgetFormat = (STRPTR)"RasPi 4 (7788)|Host-PC (9757)|Manuell...|Startseite|Lesez.+|Ueber|Abbrechen";
+        es.es_GadgetFormat = (STRPTR)"Server konfigurieren|Verbinden|Trennen|Startseite|Lesez.+|Ueber|Abbrechen";
         LONG c = IIntuition->EasyRequest(app->win, &es, NULL);
-        if (c == 1) selected_id = MID_SET_SERVER_RPI4;
-        else if (c == 2) selected_id = MID_SET_SERVER_HOSTPC;
-        else if (c == 3) selected_id = MID_SET_SERVER_CUSTOM;
+        if (c == 1) selected_id = MID_SET_SERVER_CUSTOM;
+        else if (c == 2) selected_id = MID_PROJ_CONNECT;
+        else if (c == 3) selected_id = MID_PROJ_DISCONNECT;
         else if (c == 4) selected_id = MID_PROJ_NEW;
         else if (c == 5) selected_id = MID_FAV_ADD;
         else if (c == 6) selected_id = MID_PROJ_ABOUT;
@@ -1613,7 +1877,7 @@ static uint32 find_rtg_screen_mode(uint16 req_w, uint16 req_h, uint16 *io_depth)
 }
 
 /* ------------------------------------------------------------------------
- * Odyssey-style Tabbed Browsing Functions
+ * Tabbed Browsing Functions
  * ------------------------------------------------------------------------ */
 /* ClickTab close-gadget tracking.
  * CLICKTAB_Closed / CLICKTAB_NodeClosed are STICKY: they keep returning the
@@ -1683,6 +1947,9 @@ void gui_tabs_init(VortexApp *app)
     }
     if (app->active_tab_idx >= app->num_tabs) {
         app->active_tab_idx = (uint16)(app->num_tabs - 1);
+    }
+    for (int i = 0; i < app->num_tabs; i++) {
+        app->tabs[i].id = (uint32_t)i;
     }
 
     tabs_build_list(app, &app->tab_list);
@@ -1844,11 +2111,15 @@ BOOL gui_init(VortexApp *app)
     s_idcmp_hook.h_Entry = (HOOKFUNC)idcmp_hook_func;
     s_idcmp_hook.h_Data  = app;
 
+    memset(&s_post_refresh_hook, 0, sizeof(struct Hook));
+    s_post_refresh_hook.h_Entry = (HOOKFUNC)post_refresh_hook_func;
+    s_post_refresh_hook.h_Data  = app;
+
     /* 0. Open custom Public Screen if configured */
     if (app->prefs.resolution.use_custom_screen) {
         if (!app->custom_screen) {
-            const char *pubname = "VORTEXBROWSE";
-            const char *title   = "VortexBrowse 2.0 (AmigaOS 4.1)";
+            const char *pubname = "VORTEXBROWSER";
+            const char *title   = "VortexBrowser 0.99 RC1 (AmigaOS 4.1)";
             uint16 scr_w = app->prefs.resolution.width;
             uint16 scr_h = app->prefs.resolution.height;
             uint16 scr_d = app->prefs.resolution.depth;
@@ -1897,6 +2168,114 @@ BOOL gui_init(VortexApp *app)
                 IIntuition->UnlockPubScreen(NULL, wb_scr);
             }
 
+            if (app->prefs.dark_theme == 1) {
+                static const uint32 s_dark_colors_def[32 * 3] = {
+                    /*  0: Screen / Window Background (#222428) */
+                    0x22222222UL, 0x24242424UL, 0x28282828UL,
+                    /*  1: Screen Bar / Menu Fill (#18191C) */
+                    0x18181818UL, 0x19191919UL, 0x1C1C1C1CUL,
+                    /*  2: Text / Detail (#E4E6EB) */
+                    0xE4E4E4E4UL, 0xE6E6E6E6UL, 0xEBEBEBEBUL,
+                    /*  3: 3D Shine / Highlight (#3A4454) */
+                    0x3A3A3A3AUL, 0x44444444UL, 0x54545454UL,
+                    /*  4: 3D Shadow (#121316) */
+                    0x12121212UL, 0x13131313UL, 0x16161616UL,
+                    /*  5: Titlebar Shine (#444C5C) */
+                    0x44444444UL, 0x4C4C4C4CUL, 0x5C5C5C5CUL,
+                    /*  6: Active Window Titlebar & Borders (#282C37) */
+                    0x28282828UL, 0x2C2C2C2CUL, 0x37373737UL,
+                    /*  7: Inactive Window Titlebar & Borders (#1E2026) */
+                    0x1E1E1E1EUL, 0x20202020UL, 0x26262626UL,
+                    /*  8: Selection Dark Slate (#3A4454) - non-blue tab & frame accent */
+                    0x3A3A3A3AUL, 0x44444444UL, 0x54545454UL,
+                    /*  9: Inactive Text (#787E8C) */
+                    0x78787878UL, 0x7E7E7E7EUL, 0x8C8C8C8CUL,
+                    /* 10: Button/Gadget Fill (#2E3442) */
+                    0x2E2E2E2EUL, 0x34343434UL, 0x42424242UL,
+                    /* 11: Disabled (#1C1E24) */
+                    0x1C1C1C1CUL, 0x1E1E1E1EUL, 0x24242424UL,
+                    /* 12: Half Shine (#303642) */
+                    0x30303030UL, 0x36363636UL, 0x42424242UL,
+                    /* 13: Half Shadow (#16181C) */
+                    0x16161616UL, 0x18181818UL, 0x1C1C1C1CUL,
+                    /* 14: Dark Slate (#202228) */
+                    0x20202020UL, 0x22222222UL, 0x28282828UL,
+                    /* 15: Deep Grey (#2A2E38) */
+                    0x2A2A2A2AUL, 0x2E2E2E2EUL, 0x38383838UL,
+                    /* 16: Accent Dark Slate (#3E4654) */
+                    0x3E3E3E3EUL, 0x46464646UL, 0x54545454UL,
+                    /* 17: Pure Black (#000000) */
+                    0x00000000UL, 0x00000000UL, 0x00000000UL,
+                    /* 18: Pure White (#FFFFFF) */
+                    0xFFFFFFFFUL, 0xFFFFFFFFUL, 0xFFFFFFFFUL,
+                    /* 19..31: Neutral darks */
+                    0x25252525UL, 0x27272727UL, 0x2C2C2C2CUL,
+                    0x2C2C2C2CUL, 0x2F2F2F2FUL, 0x35353535UL,
+                    0x33333333UL, 0x37373737UL, 0x3E3E3E3EUL,
+                    0x3B3B3B3BUL, 0x40404040UL, 0x47474747UL,
+                    0x42424242UL, 0x47474747UL, 0x50505050UL,
+                    0x4A4A4A4AUL, 0x50505050UL, 0x5B5B5B5BUL,
+                    0x55555555UL, 0x5C5C5C5CUL, 0x66666666UL,
+                    0x60606060UL, 0x67676767UL, 0x72727272UL,
+                    0x70707070UL, 0x77777777UL, 0x82828282UL,
+                    0x85858585UL, 0x8C8C8C8CUL, 0x96969696UL,
+                    0x9B9B9B9BUL, 0xA2A2A2A2UL, 0xACACACACUL,
+                    0xB5B5B5B5UL, 0xBCBCBCBCUL, 0xC6C6C6C6UL,
+                    0xD0D0D0D0UL, 0xD6D6D6D6UL, 0xDFDFDFDFUL
+                };
+
+                colors32[0] = (32 << 16) | 0;
+                for (int i = 0; i < 32 * 3; i++) {
+                    colors32[1 + i] = s_dark_colors_def[i];
+                }
+                colors32[32 * 3 + 1] = 0;
+
+                detail_pen = 2; /* Light text */
+                block_pen  = 1; /* Dark block */
+
+                pens_copy[DETAILPEN]             = 2;
+                pens_copy[BLOCKPEN]              = 1;
+                pens_copy[TEXTPEN]               = 2;
+                pens_copy[SHINEPEN]              = 3;
+                pens_copy[SHADOWPEN]             = 4;
+                pens_copy[FILLPEN]               = 6; /* Active window titlebar & border fill (dark #282C37) */
+                pens_copy[FILLTEXTPEN]           = 2; /* Text over FILLPEN (white #E4E6EB) */
+                pens_copy[BACKGROUNDPEN]         = 0; /* Background (dark #222428) */
+                pens_copy[HIGHLIGHTTEXTPEN]      = 2;
+                pens_copy[BARDETAILPEN]          = 2; /* Text in screen-bar (white #E4E6EB) */
+                pens_copy[BARBLOCKPEN]           = 1; /* Screen-bar fill (dark #18191C) */
+                pens_copy[BARTRIMPEN]            = 4; /* Trim under screen-bar */
+                pens_copy[BARCONTOURPEN]         = 4;
+                pens_copy[FOREGROUNDPEN]         = 10;
+                pens_copy[FORESHINEPEN]          = 3;
+                pens_copy[FORESHADOWPEN]         = 4;
+                pens_copy[FILLSHINEPEN]          = 5;
+                pens_copy[FILLSHADOWPEN]         = 4;
+                pens_copy[INACTIVEFILLPEN]       = 7; /* Inactive window titlebar & border (dark #1E2026) */
+                pens_copy[INACTIVEFILLTEXTPEN]   = 9; /* Text over INACTIVEFILLPEN */
+                pens_copy[INACTIVEFILLSHINEPEN]  = 3;
+                pens_copy[INACTIVEFILLSHADOWPEN] = 4;
+                pens_copy[DISABLEDPEN]           = 11;
+                pens_copy[DISABLEDTEXTPEN]       = 9;
+                pens_copy[DISABLEDSHINEPEN]      = 3;
+                pens_copy[DISABLEDSHADOWPEN]     = 4;
+                pens_copy[MENUBACKGROUNDPEN]     = 1;
+                pens_copy[MENUTEXTPEN]           = 2;
+                pens_copy[MENUSHINEPEN]          = 3;
+                pens_copy[MENUSHADOWPEN]         = 4;
+                pens_copy[SELECTPEN]             = 8;
+                pens_copy[SELECTTEXTPEN]         = 2;
+                pens_copy[SELECTSHINEPEN]        = 5;
+                pens_copy[SELECTSHADOWPEN]       = 4;
+                pens_copy[GLYPHPEN]              = 2;
+                pens_copy[GLYPHFILLPEN]          = 6;
+                pens_copy[INACTIVEGLYPHPEN]      = 9;
+                pens_copy[FLATBORDERPEN]         = 4;
+                pens_copy[FILLFLATPEN]           = 6;
+                pens_copy[INACTIVEFILLFLATPEN]   = 7;
+                pens_copy[NUMDRIPENS]            = (UWORD)~0;
+            }
+
             if (!is_clone_wb) {
                 if (scr_w == 0 || scr_h == 0) {
                     if (app->prefs.resolution.preset_idx < 5) {
@@ -1940,8 +2319,23 @@ BOOL gui_init(VortexApp *app)
                 DBG_LOG("[GUI] Opening custom RTG screen '%s' (%ux%u, %u-bit, ModeID 0x%08lX, CloneWB=%d)...\n",
                        pubname, (unsigned)scr_w, (unsigned)scr_h, (unsigned)scr_d, (unsigned long)mode_id, (int)is_clone_wb);
 
+                memset(&s_dark_backfill_hook, 0, sizeof(struct Hook));
+                s_dark_backfill_hook.h_Entry = (HOOKFUNC)dark_backfill_hook_func;
+
+                memset(&s_space_dark_render_hook, 0, sizeof(struct Hook));
+                s_space_dark_render_hook.h_Entry = (HOOKFUNC)space_dark_render_hook_func;
+
+                memset(&s_dark_winbar_active_hook, 0, sizeof(struct Hook));
+                s_dark_winbar_active_hook.h_Entry = (HOOKFUNC)dark_winbar_active_hook_func;
+
+                memset(&s_dark_winbar_inact_hook, 0, sizeof(struct Hook));
+                s_dark_winbar_inact_hook.h_Entry = (HOOKFUNC)dark_winbar_inact_hook_func;
+
+                memset(&s_dark_screenbar_hook, 0, sizeof(struct Hook));
+                s_dark_screenbar_hook.h_Entry = (HOOKFUNC)dark_screenbar_hook_func;
+
                 app->custom_screen = IIntuition->OpenScreenTags(NULL,
-                    is_clone_wb ? SA_LikeWorkbench : TAG_IGNORE, TRUE,
+                    (is_clone_wb && app->prefs.dark_theme != 1) ? SA_LikeWorkbench : TAG_IGNORE, TRUE,
                     SA_DisplayID,    mode_id,
                     SA_Width,        (uint32)scr_w,
                     SA_Height,       (uint32)scr_h,
@@ -1957,12 +2351,24 @@ BOOL gui_init(VortexApp *app)
                     SA_SharePens,    TRUE,
                     SA_Draggable,    TRUE,
                     SA_Compositing,  TRUE,
+                    (app->prefs.dark_theme == 1) ? GUIA_WindowBarBackfill : TAG_IGNORE, (Tag)&s_dark_winbar_active_hook,
+                    (app->prefs.dark_theme == 1) ? GUIA_WindowBarInactBackfill : TAG_IGNORE, (Tag)&s_dark_winbar_inact_hook,
+                    (app->prefs.dark_theme == 1) ? GUIA_WindowBorderBackfill : TAG_IGNORE, (Tag)&s_dark_winbar_active_hook,
+                    (app->prefs.dark_theme == 1) ? GUIA_WindowBorderInactBackfill : TAG_IGNORE, (Tag)&s_dark_winbar_inact_hook,
+                    (app->prefs.dark_theme == 1) ? GUIA_ScreenBarBackfill : TAG_IGNORE, (Tag)&s_dark_screenbar_hook,
+                    (app->prefs.dark_theme == 1) ? GUIA_WindowBorderLook : TAG_IGNORE, (Tag)FRAMEWINDOW_FLAT,
+                    (app->prefs.dark_theme == 1) ? GUIA_WindowBarFrameThickness : TAG_IGNORE, 1,
+                    (app->prefs.dark_theme == 1) ? GUIA_WindowFrameThickness : TAG_IGNORE, 1,
+                    (app->prefs.dark_theme == 1) ? GUIA_TabTitleBackfill : TAG_IGNORE, (Tag)&s_dark_winbar_active_hook,
+                    (app->prefs.dark_theme == 1) ? GUIA_TabActiveBackfill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
+                    (app->prefs.dark_theme == 1) ? GUIA_TabInactiveBackfill : TAG_IGNORE, (Tag)&s_dark_winbar_inact_hook,
+                    (app->prefs.dark_theme == 1) ? GUIA_ClickTabLook : TAG_IGNORE, (Tag)(CLICKTAB_ACTIVEFILLSELECT | CLICKTAB_ACTIVEBOLD | CLICKTAB_INACTIVEDARK),
                     TAG_DONE);
 
                 if (!app->custom_screen) {
                     /* Retry without SA_Compositing in case driver rejects it */
                     app->custom_screen = IIntuition->OpenScreenTags(NULL,
-                        is_clone_wb ? SA_LikeWorkbench : TAG_IGNORE, TRUE,
+                        (is_clone_wb && app->prefs.dark_theme != 1) ? SA_LikeWorkbench : TAG_IGNORE, TRUE,
                         SA_DisplayID,    mode_id,
                         SA_Width,        (uint32)scr_w,
                         SA_Height,       (uint32)scr_h,
@@ -1977,12 +2383,44 @@ BOOL gui_init(VortexApp *app)
                         SA_Type,         PUBLICSCREEN,
                         SA_SharePens,    TRUE,
                         SA_Draggable,    TRUE,
+                        (app->prefs.dark_theme == 1) ? GUIA_WindowBarBackfill : TAG_IGNORE, (Tag)&s_dark_winbar_active_hook,
+                        (app->prefs.dark_theme == 1) ? GUIA_WindowBarInactBackfill : TAG_IGNORE, (Tag)&s_dark_winbar_inact_hook,
+                        (app->prefs.dark_theme == 1) ? GUIA_WindowBorderBackfill : TAG_IGNORE, (Tag)&s_dark_winbar_active_hook,
+                        (app->prefs.dark_theme == 1) ? GUIA_WindowBorderInactBackfill : TAG_IGNORE, (Tag)&s_dark_winbar_inact_hook,
+                        (app->prefs.dark_theme == 1) ? GUIA_ScreenBarBackfill : TAG_IGNORE, (Tag)&s_dark_screenbar_hook,
+                        (app->prefs.dark_theme == 1) ? GUIA_WindowBorderLook : TAG_IGNORE, (Tag)FRAMEWINDOW_FLAT,
+                        (app->prefs.dark_theme == 1) ? GUIA_WindowBarFrameThickness : TAG_IGNORE, 1,
+                        (app->prefs.dark_theme == 1) ? GUIA_WindowFrameThickness : TAG_IGNORE, 1,
+                        (app->prefs.dark_theme == 1) ? GUIA_TabTitleBackfill : TAG_IGNORE, (Tag)&s_dark_winbar_active_hook,
+                        (app->prefs.dark_theme == 1) ? GUIA_TabActiveBackfill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
+                        (app->prefs.dark_theme == 1) ? GUIA_TabInactiveBackfill : TAG_IGNORE, (Tag)&s_dark_winbar_inact_hook,
+                        (app->prefs.dark_theme == 1) ? GUIA_ClickTabLook : TAG_IGNORE, (Tag)(CLICKTAB_ACTIVEFILLSELECT | CLICKTAB_ACTIVEBOLD | CLICKTAB_INACTIVEDARK),
                         TAG_DONE);
                 }
             }
 
             if (app->custom_screen) {
                 IIntuition->PubScreenStatus(app->custom_screen, 0);
+                if (app->prefs.dark_theme == 1) {
+                    struct DrawInfo *dri = IIntuition->GetScreenDrawInfo(app->custom_screen);
+                    if (dri) {
+                        IIntuition->SetGUIAttrs(NULL, dri,
+                            GUIA_WindowBarBackfill,       (Tag)&s_dark_winbar_active_hook,
+                            GUIA_WindowBarInactBackfill,   (Tag)&s_dark_winbar_inact_hook,
+                            GUIA_WindowBorderBackfill,     (Tag)&s_dark_winbar_active_hook,
+                            GUIA_WindowBorderInactBackfill, (Tag)&s_dark_winbar_inact_hook,
+                            GUIA_ScreenBarBackfill,        (Tag)&s_dark_screenbar_hook,
+                            GUIA_WindowBorderLook,         (Tag)FRAMEWINDOW_FLAT,
+                            GUIA_WindowBarFrameThickness,  1,
+                            GUIA_WindowFrameThickness,     1,
+                            GUIA_TabTitleBackfill,         (Tag)&s_dark_winbar_active_hook,
+                            GUIA_TabActiveBackfill,        (Tag)&s_dark_backfill_hook,
+                            GUIA_TabInactiveBackfill,      (Tag)&s_dark_winbar_inact_hook,
+                            GUIA_ClickTabLook,             (Tag)(CLICKTAB_ACTIVEFILLSELECT | CLICKTAB_ACTIVEBOLD | CLICKTAB_INACTIVEDARK),
+                            TAG_DONE);
+                        IIntuition->FreeScreenDrawInfo(app->custom_screen, dri);
+                    }
+                }
                 DBG_LOG("[GUI] Successfully opened custom public screen '%s' (%ux%u, %u-bit)\n",
                        pubname, (unsigned)app->custom_screen->Width, (unsigned)app->custom_screen->Height, (unsigned)scr_d);
             } else {
@@ -2006,7 +2444,60 @@ BOOL gui_init(VortexApp *app)
 
     if (app->prefs.dark_theme == 1) {
         gui_alloc_dark_pens(pub_scr);
+        if (pub_scr) {
+            struct DrawInfo *dri = IIntuition->GetScreenDrawInfo(pub_scr);
+            if (dri) {
+                if (!s_orig_gui_attrs_saved) {
+                    s_orig_gui_screen = pub_scr;
+                    IIntuition->GetGUIAttrs(NULL, dri,
+                        GUIA_WindowBarBackfill,        &s_orig_winbar_active_hook,
+                        GUIA_WindowBarInactBackfill,    &s_orig_winbar_inact_hook,
+                        GUIA_WindowBorderBackfill,      &s_orig_winborder_active_hook,
+                        GUIA_WindowBorderInactBackfill, &s_orig_winborder_inact_hook,
+                        GUIA_WindowBorderLook,          &s_orig_winborder_look,
+                        GUIA_TabTitleBackfill,          &s_orig_tab_title_hook,
+                        GUIA_TabActiveBackfill,         &s_orig_tab_active_hook,
+                        GUIA_TabInactiveBackfill,       &s_orig_tab_inact_hook,
+                        TAG_DONE);
+                    s_orig_gui_attrs_saved = TRUE;
+                }
+
+                IIntuition->SetGUIAttrs(NULL, dri,
+                    GUIA_WindowBarBackfill,        (Tag)&s_dark_winbar_active_hook,
+                    GUIA_WindowBarInactBackfill,    (Tag)&s_dark_winbar_inact_hook,
+                    GUIA_WindowBorderBackfill,      (Tag)&s_dark_winbar_active_hook,
+                    GUIA_WindowBorderInactBackfill, (Tag)&s_dark_winbar_inact_hook,
+                    GUIA_ScreenBarBackfill,        (Tag)&s_dark_screenbar_hook,
+                    GUIA_WindowBorderLook,         (Tag)FRAMEWINDOW_FLAT,
+                    GUIA_WindowBarFrameThickness,  1,
+                    GUIA_WindowFrameThickness,     1,
+                    GUIA_TabTitleBackfill,         (Tag)&s_dark_winbar_active_hook,
+                    GUIA_TabActiveBackfill,        (Tag)&s_dark_backfill_hook,
+                    GUIA_TabInactiveBackfill,      (Tag)&s_dark_winbar_inact_hook,
+                    GUIA_ClickTabLook,             (Tag)(CLICKTAB_ACTIVEFILLSELECT | CLICKTAB_ACTIVEBOLD | CLICKTAB_INACTIVEDARK),
+                    TAG_DONE);
+                IIntuition->FreeScreenDrawInfo(pub_scr, dri);
+            }
+        }
     } else {
+        if (s_orig_gui_attrs_saved && pub_scr) {
+            struct DrawInfo *dri = IIntuition->GetScreenDrawInfo(pub_scr);
+            if (dri) {
+                IIntuition->SetGUIAttrs(NULL, dri,
+                    GUIA_WindowBarBackfill,        (Tag)s_orig_winbar_active_hook,
+                    GUIA_WindowBarInactBackfill,    (Tag)s_orig_winbar_inact_hook,
+                    GUIA_WindowBorderBackfill,      (Tag)s_orig_winborder_active_hook,
+                    GUIA_WindowBorderInactBackfill, (Tag)s_orig_winborder_inact_hook,
+                    GUIA_WindowBorderLook,          (Tag)s_orig_winborder_look,
+                    GUIA_TabTitleBackfill,          (Tag)s_orig_tab_title_hook,
+                    GUIA_TabActiveBackfill,         (Tag)s_orig_tab_active_hook,
+                    GUIA_TabInactiveBackfill,       (Tag)s_orig_tab_inact_hook,
+                    TAG_DONE);
+                IIntuition->FreeScreenDrawInfo(pub_scr, dri);
+            }
+            s_orig_gui_attrs_saved = FALSE;
+            s_orig_gui_screen = NULL;
+        }
         gui_free_dark_pens();
     }
 
@@ -2019,11 +2510,10 @@ BOOL gui_init(VortexApp *app)
     static const char *const c_clear[]   = { "clear", "delete", "cross" };
     static const char *const c_go[]      = { "go", "arrowright", "return" };
     static const char *const c_search[]  = { "search", "find" };
-    static const char *const c_add_fav[] = { "bookmark_add", "add", "bookmark" };
     static const char *const c_connect[] = { "network", "connect" };
 
     /* ------------------------------------------------------------------------
-     * Row 1: Odyssey Navigation, URL Address Bar & Web Search Bar
+     * Row 1: Navigation, URL Address Bar & Web Search Bar
      * ------------------------------------------------------------------------ */
     Object *btn_back = create_toolbar_button(GID_BACK, c_back, 6, "<", "Zurueck (Historie)", pub_scr);
     Object *btn_fwd = create_toolbar_button(GID_FORWARD, c_fwd, 6, ">", "Vorwaerts (Historie)", pub_scr);
@@ -2139,7 +2629,7 @@ BOOL gui_init(VortexApp *app)
         TAG_DONE);
 
     /* ------------------------------------------------------------------------
-     * Row 2: Odyssey Bookmarks Toolbar (Schnellwahl) & Tools
+     * Row 2: Schnellwahl Toolbar & Tools
      * ------------------------------------------------------------------------ */
     for (int i = 0; i < app->prefs.num_quick_links && i < VB_MAX_QUICKLINKS; i++) {
         app->gad_quick_btn[i] = create_quicklink_button(
@@ -2156,23 +2646,12 @@ BOOL gui_init(VortexApp *app)
         app->gad_quick_del[i] = NULL;
     }
 
-    app->gad_quick_add = IIntuition->NewObject(NULL, "button.gadget",
-        GA_ID,                 GID_QUICK_ADD,
-        GA_RelVerify,          TRUE,
-        GA_Text,               (Tag)" + ",
-        BUTTON_BevelStyle,     BVS_THIN,
-        BUTTON_Justification,  BCJ_CENTER,
-        BUTTON_HorizAlignment, BALIGN_CENTER,
-        BUTTON_VertAlignment,  BALIGN_CENTER,
-        BUTTON_DomainString,   (Tag)" + ",
-        GA_HintInfo,           (Tag)"Schnellwahl-Button hinzufuegen",
-        s_dark_pens.allocated ? BUTTON_BackgroundPen : TAG_IGNORE, (uint32)s_dark_pens.btn_bg_pen,
-        s_dark_pens.allocated ? BUTTON_TextPen : TAG_IGNORE,       (uint32)s_dark_pens.txt_pen,
-        s_dark_pens.allocated ? BUTTON_FillPen : TAG_IGNORE,       (uint32)s_dark_pens.btn_sel_pen,
-        s_dark_pens.allocated ? BUTTON_FillTextPen : TAG_IGNORE,   (uint32)s_dark_pens.txt_pen,
-        TAG_DONE);
+    /* Schnellwahl '+' und '-' Buttons */
+    static const char *const c_add_ql[] = { "add", "plus", "new", NULL };
+    app->gad_quick_add = create_toolbar_button(GID_QUICK_ADD, c_add_ql, 3, "+", "Aktuelle Seite zur Schnellwahl hinzufuegen", pub_scr);
 
-    Object *btn_add_fav = create_toolbar_button(GID_ADD_FAV, c_add_fav, 3, "+Lesez.", "Zu Lesezeichen hinzufuegen", pub_scr);
+    static const char *const c_rem_ql[] = { "remove", "minus", "delete", NULL };
+    app->gad_quick_remove = create_toolbar_button(GID_QUICK_REMOVE, c_rem_ql, 3, "-", "Aktuelle Schnellwahl entfernen", pub_scr);
 
     const char *const c_download[] = { "download", "load", "down", "drawer", NULL };
     Object *btn_downloads = create_toolbar_button(GID_DOWNLOADS, c_download, 4, "Downloads", "Download-Manager oeffnen (Amiga+J)", pub_scr);
@@ -2186,24 +2665,7 @@ BOOL gui_init(VortexApp *app)
         CHOOSER_MaxLabels, 32,
         TAG_DONE);
 
-    init_server_chooser(app);
-
-    uint16 init_server_sel = 1; /* Default: Host-PC (192.168.178.60:9757) */
-    if (strcmp(app->server_host, VORTEXBROWSE_RPI_HOST) == 0) {
-        init_server_sel = 0;
-    } else if (strcmp(app->server_host, VORTEXBROWSE_HOSTPC_HOST) == 0) {
-        init_server_sel = 1;
-    }
-
-    app->gad_server_chooser = IIntuition->NewObject(NULL, "chooser.gadget",
-        GA_ID,             GID_SERVER_CHOOSER,
-        GA_RelVerify,      TRUE,
-        CHOOSER_DropDown,  TRUE,
-        CHOOSER_Labels,    &app->server_chooser_list,
-        CHOOSER_Selected,  init_server_sel,
-        CHOOSER_MaxLabels, 8,
-        GA_HintInfo,       "Server waehlen: Raspberry Pi 4 (192.168.178.2:7788), Host-PC oder manuell",
-        TAG_DONE);
+    app->gad_server_chooser = NULL;
 
     Object *btn_connect = create_toolbar_button(GID_CONNECT, c_connect, 2, "Verbinden", "Mit Server verbinden", pub_scr);
 
@@ -2212,7 +2674,7 @@ BOOL gui_init(VortexApp *app)
     int16  bar_h       = pub_scr ? (int16)(pub_scr->BarHeight + 1) : 24;
     if (bar_h < 0 || bar_h > 120) bar_h = 24;
 
-    /* Default Odyssey Web Browser window layout:
+    /* Default window layout:
      * Directly below the screen's title bar (Left=0, Top=BarHeight+1) and edge-to-edge */
     int16  win_left = 0;
     int16  win_top  = bar_h;
@@ -2280,8 +2742,11 @@ BOOL gui_init(VortexApp *app)
     }
 
     if (app->gad_quick_add) {
-        /* Always place '+' directly adjacent to the last quicklink button */
+        /* Always place '+' and '-' directly adjacent to the last quicklink button */
         row_items[cur_row][row_item_count[cur_row]++] = app->gad_quick_add;
+    }
+    if (app->gad_quick_remove) {
+        row_items[cur_row][row_item_count[cur_row]++] = app->gad_quick_remove;
     }
 
     int ql_row_count = cur_row + 1;
@@ -2306,8 +2771,10 @@ BOOL gui_init(VortexApp *app)
         if (r > 0) {
             /* Overflow rows get a trailing spacer so items remain left-aligned */
             Object *sp = IIntuition->NewObject(NULL, "space.gadget",
-                SPACE_Transparent, TRUE,
+                SPACE_Transparent, FALSE,
                 SPACE_MinWidth,    4,
+                s_dark_pens.allocated ? GA_BackFill : TAG_IGNORE,      (Tag)&s_dark_backfill_hook,
+                s_dark_pens.allocated ? SPACE_RenderHook : TAG_IGNORE, (Tag)&s_space_dark_render_hook,
                 TAG_DONE);
             if (sp) {
                 row_tags[t].ti_Tag = LAYOUT_AddChild;
@@ -2329,8 +2796,10 @@ BOOL gui_init(VortexApp *app)
     }
 
     Object *row2_spacer = IIntuition->NewObject(NULL, "space.gadget",
-        SPACE_Transparent, TRUE,
+        SPACE_Transparent, FALSE,
         SPACE_MinWidth,    4,
+        s_dark_pens.allocated ? GA_BackFill : TAG_IGNORE,      (Tag)&s_dark_backfill_hook,
+        s_dark_pens.allocated ? SPACE_RenderHook : TAG_IGNORE, (Tag)&s_space_dark_render_hook,
         TAG_DONE);
 
     Object *nav_row2 = IIntuition->NewObject(NULL, "layout.gadget",
@@ -2342,13 +2811,9 @@ BOOL gui_init(VortexApp *app)
         CHILD_WeightedWidth, 0,
         LAYOUT_AddChild,     row2_spacer,
         CHILD_WeightedWidth, 100, /* Absorbs all remaining width -> keeps buttons strictly left-aligned */
-        LAYOUT_AddChild,     btn_add_fav,
-        CHILD_WeightedWidth, 0,
         LAYOUT_AddChild,     app->gad_fav_chooser,
         CHILD_WeightedWidth, 0,
         LAYOUT_AddChild,     btn_downloads,
-        CHILD_WeightedWidth, 0,
-        LAYOUT_AddChild,     app->gad_server_chooser,
         CHILD_WeightedWidth, 0,
         LAYOUT_AddChild,     btn_connect,
         CHILD_WeightedWidth, 0,
@@ -2390,6 +2855,7 @@ BOOL gui_init(VortexApp *app)
             FUELGAUGE_Percent,     TRUE,
             FUELGAUGE_Ticks,       0,
             FUELGAUGE_Orientation, FGORIENT_HORIZ,
+            s_dark_pens.allocated ? GA_BackFill : TAG_IGNORE,          (Tag)&s_dark_backfill_hook,
             s_dark_pens.allocated ? FUELGAUGE_EmptyPen : TAG_IGNORE,   (uint32)s_dark_pens.inp_bg_pen,
             s_dark_pens.allocated ? FUELGAUGE_FillPen : TAG_IGNORE,    (uint32)s_dark_pens.gauge_fill_pen,
             s_dark_pens.allocated ? FUELGAUGE_PercentPen : TAG_IGNORE, (uint32)s_dark_pens.txt_pen,
@@ -2412,7 +2878,7 @@ BOOL gui_init(VortexApp *app)
     }
 
     /* ------------------------------------------------------------------------
-     * Odyssey-style Tabs (clicktab.gadget)
+     * Tabs (clicktab.gadget)
      * ------------------------------------------------------------------------ */
     gui_tabs_init(app);
 
@@ -2422,10 +2888,16 @@ BOOL gui_init(VortexApp *app)
         CLICKTAB_Labels,    (Tag)&app->tab_list,
         CLICKTAB_Current,   (uint32)app->active_tab_idx,
         CLICKTAB_AutoFit,   TRUE,
+        CLICKTAB_PageGroupBorder, FALSE,
+        s_dark_pens.allocated ? CLICKTAB_PageGroupBackFill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
+        s_dark_pens.allocated ? GA_BackFill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
         TAG_DONE);
 
     const char *c_add_tab[] = { "add", "plus", "new" };
-    app->gad_tab_new = create_toolbar_button(GID_TAB_NEW, c_add_tab, 3, "+", "Neuen Tab oeffnen", pub_scr);
+    app->gad_tab_new = create_toolbar_button(GID_TAB_NEW, c_add_tab, 3, "+", "Neuen Tab oeffnen (Amiga+T)", pub_scr);
+
+    const char *c_rem_tab[] = { "remove", "minus", "delete", "close", NULL };
+    app->gad_tab_close = create_toolbar_button(GID_TAB_CLOSE, c_rem_tab, 4, "-", "Aktuellen Tab schliessen (Amiga+W)", pub_scr);
 
     Object *tab_row = IIntuition->NewObject(NULL, "layout.gadget",
         LAYOUT_Orientation,  LAYOUT_ORIENT_HORIZ,
@@ -2435,6 +2907,8 @@ BOOL gui_init(VortexApp *app)
         LAYOUT_AddChild,     app->gad_clicktab,
         CHILD_WeightedWidth, 100,
         LAYOUT_AddChild,     app->gad_tab_new,
+        CHILD_WeightedWidth, 0,
+        LAYOUT_AddChild,     app->gad_tab_close,
         CHILD_WeightedWidth, 0,
         TAG_DONE);
 
@@ -2447,11 +2921,7 @@ BOOL gui_init(VortexApp *app)
     root_tags[rt].ti_Tag = LAYOUT_DeferLayout;
     root_tags[rt++].ti_Data = FALSE;
 
-    root_tags[rt].ti_Tag = LAYOUT_AddChild;
-    root_tags[rt++].ti_Data = (Tag)nav_row1;
-    root_tags[rt].ti_Tag = CHILD_WeightedHeight;
-    root_tags[rt++].ti_Data = 0;
-
+    /* Row 1: Schnellwahl (Bookmarks Toolbar) */
     root_tags[rt].ti_Tag = LAYOUT_AddChild;
     root_tags[rt++].ti_Data = (Tag)nav_row2;
     root_tags[rt].ti_Tag = CHILD_WeightedHeight;
@@ -2466,6 +2936,12 @@ BOOL gui_init(VortexApp *app)
             root_tags[rt++].ti_Data = 0;
         }
     }
+
+    /* Row 2: Navigation, URL Address Bar & Web Search Bar */
+    root_tags[rt].ti_Tag = LAYOUT_AddChild;
+    root_tags[rt++].ti_Data = (Tag)nav_row1;
+    root_tags[rt].ti_Tag = CHILD_WeightedHeight;
+    root_tags[rt++].ti_Data = 0;
 
     root_tags[rt].ti_Tag = LAYOUT_AddChild;
     root_tags[rt++].ti_Data = (Tag)tab_row;
@@ -2509,13 +2985,15 @@ BOOL gui_init(VortexApp *app)
         return FALSE;
     }
 
-    snprintf(app->win_title, sizeof(app->win_title), "VortexBrowse");
+    snprintf(app->win_title, sizeof(app->win_title), "VortexBrowser");
 
     app->win_obj = IIntuition->NewObject(NULL, "window.class",
         WA_Title,             app->win_title,
         (app->custom_screen != NULL) ? WA_ScreenTitle : TAG_IGNORE,
-        (app->custom_screen != NULL) ? (Tag)"VortexBrowse 2.0 (AmigaOS 4.1)" : 0,
-        s_dark_pens.allocated ? WA_BackFill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
+        (app->custom_screen != NULL) ? (Tag)"VortexBrowser 0.99 RC1 (AmigaOS 4.1)" : 0,
+        s_dark_pens.allocated ? WA_BackFill : TAG_IGNORE,  (Tag)&s_dark_backfill_hook,
+        s_dark_pens.allocated ? WA_DetailPen : TAG_IGNORE, (uint32)s_dark_pens.txt_pen,
+        s_dark_pens.allocated ? WA_BlockPen : TAG_IGNORE,  (uint32)s_dark_pens.btn_bg_pen,
         WA_Activate,          TRUE,
         WA_DragBar,           TRUE,
         WA_DepthGadget,       TRUE,
@@ -2526,7 +3004,7 @@ BOOL gui_init(VortexApp *app)
         WA_AutoAdjust,        TRUE,
         WA_ReportMouse,       TRUE,
         WA_MouseQueue,        1,
-        WA_RMBTrap,           TRUE,
+        WA_RMBTrap,           FALSE,
         WA_Left,              (uint32)win_left,
         WA_Top,               (uint32)win_top,
         WA_Width,             (uint32)win_w,
@@ -2534,13 +3012,16 @@ BOOL gui_init(VortexApp *app)
         WA_IDCMP,             IDCMP_CLOSEWINDOW | IDCMP_GADGETUP | IDCMP_GADGETDOWN |
                               IDCMP_RAWKEY | IDCMP_VANILLAKEY | IDCMP_MOUSEBUTTONS |
                               IDCMP_MOUSEMOVE | IDCMP_EXTENDEDMOUSE | IDCMP_NEWSIZE |
-                              IDCMP_CHANGEWINDOW | IDCMP_MENUPICK,
+                              IDCMP_CHANGEWINDOW | IDCMP_ACTIVEWINDOW | IDCMP_INACTIVEWINDOW |
+                              IDCMP_MENUPICK,
         (app->custom_screen != NULL) ? WA_CustomScreen : WA_PubScreenName,
         (app->custom_screen != NULL) ? (Tag)app->custom_screen : (Tag)"Workbench",
-        WINDOW_ParentGroup,   root_layout,
-        WINDOW_NewMenu,       s_main_menu,
-        WINDOW_IDCMPHook,     &s_idcmp_hook,
-        WINDOW_IDCMPHookBits, IDCMP_MOUSEBUTTONS | IDCMP_EXTENDEDMOUSE | IDCMP_MOUSEMOVE | IDCMP_CHANGEWINDOW,
+        WINDOW_ParentGroup,     root_layout,
+        WINDOW_NewMenu,         s_main_menu,
+        WINDOW_IDCMPHook,       &s_idcmp_hook,
+        WINDOW_IDCMPHookBits,   IDCMP_MOUSEBUTTONS | IDCMP_EXTENDEDMOUSE | IDCMP_MOUSEMOVE |
+                                IDCMP_CHANGEWINDOW | IDCMP_ACTIVEWINDOW | IDCMP_INACTIVEWINDOW,
+        (app->prefs.dark_theme == 1) ? WINDOW_PostRefreshHook : TAG_IGNORE, (Tag)&s_post_refresh_hook,
         TAG_DONE);
 
     if (!app->win_obj) {
@@ -2583,8 +3064,15 @@ BOOL gui_init(VortexApp *app)
     }
 
     if (app->win) {
+        if (app->prefs.dark_theme == 1) {
+            gui_draw_dark_titlebar(app);
+        }
+        IIntuition->RefreshWindowFrame(app->win);
+        if (app->prefs.dark_theme == 1) {
+            gui_draw_dark_titlebar(app);
+        }
         IIntuition->SetMouseQueue(app->win, 1);
-        s_current_rmb_trap = TRUE;
+        s_current_rmb_trap = FALSE;
     }
 
     if (app->custom_screen) {
@@ -2603,7 +3091,7 @@ BOOL gui_init(VortexApp *app)
         }
     }
 
-    DBG_LOG("[GUI] Odyssey Web Browser style window opened (%dx%d).\n",
+    DBG_LOG("[GUI] Window opened (%dx%d).\n",
            (int)app->win->Width, (int)app->win->Height);
 
     /* Immediately sync inner rendering viewport dimensions to server */
@@ -2631,11 +3119,9 @@ void gui_cleanup_window(VortexApp *app)
     if (app->gad_fav_chooser) {
         IIntuition->SetAttrs(app->gad_fav_chooser, CHOOSER_Labels, (Tag)NULL, TAG_DONE);
     }
-    if (app->gad_server_chooser) {
-        IIntuition->SetAttrs(app->gad_server_chooser, CHOOSER_Labels, (Tag)NULL, TAG_DONE);
-    }
-    app->gad_clicktab = NULL;
-    app->gad_tab_new  = NULL;
+    app->gad_clicktab  = NULL;
+    app->gad_tab_new   = NULL;
+    app->gad_tab_close = NULL;
 
     if (app->win_obj) {
         IIntuition->DisposeObject(app->win_obj);
@@ -2659,7 +3145,6 @@ void gui_cleanup_window(VortexApp *app)
         }
     }
     s_num_aiss_paths = 0;
-    free_server_chooser(app);
     favorites_free_chooser_list(app);
 
     for (int i = 0; i < VB_MAX_QUICKLINKS; i++) {
@@ -2667,6 +3152,7 @@ void gui_cleanup_window(VortexApp *app)
         app->gad_quick_del[i] = NULL;
     }
     app->gad_quick_add = NULL;
+    app->gad_quick_remove = NULL;
     app->gad_search_chooser = NULL;
     app->gad_space     = NULL;
     app->gad_status    = NULL;
@@ -2680,6 +3166,26 @@ void gui_cleanup(VortexApp *app)
     if (!app) return;
 
     gui_cleanup_window(app);
+
+    /* Restore original screen GUI attributes if modified */
+    if (s_orig_gui_attrs_saved && s_orig_gui_screen) {
+        struct DrawInfo *dri = IIntuition->GetScreenDrawInfo(s_orig_gui_screen);
+        if (dri) {
+            IIntuition->SetGUIAttrs(NULL, dri,
+                GUIA_WindowBarBackfill,        (Tag)s_orig_winbar_active_hook,
+                GUIA_WindowBarInactBackfill,    (Tag)s_orig_winbar_inact_hook,
+                GUIA_WindowBorderBackfill,      (Tag)s_orig_winborder_active_hook,
+                GUIA_WindowBorderInactBackfill, (Tag)s_orig_winborder_inact_hook,
+                GUIA_WindowBorderLook,          (Tag)s_orig_winborder_look,
+                GUIA_TabTitleBackfill,          (Tag)s_orig_tab_title_hook,
+                GUIA_TabActiveBackfill,         (Tag)s_orig_tab_active_hook,
+                GUIA_TabInactiveBackfill,       (Tag)s_orig_tab_inact_hook,
+                TAG_DONE);
+            IIntuition->FreeScreenDrawInfo(s_orig_gui_screen, dri);
+        }
+        s_orig_gui_attrs_saved = FALSE;
+        s_orig_gui_screen = NULL;
+    }
 
     /* Close custom public screen if one was opened */
     if (app->custom_screen) {
@@ -2836,6 +3342,58 @@ void prompt_add_quicklink(VortexApp *app)
     }
 }
 
+static void remove_current_quicklink(VortexApp *app)
+{
+    if (!app || app->prefs.num_quick_links <= 0) {
+        app_set_status("Keine Schnellwahl zum Entfernen vorhanden.");
+        return;
+    }
+
+    int target_idx = -1;
+
+    char url_buf[VB_MAX_URL_LEN];
+    get_string_gadget_text(app->gad_url, url_buf, sizeof(url_buf));
+    const char *cur = (url_buf[0] != '\0') ? url_buf : app->current_url;
+
+    if (cur && cur[0] != '\0') {
+        for (int i = 0; i < app->prefs.num_quick_links; i++) {
+            if (strcasecmp(app->prefs.quick_links[i].url, cur) == 0) {
+                target_idx = i;
+                break;
+            }
+        }
+    }
+
+    if (target_idx < 0 && app->active_quicklink_idx >= 0 && app->active_quicklink_idx < app->prefs.num_quick_links) {
+        target_idx = app->active_quicklink_idx;
+    }
+
+    if (target_idx < 0) {
+        target_idx = app->prefs.num_quick_links - 1;
+    }
+
+    char rem_name[80];
+    snprintf(rem_name, sizeof(rem_name), "%s", app->prefs.quick_links[target_idx].label);
+
+    for (int j = target_idx; j < app->prefs.num_quick_links - 1; j++) {
+        app->prefs.quick_links[j] = app->prefs.quick_links[j + 1];
+    }
+    app->prefs.num_quick_links--;
+    app->active_quicklink_idx = -1;
+    prefs_save(app, TRUE);
+
+    if (app->prefs.num_quick_links == 0) {
+        /* Wenn es der einzigste war, die Startseite laden */
+        gui_update_url_bar(app, "@HOME");
+        net_send_url(app, "@HOME");
+        app_set_status("Schnellwahl entfernt: %s (Startseite geladen)", rem_name);
+    } else {
+        app_set_status("Schnellwahl entfernt: %s", rem_name);
+    }
+
+    gui_rebuild_window(app);
+}
+
 void gui_handle_events(VortexApp *app)
 {
     if (app->pw_win_obj) {
@@ -2876,10 +3434,21 @@ void gui_handle_events(VortexApp *app)
                 break;
             }
 
+            case WMHI_ACTIVE:
+            case WMHI_INACTIVE:
+            case WMHI_CHANGEWINDOW:
+                if (app->prefs.dark_theme == 1) {
+                    gui_draw_dark_titlebar(app);
+                }
+                break;
+
             case WMHI_NEWSIZE:
                 prefs_capture_window_box(app);
                 if (app->win && app->gad_space) {
                     renderer_sync_viewport_size(app);
+                }
+                if (app->prefs.dark_theme == 1) {
+                    gui_draw_dark_titlebar(app);
                 }
                 break;
 
@@ -2943,7 +3512,7 @@ void gui_handle_events(VortexApp *app)
             case WMHI_RAWKEY: {
                 uint16 rawkey = (uint16)(result & WMHI_KEYMASK);
                 if ((rawkey & IECODE_UP_PREFIX) == 0) {
-                    /* Odyssey Web Browser RAWKEY_NM_WHEEL_UP (0x7A) / RAWKEY_NM_WHEEL_DOWN (0x7B) */
+                    /* NewMouse / RAWKEY_NM_WHEEL_UP (0x7A) / RAWKEY_NM_WHEEL_DOWN (0x7B) */
                     if ((rawkey == 0x7A || rawkey == 0x7B) && !s_got_extended_wheel && app->win) {
                         int16_t rx = 0, ry = 0;
                         if (renderer_map_window_to_remote(app, app->win->MouseX, app->win->MouseY, &rx, &ry)) {
@@ -3029,41 +3598,18 @@ void gui_handle_events(VortexApp *app)
                         }
                         break;
 
-                    case GID_SERVER_CHOOSER: {
-                        uint32 sel = 0;
-                        if (app->gad_server_chooser) {
-                            IIntuition->GetAttr(CHOOSER_Selected, app->gad_server_chooser, &sel);
-                            if (sel == 0) {
-                                strncpy(app->server_host, VORTEXBROWSE_RPI_HOST, sizeof(app->server_host) - 1);
-                                app->server_port = VORTEXBROWSE_RPI_PORT;
-                                net_connect(app, app->server_host, app->server_port);
-                            } else if (sel == 1) {
-                                strncpy(app->server_host, VORTEXBROWSE_HOSTPC_HOST, sizeof(app->server_host) - 1);
-                                app->server_port = VORTEXBROWSE_HOSTPC_PORT;
-                                net_connect(app, app->server_host, app->server_port);
-                            } else if (sel == 2) {
-                                prompt_server_address(app);
-                            }
-                        }
-                        break;
-                    }
-
                     case GID_CONNECT: {
-                        uint32 sel = 0;
-                        if (app->gad_server_chooser) {
-                            IIntuition->GetAttr(CHOOSER_Selected, app->gad_server_chooser, &sel);
-                            if (sel == 0) {
-                                strncpy(app->server_host, VORTEXBROWSE_RPI_HOST, sizeof(app->server_host) - 1);
-                                app->server_port = VORTEXBROWSE_RPI_PORT;
-                            } else if (sel == 1) {
-                                strncpy(app->server_host, VORTEXBROWSE_HOSTPC_HOST, sizeof(app->server_host) - 1);
-                                app->server_port = VORTEXBROWSE_HOSTPC_PORT;
-                            } else if (sel == 2) {
-                                prompt_server_address(app);
-                                break;
+                        if (app->server_host[0] == '\0') {
+                            prompt_server_address(app);
+                        } else {
+                            if (net_connect(app, app->server_host, app->server_port)) {
+                                renderer_sync_viewport_size(app);
+                                net_send_url(app, "@REFRESH");
+                                const char *su = (app->current_url[0] && app->current_url[0] != '@') ? app->current_url : "@HOME";
+                                gui_update_url_bar(app, (su[0] != '@') ? su : "");
+                                net_send_url(app, su);
                             }
                         }
-                        net_connect(app, app->server_host, app->server_port);
                         break;
                     }
 
@@ -3185,6 +3731,10 @@ void gui_handle_events(VortexApp *app)
                         prompt_add_quicklink(app);
                         break;
 
+                    case GID_QUICK_REMOVE:
+                        remove_current_quicklink(app);
+                        break;
+
                     case GID_MENU: {
                         int16_t mx = app->win ? app->win->MouseX : 500;
                         int16_t my = app->win ? app->win->MouseY : 300;
@@ -3243,12 +3793,17 @@ void gui_handle_events(VortexApp *app)
                         gui_tab_add(app, "Neuer Tab", "", TRUE);
                         break;
 
+                    case GID_TAB_CLOSE:
+                        gui_tab_close(app, app->active_tab_idx);
+                        break;
+
                     default: {
                         if (gid >= GID_QUICK_BASE && gid < GID_QUICK_BASE + app->prefs.num_quick_links) {
                             int qidx = (int)(gid - GID_QUICK_BASE);
                             const char *u = app->prefs.quick_links[qidx].url;
                             if (u && u[0] != '\0') {
                                 DBG_LOG("[GUI] QuickLink %d clicked: %s (%s)\n", qidx, app->prefs.quick_links[qidx].label, u);
+                                app->active_quicklink_idx = qidx;
                                 gui_update_url_bar(app, u);
                                 net_send_url(app, u);
                                 app_set_status("Schnellstart: %s", app->prefs.quick_links[qidx].label);
@@ -3365,7 +3920,7 @@ void gui_handle_events(VortexApp *app)
             } else if (has_media) {
                 snprintf(hdr_buf, sizeof(hdr_buf), "Bild / Medium");
             } else {
-                snprintf(hdr_buf, sizeof(hdr_buf), "Odyssey / VortexBrowse");
+                snprintf(hdr_buf, sizeof(hdr_buf), "VortexBrowser");
             }
 
             uint32 selected_id = CTX_NONE;
@@ -3395,7 +3950,7 @@ void gui_handle_events(VortexApp *app)
                         PMITEM("Startseite (Speed-Dial)"), PMIA_ID, CTX_HOME, PMEND,
                         PMBAR(), PMEND,
                         PMITEM(app->prefs.dark_theme ? "Helles Theme" : "Dunkles Theme"), PMIA_ID, CTX_TOGGLE_DARK_THEME, PMEND,
-                        PMITEM("VortexBrowse Hauptmenue..."), PMIA_ID, CTX_MAIN_MENU, PMEND,
+                        PMITEM("VortexBrowser Hauptmenue..."), PMIA_ID, CTX_MAIN_MENU, PMEND,
                     PMEND;
                 } else if (has_media) {
                     menu_obj = PMMENU(hdr_buf),
@@ -3413,7 +3968,7 @@ void gui_handle_events(VortexApp *app)
                         PMITEM("Startseite (Speed-Dial)"), PMIA_ID, CTX_HOME, PMEND,
                         PMBAR(), PMEND,
                         PMITEM(app->prefs.dark_theme ? "Helles Theme" : "Dunkles Theme"), PMIA_ID, CTX_TOGGLE_DARK_THEME, PMEND,
-                        PMITEM("VortexBrowse Hauptmenue..."), PMIA_ID, CTX_MAIN_MENU, PMEND,
+                        PMITEM("VortexBrowser Hauptmenue..."), PMIA_ID, CTX_MAIN_MENU, PMEND,
                     PMEND;
                 } else {
                     menu_obj = PMMENU(hdr_buf),
@@ -3431,7 +3986,7 @@ void gui_handle_events(VortexApp *app)
                         PMITEM("Aktuelle Adresse herunterladen (ASL)..."), PMIA_ID, CTX_DOWNLOAD_PAGE, PMEND,
                         PMBAR(), PMEND,
                         PMITEM(app->prefs.dark_theme ? "Helles Theme (Light Mode)" : "Dunkles Theme (Dark Mode)"), PMIA_ID, CTX_TOGGLE_DARK_THEME, PMEND,
-                        PMITEM("VortexBrowse Hauptmenue..."), PMIA_ID, CTX_MAIN_MENU, PMEND,
+                        PMITEM("VortexBrowser Hauptmenue..."), PMIA_ID, CTX_MAIN_MENU, PMEND,
                     PMEND;
                 }
 
@@ -3452,7 +4007,7 @@ void gui_handle_events(VortexApp *app)
                 struct EasyStruct es;
                 memset(&es, 0, sizeof(es));
                 es.es_StructSize   = sizeof(struct EasyStruct);
-                es.es_Title        = (STRPTR)"Odyssey / VortexBrowse Kontextmenue";
+                es.es_Title        = (STRPTR)"VortexBrowser Kontextmenue";
                 if (has_link) {
                     es.es_TextFormat   = (STRPTR)"Link: %s";
                     es.es_GadgetFormat = (STRPTR)"Link oeffnen|Neuer Tab|Tab schliessen|Auto-Login|Herunterladen (ASL)|In URL kopieren|Hauptmenue|Zurueck|Abbrechen";
@@ -3642,21 +4197,24 @@ void gui_update_url_bar(VortexApp *app, const char *url)
     /* Update clean AmigaOS style window title */
     if (app->prefs.show_status_bar) {
         if (disp[0] != '\0') {
-            snprintf(app->win_title, sizeof(app->win_title), "VortexBrowse: %s", disp);
+            snprintf(app->win_title, sizeof(app->win_title), "VortexBrowser: %s", disp);
         } else {
-            snprintf(app->win_title, sizeof(app->win_title), "VortexBrowse");
+            snprintf(app->win_title, sizeof(app->win_title), "VortexBrowser");
         }
     } else {
         const char *st = app->status_text[0] ? app->status_text : "Bereit";
         if (disp[0] != '\0') {
-            snprintf(app->win_title, sizeof(app->win_title), "VortexBrowse: %s [%s]", disp, st);
+            snprintf(app->win_title, sizeof(app->win_title), "VortexBrowser: %s [%s]", disp, st);
         } else {
-            snprintf(app->win_title, sizeof(app->win_title), "VortexBrowse [%s]", st);
+            snprintf(app->win_title, sizeof(app->win_title), "VortexBrowser [%s]", st);
         }
     }
     if (app->win) {
-        STRPTR scr_title = (app->custom_screen != NULL) ? (STRPTR)"VortexBrowse 2.0 (AmigaOS 4.1)" : (STRPTR)~0;
+        STRPTR scr_title = (app->custom_screen != NULL) ? (STRPTR)"VortexBrowser 0.99 RC1 (AmigaOS 4.1)" : (STRPTR)~0;
         IIntuition->SetWindowTitles(app->win, app->win_title, scr_title);
+        if (app->prefs.dark_theme == 1) {
+            gui_draw_dark_titlebar(app);
+        }
     }
 }
 

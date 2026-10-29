@@ -132,7 +132,7 @@ void download_handle_start(VortexApp *app, const MsgDownloadStart *msg)
             ASL_FileRequest,
             ASLFR_Window,        app->win,
             ASLFR_SleepWindow,   TRUE,
-            ASLFR_TitleText,     "VortexBrowse: Download speichern unter...",
+            ASLFR_TitleText,     "VortexBrowser: Download speichern unter...",
             ASLFR_PositiveText,  "Speichern",
             ASLFR_NegativeText,  "Abbrechen",
             ASLFR_DoSaveMode,    TRUE,
@@ -361,7 +361,7 @@ void download_handle_complete(VortexApp *app, const MsgDownloadComplete *msg)
 
     if (e->dest_path[0]) {
         char comment[160];
-        snprintf(comment, sizeof(comment), "Downloaded via VortexBrowse from %.100s", app->current_url);
+        snprintf(comment, sizeof(comment), "Downloaded via VortexBrowser from %.100s", app->current_url);
         IDOS->SetComment(e->dest_path, comment);
     }
 

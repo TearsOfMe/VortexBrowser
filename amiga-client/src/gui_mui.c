@@ -40,10 +40,10 @@ extern struct PopupMenuIFace *IPopupMenu;
 #define get(obj, attr, valptr) IIntuition->GetAttr((attr), (Object *)(obj), (uint32 *)(valptr))
 
 
-#define VORTEXBROWSE_RPI_HOST    "192.168.178.2"
-#define VORTEXBROWSE_RPI_PORT    7788
-#define VORTEXBROWSE_HOSTPC_HOST "192.168.178.60"
-#define VORTEXBROWSE_HOSTPC_PORT 9757
+#define VORTEXBROWSE_RPI_HOST    DEFAULT_SERVER_HOST
+#define VORTEXBROWSE_RPI_PORT    DEFAULT_SERVER_PORT
+#define VORTEXBROWSE_HOSTPC_HOST DEFAULT_SERVER_HOST
+#define VORTEXBROWSE_HOSTPC_PORT DEFAULT_SERVER_PORT
 
 static const char *s_server_entries[] = {
     "RasPi 4 (192.168.178.2:7788)",
@@ -475,12 +475,12 @@ BOOL gui_mui_init(VortexApp *app)
     APTR btn_add_fav, btn_connect, btn_menu;
     APTR row1, row2, status_row;
 
-    snprintf(app->win_title, sizeof(app->win_title), "Odyssey (MUI) / %s", VB_APP_TITLE);
+    snprintf(app->win_title, sizeof(app->win_title), "%s (MUI)", VB_APP_TITLE);
 
     APTR menustrip = MUI_MakeObject(MUIO_MenustripNM, s_mui_menu, 0);
 
     /* ------------------------------------------------------------------------
-     * Row 1: Odyssey Navigation, URL String & Web Search Bar
+     * Row 1: Navigation, URL String & Web Search Bar
      * ------------------------------------------------------------------------ */
     row1 = HGroup,
         Child, btn_back      = SimpleButton("<"),
@@ -504,7 +504,7 @@ BOOL gui_mui_init(VortexApp *app)
     End;
 
     /* ------------------------------------------------------------------------
-     * Row 2: Odyssey Bookmarks, Lesezeichen Cycle & Server Chooser
+     * Row 2: Bookmarks, Lesezeichen Cycle & Server Chooser
      * ------------------------------------------------------------------------ */
     row2 = HGroup,
         Child, btn_bm_an           = SimpleButton("Amiga-News"),
@@ -674,9 +674,9 @@ void gui_mui_update_url_bar(VortexApp *app, const char *url)
     set(app->mui_url, MUIA_String_Contents, (STRPTR)disp);
 
     if (disp[0] != '\0') {
-        snprintf(app->win_title, sizeof(app->win_title), "Odyssey (MUI) / VortexBrowse - %s", disp);
+        snprintf(app->win_title, sizeof(app->win_title), "%s (MUI) - %s", VB_APP_TITLE, disp);
     } else {
-        snprintf(app->win_title, sizeof(app->win_title), "Odyssey (MUI) / %s", VB_APP_TITLE);
+        snprintf(app->win_title, sizeof(app->win_title), "%s (MUI)", VB_APP_TITLE);
     }
     if (app->mui_win) {
         set(app->mui_win, MUIA_Window_Title, (STRPTR)app->win_title);
@@ -895,7 +895,7 @@ void gui_mui_handle_action(VortexApp *app, uint32 action_id)
                         "OK",
                         "VortexBrowse 1.0 (MUI Edition)\n"
                         "AmigaOS 4.1 PowerPC\n\n"
-                        "Moderner Remote-Browser mit Odyssey-Bedienkonzept,\n"
+                        "Moderner Remote-Browser fuer AmigaOS 4,\n"
                         "Compositing Video-Engine & AHI Low-Latency Audio.\n\n"
                         "(c) 2026 TearsOfMe");
             break;
@@ -979,7 +979,7 @@ void gui_mui_handle_events(VortexApp *app)
             } else if (has_media) {
                 snprintf(hdr_buf, sizeof(hdr_buf), "Bild / Medium");
             } else {
-                snprintf(hdr_buf, sizeof(hdr_buf), "Odyssey / VortexBrowse");
+                snprintf(hdr_buf, sizeof(hdr_buf), "VortexBrowse");
             }
 
             uint32 selected_id = CTX_NONE;
@@ -1043,7 +1043,7 @@ void gui_mui_handle_events(VortexApp *app)
                 struct EasyStruct es;
                 memset(&es, 0, sizeof(es));
                 es.es_StructSize   = sizeof(struct EasyStruct);
-                es.es_Title        = (STRPTR)"Odyssey / VortexBrowse Kontextmenue";
+                es.es_Title        = (STRPTR)"VortexBrowse Kontextmenue";
                 if (has_link) {
                     es.es_TextFormat   = (STRPTR)"Link: %s";
                     es.es_GadgetFormat = (STRPTR)"Link oeffnen|Neuer Tab|Herunterladen (ASL)|In URL-Leiste|Zurueck|Abbrechen";

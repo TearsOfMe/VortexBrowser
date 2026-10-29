@@ -3,6 +3,8 @@
 *.stripped
 amiga-client/VortexBrowse
 amiga-client/VortexBrowse.stripped
+amiga-client/VortexBrowser
+amiga-client/VortexBrowser.stripped
 *.so
 !fast_pixconv_aarch64.so
 

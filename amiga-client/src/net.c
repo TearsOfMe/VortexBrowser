@@ -86,6 +86,11 @@ BOOL net_connect(VortexApp *app, const char *host, uint16_t port)
         app->server_port = port;
     }
 
+    if (!app->server_host[0]) {
+        app_set_status("Nicht verbunden. Bitte Server konfigurieren (Amiga+1).");
+        return FALSE;
+    }
+
     app_set_status("Verbinde mit %s:%u ...", app->server_host, (unsigned)app->server_port);
 
     struct sockaddr_in addr;
@@ -150,13 +155,6 @@ BOOL net_connect(VortexApp *app, const char *host, uint16_t port)
 
     if (!conn_ok) {
         ISocket->CloseSocket(sock);
-        /* If port 7788 or RasPi failed, automatically fall back to Host-PC 192.168.178.60:9757 */
-        if (strcmp(app->server_host, VORTEXBROWSE_HOSTPC_HOST) != 0 || app->server_port != VORTEXBROWSE_HOSTPC_PORT) {
-            strncpy(app->server_host, VORTEXBROWSE_HOSTPC_HOST, sizeof(app->server_host) - 1);
-            app->server_host[sizeof(app->server_host) - 1] = '\0';
-            app->server_port = VORTEXBROWSE_HOSTPC_PORT;
-            return net_connect(app, app->server_host, app->server_port);
-        }
         app_set_status("Verbindung zu %s:%u fehlgeschlagen!", app->server_host, (unsigned)app->server_port);
         return FALSE;
     }
@@ -484,11 +482,16 @@ BOOL net_send_url(VortexApp *app, const char *url)
     strncpy(app->current_url, url, sizeof(app->current_url) - 1);
     app->current_url[sizeof(app->current_url) - 1] = '\0';
     if (!app->connected || app->sock_fd < 0) {
-        DBG_LOG("[Net] Not connected, auto-connecting to %s:%u before sending URL...\n",
-               app->server_host, (unsigned)app->server_port);
-        if (!net_connect(app, app->server_host, app->server_port)) {
-            app_set_status("Verbindung zu %s:%u fehlgeschlagen!", app->server_host, (unsigned)app->server_port);
-            return FALSE;
+        if (!app->server_host[0]) {
+            prompt_server_address(app);
+            if (!app->connected) return FALSE;
+        } else {
+            DBG_LOG("[Net] Not connected, auto-connecting to %s:%u before sending URL...\n",
+                   app->server_host, (unsigned)app->server_port);
+            if (!net_connect(app, app->server_host, app->server_port)) {
+                app_set_status("Verbindung zu %s:%u fehlgeschlagen!", app->server_host, (unsigned)app->server_port);
+                return FALSE;
+            }
         }
     }
     app_set_status("Lade Seite: %s ...", url);

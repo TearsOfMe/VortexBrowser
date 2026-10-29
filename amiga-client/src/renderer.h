@@ -19,6 +19,7 @@ void renderer_flush_dirty(VortexApp *app);
 
 /* Composite & blit full current frame into the Reaction space.gadget area */
 void renderer_present(VortexApp *app, struct RastPort *rp, struct IBox *area);
+void renderer_present_clipped(VortexApp *app, struct RastPort *rp, struct IBox *area, const struct Rectangle *clip_rect);
 
 /* Notify server if the Amiga window's space.gadget dimensions changed for 1:1 native rendering */
 void renderer_sync_viewport_size(VortexApp *app);

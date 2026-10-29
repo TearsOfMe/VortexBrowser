@@ -26,7 +26,7 @@ SRCS_COMMON = src/net.c src/renderer.c src/favorites.c src/download.c src/audio.
 OBJS_COMMON = $(SRCS_COMMON:.c=.o)
 
 OBJS_RX     = src/main.o src/gui.o src/gui_prefs.o src/gui_passwords.o src/gui_download.o $(OBJS_COMMON)
-TARGET_RX   = VortexBrowse
+TARGET_RX   = VortexBrowser
 
 all: $(TARGET_RX)
 

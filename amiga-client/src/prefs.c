@@ -69,8 +69,8 @@ void prefs_init(VortexApp *app)
 
     memset(&app->prefs, 0, sizeof(VortexPrefs));
 
-    /* 1. Unified Resolution: Default to Odyssey-style Auto-Fit window on Workbench screen */
-    app->prefs.resolution.preset_idx        = 5; /* Automatisch anpassen (Odyssey Fenster) */
+    /* 1. Unified Resolution: Default to Auto-Fit window on Workbench screen */
+    app->prefs.resolution.preset_idx        = 5; /* Automatisch anpassen */
     app->prefs.resolution.width             = 1024;
     app->prefs.resolution.height            = 768;
     app->prefs.resolution.custom_w          = 1024;
@@ -88,9 +88,9 @@ void prefs_init(VortexApp *app)
     app->prefs.show_status_bar              = FALSE; /* Default: OFF */
     app->prefs.stream_res_mode              = STREAM_RES_NATIVE; /* Default: 1:1 Window Size */
     app->prefs.dark_theme                   = 0; /* Default: Hell (Standard) */
-    strncpy(app->prefs.server_host, VORTEXBROWSE_HOSTPC_HOST, sizeof(app->prefs.server_host) - 1);
+    strncpy(app->prefs.server_host, DEFAULT_SERVER_HOST, sizeof(app->prefs.server_host) - 1);
     app->prefs.server_host[sizeof(app->prefs.server_host) - 1] = '\0';
-    app->prefs.server_port                  = VORTEXBROWSE_HOSTPC_PORT;
+    app->prefs.server_port                  = DEFAULT_SERVER_PORT;
     app->prefs.jpeg_quality                 = 100; /* Default: 100% */
     app->prefs.dynamic_video_quality        = TRUE;
     app->prefs.save_server_on_exit          = TRUE;
@@ -110,7 +110,7 @@ void prefs_init(VortexApp *app)
     app->prefs.font.web_font_family = 0; /* Sans-Serif */
     app->prefs.search_engine        = 0; /* DuckDuckGo (Default) */
 
-    /* 3. Odyssey-style Quick Links (with icons & variable count) */
+    /* 3. Quick Links (with icons & variable count) */
     app->prefs.num_quick_links = 7;
     set_quicklink_entry(&app->prefs.quick_links[0], "Amiga-News", "https://www.amiga-news.de", "amiga-news");
     set_quicklink_entry(&app->prefs.quick_links[1], "OS4Depot",   "https://os4depot.net",      "os4depot");
@@ -287,7 +287,7 @@ static BOOL load_from_file(VortexApp *app, const char *path)
         app->prefs.num_quick_links = (uint16_t)loaded_links;
     }
 
-    /* Upgrade pre-v3 configs to Odyssey window layout (below screen titlebar to screen edges) */
+    /* Upgrade pre-v3 configs to modern window layout (below screen titlebar to screen edges) */
     if (cfg_version < 3) {
         app->prefs.resolution.preset_idx  = 5;
         app->prefs.resolution.has_win_pos = FALSE;
@@ -312,10 +312,8 @@ static BOOL load_from_file(VortexApp *app, const char *path)
     if (app->prefs.font.web_font_size == 0) app->prefs.font.web_font_size = 16;
     if (app->prefs.search_engine >= NUM_SEARCH_ENGINES) app->prefs.search_engine = 0;
     if (app->prefs.jpeg_quality == 0) app->prefs.jpeg_quality = 100;
-    if (app->prefs.server_host[0] == '\0') {
-        strncpy(app->prefs.server_host, VORTEXBROWSE_HOSTPC_HOST, sizeof(app->prefs.server_host) - 1);
-        app->prefs.server_host[sizeof(app->prefs.server_host) - 1] = '\0';
-        app->prefs.server_port = VORTEXBROWSE_HOSTPC_PORT;
+    if (app->prefs.server_port == 0) {
+        app->prefs.server_port = DEFAULT_SERVER_PORT;
     }
 
     fclose(fp);
@@ -326,13 +324,47 @@ BOOL prefs_load(VortexApp *app)
 {
     if (!app) return FALSE;
 
+    BOOL loaded = FALSE;
     if (load_from_file(app, VB_PREFS_ENV_FILE)) {
-        return TRUE;
+        loaded = TRUE;
+    } else if (load_from_file(app, VB_PREFS_ENVARC_FILE)) {
+        loaded = TRUE;
+    } else if (load_from_file(app, "ENV:VortexBrowse/vortexbrowse.prefs")) {
+        loaded = TRUE;
+    } else if (load_from_file(app, "ENVARC:VortexBrowse/vortexbrowse.prefs")) {
+        loaded = TRUE;
+    } else if (load_from_file(app, VB_PREFS_PROGDIR_FILE)) {
+        loaded = TRUE;
     }
-    if (load_from_file(app, VB_PREFS_ENVARC_FILE)) {
-        return TRUE;
+
+    /* Check DOS environment variables if set */
+    if (IDOS) {
+        char env_host[128];
+        if (IDOS->GetVar("VortexBrowser/server_host", env_host, sizeof(env_host), GVF_GLOBAL_ONLY) > 0 && env_host[0] != '\0') {
+            strncpy(app->prefs.server_host, env_host, sizeof(app->prefs.server_host) - 1);
+            app->prefs.server_host[sizeof(app->prefs.server_host) - 1] = '\0';
+        } else if (IDOS->GetVar("VortexBrowse/server_host", env_host, sizeof(env_host), GVF_GLOBAL_ONLY) > 0 && env_host[0] != '\0') {
+            strncpy(app->prefs.server_host, env_host, sizeof(app->prefs.server_host) - 1);
+            app->prefs.server_host[sizeof(app->prefs.server_host) - 1] = '\0';
+        }
+        char env_port[16];
+        if (IDOS->GetVar("VortexBrowser/server_port", env_port, sizeof(env_port), GVF_GLOBAL_ONLY) > 0 && env_port[0] != '\0') {
+            int ep = atoi(env_port);
+            if (ep > 0 && ep <= 65535) app->prefs.server_port = (uint16_t)ep;
+        } else if (IDOS->GetVar("VortexBrowse/server_port", env_port, sizeof(env_port), GVF_GLOBAL_ONLY) > 0 && env_port[0] != '\0') {
+            int ep = atoi(env_port);
+            if (ep > 0 && ep <= 65535) app->prefs.server_port = (uint16_t)ep;
+        }
     }
-    return FALSE;
+
+    /* Always synchronize active app server with loaded preferences */
+    if (app->prefs.server_host[0] != '\0') {
+        strncpy(app->server_host, app->prefs.server_host, sizeof(app->server_host) - 1);
+        app->server_host[sizeof(app->server_host) - 1] = '\0';
+        app->server_port = app->prefs.server_port;
+    }
+
+    return loaded;
 }
 
 void prefs_capture_window_box(VortexApp *app)
@@ -352,7 +384,7 @@ static BOOL save_to_file(const VortexApp *app, const char *path)
     FILE *fp = fopen(path, "w");
     if (!fp) return FALSE;
 
-    fprintf(fp, "# VortexBrowse Configuration\n");
+    fprintf(fp, "# VortexBrowser Configuration\n");
     fprintf(fp, "version=3\n\n");
 
     /* Unified Resolution & Saved Window Geometry */
@@ -380,8 +412,12 @@ static BOOL save_to_file(const VortexApp *app, const char *path)
 
     /* Server & Streaming */
     fprintf(fp, "# Server & Streaming Configuration\n");
-    fprintf(fp, "server_host=%s\n", app->prefs.server_host[0] ? app->prefs.server_host : VORTEXBROWSE_HOSTPC_HOST);
-    fprintf(fp, "server_port=%u\n", (unsigned)(app->prefs.server_port ? app->prefs.server_port : VORTEXBROWSE_HOSTPC_PORT));
+    const char *sh = app->prefs.server_host[0] ? app->prefs.server_host :
+                    (app->server_host[0] ? app->server_host : DEFAULT_SERVER_HOST);
+    uint16_t sp    = app->prefs.server_port ? app->prefs.server_port :
+                    (app->server_port ? app->server_port : DEFAULT_SERVER_PORT);
+    fprintf(fp, "server_host=%s\n", sh);
+    fprintf(fp, "server_port=%u\n", (unsigned)sp);
     fprintf(fp, "jpeg_quality=%u\n", (unsigned)(app->prefs.jpeg_quality ? app->prefs.jpeg_quality : 100));
     fprintf(fp, "dynamic_video_quality=%d\n", app->prefs.dynamic_video_quality ? 1 : 0);
     fprintf(fp, "save_server_on_exit=%d\n\n", app->prefs.save_server_on_exit ? 1 : 0);
@@ -401,8 +437,8 @@ static BOOL save_to_file(const VortexApp *app, const char *path)
     fprintf(fp, "web_font_family=%u\n", (unsigned)app->prefs.font.web_font_family);
     fprintf(fp, "search_engine=%u\n\n", (unsigned)app->prefs.search_engine);
 
-    /* Odyssey Quick Links */
-    fprintf(fp, "# Odyssey Quick Links\n");
+    /* Quick Links */
+    fprintf(fp, "# Quick Links\n");
     fprintf(fp, "num_quicklinks=%u\n", (unsigned)app->prefs.num_quick_links);
     for (int i = 0; i < app->prefs.num_quick_links && i < VB_MAX_QUICKLINKS; i++) {
         fprintf(fp, "quick%d_label=%s\n", i + 1, app->prefs.quick_links[i].label);
@@ -418,6 +454,13 @@ BOOL prefs_save(const VortexApp *app, BOOL permanent)
 {
     if (!app) return FALSE;
 
+    /* Always synchronize active app server into prefs if set */
+    if (app->server_host[0] != '\0' && (app->prefs.save_server_on_exit || app->prefs.server_host[0] == '\0')) {
+        strncpy(((VortexApp *)app)->prefs.server_host, app->server_host, sizeof(app->prefs.server_host) - 1);
+        ((VortexApp *)app)->prefs.server_host[sizeof(app->prefs.server_host) - 1] = '\0';
+        ((VortexApp *)app)->prefs.server_port = app->server_port;
+    }
+
     prefs_capture_window_box((VortexApp *)app);
 
     ensure_dir_exists(VB_PREFS_ENV_DIR);
@@ -429,9 +472,14 @@ BOOL prefs_save(const VortexApp *app, BOOL permanent)
         ok_arc = save_to_file(app, VB_PREFS_ENVARC_FILE);
     }
 
-    if (app->prefs.server_host[0] != '\0') {
+    /* Also save in PROGDIR: so settings persist even without ENVARC: */
+    save_to_file(app, VB_PREFS_PROGDIR_FILE);
+
+    if (app->prefs.server_host[0] != '\0' && IDOS) {
         char port_str[16];
         snprintf(port_str, sizeof(port_str), "%u", (unsigned)app->prefs.server_port);
+        IDOS->SetVar("VortexBrowser/server_host", (STRPTR)app->prefs.server_host, -1, GVF_GLOBAL_ONLY | (permanent ? GVF_SAVE_VAR : 0));
+        IDOS->SetVar("VortexBrowser/server_port", port_str, -1, GVF_GLOBAL_ONLY | (permanent ? GVF_SAVE_VAR : 0));
         IDOS->SetVar("VortexBrowse/server_host", (STRPTR)app->prefs.server_host, -1, GVF_GLOBAL_ONLY | (permanent ? GVF_SAVE_VAR : 0));
         IDOS->SetVar("VortexBrowse/server_port", port_str, -1, GVF_GLOBAL_ONLY | (permanent ? GVF_SAVE_VAR : 0));
     }

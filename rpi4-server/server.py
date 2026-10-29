@@ -436,7 +436,7 @@ PORTAL_HTML = """<!DOCTYPE html>
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<title>Odyssey Web Browser - AmigaOS 4.1 Edition</title>
+<title>VortexBrowse - AmigaOS 4.1 Edition</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -506,7 +506,7 @@ PORTAL_HTML = """<!DOCTYPE html>
     border-color: #2563eb;
     box-shadow: 0 0 0 2px rgba(37,99,235,0.25);
   }
-  .btn-search, .btn-odyssey {
+  .btn-search, .btn-vortex {
     padding: 8px 16px;
     border-radius: 4px;
     border: 1px solid #64748b;
@@ -519,11 +519,11 @@ PORTAL_HTML = """<!DOCTYPE html>
     display: inline-block;
     box-shadow: 0 1px 2px rgba(0,0,0,0.12);
   }
-  .btn-search:hover, .btn-odyssey:hover {
+  .btn-search:hover, .btn-vortex:hover {
     background: linear-gradient(180deg, #ffffff 0%, #e2e8f0 100%);
     border-color: #475569;
   }
-  .btn-search:active, .btn-odyssey:active {
+  .btn-search:active, .btn-vortex:active {
     background: #cbd5e1;
     box-shadow: inset 0 1px 3px rgba(0,0,0,0.25);
   }
@@ -635,12 +635,12 @@ PORTAL_HTML = """<!DOCTYPE html>
     .search-bar input:focus {
       border-color: #3b82f6;
     }
-    .btn-search, .btn-odyssey {
+    .btn-search, .btn-vortex {
       background: linear-gradient(180deg, #3f3f46 0%, #27272a 100%);
       border-color: #52525b;
       color: #f4f4f5;
     }
-    .btn-search:hover, .btn-odyssey:hover {
+    .btn-search:hover, .btn-vortex:hover {
       background: linear-gradient(180deg, #52525b 0%, #3f3f46 100%);
     }
     .card {
@@ -696,7 +696,7 @@ function playAmigaSynth() {
 <body>
   <div class="header">
     <div class="title-box">
-      <h1>Odyssey Web Browser / VortexBrowse AmigaOS 4.1</h1>
+      <h1>VortexBrowse - AmigaOS 4.1 Edition</h1>
       <p>Schnellwahl &bull; Turbo LZ4-Streaming &bull; AHI Stereo-Audio &bull; AmigaOS 4 Kontextmen&uuml; &bull; ASL Download</p>
     </div>
     <div class="badge">AmigaOS 4.1 PPC</div>
@@ -728,7 +728,7 @@ function playAmigaSynth() {
           <p>Aktuelle Nachrichten rund um AmigaOS 4, PowerPC Hardware und Community-Projekte.</p>
         </div>
         <div class="card-action">
-          <a class="btn-odyssey" href="https://www.amiga-news.de">&Ouml;ffnen</a>
+          <a class="btn-vortex" href="https://www.amiga-news.de">&Ouml;ffnen</a>
         </div>
       </div>
     </div>
@@ -741,7 +741,7 @@ function playAmigaSynth() {
           <p>Das zentrale Archiv f&uuml;r native AmigaOS 4 Software, Bibliotheken und Spiele.</p>
         </div>
         <div class="card-action">
-          <a class="btn-odyssey" href="https://os4depot.net">&Ouml;ffnen</a>
+          <a class="btn-vortex" href="https://os4depot.net">&Ouml;ffnen</a>
         </div>
       </div>
     </div>
@@ -754,8 +754,8 @@ function playAmigaSynth() {
           <p>Videos &amp; Musik mit direkter 22050Hz AHI-Stereo-Ton&uuml;bertragung auf die Workbench.</p>
         </div>
         <div class="card-action">
-          <a class="btn-odyssey" href="https://www.youtube.com">&Ouml;ffnen</a>
-          <a class="btn-odyssey" href="https://m.youtube.com" style="margin-left: 6px; background: linear-gradient(180deg, #d32f2f, #9a0007);">Lite / Mobil</a>
+          <a class="btn-vortex" href="https://www.youtube.com">&Ouml;ffnen</a>
+          <a class="btn-vortex" href="https://m.youtube.com" style="margin-left: 6px; background: linear-gradient(180deg, #d32f2f, #9a0007);">Lite / Mobil</a>
         </div>
       </div>
     </div>
@@ -768,7 +768,7 @@ function playAmigaSynth() {
           <p>Das internationale AmigaOS 4 Forum f&uuml;r Anwender, Entwickler und Erfahrungsaustausch.</p>
         </div>
         <div class="card-action">
-          <a class="btn-odyssey" href="https://www.amigans.net">&Ouml;ffnen</a>
+          <a class="btn-vortex" href="https://www.amigans.net">&Ouml;ffnen</a>
         </div>
       </div>
     </div>
@@ -781,7 +781,7 @@ function playAmigaSynth() {
           <p>Das weltgr&ouml;&szlig;te Amiga-Softwarearchiv f&uuml;r Classic, PPC und AmigaOS 4.</p>
         </div>
         <div class="card-action">
-          <a class="btn-odyssey" href="https://aminet.net">&Ouml;ffnen</a>
+          <a class="btn-vortex" href="https://aminet.net">&Ouml;ffnen</a>
         </div>
       </div>
     </div>
@@ -794,8 +794,8 @@ function playAmigaSynth() {
           <p>Live-Streaming mit Turbo-H.264 &amp; 30 FPS Optimierung. Ton direkt via AHI Stereo.</p>
         </div>
         <div class="card-action">
-          <a class="btn-odyssey" href="https://www.twitch.tv">&Ouml;ffnen</a>
-          <a class="btn-odyssey" href="https://m.twitch.tv" style="margin-left: 6px; background: linear-gradient(180deg, #9146ff, #5c16c5);">Lite / Mobil</a>
+          <a class="btn-vortex" href="https://www.twitch.tv">&Ouml;ffnen</a>
+          <a class="btn-vortex" href="https://m.twitch.tv" style="margin-left: 6px; background: linear-gradient(180deg, #9146ff, #5c16c5);">Lite / Mobil</a>
         </div>
       </div>
     </div>
@@ -808,7 +808,7 @@ function playAmigaSynth() {
           <p>Testet AHI 16-Bit Stereo-Ausgabe &uuml;ber PipeWire und direkte Dirty-Slice Bildaktualisierung.</p>
         </div>
         <div class="card-action" style="flex-direction: column; align-items: flex-end;">
-          <button class="btn-odyssey" id="btn-test" onclick="window._clicks=(window._clicks||0)+1; playAmigaSynth(); document.getElementById('click-status').textContent='Ton + Klick OK! ('+window._clicks+'x)';">Ton &amp; Klick-Test</button>
+          <button class="btn-vortex" id="btn-test" onclick="window._clicks=(window._clicks||0)+1; playAmigaSynth(); document.getElementById('click-status').textContent='Ton + Klick OK! ('+window._clicks+'x)';">Ton &amp; Klick-Test</button>
           <div id="click-status">Bereit f&uuml;r AHI-Sound.</div>
         </div>
       </div>
@@ -891,7 +891,7 @@ def _fetch_search_results_sync(query: str) -> str:
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<title>Odyssey Suche: {q_esc}</title>
+<title>VortexBrowse Suche: {q_esc}</title>
 <style>
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
   body {{
@@ -1378,6 +1378,8 @@ class AmigaClientSession:
         self.last_hover_url: Optional[str] = None
         self.last_hover_time: float = 0.0
         self.hover_task: Optional[asyncio.Task] = None
+        self._pending_mouse_coord: Optional[Tuple[int, int]] = None
+        self._mouse_move_task: Optional[asyncio.Task] = None
 
         # Explicit Navigation History Stack (immune to HTTP/JS redirect loops)
         self.nav_history: List[str] = []
@@ -2379,30 +2381,12 @@ class AmigaClientSession:
 
             if pixel_format == FMT_YUV420P:
                 # 12 bpp Planar YUV420: Stream Y, U, V planes compressed with LZ4
-                if not force_full and _FAST_PIXCONV is not None and prev_buf is not None:
-                    rx = ctypes.c_int(0)
-                    ry = ctypes.c_int(0)
-                    rw = ctypes.c_int(0)
-                    rh = ctypes.c_int(0)
-                    changed = _FAST_PIXCONV.find_and_update_dirty_rect(
-                        raw_bytes,
-                        prev_buf,
-                        width,
-                        height,
-                        1,
-                        ctypes.byref(rx),
-                        ctypes.byref(ry),
-                        ctypes.byref(rw),
-                        ctypes.byref(rh),
-                    )
-                    if changed == 0:
+                # Dirty-rect optimization is supported for YUV420P too (bpp==1 in fast_pixconv.c)
+                if not force_full and prev_buf is not None and len(prev_buf) == len(raw_bytes):
+                    if prev_buf.raw == raw_bytes:
                         return None
-                else:
-                    if not force_full and prev_buf is not None and len(prev_buf) == len(raw_bytes):
-                        if prev_buf.raw == raw_bytes:
-                            return None
-                    if prev_buf is not None and len(prev_buf) == len(raw_bytes):
-                        ctypes.memmove(prev_buf, raw_bytes, len(raw_bytes))
+                if prev_buf is not None and len(prev_buf) == len(raw_bytes):
+                    ctypes.memmove(prev_buf, raw_bytes, len(raw_bytes))
                 compressed = lz4.block.compress(raw_bytes, store_size=False)
                 hdr = STRUCT_MSG_FRAME.pack(
                     MSG_FRAME,
@@ -2788,6 +2772,14 @@ class AmigaClientSession:
         cy = max(0, min(self.height - 1, int(y)))
 
         try:
+            if self._pending_mouse_coord is not None and event_type in (INPUT_CLICK, INPUT_MOUSE_DOWN, INPUT_MOUSE_UP):
+                target_m = self._pending_mouse_coord
+                self._pending_mouse_coord = None
+                try:
+                    await self.page.mouse.move(target_m[0], target_m[1])
+                except Exception:
+                    pass
+
             if event_type == INPUT_CLICK:
                 btn = "left"
                 if key_code == 2:
@@ -2857,10 +2849,19 @@ class AmigaClientSession:
                 self._schedule_delayed_frames()
 
             elif event_type == INPUT_MOUSE_MOVE:
-                try:
-                    await self.page.mouse.move(cx, cy)
-                except Exception:
-                    pass
+                self._pending_mouse_coord = (cx, cy)
+                if self._mouse_move_task is None or self._mouse_move_task.done():
+                    async def _dispatch_mouse_moves():
+                        while self._pending_mouse_coord is not None and self.running and self.page:
+                            target = self._pending_mouse_coord
+                            self._pending_mouse_coord = None
+                            try:
+                                await self.page.mouse.move(target[0], target[1])
+                            except Exception:
+                                pass
+                            await asyncio.sleep(0.002)
+                    self._mouse_move_task = asyncio.create_task(_dispatch_mouse_moves())
+
                 now = time.monotonic()
                 if (now - self.last_hover_time) >= 0.25:
                     if self.hover_task and not self.hover_task.done():
@@ -3169,6 +3170,17 @@ class AmigaClientSession:
                             }
                         },
                     )
+                    await self.cdp.send(
+                        "Page.setFontFamilies",
+                        {
+                            "fontFamilies": {
+                                "standard": css_font,
+                                "sansSerif": "sans-serif",
+                                "serif": "serif",
+                                "fixed": "monospace",
+                            }
+                        },
+                    )
                 except Exception:
                     pass
 
@@ -3183,7 +3195,6 @@ class AmigaClientSession:
                 try {{
                     if (document.documentElement) {{
                         document.documentElement.style.zoom = '';
-                        document.documentElement.style.fontSize = '{effective_px}px';
                     }}
                     let style = document.getElementById('__vb_font_override');
                     if (!style && document.head) {{
@@ -3192,7 +3203,7 @@ class AmigaClientSession:
                         document.head.appendChild(style);
                     }}
                     if (style) {{
-                        style.textContent = 'html {{ font-size: {effective_px}px !important; scroll-behavior: auto !important; }} body {{ font-size: {effective_px}px; }} * {{ font-family: {css_font} !important; }} {dark_css}';
+                        style.textContent = 'html {{ scroll-behavior: auto !important; }} body, input, select, textarea {{ font-family: {css_font}; }} {dark_css}';
                     }}
                 }} catch (e) {{}}
             }})();
@@ -3268,6 +3279,18 @@ class AmigaClientSession:
                 pass
             return
 
+        if cmd.upper().startswith("@VIDEO_TURBO:"):
+            try:
+                enabled = int(cmd.split(":", 1)[1].strip()) != 0
+                self.video_turbo_enabled = enabled
+                logger.info("Client requested Video-Turbo (720p scaling) = %s", self.video_turbo_enabled)
+                if self.screencast_active:
+                    target_q = self.video_jpeg_quality if self.is_video_mode else self.base_jpeg_quality
+                    await self._set_screencast_quality(target_q)
+            except Exception:
+                pass
+            return
+
         if cmd.upper().startswith("@FPS:"):
             try:
                 fps = int(cmd.split(":", 1)[1].strip())
@@ -3285,12 +3308,14 @@ class AmigaClientSession:
         if cmd.upper().startswith("@RESIZE:"):
             try:
                 dims = cmd.split(":", 1)[1].lower().split("x")
-                new_w = max(320, min(1920, int(dims[0]) & ~1))
+                new_w = max(320, min(1920, int(dims[0]) & ~15))
                 new_h = max(200, min(1080, int(dims[1]) & ~1))
                 if (new_w, new_h) != (self.width, self.height):
                     logger.info("Syncing browser viewport 1:1 to Amiga window: %dx%d", new_w, new_h)
                     self.width = new_w
                     self.height = new_h
+                    self.current_screencast_w = new_w
+                    self.current_screencast_h = new_h
                     self._trigger_full_refresh(True)
                     await self.page.set_viewport_size({"width": new_w, "height": new_h})
                     if self.engine == "chromium":
@@ -4235,7 +4260,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--portal-port", type=int, default=8089, help="Local start portal HTTP port")
     parser.add_argument("--width", type=int, default=1024, help="Initial browser width (default: 1024)")
     parser.add_argument("--height", type=int, default=768, help="Initial browser height (default: 768)")
-    parser.add_argument("--format", choices=["argb32", "rgb565", "yuv420p", "yuv"], default="rgb565", help="Wire pixel format (default: rgb565 — 16-bit low Amiga CPU, or argb32)")
+    parser.add_argument("--format", choices=["argb32", "rgb565", "yuv420p", "yuv"], default="yuv420p", help="Wire pixel format (default: yuv420p — GPU-native YUV, lowest bandwidth)")
     parser.add_argument("--fps", type=int, default=25, help="Max target FPS (default: 25)")
     parser.add_argument("--url", default="", help="Optional initial URL (default: built-in Amiga portal)")
     parser.add_argument("--browser-bin", default=None, help="Explicit path to Chromium or Ungoogled-Chromium executable")

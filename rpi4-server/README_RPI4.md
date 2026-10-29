@@ -63,7 +63,7 @@ Der Server lauscht standardmäßig auf **Port 7788** (und Port 9757 für Abwärt
    HOST=192.168.178.xx
    PORT=7788
    ```
-3. Klicke auf Verbinden – der Odyssey-Skin und das Webstreaming erscheinen sofort auf deiner Workbench!
+3. Klicke auf Verbinden – der Browser und das Webstreaming erscheinen sofort auf deiner Workbench!
 
 ---
 

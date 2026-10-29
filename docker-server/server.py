@@ -416,6 +416,19 @@ def find_ublock_extension_path() -> Optional[str]:
     return exts[0] if exts else None
 
 
+DARKREADER_JS: str = ""
+try:
+    dr_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "darkreader.js")
+    if os.path.exists(dr_path):
+        with open(dr_path, "r", encoding="utf-8") as f:
+            DARKREADER_JS = f.read()
+        logger.info("Loaded DarkReader engine (%d bytes)", len(DARKREADER_JS))
+    else:
+        logger.warning("darkreader.js not found at %s", dr_path)
+except Exception as exc:
+    logger.warning("Could not read darkreader.js: %s", exc)
+
+
 # ============================================================================
 # Built-in Local Portal & Test HTTP Server
 # ============================================================================
@@ -423,7 +436,7 @@ PORTAL_HTML = """<!DOCTYPE html>
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<title>Odyssey Web Browser - AmigaOS 4.1 Edition</title>
+<title>VortexBrowse - AmigaOS 4.1 Edition</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -493,7 +506,7 @@ PORTAL_HTML = """<!DOCTYPE html>
     border-color: #2563eb;
     box-shadow: 0 0 0 2px rgba(37,99,235,0.25);
   }
-  .btn-search, .btn-odyssey {
+  .btn-search, .btn-vortex {
     padding: 8px 16px;
     border-radius: 4px;
     border: 1px solid #64748b;
@@ -506,11 +519,11 @@ PORTAL_HTML = """<!DOCTYPE html>
     display: inline-block;
     box-shadow: 0 1px 2px rgba(0,0,0,0.12);
   }
-  .btn-search:hover, .btn-odyssey:hover {
+  .btn-search:hover, .btn-vortex:hover {
     background: linear-gradient(180deg, #ffffff 0%, #e2e8f0 100%);
     border-color: #475569;
   }
-  .btn-search:active, .btn-odyssey:active {
+  .btn-search:active, .btn-vortex:active {
     background: #cbd5e1;
     box-shadow: inset 0 1px 3px rgba(0,0,0,0.25);
   }
@@ -596,6 +609,61 @@ PORTAL_HTML = """<!DOCTYPE html>
     font-weight: bold;
     font-size: 11.5px;
   }
+  @media (prefers-color-scheme: dark) {
+    body {
+      background: linear-gradient(180deg, #18181b 0%, #09090b 100%);
+      color: #f4f4f5;
+    }
+    .header {
+      background: linear-gradient(180deg, #27272a 0%, #18181b 100%);
+      border-color: #3f3f46;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    }
+    .title-box p {
+      color: #a1a1aa;
+    }
+    .search-bar {
+      background: #27272a;
+      border-color: #3f3f46;
+      box-shadow: inset 0 1px 3px rgba(0,0,0,0.4);
+    }
+    .search-bar input {
+      background: #18181b;
+      color: #fafafa;
+      border-color: #3f3f46;
+    }
+    .search-bar input:focus {
+      border-color: #3b82f6;
+    }
+    .btn-search, .btn-vortex {
+      background: linear-gradient(180deg, #3f3f46 0%, #27272a 100%);
+      border-color: #52525b;
+      color: #f4f4f5;
+    }
+    .btn-search:hover, .btn-vortex:hover {
+      background: linear-gradient(180deg, #52525b 0%, #3f3f46 100%);
+    }
+    .card {
+      background: #27272a;
+      border-color: #3f3f46;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+    }
+    .card-body h3 {
+      color: #60a5fa;
+    }
+    .card-body p {
+      color: #a1a1aa;
+    }
+    .dl-strip {
+      background: #27272a;
+      border-color: #3f3f46;
+      border-left: 5px solid #d97706;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+    }
+    .dl-strip p {
+      color: #a1a1aa;
+    }
+  }
 </style>
 <script>
 function playAmigaSynth() {
@@ -628,7 +696,7 @@ function playAmigaSynth() {
 <body>
   <div class="header">
     <div class="title-box">
-      <h1>Odyssey Web Browser / VortexBrowse AmigaOS 4.1</h1>
+      <h1>VortexBrowse - AmigaOS 4.1 Edition</h1>
       <p>Schnellwahl &bull; Turbo LZ4-Streaming &bull; AHI Stereo-Audio &bull; AmigaOS 4 Kontextmen&uuml; &bull; ASL Download</p>
     </div>
     <div class="badge">AmigaOS 4.1 PPC</div>
@@ -660,7 +728,7 @@ function playAmigaSynth() {
           <p>Aktuelle Nachrichten rund um AmigaOS 4, PowerPC Hardware und Community-Projekte.</p>
         </div>
         <div class="card-action">
-          <a class="btn-odyssey" href="https://www.amiga-news.de">&Ouml;ffnen</a>
+          <a class="btn-vortex" href="https://www.amiga-news.de">&Ouml;ffnen</a>
         </div>
       </div>
     </div>
@@ -673,7 +741,7 @@ function playAmigaSynth() {
           <p>Das zentrale Archiv f&uuml;r native AmigaOS 4 Software, Bibliotheken und Spiele.</p>
         </div>
         <div class="card-action">
-          <a class="btn-odyssey" href="https://os4depot.net">&Ouml;ffnen</a>
+          <a class="btn-vortex" href="https://os4depot.net">&Ouml;ffnen</a>
         </div>
       </div>
     </div>
@@ -686,8 +754,8 @@ function playAmigaSynth() {
           <p>Videos &amp; Musik mit direkter 22050Hz AHI-Stereo-Ton&uuml;bertragung auf die Workbench.</p>
         </div>
         <div class="card-action">
-          <a class="btn-odyssey" href="https://www.youtube.com">&Ouml;ffnen</a>
-          <a class="btn-odyssey" href="https://m.youtube.com" style="margin-left: 6px; background: linear-gradient(180deg, #d32f2f, #9a0007);">Lite / Mobil</a>
+          <a class="btn-vortex" href="https://www.youtube.com">&Ouml;ffnen</a>
+          <a class="btn-vortex" href="https://m.youtube.com" style="margin-left: 6px; background: linear-gradient(180deg, #d32f2f, #9a0007);">Lite / Mobil</a>
         </div>
       </div>
     </div>
@@ -700,7 +768,7 @@ function playAmigaSynth() {
           <p>Das internationale AmigaOS 4 Forum f&uuml;r Anwender, Entwickler und Erfahrungsaustausch.</p>
         </div>
         <div class="card-action">
-          <a class="btn-odyssey" href="https://www.amigans.net">&Ouml;ffnen</a>
+          <a class="btn-vortex" href="https://www.amigans.net">&Ouml;ffnen</a>
         </div>
       </div>
     </div>
@@ -713,7 +781,7 @@ function playAmigaSynth() {
           <p>Das weltgr&ouml;&szlig;te Amiga-Softwarearchiv f&uuml;r Classic, PPC und AmigaOS 4.</p>
         </div>
         <div class="card-action">
-          <a class="btn-odyssey" href="https://aminet.net">&Ouml;ffnen</a>
+          <a class="btn-vortex" href="https://aminet.net">&Ouml;ffnen</a>
         </div>
       </div>
     </div>
@@ -726,8 +794,8 @@ function playAmigaSynth() {
           <p>Live-Streaming mit Turbo-H.264 &amp; 30 FPS Optimierung. Ton direkt via AHI Stereo.</p>
         </div>
         <div class="card-action">
-          <a class="btn-odyssey" href="https://www.twitch.tv">&Ouml;ffnen</a>
-          <a class="btn-odyssey" href="https://m.twitch.tv" style="margin-left: 6px; background: linear-gradient(180deg, #9146ff, #5c16c5);">Lite / Mobil</a>
+          <a class="btn-vortex" href="https://www.twitch.tv">&Ouml;ffnen</a>
+          <a class="btn-vortex" href="https://m.twitch.tv" style="margin-left: 6px; background: linear-gradient(180deg, #9146ff, #5c16c5);">Lite / Mobil</a>
         </div>
       </div>
     </div>
@@ -740,7 +808,7 @@ function playAmigaSynth() {
           <p>Testet AHI 16-Bit Stereo-Ausgabe &uuml;ber PipeWire und direkte Dirty-Slice Bildaktualisierung.</p>
         </div>
         <div class="card-action" style="flex-direction: column; align-items: flex-end;">
-          <button class="btn-odyssey" id="btn-test" onclick="window._clicks=(window._clicks||0)+1; playAmigaSynth(); document.getElementById('click-status').textContent='Ton + Klick OK! ('+window._clicks+'x)';">Ton &amp; Klick-Test</button>
+          <button class="btn-vortex" id="btn-test" onclick="window._clicks=(window._clicks||0)+1; playAmigaSynth(); document.getElementById('click-status').textContent='Ton + Klick OK! ('+window._clicks+'x)';">Ton &amp; Klick-Test</button>
           <div id="click-status">Bereit f&uuml;r AHI-Sound.</div>
         </div>
       </div>
@@ -823,7 +891,7 @@ def _fetch_search_results_sync(query: str) -> str:
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<title>Odyssey Suche: {q_esc}</title>
+<title>VortexBrowse Suche: {q_esc}</title>
 <style>
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
   body {{
@@ -1262,7 +1330,7 @@ class AmigaClientSession:
         start_url: str,
         portal_url: str,
         audio_enabled: bool = True,
-        jpeg_quality: int = 80,
+        jpeg_quality: int = 100,
         codec_mode: str = "auto",
         engine: str = "chromium",
     ):
@@ -1278,7 +1346,16 @@ class AmigaClientSession:
         self.start_url = start_url
         self.portal_url = portal_url
         self.audio_enabled = audio_enabled
-        self.jpeg_quality = max(20, min(98, jpeg_quality))
+        self.base_jpeg_quality: int = max(20, min(100, jpeg_quality))
+        self.video_jpeg_quality: int = min(self.base_jpeg_quality, 60)
+        self.current_screencast_quality: int = self.base_jpeg_quality
+        self.jpeg_quality: int = self.base_jpeg_quality
+        self.is_video_mode: bool = False
+        self._last_video_eval_time: float = 0.0
+        self._last_video_state_time: float = 0.0
+        self._video_element_playing: bool = False
+        self._frames_last_sec: int = 0
+        self._sec_start_time: float = time.monotonic()
         self.codec_mode: str = codec_mode
 
         self.write_lock = asyncio.Lock()
@@ -1300,6 +1377,9 @@ class AmigaClientSession:
         self.soft_scroll: bool = True
         self.last_hover_url: Optional[str] = None
         self.last_hover_time: float = 0.0
+        self.hover_task: Optional[asyncio.Task] = None
+        self._pending_mouse_coord: Optional[Tuple[int, int]] = None
+        self._mouse_move_task: Optional[asyncio.Task] = None
 
         # Explicit Navigation History Stack (immune to HTTP/JS redirect loops)
         self.nav_history: List[str] = []
@@ -1315,6 +1395,7 @@ class AmigaClientSession:
         self.web_font_size: int = 16
         self.web_font_family: str = "sans-serif"
         self.web_charset: str = "utf-8"
+        self.dark_mode: int = 0  # 0 = Light, 1 = Dark, 2 = Auto
 
         try:
             sock = self.writer.get_extra_info("socket")
@@ -1428,6 +1509,11 @@ class AmigaClientSession:
         self.nav_times.append(now)
         self.nav_idx = len(self.nav_history) - 1
         logger.info("History push [%d/%d]: %s", self.nav_idx, len(self.nav_history), url)
+
+        if self.dark_mode == 1 and self.page:
+            t = asyncio.create_task(self._apply_dark_mode(self.page))
+            self.background_tasks.add(t)
+            t.add_done_callback(self.background_tasks.discard)
 
     def _on_popup_page(self, new_page: Page) -> None:
         """Redirects any target='_blank' or window.open popup into the main streamed page."""
@@ -1696,6 +1782,7 @@ class AmigaClientSession:
                 self.cdp = None
 
             self._setup_page_listeners(self.page)
+            await self._apply_dark_mode(self.page)
 
             # Pre-allocate pixel conversion buffers (reused across frames to avoid alloc churn)
             num_pixels = self.width * self.height
@@ -1888,6 +1975,36 @@ class AmigaClientSession:
         finally:
             self._screencast_handler = None
             self.screencast_queue = None
+
+    async def _set_screencast_quality(self, new_quality: int) -> None:
+        """Dynamically adjusts CDP screencast JPEG quality (e.g. q60 during video, q100 for crisp text)."""
+        new_quality = max(20, min(100, int(new_quality)))
+        if new_quality == self.current_screencast_quality:
+            return
+        self.current_screencast_quality = new_quality
+        self.jpeg_quality = new_quality
+        if self.cdp and self.screencast_active and self._screencast_handler:
+            try:
+                # Stop and immediately restart screencast with new quality.
+                # Event listener remains attached and receives frames seamlessly.
+                await self.cdp.send("Page.stopScreencast")
+                await self.cdp.send(
+                    "Page.startScreencast",
+                    {
+                        "format": "jpeg",
+                        "quality": new_quality,
+                        "everyNthFrame": 1,
+                        "maxWidth": self.width,
+                        "maxHeight": self.height,
+                    },
+                )
+                logger.info(
+                    "Dynamic JPEG quality switched to %d (Video mode: %s)",
+                    new_quality,
+                    new_quality < self.base_jpeg_quality,
+                )
+            except Exception as exc:
+                logger.debug("Failed updating screencast quality: %s", exc)
 
     async def send_clipboard_to_amiga(self, text: str) -> bool:
         if not text or not self.running:
@@ -2342,11 +2459,52 @@ class AmigaClientSession:
 
         idle_ticks = 0
         frames_sent = 0
+        frames_in_sec = 0
         fps_report_time = time.monotonic()
         while self.running:
             if time.monotonic() < self.pause_frames_until:
                 await asyncio.sleep(0.04)
                 continue
+
+            now_tick = time.monotonic()
+            if now_tick - self._sec_start_time >= 1.0:
+                self._frames_last_sec = frames_in_sec
+                frames_in_sec = 0
+                self._sec_start_time = now_tick
+
+            # Dynamic Video Detection:
+            # 1. Real audio streaming active (e.g. YouTube, Twitch)
+            audio_active = (getattr(self, "last_audio_time", 0.0) > now_tick - 2.0)
+
+            # 2. Query HTML5 <video> element playback state asynchronously every 2.0 seconds
+            if self.page and (now_tick - self._last_video_eval_time) >= 2.0:
+                self._last_video_eval_time = now_tick
+                async def _eval_video():
+                    try:
+                        if self.page and self.running:
+                            is_playing = await asyncio.wait_for(
+                                self.page.evaluate(
+                                    "() => Array.from(document.querySelectorAll('video')).some(v => !v.paused && !v.ended && v.currentTime > 0)"
+                                ),
+                                timeout=0.08,
+                            )
+                            self._video_element_playing = bool(is_playing)
+                    except Exception:
+                        pass
+                t_vid = asyncio.create_task(_eval_video())
+                self.background_tasks.add(t_vid)
+                t_vid.add_done_callback(self.background_tasks.discard)
+
+            if audio_active or self._video_element_playing:
+                self._last_video_state_time = now_tick
+                if not self.is_video_mode:
+                    self.is_video_mode = True
+                    await self._set_screencast_quality(self.video_jpeg_quality)
+            elif self.is_video_mode:
+                # Video ended/paused; wait 3.0s of static/quiet before restoring crisp high quality (e.g. q80)
+                if (now_tick - self._last_video_state_time) >= 3.0:
+                    self.is_video_mode = False
+                    await self._set_screencast_quality(self.base_jpeg_quality)
 
             t0 = time.monotonic()
             forced = self.force_frame_event.is_set()
@@ -2360,6 +2518,7 @@ class AmigaClientSession:
             # A frame was actually sent if the content hash changed
             if self.last_frame_hash != prev_hash:
                 frames_sent += 1
+                frames_in_sec += 1
                 idle_ticks = 0
             else:
                 now_loop = time.monotonic()
@@ -2412,7 +2571,9 @@ class AmigaClientSession:
                         """([x, y]) => {
                             const probePoints = [
                                 [0, 0], [0, -3], [0, 3], [-4, 0], [4, 0],
-                                [0, -7], [0, 7], [-8, 0], [8, 0], [-12, 0], [12, 0]
+                                [-4, -4], [4, -4], [-4, 4], [4, 4],
+                                [0, -7], [0, 7], [-8, 0], [8, 0],
+                                [-12, 0], [12, 0], [-16, 0], [16, 0]
                             ];
                             let foundA = null;
                             let foundImg = null;
@@ -2421,11 +2582,22 @@ class AmigaClientSession:
                             for (const [dx, dy] of probePoints) {
                                 const px = Math.max(0, x + dx);
                                 const py = Math.max(0, y + dy);
-                                const el = document.elementFromPoint(px, py);
+                                let el = document.elementFromPoint(px, py);
                                 if (!el) continue;
+                                while (el && el.shadowRoot && el.shadowRoot.elementFromPoint) {
+                                    const inner = el.shadowRoot.elementFromPoint(px, py);
+                                    if (!inner || inner === el) break;
+                                    el = inner;
+                                }
                                 if (!foundA) {
-                                    const a = el.closest ? el.closest('a[href]') : (el.tagName === 'A' && el.href ? el : null);
-                                    if (a && a.href && !a.href.startsWith('javascript:')) foundA = a;
+                                    const a = el.closest ? el.closest('a[href], a[xlink\\\\:href], [role="link"]') : (el.tagName === 'A' ? el : null);
+                                    if (a) {
+                                        let h = '';
+                                        if (typeof a.href === 'string' && a.href) h = a.href;
+                                        else if (a.href && typeof a.href.baseVal === 'string') h = a.href.baseVal;
+                                        else h = a.getAttribute('href') || a.getAttribute('xlink:href') || '';
+                                        if (h && !h.startsWith('javascript:')) foundA = a;
+                                    }
                                 }
                                 if (!foundImg) {
                                     const img = (el.tagName === 'IMG') ? el : (el.closest ? el.closest('img[src]') : null);
@@ -2441,8 +2613,20 @@ class AmigaClientSession:
                             let linkHref = '';
                             let linkLabel = '';
                             if (foundA) {
-                                linkHref = foundA.href || '';
-                                linkLabel = (foundA.innerText || foundA.getAttribute('title') || foundA.getAttribute('aria-label') || foundA.href || '').trim().replace(/\\s+/g, ' ').slice(0, 72);
+                                let rawHref = '';
+                                if (typeof foundA.href === 'string' && foundA.href) {
+                                    rawHref = foundA.href;
+                                } else if (foundA.href && typeof foundA.href.baseVal === 'string') {
+                                    rawHref = foundA.href.baseVal;
+                                } else {
+                                    rawHref = foundA.getAttribute('href') || foundA.getAttribute('xlink:href') || '';
+                                }
+                                try {
+                                    linkHref = new URL(rawHref, document.baseURI).href;
+                                } catch (e) {
+                                    linkHref = rawHref;
+                                }
+                                linkLabel = (foundA.innerText || foundA.textContent || foundA.getAttribute('title') || foundA.getAttribute('aria-label') || linkHref || '').trim().replace(/\\s+/g, ' ').slice(0, 72);
                             }
 
                             let mSrc = '';
@@ -2454,6 +2638,11 @@ class AmigaClientSession:
                                     const s = foundMedia.querySelector('source[src]');
                                     if (s) mSrc = s.src || '';
                                 }
+                            }
+                            if (mSrc) {
+                                try {
+                                    mSrc = new URL(mSrc, document.baseURI).href;
+                                } catch (e) {}
                             }
                             return { linkHref, linkLabel, mSrc };
                         }""",
@@ -2471,6 +2660,8 @@ class AmigaClientSession:
             if not link_url and self.last_hover_url:
                 link_url = self.last_hover_url
                 logger.info("Using last_hover_url fallback for context menu: %s", link_url)
+                if not link_text:
+                    link_text = link_url.split("/")[-1] or link_url
 
         logger.info(
             "Sending Native AmigaOS 4 Context Menu for (%d, %d): link=%r text=%r media=%r",
@@ -2514,6 +2705,16 @@ class AmigaClientSession:
                             delta_y += ndy
                         except Exception:
                             break
+                elif event_type == INPUT_MOUSE_MOVE:
+                    pkt_len = 1 + STRUCT_MSG_INPUT_BODY.size
+                    buf = getattr(self.reader, "_buffer", None)
+                    while buf is not None and len(buf) >= pkt_len and buf[0] == MSG_INPUT and buf[1] == INPUT_MOUSE_MOVE:
+                        try:
+                            nxt = await self.reader.readexactly(pkt_len)
+                            _, nx, ny, _, _, _ = STRUCT_MSG_INPUT_BODY.unpack(nxt[1:])
+                            x, y = nx, ny
+                        except Exception:
+                            break
                 text_str = raw_text.split(b"\x00", 1)[0].decode("utf-8", errors="replace")
                 await self._handle_input(event_type, x, y, delta_y, key_code, text_str)
 
@@ -2550,7 +2751,7 @@ class AmigaClientSession:
                 await asyncio.sleep(delay)
                 if not self.running:
                     break
-                self._trigger_full_refresh(True)
+                self.force_frame_event.set()
         t = asyncio.create_task(_follow_up())
         self.background_tasks.add(t)
         t.add_done_callback(self.background_tasks.discard)
@@ -2571,6 +2772,14 @@ class AmigaClientSession:
         cy = max(0, min(self.height - 1, int(y)))
 
         try:
+            if self._pending_mouse_coord is not None and event_type in (INPUT_CLICK, INPUT_MOUSE_DOWN, INPUT_MOUSE_UP):
+                target_m = self._pending_mouse_coord
+                self._pending_mouse_coord = None
+                try:
+                    await self.page.mouse.move(target_m[0], target_m[1])
+                except Exception:
+                    pass
+
             if event_type == INPUT_CLICK:
                 btn = "left"
                 if key_code == 2:
@@ -2640,40 +2849,52 @@ class AmigaClientSession:
                 self._schedule_delayed_frames()
 
             elif event_type == INPUT_MOUSE_MOVE:
-                try:
-                    await self.page.mouse.move(cx, cy)
-                except Exception:
-                    pass
+                self._pending_mouse_coord = (cx, cy)
+                if self._mouse_move_task is None or self._mouse_move_task.done():
+                    async def _dispatch_mouse_moves():
+                        while self._pending_mouse_coord is not None and self.running and self.page:
+                            target = self._pending_mouse_coord
+                            self._pending_mouse_coord = None
+                            try:
+                                await self.page.mouse.move(target[0], target[1])
+                            except Exception:
+                                pass
+                            await asyncio.sleep(0.002)
+                    self._mouse_move_task = asyncio.create_task(_dispatch_mouse_moves())
+
                 now = time.monotonic()
-                if (now - self.last_hover_time) >= 0.12:
-                    self.last_hover_time = now
-                    async def _check_hover_async(hx: int, hy: int):
-                        if not self.page:
-                            return
-                        try:
-                            hover_url = await asyncio.wait_for(
-                                self.page.evaluate(
-                                    """([x, y]) => {
-                                        const el = document.elementFromPoint(x, y);
-                                        if (!el) return null;
-                                        const a = el.closest('a');
-                                        return (a && a.href) ? a.href : null;
-                                    }""",
-                                    [hx, hy],
-                                ),
-                                timeout=0.08,
-                            )
-                            if hover_url != self.last_hover_url:
-                                self.last_hover_url = hover_url
-                                if hover_url:
-                                    self._send_progress(100, f"Link: {hover_url[:55]}")
-                                else:
-                                    self._send_progress(100, "Bereit")
-                        except Exception:
-                            pass
-                    t_hov = asyncio.create_task(_check_hover_async(cx, cy))
-                    self.background_tasks.add(t_hov)
-                    t_hov.add_done_callback(self.background_tasks.discard)
+                if (now - self.last_hover_time) >= 0.25:
+                    if self.hover_task and not self.hover_task.done():
+                        pass
+                    else:
+                        self.last_hover_time = now
+                        async def _check_hover_async(hx: int, hy: int):
+                            if not self.page:
+                                return
+                            try:
+                                hover_url = await asyncio.wait_for(
+                                    self.page.evaluate(
+                                        """([x, y]) => {
+                                            const el = document.elementFromPoint(x, y);
+                                            if (!el) return null;
+                                            const a = el.closest('a');
+                                            return (a && a.href) ? a.href : null;
+                                        }""",
+                                        [hx, hy],
+                                    ),
+                                    timeout=0.08,
+                                )
+                                if hover_url != self.last_hover_url:
+                                    self.last_hover_url = hover_url
+                                    if hover_url:
+                                        self._send_progress(100, f"Link: {hover_url[:55]}")
+                                    else:
+                                        self._send_progress(100, "Bereit")
+                            except Exception:
+                                pass
+                        self.hover_task = asyncio.create_task(_check_hover_async(cx, cy))
+                        self.background_tasks.add(self.hover_task)
+                        self.hover_task.add_done_callback(self.background_tasks.discard)
 
             elif event_type == INPUT_WHEEL:
                 dy = max(-960, min(960, int(delta_y)))
@@ -2747,7 +2968,7 @@ class AmigaClientSession:
             elif event_type == INPUT_KEY_DOWN:
                 await self._handle_key_down(key_code, text_or_url)
                 self.force_frame_event.set()
-                self._schedule_delayed_frames()
+                self.active_until = time.monotonic() + 1.5
 
             elif event_type == INPUT_KEY_UP:
                 pass
@@ -2868,8 +3089,67 @@ class AmigaClientSession:
             kname = AMIGA_RAWKEY_MAP[key_code]
             await self.page.keyboard.press(" " if kname == "Space" else kname)
 
-    async def _apply_web_styling(self) -> None:
-        if not self.page:
+    async def _apply_dark_mode(self, page=None) -> None:
+        target_page = page or self.page
+        if not target_page:
+            return
+        is_dark = (self.dark_mode == 1)
+        color_scheme = "dark" if is_dark else ("light" if self.dark_mode == 0 else "no-preference")
+        try:
+            await target_page.emulate_media(color_scheme=color_scheme)
+        except Exception as exc:
+            logger.debug("emulate_media color_scheme error: %s", exc)
+
+        if self.cdp is not None and self.engine == "chromium":
+            try:
+                await self.cdp.send("Emulation.setAutoDarkModeOverride", {"enabled": is_dark})
+            except Exception as exc:
+                logger.debug("Emulation.setAutoDarkModeOverride error: %s", exc)
+
+        if DARKREADER_JS:
+            try:
+                if is_dark:
+                    js = (
+                        "(() => {"
+                        "try {"
+                        "if (typeof DarkReader === 'undefined') {"
+                        + DARKREADER_JS +
+                        "\n}"
+                        "if (typeof DarkReader !== 'undefined') {"
+                        "DarkReader.enable({ brightness: 100, contrast: 90, sepia: 10 });"
+                        "}"
+                        "let s = document.getElementById('__vb_dark_flash');"
+                        "if (!s && document.head) {"
+                        "s = document.createElement('style');"
+                        "s.id = '__vb_dark_flash';"
+                        "document.head.appendChild(s);"
+                        "}"
+                        "if (s) s.textContent = 'html, body { background-color: #18181b !important; color: #f4f4f5 !important; }';"
+                        "} catch (e) {}"
+                        "})();"
+                    )
+                    await target_page.evaluate(js)
+                else:
+                    js = """
+                    (() => {
+                        try {
+                            if (typeof DarkReader !== 'undefined') {
+                                DarkReader.disable();
+                            }
+                            let s = document.getElementById('__vb_dark_flash');
+                            if (s) s.remove();
+                        } catch (e) {}
+                    })();
+                    """
+                    await target_page.evaluate(js)
+            except Exception as exc:
+                logger.debug("DarkReader evaluate error: %s", exc)
+
+        await self._apply_web_styling(target_page)
+
+    async def _apply_web_styling(self, page=None) -> None:
+        target_page = page or self.page
+        if not target_page:
             return
         try:
             css_font = self.web_font_family if self.web_font_family in ("serif", "monospace") else "sans-serif"
@@ -2890,15 +3170,31 @@ class AmigaClientSession:
                             }
                         },
                     )
+                    await self.cdp.send(
+                        "Page.setFontFamilies",
+                        {
+                            "fontFamilies": {
+                                "standard": css_font,
+                                "sansSerif": "sans-serif",
+                                "serif": "serif",
+                                "fixed": "monospace",
+                            }
+                        },
+                    )
                 except Exception:
                     pass
+
+            dark_css = ""
+            if self.dark_mode == 1:
+                dark_css = ":root, html { color-scheme: dark !important; } html, body { background-color: #18181b !important; color: #f4f4f5 !important; }"
+            elif self.dark_mode == 0:
+                dark_css = ":root, html { color-scheme: light !important; }"
 
             js = f"""
             (() => {{
                 try {{
                     if (document.documentElement) {{
                         document.documentElement.style.zoom = '';
-                        document.documentElement.style.fontSize = '{effective_px}px';
                     }}
                     let style = document.getElementById('__vb_font_override');
                     if (!style && document.head) {{
@@ -2907,19 +3203,21 @@ class AmigaClientSession:
                         document.head.appendChild(style);
                     }}
                     if (style) {{
-                        style.textContent = 'html {{ font-size: {effective_px}px !important; scroll-behavior: auto !important; }} body {{ font-size: {effective_px}px; }} * {{ font-family: {css_font} !important; }}';
+                        style.textContent = 'html {{ scroll-behavior: auto !important; }} body, input, select, textarea {{ font-family: {css_font}; }} {dark_css}';
                     }}
                 }} catch (e) {{}}
             }})();
             """
-            await self.page.evaluate(js)
+            await target_page.evaluate(js)
         except Exception:
             pass
 
     def _on_page_updated(self) -> None:
         self._trigger_full_refresh()
         if self.page and self.running:
-            t = asyncio.create_task(self._apply_web_styling())
+            t = asyncio.create_task(self._apply_dark_mode(self.page))
+            self.background_tasks.add(t)
+            t.add_done_callback(self.background_tasks.discard)
             self.background_tasks.add(t)
             t.add_done_callback(self.background_tasks.discard)
 
@@ -2972,8 +3270,23 @@ class AmigaClientSession:
         if cmd.upper().startswith("@JPEG_QUALITY:"):
             try:
                 q = int(cmd.split(":", 1)[1].strip())
-                self.jpeg_quality = max(20, min(98, q))
-                logger.info("Set JPEG/MJPEG quality to %d", self.jpeg_quality)
+                self.base_jpeg_quality = max(20, min(100, q))
+                self.video_jpeg_quality = min(self.base_jpeg_quality, 60)
+                target_q = self.video_jpeg_quality if self.is_video_mode else self.base_jpeg_quality
+                await self._set_screencast_quality(target_q)
+                logger.info("Set JPEG/MJPEG base quality to %d (current=%d)", self.base_jpeg_quality, self.jpeg_quality)
+            except Exception:
+                pass
+            return
+
+        if cmd.upper().startswith("@VIDEO_TURBO:"):
+            try:
+                enabled = int(cmd.split(":", 1)[1].strip()) != 0
+                self.video_turbo_enabled = enabled
+                logger.info("Client requested Video-Turbo (720p scaling) = %s", self.video_turbo_enabled)
+                if self.screencast_active:
+                    target_q = self.video_jpeg_quality if self.is_video_mode else self.base_jpeg_quality
+                    await self._set_screencast_quality(target_q)
             except Exception:
                 pass
             return
@@ -2995,12 +3308,14 @@ class AmigaClientSession:
         if cmd.upper().startswith("@RESIZE:"):
             try:
                 dims = cmd.split(":", 1)[1].lower().split("x")
-                new_w = max(320, min(1920, int(dims[0]) & ~1))
+                new_w = max(320, min(1920, int(dims[0]) & ~15))
                 new_h = max(200, min(1080, int(dims[1]) & ~1))
                 if (new_w, new_h) != (self.width, self.height):
                     logger.info("Syncing browser viewport 1:1 to Amiga window: %dx%d", new_w, new_h)
                     self.width = new_w
                     self.height = new_h
+                    self.current_screencast_w = new_w
+                    self.current_screencast_h = new_h
                     self._trigger_full_refresh(True)
                     await self.page.set_viewport_size({"width": new_w, "height": new_h})
                     if self.engine == "chromium":
@@ -3069,6 +3384,22 @@ class AmigaClientSession:
                 logger.warning("Charset error: %s", exc)
             return
 
+        if cmd.upper().startswith("@DARKMODE:") or cmd.upper().startswith("@THEME:"):
+            try:
+                val = cmd.split(":", 1)[1].strip()
+                if val in ("1", "dark", "dunkel", "true"):
+                    self.dark_mode = 1
+                elif val in ("2", "auto"):
+                    self.dark_mode = 2
+                else:
+                    self.dark_mode = 0
+                logger.info("Setting Dark Mode to %d (0=Light, 1=Dark, 2=Auto)", self.dark_mode)
+                await self._apply_dark_mode()
+                self._trigger_full_refresh(True)
+            except Exception as exc:
+                logger.warning("DarkMode error: %s", exc)
+            return
+
         if cmd.upper().startswith("@DOWNLOAD:"):
             dl_url = cmd.split(":", 1)[1].strip()
             if dl_url:
@@ -3106,6 +3437,7 @@ class AmigaClientSession:
                     else:
                         self.cdp = None
                     await self.page.set_viewport_size({"width": self.width, "height": self.height})
+                    await self._apply_dark_mode(new_page)
                     self._send_progress(20, f"Lade {target}...")
                     await self.page.goto(target, wait_until="commit", timeout=15000)
                     self._send_nav_update(self.page.url or target)
@@ -3130,6 +3462,7 @@ class AmigaClientSession:
                             self.cdp = None
                     else:
                         self.cdp = None
+                    await self._apply_dark_mode(self.page)
                     self._send_nav_update(self.page.url or "")
                     self._trigger_full_refresh(True)
             except Exception as exc:
@@ -3155,6 +3488,7 @@ class AmigaClientSession:
                             self.cdp = None
                     else:
                         self.cdp = None
+                    await self._apply_dark_mode(self.page)
                     self._send_nav_update(self.page.url or "")
                     self._trigger_full_refresh(True)
             except Exception as exc:
@@ -3179,6 +3513,19 @@ class AmigaClientSession:
                     t.add_done_callback(self.background_tasks.discard)
                 except Exception as exc:
                     logger.warning("Error applying twitch token: %s", exc)
+            return
+
+        if cmd.upper().startswith("@AUTOLOGIN:"):
+            payload = cmd.split(":", 1)[1]
+            user = ""
+            pwd = ""
+            if "\t" in payload:
+                user, pwd = payload.split("\t", 1)
+            elif " " in payload:
+                user, pwd = payload.split(" ", 1)
+            else:
+                user = payload
+            await self._perform_auto_login(user, pwd)
             return
 
         logger.info("INPUT_GOTO_URL: %s (history idx=%d/%d)", cmd, self.nav_idx, len(self.nav_history))
@@ -3257,6 +3604,153 @@ class AmigaClientSession:
         t = asyncio.create_task(_nav_bg())
         self.background_tasks.add(t)
         t.add_done_callback(self.background_tasks.discard)
+
+    async def _perform_auto_login(self, username: str, password: str) -> None:
+        if not self.page:
+            return
+        logger.info("Executing Auto-Login for user: %r", username)
+        self._send_progress(50, f"Auto-Login fuer '{username}'...")
+
+        js_script = """
+        ([user, pass]) => {
+            function isVisible(el) {
+                if (!el) return false;
+                const style = window.getComputedStyle(el);
+                if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+                const rect = el.getBoundingClientRect();
+                return rect.width > 0 && rect.height > 0;
+            }
+
+            function setVal(elem, val) {
+                if (!elem) return false;
+                elem.focus();
+                const valueSetter = Object.getOwnPropertyDescriptor(elem, 'value')?.set;
+                const prototype = Object.getPrototypeOf(elem);
+                const protoSetter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+                if (protoSetter && valueSetter !== protoSetter) {
+                    protoSetter.call(elem, val);
+                } else if (valueSetter) {
+                    valueSetter.call(elem, val);
+                } else {
+                    elem.value = val;
+                }
+                elem.dispatchEvent(new Event('focus', { bubbles: true }));
+                elem.dispatchEvent(new Event('input', { bubbles: true }));
+                elem.dispatchEvent(new Event('change', { bubbles: true }));
+                elem.dispatchEvent(new Event('blur', { bubbles: true }));
+                return true;
+            }
+
+            const doc = document;
+            // 1. Password input detection
+            let pwInputs = Array.from(doc.querySelectorAll('input[type="password"]')).filter(isVisible);
+            if (pwInputs.length === 0) {
+                pwInputs = Array.from(doc.querySelectorAll('input[name*="pass" i], input[id*="pass" i]')).filter(isVisible);
+            }
+            if (pwInputs.length === 0) {
+                pwInputs = Array.from(doc.querySelectorAll('input[type="password"]'));
+            }
+            const pwInput = pwInputs[0] || null;
+
+            // 2. Username / Email input detection
+            let userInputs = Array.from(doc.querySelectorAll(
+                'input[autocomplete="username"], input[autocomplete="email"], input[type="email"], ' +
+                'input[name*="user" i], input[name*="login" i], input[name*="email" i], input[name*="account" i], ' +
+                'input[id*="user" i], input[id*="login" i], input[id*="email" i], input[id*="account" i], ' +
+                'input[placeholder*="user" i], input[placeholder*="benutzer" i], input[placeholder*="login" i], ' +
+                'input[placeholder*="e-mail" i], input[placeholder*="email" i], ' +
+                'input[aria-label*="user" i], input[aria-label*="benutzer" i], input[aria-label*="login" i], input[aria-label*="email" i]'
+            )).filter(isVisible);
+
+            let userInput = userInputs[0] || null;
+            if (!userInput && pwInput) {
+                const form = pwInput.closest('form') || doc;
+                const textInputs = Array.from(form.querySelectorAll('input[type="text"], input:not([type])')).filter(isVisible);
+                if (textInputs.length > 0) {
+                    userInput = textInputs[0];
+                }
+            }
+            if (!userInput && !pwInput) {
+                const anyText = Array.from(doc.querySelectorAll('input[type="text"], input[type="email"], input:not([type])')).filter(isVisible);
+                if (anyText.length > 0) userInput = anyText[0];
+            }
+
+            let userFilled = false;
+            let passFilled = false;
+            if (userInput && user) {
+                userFilled = setVal(userInput, user);
+            }
+            if (pwInput && pass) {
+                passFilled = setVal(pwInput, pass);
+            }
+
+            // 3. Submit button detection
+            let submitBtn = null;
+            const form = (pwInput && pwInput.closest('form')) || (userInput && userInput.closest('form'));
+            if (form) {
+                submitBtn = form.querySelector('button[type="submit"], input[type="submit"]');
+            }
+            if (!submitBtn) {
+                const allButtons = Array.from(doc.querySelectorAll('button, input[type="submit"], input[type="button"], a[role="button"]')).filter(isVisible);
+                for (const btn of allButtons) {
+                    const txt = (btn.innerText || btn.value || btn.getAttribute('aria-label') || '').trim().toLowerCase();
+                    if (txt.includes('login') || txt.includes('log in') || txt.includes('sign in') || txt.includes('signin') ||
+                        txt.includes('anmelden') || txt.includes('einloggen') || txt.includes('weiter') || txt.includes('next')) {
+                        submitBtn = btn;
+                        break;
+                    }
+                }
+            }
+
+            let submitted = false;
+            if (submitBtn) {
+                try {
+                    submitBtn.click();
+                    submitted = true;
+                } catch (e) {}
+            } else if (form && (userFilled || passFilled)) {
+                try {
+                    form.submit();
+                    submitted = true;
+                } catch (e) {}
+            }
+
+            return {
+                userFilled,
+                passFilled,
+                submitted,
+                foundUser: !!userInput,
+                foundPass: !!pwInput,
+                foundSubmit: !!submitBtn
+            };
+        }
+        """
+        try:
+            frames = [self.page] + list(self.page.frames)
+            res = None
+            for frame in frames:
+                try:
+                    res = await frame.evaluate(js_script, [username, password])
+                    if res and (res.get("userFilled") or res.get("passFilled")):
+                        break
+                except Exception:
+                    continue
+
+            logger.info("Auto-Login execution result: %s", res)
+            if res and not res.get("submitted") and (res.get("userFilled") or res.get("passFilled")):
+                await self.page.keyboard.press("Enter")
+
+            if res and (res.get("userFilled") or res.get("passFilled")):
+                self._send_progress(100, f"Auto-Login ausgefuehrt ({username})")
+            else:
+                self._send_progress(100, "Keine Login-Felder gefunden")
+        except Exception as exc:
+            logger.warning("Auto-Login error: %s", exc)
+            self._send_progress(100, "Auto-Login fehlgeschlagen")
+        finally:
+            self.active_until = time.monotonic() + 3.0
+            self._trigger_full_refresh(True)
+            self._schedule_delayed_frames()
 
     # ------------------------------------------------------------------------
     # Download Interceptor & Direct URL ASL Download Streamer (Server -> Amiga)
@@ -3704,7 +4198,7 @@ async def run_server(args: argparse.Namespace) -> None:
                         start_url=args.url,
                         portal_url=portal_url,
                         audio_enabled=audio_ready,
-                        jpeg_quality=getattr(args, "jpeg_quality", 80),
+                        jpeg_quality=getattr(args, "jpeg_quality", 100),
                         codec_mode=getattr(args, "codec", "auto"),
                         engine=engine,
                     )
@@ -3771,7 +4265,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--url", default="", help="Optional initial URL (default: built-in Amiga portal)")
     parser.add_argument("--browser-bin", default=None, help="Explicit path to Chromium or Ungoogled-Chromium executable")
     parser.add_argument("--codec", choices=["auto", "jpeg", "lz4"], default="auto", help="Streaming codec (default: auto)")
-    parser.add_argument("--jpeg-quality", type=int, default=75, help="JPEG capture quality 20-98 (default: 75 for optimal speed and bandwidth)")
+    parser.add_argument("--jpeg-quality", type=int, default=100, help="JPEG capture quality 20-100 (default: 100 for maximum clarity)")
     parser.add_argument("--enable-extensions", dest="enable_extensions", action="store_true", default=True, help="Enable browser extensions (uBlock, h264ify) [default: enabled]")
     parser.add_argument("--disable-extensions", dest="enable_extensions", action="store_false", help="Disable all browser extensions")
     parser.add_argument("--disable-gpu", action="store_true", help="Disable GPU hardware acceleration (forces CPU software rasterization)")

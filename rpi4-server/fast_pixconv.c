@@ -331,6 +331,26 @@ int find_and_update_dirty_rect(
         (size_t)rh * row_bytes
     );
 
+    if (bpp == 1) {
+        /* Also update U and V chroma planes in prev_buf for YUV420P */
+        size_t half_w = (size_t)width / 2;
+        size_t u_off  = (size_t)width * (size_t)height;
+        size_t v_off  = u_off + half_w * ((size_t)height / 2);
+        size_t half_min_y = (size_t)min_y / 2;
+        size_t half_rh    = ((size_t)rh + 1) / 2;
+
+        memcpy(
+            prev_buf + u_off + half_min_y * half_w,
+            cur_buf  + u_off + half_min_y * half_w,
+            half_rh * half_w
+        );
+        memcpy(
+            prev_buf + v_off + half_min_y * half_w,
+            cur_buf  + v_off + half_min_y * half_w,
+            half_rh * half_w
+        );
+    }
+
     *out_x = min_x;
     *out_y = min_y;
     *out_w = rw;
@@ -355,6 +375,53 @@ void pack_sub_rect(
         const uint8_t *s = src_buf + ((size_t)(ry + y) * src_stride) + ((size_t)rx * (size_t)bpp);
         uint8_t       *d = dst_buf + ((size_t)y * rect_row_bytes);
         memcpy(d, s, rect_row_bytes);
+    }
+}
+
+void pack_sub_rect_yuv420p(
+    const uint8_t * restrict src_yuv,
+    uint8_t       * restrict dst_buf,
+    int                      src_width,
+    int                      src_height,
+    int                      rx,
+    int                      ry,
+    int                      rw,
+    int                      rh
+)
+{
+    /* 1. Y plane: rw x rh bytes */
+    size_t y_stride = (size_t)src_width;
+    for (int y = 0; y < rh; y++) {
+        const uint8_t *s = src_yuv + (size_t)(ry + y) * y_stride + (size_t)rx;
+        uint8_t       *d = dst_buf + (size_t)y * (size_t)rw;
+        memcpy(d, s, rw);
+    }
+
+    /* 2. U and V planes in source */
+    size_t half_w = (size_t)src_width / 2;
+    size_t half_h = (size_t)src_height / 2;
+    size_t u_plane_offset = (size_t)src_width * (size_t)src_height;
+    size_t v_plane_offset = u_plane_offset + half_w * half_h;
+
+    const uint8_t *src_u = src_yuv + u_plane_offset;
+    const uint8_t *src_v = src_yuv + v_plane_offset;
+
+    /* 3. U and V planes in destination */
+    size_t sub_half_w = (size_t)rw / 2;
+    size_t sub_half_h = (size_t)rh / 2;
+    uint8_t *dst_u = dst_buf + (size_t)rw * (size_t)rh;
+    uint8_t *dst_v = dst_u   + sub_half_w * sub_half_h;
+
+    size_t half_rx = (size_t)rx / 2;
+    size_t half_ry = (size_t)ry / 2;
+
+    for (int y2 = 0; y2 < (int)sub_half_h; y2++) {
+        const uint8_t *su = src_u + (half_ry + (size_t)y2) * half_w + half_rx;
+        const uint8_t *sv = src_v + (half_ry + (size_t)y2) * half_w + half_rx;
+        uint8_t       *du = dst_u + (size_t)y2 * sub_half_w;
+        uint8_t       *dv = dst_v + (size_t)y2 * sub_half_w;
+        memcpy(du, su, sub_half_w);
+        memcpy(dv, sv, sub_half_w);
     }
 }
 

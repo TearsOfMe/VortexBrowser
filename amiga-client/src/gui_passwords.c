@@ -353,8 +353,8 @@ void gui_open_password_manager(VortexApp *app)
     if (!root_layout) return;
 
     app->pw_win_obj = IIntuition->NewObject(NULL, "window.class",
-        WA_Title,             "VortexBrowse Passwort-Manager",
-        WA_ScreenTitle,       "VortexBrowse",
+        WA_Title,             "VortexBrowser Passwort-Manager",
+        WA_ScreenTitle,       "VortexBrowser",
         target_scr ? WA_CustomScreen : TAG_IGNORE, (Tag)target_scr,
         WA_CloseGadget,       TRUE,
         WA_DepthGadget,       TRUE,

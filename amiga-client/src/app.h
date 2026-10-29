@@ -20,7 +20,10 @@
   #define DBG_LOG(...) do { } while (0)
 #endif
 
-#define VB_APP_TITLE     "VortexBrowse 2.0"
+#define VB_APP_NAME      "VortexBrowser"
+#define VB_APP_VERSION   "0.99 RC1"
+#define VB_APP_DATE      "(29.10.2026)"
+#define VB_APP_TITLE     "VortexBrowser 0.99 RC1"
 #define VB_MAX_FAVORITES 64
 #define VB_MAX_URL_LEN   512
 #define VB_MAX_TITLE_LEN 128
@@ -175,6 +178,8 @@ typedef struct VortexApp {
     Object        *gad_quick_btn[VB_MAX_QUICKLINKS];
     Object        *gad_quick_del[VB_MAX_QUICKLINKS];
     Object        *gad_quick_add;
+    Object        *gad_quick_remove;
+    int16_t        active_quicklink_idx;
     char           win_title[512];
 
     /* Preferences */
@@ -209,7 +214,7 @@ typedef struct VortexApp {
     BOOL           pw_show_plaintext;
     char           pw_real_pass[128];
 
-    /* Modeless Download Manager Window (Odyssey / IBrowse style listbrowser) */
+    /* Modeless Download Manager Window (Reaction listbrowser) */
     Object             *dl_win_obj;
     struct Window      *dl_win;
     Object             *dl_gad_listbrowser;
@@ -224,7 +229,7 @@ typedef struct VortexApp {
     Object             *dl_gad_btn_close;
     int                 dl_cur_sel;
 
-    /* Mouse throttling */
+    /* Mouse throttling & instant wakeup */
     uint32_t       last_move_secs;
     uint32_t       last_move_micros;
     int16_t        last_remote_x;
@@ -232,6 +237,9 @@ typedef struct VortexApp {
     BOOL           pending_mouse_move;
     int16_t        pending_win_mouse_x;
     int16_t        pending_win_mouse_y;
+    struct Task   *main_task;
+    int8           mouse_sig_bit;
+    uint32         mouse_sig_mask;
     struct IBox    cached_space_box;
 
     /* Native AmigaOS 4 Context Menu (popupmenu.class) */
@@ -239,13 +247,14 @@ typedef struct VortexApp {
     BOOL           ctx_menu_pending;
     BOOL           ctx_menu_ready;
 
-    /* Odyssey-style Tabs (clicktab.gadget) */
+    /* Tabs (clicktab.gadget) */
     BrowserTab     tabs[VB_MAX_TABS];
     uint16_t       num_tabs;
     uint16_t       active_tab_idx;
     Object        *gad_clicktab;
     struct List    tab_list;
     Object        *gad_tab_new;
+    Object        *gad_tab_close;
 
     /* URL Bar Favicon */
     Object        *gad_url_favicon;

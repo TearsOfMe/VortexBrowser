@@ -26,7 +26,7 @@ static void ensure_dir_exists(const char *dir_path)
 static void populate_defaults(VortexApp *app)
 {
     app->num_favorites = 0;
-    favorites_add(app, "VortexBrowse Portal (Start)", "@HOME");
+    favorites_add(app, "VortexBrowser Portal (Start)", "@HOME");
     favorites_add(app, "amiga-news.de", "https://www.amiga-news.de");
     favorites_add(app, "OS4Depot", "https://os4depot.net");
     favorites_add(app, "Amigans.net", "https://www.amigans.net");
@@ -98,7 +98,7 @@ static BOOL save_to_path(const VortexApp *app, const char *path)
     if (!fp) {
         return FALSE;
     }
-    fprintf(fp, "# VortexBrowse Favorites Preferences\n");
+    fprintf(fp, "# VortexBrowser Favorites Preferences\n");
     for (int i = 0; i < app->num_favorites; i++) {
         fprintf(fp, "%s|%s\n", app->favorites[i].title, app->favorites[i].url);
     }
