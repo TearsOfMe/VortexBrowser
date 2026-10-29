@@ -1106,7 +1106,7 @@ void renderer_present(VortexApp *app, struct RastPort *rp, struct IBox *area)
 
         int32 scale_x = is_1to1 ? COMP_FLOAT_TO_FIX(1.0f) : COMP_FLOAT_TO_FIX((float)dw / (float)r->src_width);
         int32 scale_y = is_1to1 ? COMP_FLOAT_TO_FIX(1.0f) : COMP_FLOAT_TO_FIX((float)dh / (float)r->src_height);
-        uint32 flags = COMPFLAG_IgnoreDestAlpha | COMPFLAG_HardwareOnly | (is_1to1 ? 0 : COMPFLAG_SrcFilter);
+        uint32 flags = COMPFLAG_IgnoreDestAlpha | (is_1to1 ? 0 : COMPFLAG_SrcFilter);
         uint32 yuv_tag = r->src_bm_is_yuv ? COMPTAG_SrcYUVStandard : TAG_IGNORE;
         uint32 yuv_val = r->src_bm_is_yuv ? COMPYUV_BT601 : 0;
 
