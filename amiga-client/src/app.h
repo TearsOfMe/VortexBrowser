@@ -25,9 +25,13 @@
 #define VB_APP_DATE      "(29.10.2026)"
 #define VB_APP_TITLE     "VortexBrowser 0.99 RC1"
 #define VB_MAX_FAVORITES 64
+#ifndef VB_MAX_URL_LEN
 #define VB_MAX_URL_LEN   512
+#endif
 #define VB_MAX_TITLE_LEN 128
+#ifndef VB_MAX_TABS
 #define VB_MAX_TABS      16
+#endif
 
 typedef struct FavoriteItem {
     char title[VB_MAX_TITLE_LEN];

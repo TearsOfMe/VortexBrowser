@@ -498,6 +498,38 @@ BOOL net_send_url(VortexApp *app, const char *url)
     return net_send_input(app, INPUT_GOTO_URL, 0, 0, 0, 0, url);
 }
 
+void net_sync_tabs(VortexApp *app)
+{
+    if (!app || !app->connected || app->sock_fd < 0) return;
+
+    if (app->num_tabs == 0) {
+        const char *su = (app->current_url[0] && app->current_url[0] != '@') ? app->current_url : "@HOME";
+        gui_update_url_bar(app, (su[0] != '@') ? su : "");
+        net_send_url(app, su);
+        return;
+    }
+
+    /* Tab 0 is the initial tab created on server connect */
+    const char *u0 = (app->tabs[0].url[0] && app->tabs[0].url[0] != '@') ? app->tabs[0].url : "@HOME";
+    net_send_url(app, u0);
+
+    /* Open additional restored tabs on the server */
+    for (int i = 1; i < app->num_tabs; i++) {
+        const char *ui = (app->tabs[i].url[0] && app->tabs[i].url[0] != '@') ? app->tabs[i].url : "@HOME";
+        char cmd[VB_MAX_URL_LEN + 16];
+        snprintf(cmd, sizeof(cmd), "@NEWTAB:%s", ui);
+        net_send_url(app, cmd);
+    }
+
+    /* Switch remote server to the active tab */
+    if (app->active_tab_idx < app->num_tabs) {
+        char cmd[32];
+        snprintf(cmd, sizeof(cmd), "@SWITCHTAB:%u", (unsigned)app->active_tab_idx);
+        net_send_url(app, cmd);
+        gui_update_url_bar(app, app->tabs[app->active_tab_idx].url);
+    }
+}
+
 BOOL net_send_click(VortexApp *app, int16_t x, int16_t y, uint16_t button)
 {
     return net_send_input(app, INPUT_CLICK, x, y, 0, button, NULL);

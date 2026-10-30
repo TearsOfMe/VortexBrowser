@@ -173,6 +173,11 @@ VortexBrowser unterstuetzt echtes Tabbed-Browsing mit mehreren gleichzeitigen We
   oder druecken Sie @{b}Amiga+W@{ub}.
 - @{b}Link in neuem Tab oeffnen:@{ub} Rechtsklick auf einen Link und im Kontextmenue
   @{b}"In neuem Tab oeffnen"@{ub} waehlen.
+- @{b}Automatische Sitzungswiederherstellung (Tab-Persistenz):@{ub}
+  Alle geoeffneten Tabs und der aktive Tab werden beim Beenden von VortexBrowser
+  automatisch in den Einstellungen gespeichert. Beim naechsten Programmstart stellt
+  VortexBrowser saemtliche Tabs mit ihren URLs und Titeln automatisch wieder her und
+  synchronisiert sie direkt mit dem Server!
 
 Jeder Tab wird serverseitig in einer eigenen Browser-Instanz verwaltet, sodass Ihre
 Sitzungen sauber getrennt bleiben.
@@ -229,6 +234,9 @@ Der Download-Manager von VortexBrowser bietet eine uebersichtliche Verwaltung al
   - @{b}Ordner oeffnen:@{ub} Oeffnet das Zielverzeichnis auf der Workbench.
   - @{b}Eintrag loeschen:@{ub} Entfernt den markierten Eintrag aus der Liste.
   - @{b}Aufraeumen:@{ub} Loescht alle beendeten Downloads aus der Liste.
+- @{b}Umlaut- & Zeichensatz-Unterstuetzung:@{ub}
+  Dateinamen und Spaltenbeschriftungen mit Umlauten werden sauber dargestellt und
+  ohne Zeichenfehler gespeichert.
 - @{b}Speicherort:@{ub}
   Standardmaessig werden Dateien in @{b}RAM:@{ub} gespeichert (in den Einstellungen frei waehlbar).
 
@@ -241,8 +249,9 @@ VortexBrowser enthaelt einen sicheren, integrierten Passwort-Manager:
 
 - @{b}Lokale, starke Verschluesselung:@{ub}
   Alle Anmeldedaten werden verschluesselt mit @{b}Blowfish-CBC@{ub} und einem ueber
-  @{b}SHA-256@{ub} abgeleiteten Master-Key in @{b}PROGDIR:passwords.dat@{ub} gespeichert.
-  Es werden keinerlei Passwoerter im Klartext abgelegt!
+  @{b}SHA-256@{ub} abgeleiteten Master-Key in @{b}ENVARC:VortexBrowser/passwords.enc@{ub}
+  und @{b}ENV:VortexBrowser/passwords.enc@{ub} gespeichert (100% kompatibel mit FFS, SFS
+  und exFATFileSystem). Es werden keinerlei Passwoerter im Klartext abgelegt!
 - @{b}Passwort-Tresor oeffnen:@{ub}
   Druecken Sie @{b}Amiga+K@{ub} oder waehlen Sie im Menue @{b}Projekt -> Passwort-Manager...@{ub}.
 - @{b}Auto-Login fuer die aktuelle Seite:@{ub}
@@ -438,6 +447,13 @@ was die CPU-Auslastung auf 20-30% senkt!
 1. Stellen Sie sicher, dass Ihr AHI auf dem Amiga korrekt konfiguriert ist (z. B. Unit 0).
 2. Auf dem Linux-Server muss PulseAudio oder PipeWire aktiv sein.
 
+@{b}Frage: Kann VortexBrowser von exFAT-Partitionen oder RAM: ausgefuehrt werden?@{ub}
+@{b}Antwort:@{ub}
+Ja! VortexBrowser enthaelt einen eingebetteten 512 KB Stack-Cookie ($STACK: 524288) und
+speichert Einstellungen sowie Passwoerter ausschliesslich in ENV: und ENVARC:. Dadurch
+laeuft VortexBrowser absolut stabil auf allen Dateisystemen einschliesslich exFATFileSystem,
+SFS, FFS und RAM:.
+
 @endnode
 
 @node "EnglishDoc" "English Documentation Summary"
@@ -519,9 +535,11 @@ SCHRITT 2: {APP_NAME} auf dem Amiga starten
 ------------------------------------------------------------------------------
 3. WICHTIGE FEATURES & BEDIENUNG
 ------------------------------------------------------------------------------
-* Tabs:
+* Tabs & Sitzungswiederherstellung:
   - Neuer Tab: [+] in der Tableiste oder Amiga+T
   - Tab schliessen: [-] neben der Tableiste oder Amiga+W
+  - Automatische Persistenz: Alle geoeffneten Tabs und der aktive Tab werden
+    beim Beenden gemerkt und beim naechsten Start vollstaendig wiederhergestellt!
 
 * Schnellwahl:
   - Knoepfe fuer beliebte Amiga- und Medienseiten direkt erreichbar.
@@ -530,6 +548,7 @@ SCHRITT 2: {APP_NAME} auf dem Amiga starten
 * Download-Manager:
   - Oeffnen mit: Amiga+D (oder Menue "Projekt -> Download-Manager...").
   - Live-Geschwindigkeit, Fortschritt in Prozent, Datei oeffnen, Ordner oeffnen.
+  - Saubere Darstellung und Speicherung auch bei Umlauten im Dateinamen.
 
 * Dark Mode (Dunkles Theme):
   - Umschalten mit: Amiga+U.
@@ -538,7 +557,11 @@ SCHRITT 2: {APP_NAME} auf dem Amiga starten
 * Passwort-Manager & Auto-Login:
   - Passwort-Manager oeffnen: Amiga+K
   - Gespeichertes Login automatisch eintragen: Amiga+L
-  - Sichere Blowfish-Verschluesselung in PROGDIR:passwords.dat!
+  - Sichere Blowfish-Verschluesselung in ENVARC:VortexBrowser/passwords.enc!
+
+* Maximale Dateisystem-Stabilitaet (exFAT / SFS / FFS / RAM):
+  - Integrierter 512 KB Stack-Cookie ($STACK: 524288).
+  - Konfigurationsdateien werden deadlock-frei in ENV: und ENVARC: gespeichert.
 
 * TIPP ZUR CPU-ENTLASTUNG (fuer SAM440, SAM460, G4):
   - Menue "Ansicht -> Stream: 720p HD" oder "Stream: 540p qHD" waehlen.
@@ -888,7 +911,7 @@ with zipfile.ZipFile(RPI4_ZIP, "w", zipfile.ZIP_DEFLATED) as zf:
 print(f"[+] Created Raspberry Pi 4 Server Zip: {RPI4_ZIP} ({os.path.getsize(RPI4_ZIP)} bytes)")
 
 # -------------------------------------------------------------
-# Create 4: Complete Zip Archive
+# Create 4: Complete Zip & LHA Archives
 # -------------------------------------------------------------
 COMPLETE_ZIP = os.path.join(DIST_DIR, f"{APP_NAME}-{VER_STR}-Complete.zip")
 with zipfile.ZipFile(COMPLETE_ZIP, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -898,6 +921,14 @@ with zipfile.ZipFile(COMPLETE_ZIP, "w", zipfile.ZIP_DEFLATED) as zf:
             rel_path = os.path.relpath(full_path, STAGING_DIR)
             zf.write(full_path, rel_path)
 print(f"[+] Created Complete Zip: {COMPLETE_ZIP} ({os.path.getsize(COMPLETE_ZIP)} bytes)")
+
+COMPLETE_LHA = os.path.join(DIST_DIR, f"{APP_NAME}-{VER_STR}-Complete.lha")
+cmd = ["lha", "a", COMPLETE_LHA, APP_NAME, f"{APP_NAME}.info", "Server-Linux", "Server-RaspberryPi4", "ANLEITUNG_DEUTSCH.txt"]
+res = subprocess.run(cmd, cwd=STAGING_DIR, capture_output=True, text=True)
+if res.returncode == 0:
+    print(f"[+] Created Complete LHA: {COMPLETE_LHA} ({os.path.getsize(COMPLETE_LHA)} bytes)")
+else:
+    print("Warning: Could not create Complete LHA:", res.stderr)
 
 print(f"=== [6/6] Verifying Archives ===")
 res = subprocess.run(["lha", "v", LHA_ARCHIVE], capture_output=True, text=True)

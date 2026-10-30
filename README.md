@@ -1,43 +1,71 @@
-# VortexBrowse – High-Performance Headless Web Browser Streaming System
-**(CachyOS / Raspberry Pi 4 Server $\rightarrow$ AmigaOS 4.1 PowerPC Client)**
+# VortexBrowser – High-Performance Headless Web Browser Streaming System
+**(Linux PC / Raspberry Pi 4/5 Server $\rightarrow$ AmigaOS 4.1 PowerPC Client)**
 
-VortexBrowse rendert moderne Webseiten über einen Headless Chromium (Playwright) auf dem **CachyOS-Server** (bzw. Raspberry Pi 4) und streamt die Bilddaten asymmetrisch komprimiert per **LZ4** an einen nativen **AmigaOS 4.1 PowerPC Reaction-Client**.
-
----
-
-## Architektur & Features
-
-1. **Binär-Protokoll (`common/protocol.h`)**
-   - Gepackte Big-Endian-Strukturen (`#pragma pack(push, 2)`) für native PowerPC-Verarbeitung ohne Byte-Swapping.
-   - Pakettypen: `MSG_FRAME` (`0x01`), `MSG_INPUT` (`0x02`), `MSG_DOWNLOAD_START` (`0x03`), `MSG_DOWNLOAD_RESPONSE` (`0x04`), `MSG_DOWNLOAD_CHUNK` (`0x05`), `MSG_DOWNLOAD_COMPLETE` (`0x06`).
-
-2. **CachyOS / Pi Streaming-Server (`pi-server/`)**
-   - **Native SIMD-Beschleunigung (`fast_pixconv.c` / `fast_pixconv.so`):** Konvertiert RGB24-Frames mit `-O3 -march=native` direkt in Big-Endian `ARGB32` (`PIXF_A8R8G8B8`) oder `RGB565` (`PIXF_R5G6B5`).
-   - **LZ4-Block-Kompression:** `lz4.block.compress(raw_bytes, store_size=False)` mit Frame-Deduplizierung (MD5-Hash).
-   - **Download-Interceptor:** Fängt Browser-Downloads via `page.on("download")` ab, meldet Dateiname und Größe via `MSG_DOWNLOAD_START` an den Amiga und streamt nach Bestätigung (`MSG_DOWNLOAD_RESPONSE`) in **64-KB-Blöcken** (`MSG_DOWNLOAD_CHUNK`).
-
-3. **AmigaOS 4.1 PowerPC Client (`amiga-client/`)**
-   - **Reaction GUI (`src/gui.c`):** Native BOOPSI-Oberfläche (`window.class`, `layout.gadget`, `button.gadget`, `string.gadget`, `space.gadget`, `chooser.gadget`, `fuelgauge.gadget`).
-   - **Double-Buffering & GPU-Skalierung (`src/renderer.c`):** Zwei RTG-BitMaps (`src_bm[0..1]`) + stufenlose Hardware-Skalierung über `IGraphics->CompositeTags` (`COMPFLAG_SrcFilter | COMPFLAG_IgnoreDestAlpha`).
-   - **Favoriten-Verwaltung (`src/favorites.c`):** Lädt und speichert Lesezeichen persistent in `ENVARC:VortexBrowse/favorites.prefs` und `ENV:VortexBrowse/favorites.prefs`.
-   - **ASL-Download-Proxy (`src/download.c`):** Öffnet bei eingehenden Downloads einen nativen `asl.library` Save-FileRequester und zeigt den Fortschritt live im `fuelgauge.gadget`.
+VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwright/CDP) auf dem **Linux-Server** (bzw. Raspberry Pi 4/5) und streamt die Bilddaten asymmetrisch komprimiert per **MJPEG/LZ4** an einen nativen **AmigaOS 4.1 PowerPC Reaction-Client**.
 
 ---
 
-## Build & Start
+## Highlights & Features
 
-### 1. Komplett-Build (CachyOS SIMD-Modul + AmigaOS 4 Cross-Compile)
+1. **Multi-Tab-Browsing & Sitzungswiederherstellung:**
+   - Echte Tabs über `clicktab.gadget` mit AmigaOS 4 Standard-Bedienung (`Amiga+T` für neuen Tab, `Amiga+W` zum Schließen).
+   - **Tab-Persistenz:** Sämtliche geöffneten Tabs, Titel und der aktive Tab werden beim Beenden automatisch gespeichert und beim nächsten Start nahtlos wiederhergestellt.
+
+2. **Download-Manager:**
+   - Vollständiger nativer Download-Manager (`Amiga+D`) mit Live-Geschwindigkeitsanzeige, Fortschritt in Prozent, Restzeitschätzung (ETA), Datei- und Ordneröffner.
+   - Saubere Umlaut- und Zeichensatz-Behandlung für Dateinamen und GUI-Buttons.
+
+3. **Passwort-Manager & Auto-Login:**
+   - Integrierter Passwort-Tresor (`Amiga+K`) mit starker Blowfish-CBC- und SHA-256-Verschlüsselung.
+   - Ein-Klick Auto-Login für die aktuelle Website über `Amiga+L`.
+   - Speicherort in `ENVARC:VortexBrowser/passwords.enc` und `ENV:VortexBrowser/passwords.enc`.
+
+4. **Dateisystem-Stabilität (exFAT / SFS / FFS / RAM):**
+   - Integrierter 512 KB Stack-Cookie (`$STACK: 524288` und `__stack = 524288`).
+   - Deadlock-freie Konfiguration: Benutzereinstellungen werden atomar in `ENV:` und `ENVARC:` gespeichert, ohne Locks auf Dateisysteme wie `exFATFileSystem` zu halten.
+
+5. **Audio-Streaming:**
+   - Synchroner 16-Bit 48kHz Stereo-Audiostream über separaten Port 9757 direkt an AmigaOS 4 AHI (`ahi.device`).
+
+6. **Radeon GPU-Skalierung:**
+   - Hardware-Composite-Skalierung über `IGraphics->CompositeTags()` (z. B. 720p HD oder 540p qHD auf volle Bildschirmgröße) entlastet Amiga-CPUs (G4, SAM440, SAM460) um bis zu 70%.
+
+---
+
+## Verzeichnisstruktur des Gesamtpakets
+
+- `VortexBrowser/`: Der vollständige AmigaOS 4 Client-Ordner
+  - `VortexBrowser`: AmigaOS 4 Executable (Newlib)
+  - `VortexBrowser.info`: AmigaOS 4 Dual-PNG-Icon
+  - `VortexBrowser.guide`: Ausführliches AmigaGuide-Handbuch
+  - `LIESMICH.txt`: Deutsche Kurzanleitung
+  - `README.txt`: Englische Kurzanleitung
+  - `icons/`: Symbolleisten- und Schnellwahl-Icons
+- `Server-Linux/`: Rendering-Server für x86_64 Linux PCs
+- `Server-RaspberryPi4/`: Rendering-Server für Raspberry Pi 4 / 5 (ARM64)
+- `ANLEITUNG_DEUTSCH.txt`: Gesamtanleitung
+
+---
+
+## Build & Installation
+
+### 1. Client kompilieren & Release-Pakete schnüren
 ```bash
+# Kompiliert das SIMD-Modul und den AmigaOS 4 Client
 ./build.sh
+
+# Erstellt alle Release-Archive (LHA, Complete-ZIP, Linux-ZIP, Pi-ZIP)
+python3 make_release.py
 ```
 
-### 2. Server auf CachyOS starten
+### 2. Server starten (Linux PC oder Raspberry Pi 4/5)
 ```bash
-./pi-server/run_server.sh --host 0.0.0.0 --port 7788 --width 1280 --height 720 --fps 15
+cd Server-Linux        # bzw. Server-RaspberryPi4
+./install_server.sh    # Einmalige Einrichtung
+./run_server.sh        # Server starten
 ```
 
 ### 3. Client auf AmigaOS 4.1 starten
-In der AmigaShell (unter QEMU erreicht der Gast den CachyOS-Host unter `10.0.2.2`):
-```amigados
-SHARED:Download/VortexBrowse/VortexBrowse --host 10.0.2.2 --port 7788
-```
+1. Ordner `VortexBrowser` auf den Amiga kopieren (z. B. nach `Work:Internet/VortexBrowser`).
+2. Doppelklick auf das `VortexBrowser`-Icon.
+3. IP-Adresse des Servers eingeben und auf **Verbinden** klicken!

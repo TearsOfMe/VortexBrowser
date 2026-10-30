@@ -1241,9 +1241,7 @@ void prompt_server_address(VortexApp *app)
             if (net_connect(app, app->server_host, app->server_port)) {
                 renderer_sync_viewport_size(app);
                 net_send_url(app, "@REFRESH");
-                const char *su = (app->current_url[0] && app->current_url[0] != '@') ? app->current_url : "@HOME";
-                gui_update_url_bar(app, (su[0] != '@') ? su : "");
-                net_send_url(app, su);
+                net_sync_tabs(app);
             }
         }
     }
@@ -1279,9 +1277,7 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
                 if (net_connect(app, app->server_host, app->server_port)) {
                     renderer_sync_viewport_size(app);
                     net_send_url(app, "@REFRESH");
-                    const char *su = (app->current_url[0] && app->current_url[0] != '@') ? app->current_url : "@HOME";
-                    gui_update_url_bar(app, (su[0] != '@') ? su : "");
-                    net_send_url(app, su);
+                    net_sync_tabs(app);
                 }
             }
             break;
@@ -1965,13 +1961,35 @@ void gui_tabs_init(VortexApp *app)
      * stays in sync with the server's tab list across GUI rebuilds
      * (screen change, prefs, adding quicklinks ...). */
     if (app->num_tabs == 0) {
-        app->active_tab_idx = 0;
-        app->tabs[0].id = 0;
-        strncpy(app->tabs[0].title, "Startseite", sizeof(app->tabs[0].title) - 1);
-        app->tabs[0].title[sizeof(app->tabs[0].title) - 1] = '\0';
-        strncpy(app->tabs[0].url, app->current_url, sizeof(app->tabs[0].url) - 1);
-        app->tabs[0].url[sizeof(app->tabs[0].url) - 1] = '\0';
-        app->num_tabs = 1;
+        if (app->prefs.saved_num_tabs > 0) {
+            app->num_tabs = app->prefs.saved_num_tabs;
+            if (app->num_tabs > VB_MAX_TABS) app->num_tabs = VB_MAX_TABS;
+            app->active_tab_idx = app->prefs.saved_active_tab;
+            if (app->active_tab_idx >= app->num_tabs) {
+                app->active_tab_idx = (uint16)(app->num_tabs - 1);
+            }
+            for (int i = 0; i < app->num_tabs; i++) {
+                app->tabs[i].id = (uint32_t)i;
+                strncpy(app->tabs[i].url, app->prefs.saved_tab_urls[i], sizeof(app->tabs[0].url) - 1);
+                app->tabs[i].url[sizeof(app->tabs[0].url) - 1] = '\0';
+                const char *t = app->prefs.saved_tab_titles[i];
+                strncpy(app->tabs[i].title, (t && t[0]) ? t : "Startseite", sizeof(app->tabs[0].title) - 1);
+                app->tabs[i].title[sizeof(app->tabs[0].title) - 1] = '\0';
+            }
+            const char *act_url = app->tabs[app->active_tab_idx].url;
+            if (act_url && act_url[0] && act_url[0] != '@') {
+                strncpy(app->current_url, act_url, sizeof(app->current_url) - 1);
+                app->current_url[sizeof(app->current_url) - 1] = '\0';
+            }
+        } else {
+            app->active_tab_idx = 0;
+            app->tabs[0].id = 0;
+            strncpy(app->tabs[0].title, "Startseite", sizeof(app->tabs[0].title) - 1);
+            app->tabs[0].title[sizeof(app->tabs[0].title) - 1] = '\0';
+            strncpy(app->tabs[0].url, app->current_url, sizeof(app->tabs[0].url) - 1);
+            app->tabs[0].url[sizeof(app->tabs[0].url) - 1] = '\0';
+            app->num_tabs = 1;
+        }
     }
     if (app->active_tab_idx >= app->num_tabs) {
         app->active_tab_idx = (uint16)(app->num_tabs - 1);
@@ -3633,9 +3651,7 @@ void gui_handle_events(VortexApp *app)
                             if (net_connect(app, app->server_host, app->server_port)) {
                                 renderer_sync_viewport_size(app);
                                 net_send_url(app, "@REFRESH");
-                                const char *su = (app->current_url[0] && app->current_url[0] != '@') ? app->current_url : "@HOME";
-                                gui_update_url_bar(app, (su[0] != '@') ? su : "");
-                                net_send_url(app, su);
+                                net_sync_tabs(app);
                             }
                         }
                         break;
@@ -3674,6 +3690,7 @@ void gui_handle_events(VortexApp *app)
                         char url_buf[VB_MAX_URL_LEN];
                         get_string_gadget_text(app->gad_url, url_buf, sizeof(url_buf));
                         if (url_buf[0] != '\0') {
+                            gui_update_url_bar(app, url_buf);
                             net_send_url(app, url_buf);
                         }
                         break;

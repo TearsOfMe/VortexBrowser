@@ -265,7 +265,7 @@ void gui_open_download_manager(VortexApp *app)
                 LBCIA_Weight, 12,
                 LBCIA_DraggableSeparator, TRUE,
             LBCIA_Column, 2,
-                LBCIA_Title, "Größe",
+                LBCIA_Title, "Groesse",
                 LBCIA_Weight, 16,
                 LBCIA_DraggableSeparator, TRUE,
                 LBCIA_HorizJustify, LCJ_RIGHT,
@@ -315,15 +315,15 @@ void gui_open_download_manager(VortexApp *app)
     app->dl_gad_btn_open_file = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_DL_BTN_OPEN_FILE,
         GA_RelVerify, TRUE,
-        GA_Text,      "Datei öffnen",
-        GA_HintInfo,  "Heruntergeladene Datei mit Standard-Programm ausführen (auch Doppelklick in Liste)",
+        GA_Text,      "Datei oeffnen",
+        GA_HintInfo,  "Heruntergeladene Datei mit Standard-Programm ausfuehren (auch Doppelklick in Liste)",
         TAG_DONE);
 
     app->dl_gad_btn_open_dir = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_DL_BTN_OPEN_DIR,
         GA_RelVerify, TRUE,
-        GA_Text,      "Ordner öffnen",
-        GA_HintInfo,  "Zielordner der Datei auf der Workbench öffnen",
+        GA_Text,      "Ordner oeffnen",
+        GA_HintInfo,  "Zielordner der Datei auf der Workbench oeffnen",
         TAG_DONE);
 
     app->dl_gad_btn_cancel = IIntuition->NewObject(NULL, "button.gadget",
@@ -336,22 +336,22 @@ void gui_open_download_manager(VortexApp *app)
     app->dl_gad_btn_remove = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_DL_BTN_REMOVE,
         GA_RelVerify, TRUE,
-        GA_Text,      "Eintrag löschen",
-        GA_HintInfo,  "Ausgewählten Eintrag aus der Liste entfernen",
+        GA_Text,      "Eintrag loeschen",
+        GA_HintInfo,  "Ausgewaehlten Eintrag aus der Liste entfernen",
         TAG_DONE);
 
     app->dl_gad_btn_clear = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_DL_BTN_CLEAR,
         GA_RelVerify, TRUE,
-        GA_Text,      "Aufräumen",
+        GA_Text,      "Aufraeumen",
         GA_HintInfo,  "Alle abgeschlossenen und abgebrochenen Downloads aus der Liste entfernen",
         TAG_DONE);
 
     app->dl_gad_btn_close = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_DL_BTN_CLOSE,
         GA_RelVerify, TRUE,
-        GA_Text,      "Schließen",
-        GA_HintInfo,  "Download-Manager Fenster schließen (Downloads laufen im Hintergrund weiter)",
+        GA_Text,      "Schliessen",
+        GA_HintInfo,  "Download-Manager Fenster schliessen (Downloads laufen im Hintergrund weiter)",
         TAG_DONE);
 
     Object *btn_row = IIntuition->NewObject(NULL, "layout.gadget",

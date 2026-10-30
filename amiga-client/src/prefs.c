@@ -281,6 +281,31 @@ static BOOL load_from_file(VortexApp *app, const char *path)
             int se = atoi(val);
             if (se >= 0 && se < NUM_SEARCH_ENGINES) app->prefs.search_engine = (uint8_t)se;
         }
+        /* Open Tabs Persistence */
+        else if (strcmp(key, "num_tabs") == 0) {
+            int nt = atoi(val);
+            if (nt >= 0 && nt <= VB_MAX_TABS) {
+                app->prefs.saved_num_tabs = (uint16_t)nt;
+            }
+        } else if (strcmp(key, "active_tab") == 0) {
+            int at = atoi(val);
+            if (at >= 0 && at < VB_MAX_TABS) {
+                app->prefs.saved_active_tab = (uint16_t)at;
+            }
+        } else if (strncmp(key, "tab", 3) == 0) {
+            int tab_num = 0;
+            char field[32];
+            if (sscanf(key, "tab%d_%31s", &tab_num, field) == 2 && tab_num >= 1 && tab_num <= VB_MAX_TABS) {
+                int idx = tab_num - 1;
+                if (strcmp(field, "url") == 0) {
+                    strncpy(app->prefs.saved_tab_urls[idx], val, sizeof(app->prefs.saved_tab_urls[idx]) - 1);
+                    app->prefs.saved_tab_urls[idx][sizeof(app->prefs.saved_tab_urls[idx]) - 1] = '\0';
+                } else if (strcmp(field, "title") == 0) {
+                    strncpy(app->prefs.saved_tab_titles[idx], val, sizeof(app->prefs.saved_tab_titles[idx]) - 1);
+                    app->prefs.saved_tab_titles[idx][sizeof(app->prefs.saved_tab_titles[idx]) - 1] = '\0';
+                }
+            }
+        }
     }
 
     if (loaded_links > 0 && app->prefs.num_quick_links == 0) {
@@ -374,6 +399,32 @@ void prefs_capture_window_box(VortexApp *app)
     }
 }
 
+void prefs_capture_tabs(VortexApp *app)
+{
+    if (!app) return;
+    if (app->num_tabs > 0) {
+        uint16_t count = 0;
+        for (int i = 0; i < app->num_tabs && count < VB_MAX_TABS; i++) {
+            const char *u = app->tabs[i].url;
+            const char *t = app->tabs[i].title;
+            if (u && u[0] == '@') continue;
+            strncpy(app->prefs.saved_tab_urls[count], u ? u : "", sizeof(app->prefs.saved_tab_urls[0]) - 1);
+            app->prefs.saved_tab_urls[count][sizeof(app->prefs.saved_tab_urls[0]) - 1] = '\0';
+
+            strncpy(app->prefs.saved_tab_titles[count], (t && t[0]) ? t : "Startseite", sizeof(app->prefs.saved_tab_titles[0]) - 1);
+            app->prefs.saved_tab_titles[count][sizeof(app->prefs.saved_tab_titles[0]) - 1] = '\0';
+
+            count++;
+        }
+        app->prefs.saved_num_tabs = count;
+        if (app->active_tab_idx < count) {
+            app->prefs.saved_active_tab = app->active_tab_idx;
+        } else {
+            app->prefs.saved_active_tab = (count > 0) ? (count - 1) : 0;
+        }
+    }
+}
+
 static BOOL save_to_file(const VortexApp *app, const char *path)
 {
     FILE *fp = fopen(path, "w");
@@ -441,22 +492,35 @@ static BOOL save_to_file(const VortexApp *app, const char *path)
         fprintf(fp, "quick%d_icon=%s\n",  i + 1, app->prefs.quick_links[i].icon);
     }
 
+    /* Open Tabs */
+    if (app->prefs.saved_num_tabs > 0) {
+        fprintf(fp, "\n# Open Tabs\n");
+        fprintf(fp, "num_tabs=%u\n", (unsigned)app->prefs.saved_num_tabs);
+        fprintf(fp, "active_tab=%u\n", (unsigned)app->prefs.saved_active_tab);
+        for (int i = 0; i < app->prefs.saved_num_tabs && i < VB_MAX_TABS; i++) {
+            fprintf(fp, "tab%d_url=%s\n", i + 1, app->prefs.saved_tab_urls[i]);
+            fprintf(fp, "tab%d_title=%s\n", i + 1, app->prefs.saved_tab_titles[i]);
+        }
+    }
+
     fclose(fp);
     return TRUE;
 }
 
-BOOL prefs_save(const VortexApp *app, BOOL permanent)
+BOOL prefs_save(VortexApp *app, BOOL permanent)
 {
     if (!app) return FALSE;
 
+    /* Capture open tabs and window position before saving */
+    prefs_capture_tabs(app);
+    prefs_capture_window_box(app);
+
     /* Always synchronize active app server into prefs if set */
     if (app->server_host[0] != '\0' && (app->prefs.save_server_on_exit || app->prefs.server_host[0] == '\0')) {
-        strncpy(((VortexApp *)app)->prefs.server_host, app->server_host, sizeof(app->prefs.server_host) - 1);
-        ((VortexApp *)app)->prefs.server_host[sizeof(app->prefs.server_host) - 1] = '\0';
-        ((VortexApp *)app)->prefs.server_port = app->server_port;
+        strncpy(app->prefs.server_host, app->server_host, sizeof(app->prefs.server_host) - 1);
+        app->prefs.server_host[sizeof(app->prefs.server_host) - 1] = '\0';
+        app->prefs.server_port = app->server_port;
     }
-
-    prefs_capture_window_box((VortexApp *)app);
 
     ensure_dir_exists(VB_PREFS_ENV_DIR);
     BOOL ok_env = save_to_file(app, VB_PREFS_ENV_FILE);

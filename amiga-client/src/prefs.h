@@ -83,6 +83,13 @@ typedef struct FontConfig {
 #define STREAM_RES_540P   2  /* 960x540 qHD (Turbo) */
 #define STREAM_RES_1080P  3  /* 1920x1080 Full HD */
 
+#ifndef VB_MAX_TABS
+#define VB_MAX_TABS 16
+#endif
+#ifndef VB_MAX_URL_LEN
+#define VB_MAX_URL_LEN 512
+#endif
+
 typedef struct VortexPrefs {
     ResolutionConfig resolution;
     FontConfig       font;
@@ -102,14 +109,21 @@ typedef struct VortexPrefs {
     BOOL             save_server_on_exit;   /* TRUE = Aktuellen Server beim Beenden merken (Default: TRUE) */
     char             download_dir[256];     /* Standard Download-Ordner (Default: "RAM:") */
     BOOL             always_ask_download;  /* TRUE = Immer nach Zielordner fragen (ASL-Requester) */
+
+    /* Open Tabs Persistence */
+    uint16_t         saved_num_tabs;
+    uint16_t         saved_active_tab;
+    char             saved_tab_urls[VB_MAX_TABS][VB_MAX_URL_LEN];
+    char             saved_tab_titles[VB_MAX_TABS][64];
 } VortexPrefs;
 
 struct VortexApp;
 
 void prefs_init(struct VortexApp *app);
 BOOL prefs_load(struct VortexApp *app);
-BOOL prefs_save(const struct VortexApp *app, BOOL permanent);
+BOOL prefs_save(struct VortexApp *app, BOOL permanent);
 void prefs_capture_window_box(struct VortexApp *app);
+void prefs_capture_tabs(struct VortexApp *app);
 void prefs_apply(struct VortexApp *app);
 void prefs_resize_window_to_resolution(struct VortexApp *app, uint16_t req_w, uint16_t req_h);
 

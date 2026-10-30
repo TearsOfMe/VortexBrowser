@@ -277,6 +277,16 @@ int main(int argc, char **argv)
     prefs_init(&g_app);
     prefs_load(&g_app);
 
+    /* Sanitize start_url if corrupted with an internal command */
+    if (g_app.prefs.start_url[0] == '@' || g_app.prefs.start_url[0] == '\0') {
+        strncpy(g_app.prefs.start_url, "https://www.amiga-news.de", sizeof(g_app.prefs.start_url) - 1);
+        g_app.prefs.start_url[sizeof(g_app.prefs.start_url) - 1] = '\0';
+    }
+    if (g_app.current_url[0] == '\0' || g_app.current_url[0] == '@') {
+        strncpy(g_app.current_url, g_app.prefs.start_url, sizeof(g_app.current_url) - 1);
+        g_app.current_url[sizeof(g_app.current_url) - 1] = '\0';
+    }
+
     renderer_init(&g_app);
     download_init(&g_app);
     favorites_init(&g_app);
@@ -297,24 +307,12 @@ int main(int argc, char **argv)
     prefs_apply(&g_app);
     gui_handle_events(&g_app);
 
-    /* Sanitize start_url if corrupted with an internal command */
-    if (g_app.prefs.start_url[0] == '@' || g_app.prefs.start_url[0] == '\0') {
-        strncpy(g_app.prefs.start_url, "https://www.amiga-news.de", sizeof(g_app.prefs.start_url) - 1);
-        g_app.prefs.start_url[sizeof(g_app.prefs.start_url) - 1] = '\0';
-    }
-    if (g_app.current_url[0] == '\0' || g_app.current_url[0] == '@') {
-        strncpy(g_app.current_url, g_app.prefs.start_url, sizeof(g_app.current_url) - 1);
-        g_app.current_url[sizeof(g_app.current_url) - 1] = '\0';
-    }
-
     /* Connect automatically on startup if a server address is configured */
     if (g_app.server_host[0] != '\0') {
         if (net_connect(&g_app, g_app.server_host, g_app.server_port)) {
             renderer_sync_viewport_size(&g_app);
             net_send_url(&g_app, "@REFRESH");
-            const char *su = (g_app.current_url[0] && g_app.current_url[0] != '@') ? g_app.current_url : "@HOME";
-            gui_update_url_bar(&g_app, (su[0] != '@') ? su : "");
-            net_send_url(&g_app, su);
+            net_sync_tabs(&g_app);
         }
     } else {
         /* Clean start / fresh installation: prompt user for server address */
@@ -422,6 +420,7 @@ int main(int argc, char **argv)
         g_app.prefs.start_url[sizeof(g_app.prefs.start_url) - 1] = '\0';
     }
 
+    prefs_capture_tabs(&g_app);
     prefs_capture_window_box(&g_app);
     prefs_save(&g_app, TRUE);
 

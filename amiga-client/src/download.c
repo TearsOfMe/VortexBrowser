@@ -83,11 +83,58 @@ static void sanitize_filename(const char *in, char *out, size_t max_len)
 {
     size_t j = 0;
     for (size_t i = 0; in[i] != '\0' && j + 1 < max_len; i++) {
-        char c = in[i];
-        if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|') {
+        unsigned char c = (unsigned char)in[i];
+
+        /* Convert UTF-8 multi-byte characters to clean ASCII representations */
+        if (c == 0xC3 && in[i + 1] != '\0') {
+            unsigned char c2 = (unsigned char)in[++i];
+            if (c2 == 0x84) { /* Ä */
+                if (j + 2 < max_len) { out[j++] = 'A'; out[j++] = 'e'; }
+                continue;
+            } else if (c2 == 0x96) { /* Ö */
+                if (j + 2 < max_len) { out[j++] = 'O'; out[j++] = 'e'; }
+                continue;
+            } else if (c2 == 0x9C) { /* Ü */
+                if (j + 2 < max_len) { out[j++] = 'U'; out[j++] = 'e'; }
+                continue;
+            } else if (c2 == 0xA4) { /* ä */
+                if (j + 2 < max_len) { out[j++] = 'a'; out[j++] = 'e'; }
+                continue;
+            } else if (c2 == 0xB6) { /* ö */
+                if (j + 2 < max_len) { out[j++] = 'o'; out[j++] = 'e'; }
+                continue;
+            } else if (c2 == 0xBC) { /* ü */
+                if (j + 2 < max_len) { out[j++] = 'u'; out[j++] = 'e'; }
+                continue;
+            } else if (c2 == 0x9F) { /* ß */
+                if (j + 2 < max_len) { out[j++] = 's'; out[j++] = 's'; }
+                continue;
+            } else if (c2 >= 0x80 && c2 <= 0xBF) {
+                /* Other accented Latin-1 letters: map to basic letter or replace */
+                c = (unsigned char)(c2 + 0x40);
+                if (c >= 192 && c <= 197) c = 'A';
+                else if (c == 199) c = 'C';
+                else if (c >= 200 && c <= 203) c = 'E';
+                else if (c >= 204 && c <= 207) c = 'I';
+                else if (c >= 210 && c <= 214) c = 'O';
+                else if (c >= 217 && c <= 220) c = 'U';
+                else if (c >= 224 && c <= 229) c = 'a';
+                else if (c == 231) c = 'c';
+                else if (c >= 232 && c <= 235) c = 'e';
+                else if (c >= 236 && c <= 239) c = 'i';
+                else if (c >= 242 && c <= 246) c = 'o';
+                else if (c >= 249 && c <= 252) c = 'u';
+                else c = '_';
+            }
+        } else if (c == 0xC2 && in[i + 1] != '\0') {
+            i++; /* Skip U+0080..U+00BF punctuation/symbols */
             c = '_';
         }
-        out[j++] = c;
+
+        if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|' || c < 32 || c > 126) {
+            c = '_';
+        }
+        out[j++] = (char)c;
     }
     out[j] = '\0';
     if (j == 0) {

@@ -22,6 +22,7 @@ BOOL net_send_input(
 );
 
 BOOL net_send_url(VortexApp *app, const char *url);
+void net_sync_tabs(VortexApp *app);
 BOOL net_send_click(VortexApp *app, int16_t x, int16_t y, uint16_t button);
 BOOL net_send_mouse_button(VortexApp *app, int16_t x, int16_t y, uint16_t button, BOOL is_down);
 BOOL net_send_move(VortexApp *app, int16_t x, int16_t y);
