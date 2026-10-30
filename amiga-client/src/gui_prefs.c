@@ -244,7 +244,7 @@ static void invoke_screen_mode_requester(struct Window *win, uint32 *io_mode_id,
 
     struct ScreenModeRequester *sm_req = (struct ScreenModeRequester *)IAsl->AllocAslRequestTags(
         ASL_ScreenModeRequest,
-        ASLSM_TitleText,            (Tag)"VortexBrowse Bildschirm-Modus waehlen",
+        ASLSM_TitleText,            (Tag)"VortexBrowser Bildschirm-Modus waehlen",
         ASLSM_Window,               (Tag)win,
         ASLSM_SleepWindow,          TRUE,
         ASLSM_InitialDisplayID,     (*io_mode_id ? *io_mode_id : INVALID_ID),
@@ -1328,8 +1328,8 @@ void gui_prefs_open(VortexApp *app)
     struct Screen *target_scr = (app && app->win && app->win->WScreen) ? app->win->WScreen : (app ? app->custom_screen : NULL);
 
     Object *win_obj = IIntuition->NewObject(NULL, "window.class",
-        WA_Title,             "VortexBrowse Voreinstellungen",
-        WA_ScreenTitle,       "VortexBrowse",
+        WA_Title,             "VortexBrowser Voreinstellungen",
+        WA_ScreenTitle,       "VortexBrowser",
         target_scr ? WA_CustomScreen : TAG_IGNORE, (Tag)target_scr,
         WA_CloseGadget,       TRUE,
         WA_DepthGadget,       TRUE,

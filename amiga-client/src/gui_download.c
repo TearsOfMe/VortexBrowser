@@ -387,8 +387,8 @@ void gui_open_download_manager(VortexApp *app)
     if (!root_layout) return;
 
     app->dl_win_obj = IIntuition->NewObject(NULL, "window.class",
-        WA_Title,             "Downloads - VortexBrowse",
-        WA_ScreenTitle,       "VortexBrowse",
+        WA_Title,             "Downloads - VortexBrowser",
+        WA_ScreenTitle,       "VortexBrowser",
         target_scr ? WA_CustomScreen : TAG_IGNORE, (Tag)target_scr,
         WA_CloseGadget,       TRUE,
         WA_DepthGadget,       TRUE,

@@ -289,11 +289,11 @@ static void chacha20_crypt(const uint8 key[32], const uint8 nonce[12], uint32 co
 }
 
 /* Default key used when no custom master password was configured */
-static const char *s_default_internal_pass = "VortexBrowse-OS4-SecurePasswordStore-Key-2026";
+static const char *s_default_internal_pass = "VortexBrowser-OS4-SecurePasswordStore-Key-2026";
 
 /* File paths */
-#define VB_PW_PATH_ENVARC "ENVARC:VortexBrowse/passwords.enc"
-#define VB_PW_PATH_ENV    "ENV:VortexBrowse/passwords.enc"
+#define VB_PW_PATH_ENVARC "ENVARC:VortexBrowser/passwords.enc"
+#define VB_PW_PATH_ENV    "ENV:VortexBrowser/passwords.enc"
 #define VB_PW_PATH_LOCAL  "PROGDIR:passwords.enc"
 
 /* File header: "VBENC01\0" */
@@ -553,19 +553,19 @@ BOOL passwords_save(VortexApp *app)
     hmac_sha256(key, 32, hmac_data, 16 + 12 + payload_len, hdr.hmac);
     free(hmac_data);
 
-    /* Write to disk */
-    const char *paths[] = { VB_PW_PATH_ENVARC, VB_PW_PATH_ENV, VB_PW_PATH_LOCAL };
+    /* Write to disk (ENVARC: and ENV:) */
+    const char *paths[] = { VB_PW_PATH_ENVARC, VB_PW_PATH_ENV };
     BOOL any_saved = FALSE;
 
-    for (int p = 0; p < 3; p++) {
+    for (int p = 0; p < 2; p++) {
         FILE *fp = fopen(paths[p], "wb");
         if (!fp) {
-            /* Try to create directory if ENVARC:VortexBrowse does not exist */
+            /* Try to create directory if ENVARC:VortexBrowser does not exist */
             if (p == 0) {
-                IDOS->CreateDir("ENVARC:VortexBrowse");
+                IDOS->CreateDir("ENVARC:VortexBrowser");
                 fp = fopen(paths[p], "wb");
             } else if (p == 1) {
-                IDOS->CreateDir("ENV:VortexBrowse");
+                IDOS->CreateDir("ENV:VortexBrowser");
                 fp = fopen(paths[p], "wb");
             }
         }

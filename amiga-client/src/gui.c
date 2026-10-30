@@ -308,25 +308,30 @@ static uint32 dark_screenbar_hook_func(struct Hook *hook, struct RastPort *rp, s
 }
 
 static struct Hook s_post_refresh_hook;
+static BOOL s_in_draw_titlebar = FALSE;
 
 void gui_draw_dark_titlebar(VortexApp *app)
 {
     if (!app || !app->win || app->prefs.dark_theme != 1) return;
+    if (s_in_draw_titlebar) return; /* Prevent re-entrancy / recursive layer lock freezes */
+    s_in_draw_titlebar = TRUE;
+
     struct Window *win = app->win;
     struct RastPort *rp = win->RPort;
-    if (!rp || !s_dark_pens.allocated) return;
+    if (!rp || !s_dark_pens.allocated) {
+        s_in_draw_titlebar = FALSE;
+        return;
+    }
 
     int top_h = win->BorderTop;
     int win_w = win->Width;
     int win_h = win->Height;
-    if (top_h <= 2 || win_w <= 20) return;
+    if (top_h <= 2 || win_w <= 20) {
+        s_in_draw_titlebar = FALSE;
+        return;
+    }
 
     BOOL active = (win->Flags & WFLG_WINDOWACTIVE) != 0;
-
-    struct Layer *layer = win->WLayer;
-    if (layer && ILayers) {
-        ILayers->LockLayer(0, layer);
-    }
 
     uint32 bar_pen  = (active && s_dark_pens.btn_bg_pen >= 0) ? (uint32)s_dark_pens.btn_bg_pen
                      : ((s_dark_pens.bg_pen >= 0) ? (uint32)s_dark_pens.bg_pen : 1);
@@ -469,9 +474,7 @@ void gui_draw_dark_titlebar(VortexApp *app)
         IGraphics->Text(rp, title_buf, strlen(title_buf));
     }
 
-    if (layer && ILayers) {
-        ILayers->UnlockLayer(layer);
-    }
+    s_in_draw_titlebar = FALSE;
 }
 
 static uint32 post_refresh_hook_func(struct Hook *hook, APTR win_obj, struct Gadget *gadget)
@@ -651,13 +654,25 @@ static struct Image *load_quicklink_image(const char *icon_name, const char *url
     candidates[num_c++] = "drawer";
     candidates[num_c++] = "link";
 
-    static const char *const dir_prefixes[] = {
-        "PROGDIR:icons/",
-        "PROGDIR:vortexbrowser/icons/",
-        "Work2:vortexbrowser/icons/",
-        "Work2:icons/",
-        "TBIMAGES:"
-    };
+    static int s_has_progdir_icons = -1;
+    if (s_has_progdir_icons == -1 && IDOS) {
+        BPTR dirlk = IDOS->Lock("PROGDIR:icons", SHARED_LOCK);
+        if (dirlk != ZERO) {
+            s_has_progdir_icons = 1;
+            IDOS->UnLock(dirlk);
+        } else {
+            s_has_progdir_icons = 0;
+        }
+    }
+
+    const char *dir_prefixes[2];
+    int num_prefixes = 0;
+    if (s_has_progdir_icons == 1) {
+        dir_prefixes[num_prefixes++] = "PROGDIR:icons/";
+    }
+    dir_prefixes[num_prefixes++] = "TBIMAGES:";
+
+    APTR prev_win = IDOS ? IDOS->SetProcWindow((APTR)-1) : NULL;
 
     for (int i = 0; i < num_c; i++) {
         const char *cand = candidates[i];
@@ -665,7 +680,7 @@ static struct Image *load_quicklink_image(const char *icon_name, const char *url
 
         char path[160];
         BPTR lk = ZERO;
-        for (size_t d = 0; d < sizeof(dir_prefixes)/sizeof(dir_prefixes[0]); d++) {
+        for (int d = 0; d < num_prefixes; d++) {
             snprintf(path, sizeof(path), "%s%s.png", dir_prefixes[d], cand);
             lk = IDOS->Lock(path, SHARED_LOCK);
             if (lk != ZERO) break;
@@ -678,6 +693,7 @@ static struct Image *load_quicklink_image(const char *icon_name, const char *url
             continue;
         }
         IDOS->UnLock(lk);
+        if (IDOS) IDOS->SetProcWindow(prev_win);
 
         char *p_copy = strdup(path);
         if (s_num_aiss_paths < (MAX_AISS_IMAGES * 3) - 1 && p_copy) {
@@ -696,7 +712,9 @@ static struct Image *load_quicklink_image(const char *icon_name, const char *url
             }
             return img;
         }
+        prev_win = IDOS ? IDOS->SetProcWindow((APTR)-1) : NULL;
     }
+    if (IDOS) IDOS->SetProcWindow(prev_win);
     return NULL;
 }
 
@@ -705,13 +723,23 @@ static struct Image *load_favicon_image(const char *url, struct Screen *screen)
     return load_quicklink_image(NULL, url, screen);
 }
 
+static char s_last_favicon_url[VB_MAX_URL_LEN] = { 0 };
+
 static void gui_update_url_favicon(VortexApp *app, const char *url)
 {
     if (!app || !app->gad_url_favicon || !app->win) return;
 
+    if (url && s_last_favicon_url[0] && strcmp(url, s_last_favicon_url) == 0) {
+        return;
+    }
+
     struct Screen *scr = (app->win && app->win->WScreen) ? app->win->WScreen : app->custom_screen;
     struct Image *img = load_favicon_image(url, scr);
     if (img) {
+        if (url) {
+            strncpy(s_last_favicon_url, url, sizeof(s_last_favicon_url) - 1);
+            s_last_favicon_url[sizeof(s_last_favicon_url) - 1] = '\0';
+        }
         IIntuition->SetGadgetAttrs((struct Gadget *)app->gad_url_favicon, app->win, NULL,
                                    GA_Image, (Object *)img,
                                    TAG_DONE);
@@ -1560,8 +1588,8 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
             favorites_save(app);
             char port_str[16];
             snprintf(port_str, sizeof(port_str), "%u", (unsigned)app->server_port);
-            IDOS->SetVar("VortexBrowse/server_host", app->server_host, -1, GVF_GLOBAL_ONLY | GVF_SAVE_VAR);
-            IDOS->SetVar("VortexBrowse/server_port", port_str, -1, GVF_GLOBAL_ONLY | GVF_SAVE_VAR);
+            IDOS->SetVar("VortexBrowser/server_host", app->server_host, -1, GVF_GLOBAL_ONLY | GVF_SAVE_VAR);
+            IDOS->SetVar("VortexBrowser/server_port", port_str, -1, GVF_GLOBAL_ONLY | GVF_SAVE_VAR);
             app_set_status("Einstellungen dauerhaft gespeichert (ENVARC:).");
             break;
         }

@@ -28,6 +28,10 @@
 #include "audio.h"
 #include "clipboard.h"
 
+static const char *used_verstag __attribute__((used)) = "\0$VER: VortexBrowser 0.99 RC1 (29.10.2026)";
+static const char *used_stack   __attribute__((used)) = "\0$STACK:524288";
+uint32 __stack = 524288;
+
 VortexApp g_app;
 
 /* Explicitly managed libraries & interfaces (in addition to newlib auto-init) */

@@ -329,12 +329,13 @@ BOOL prefs_load(VortexApp *app)
         loaded = TRUE;
     } else if (load_from_file(app, VB_PREFS_ENVARC_FILE)) {
         loaded = TRUE;
-    } else if (load_from_file(app, "ENV:VortexBrowse/vortexbrowse.prefs")) {
-        loaded = TRUE;
-    } else if (load_from_file(app, "ENVARC:VortexBrowse/vortexbrowse.prefs")) {
-        loaded = TRUE;
     } else if (load_from_file(app, VB_PREFS_PROGDIR_FILE)) {
         loaded = TRUE;
+    }
+
+    /* Fallback: if the loaded prefs carry no server, take it from PROGDIR: prefs */
+    if (app->prefs.server_host[0] == '\0') {
+        if (load_from_file(app, VB_PREFS_PROGDIR_FILE)) loaded = TRUE;
     }
 
     /* Check DOS environment variables if set */
@@ -343,15 +344,9 @@ BOOL prefs_load(VortexApp *app)
         if (IDOS->GetVar("VortexBrowser/server_host", env_host, sizeof(env_host), GVF_GLOBAL_ONLY) > 0 && env_host[0] != '\0') {
             strncpy(app->prefs.server_host, env_host, sizeof(app->prefs.server_host) - 1);
             app->prefs.server_host[sizeof(app->prefs.server_host) - 1] = '\0';
-        } else if (IDOS->GetVar("VortexBrowse/server_host", env_host, sizeof(env_host), GVF_GLOBAL_ONLY) > 0 && env_host[0] != '\0') {
-            strncpy(app->prefs.server_host, env_host, sizeof(app->prefs.server_host) - 1);
-            app->prefs.server_host[sizeof(app->prefs.server_host) - 1] = '\0';
         }
         char env_port[16];
         if (IDOS->GetVar("VortexBrowser/server_port", env_port, sizeof(env_port), GVF_GLOBAL_ONLY) > 0 && env_port[0] != '\0') {
-            int ep = atoi(env_port);
-            if (ep > 0 && ep <= 65535) app->prefs.server_port = (uint16_t)ep;
-        } else if (IDOS->GetVar("VortexBrowse/server_port", env_port, sizeof(env_port), GVF_GLOBAL_ONLY) > 0 && env_port[0] != '\0') {
             int ep = atoi(env_port);
             if (ep > 0 && ep <= 65535) app->prefs.server_port = (uint16_t)ep;
         }
@@ -472,16 +467,11 @@ BOOL prefs_save(const VortexApp *app, BOOL permanent)
         ok_arc = save_to_file(app, VB_PREFS_ENVARC_FILE);
     }
 
-    /* Also save in PROGDIR: so settings persist even without ENVARC: */
-    save_to_file(app, VB_PREFS_PROGDIR_FILE);
-
     if (app->prefs.server_host[0] != '\0' && IDOS) {
         char port_str[16];
         snprintf(port_str, sizeof(port_str), "%u", (unsigned)app->prefs.server_port);
         IDOS->SetVar("VortexBrowser/server_host", (STRPTR)app->prefs.server_host, -1, GVF_GLOBAL_ONLY | (permanent ? GVF_SAVE_VAR : 0));
         IDOS->SetVar("VortexBrowser/server_port", port_str, -1, GVF_GLOBAL_ONLY | (permanent ? GVF_SAVE_VAR : 0));
-        IDOS->SetVar("VortexBrowse/server_host", (STRPTR)app->prefs.server_host, -1, GVF_GLOBAL_ONLY | (permanent ? GVF_SAVE_VAR : 0));
-        IDOS->SetVar("VortexBrowse/server_port", port_str, -1, GVF_GLOBAL_ONLY | (permanent ? GVF_SAVE_VAR : 0));
     }
 
     return ok_env && ok_arc;

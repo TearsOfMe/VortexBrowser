@@ -3,10 +3,10 @@
 
 #include "app.h"
 
-#define VB_ENV_DIR     "ENV:VortexBrowse"
-#define VB_ENVARC_DIR  "ENVARC:VortexBrowse"
-#define VB_ENV_FILE    "ENV:VortexBrowse/favorites.prefs"
-#define VB_ENVARC_FILE "ENVARC:VortexBrowse/favorites.prefs"
+#define VB_ENV_DIR     "ENV:VortexBrowser"
+#define VB_ENVARC_DIR  "ENVARC:VortexBrowser"
+#define VB_ENV_FILE    "ENV:VortexBrowser/favorites.prefs"
+#define VB_ENVARC_FILE "ENVARC:VortexBrowser/favorites.prefs"
 
 void favorites_init(VortexApp *app);
 BOOL favorites_load(VortexApp *app);
