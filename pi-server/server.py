@@ -3165,7 +3165,6 @@ class AmigaClientSession:
                 try {{
                     if (document.documentElement) {{
                         document.documentElement.style.zoom = '';
-                        document.documentElement.style.fontSize = '{effective_px}px';
                     }}
                     let style = document.getElementById('__vb_font_override');
                     if (!style && document.head) {{
@@ -3174,7 +3173,7 @@ class AmigaClientSession:
                         document.head.appendChild(style);
                     }}
                     if (style) {{
-                        style.textContent = 'html {{ font-size: {effective_px}px !important; scroll-behavior: auto !important; }} body {{ font-size: {effective_px}px; }} * {{ font-family: {css_font} !important; }} {dark_css}';
+                        style.textContent = 'html {{ scroll-behavior: auto !important; }} body, input, select, textarea {{ font-family: {css_font}; }} {dark_css}';
                     }}
                 }} catch (e) {{}}
             }})();
