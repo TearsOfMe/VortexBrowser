@@ -130,10 +130,12 @@ AMIGA_RAWKEY_MAP = {
 class CPUGovernorManager:
     """Manages CPU power scaling profile via 'powerprofilesctl' (NOT cpufreq).
     Switches the system power profile to 'performance' when an Amiga client connects,
-    and switches to 'power-saver' when no clients are connected or on shutdown.
+    and restores the previous profile (e.g. 'balanced' or 'power-saver') when clients
+    disconnect or on shutdown.
     """
     def __init__(self, enabled: bool = True):
         self.enabled = enabled
+        self.prev_profile: Optional[str] = None
         self.active_count = 0
         self.is_performance = False
         self._lock = asyncio.Lock()
@@ -143,9 +145,6 @@ class CPUGovernorManager:
             if not cur:
                 self.enabled = False
                 logger.debug("[CPU Power] powerprofilesctl not available or inactive.")
-            else:
-                if self.set_profile("power-saver"):
-                    logger.info("[CPU Power] Server idle -> powerprofilesctl set to 'power-saver'")
 
     @staticmethod
     def read_current_profile() -> Optional[str]:
@@ -183,11 +182,14 @@ class CPUGovernorManager:
         async with self._lock:
             self.active_count += 1
             if self.active_count == 1 and not self.is_performance:
+                cur = self.read_current_profile()
+                if cur and not self.prev_profile:
+                    self.prev_profile = cur
                 if self.set_profile("performance"):
                     self.is_performance = True
-                    logger.info("[CPU Power] Amiga client active -> powerprofilesctl switched to 'performance'")
+                    logger.info("[CPU Power] Amiga client active -> powerprofilesctl switched to 'performance' (was '%s')", self.prev_profile or "default")
                 else:
-                    logger.debug("[CPU Power] Could not set powerprofilesctl to 'performance'")
+                    logger.debug("[CPU Power] Could not set powerprofilesctl to performance")
 
     async def client_disconnected(self) -> None:
         if not self.enabled:
@@ -195,14 +197,16 @@ class CPUGovernorManager:
         async with self._lock:
             self.active_count = max(0, self.active_count - 1)
             if self.active_count == 0 and self.is_performance:
+                restored_to = self.prev_profile or "balanced"
                 self.restore()
-                logger.info("[CPU Power] No active clients -> powerprofilesctl switched to 'power-saver'")
+                logger.info("[CPU Power] No active clients -> powerprofilesctl restored to '%s'", restored_to)
 
     def restore(self) -> None:
-        if self.enabled:
+        if self.is_performance:
+            target = self.prev_profile if (self.prev_profile and self.prev_profile != "performance") else "balanced"
             try:
                 subprocess.run(
-                    ["powerprofilesctl", "set", "power-saver"],
+                    ["powerprofilesctl", "set", target],
                     check=False,
                     capture_output=True,
                     timeout=2.0,
@@ -210,6 +214,7 @@ class CPUGovernorManager:
             except Exception:
                 pass
             self.is_performance = False
+            self.prev_profile = None
 
 
 cpu_gov_global: Optional[CPUGovernorManager] = None
@@ -1375,6 +1380,7 @@ class AmigaClientSession:
         self.screencast_queue: Optional[asyncio.Queue] = None
         self.screencast_active: bool = False
         self._screencast_handler = None
+        self.last_screencast_frame_time: float = 0.0
 
         # Pre-allocated pixel conversion buffers (reused across frames to avoid alloc churn)
         self._argb_buf: Optional[ctypes.Array] = None
@@ -1880,6 +1886,7 @@ class AmigaClientSession:
             self.screencast_active = True
 
             def _screencast_handler(params: dict) -> None:
+                self.last_screencast_frame_time = time.monotonic()
                 session_id = params.get("sessionId")
                 if session_id is not None and self.cdp is not None:
                     try:
@@ -1914,6 +1921,7 @@ class AmigaClientSession:
                 ),
                 timeout=2.0,
             )
+            self.last_screencast_frame_time = time.monotonic()
             logger.info("CDP Page.screencast started (push-based frame streaming, JPEG q%d)", self.jpeg_quality)
             return True
         except Exception as exc:
@@ -2171,11 +2179,19 @@ class AmigaClientSession:
                 except Exception as exc:
                     logger.debug("Screencast frame decode error: %s", exc)
 
-            # If screencast is active and queue was empty, only capture fallback screenshot if:
+            # If screencast is active and queue was empty, capture fallback screenshot if:
             # - No initial frame has EVER been sent yet (self.last_frame_hash is None), OR
-            # - An explicit full refresh was requested (self.force_full_frame).
-            # Never poll synchronous Page.captureScreenshot 25x/sec while screencast is active!
-            needs_frame = self.force_full_frame or (self.last_frame_hash is None)
+            # - An explicit full refresh was requested (self.force_full_frame), OR
+            # - Video/audio/active interaction is ongoing and CDP screencast hasn't pushed a frame for > 65ms.
+            now = time.monotonic()
+            is_dynamic = (
+                self.is_video_mode
+                or self._video_element_playing
+                or (getattr(self, "last_audio_time", 0.0) > now - 2.0)
+                or (now < self.active_until)
+            )
+            screencast_stalled = is_dynamic and ((now - self.last_screencast_frame_time) >= 0.065)
+            needs_frame = self.force_full_frame or (self.last_frame_hash is None) or screencast_stalled
             if not needs_frame:
                 return
 
@@ -2188,7 +2204,7 @@ class AmigaClientSession:
             logger.debug("Screenshot skipped during navigation: %s", exc)
             return
 
-        await self._encode_and_send_png(jpeg_bytes, force)
+        await self._encode_and_send_png(jpeg_bytes, self.force_full_frame)
 
     async def _encode_and_send_png(self, png_bytes: bytes, force: bool = False) -> None:
         """Decode PNG/JPEG, run dirty-region detection, LZ4 compress, and send to Amiga."""
@@ -2472,15 +2488,27 @@ class AmigaClientSession:
             # 1. Real audio streaming active (e.g. YouTube, Twitch)
             audio_active = (getattr(self, "last_audio_time", 0.0) > now_tick - 2.0)
 
-            # 2. Query HTML5 <video> element playback state asynchronously every 2.0 seconds
-            if self.page and (now_tick - self._last_video_eval_time) >= 2.0:
+            # 2. Query HTML5 <video> element playback state asynchronously every 0.8 seconds
+            if self.page and (now_tick - self._last_video_eval_time) >= 0.8:
                 self._last_video_eval_time = now_tick
                 async def _eval_video():
                     try:
                         if self.page and self.running:
                             is_playing = await asyncio.wait_for(
                                 self.page.evaluate(
-                                    "() => Array.from(document.querySelectorAll('video')).some(v => !v.paused && !v.ended && v.currentTime > 0)"
+                                    """() => {
+                                        if (Array.from(document.querySelectorAll('video')).some(v => !v.paused && !v.ended && v.readyState >= 2)) {
+                                            return true;
+                                        }
+                                        for (const f of document.querySelectorAll('iframe')) {
+                                            try {
+                                                if (f.contentDocument && Array.from(f.contentDocument.querySelectorAll('video')).some(v => !v.paused && !v.ended && v.readyState >= 2)) {
+                                                    return true;
+                                                }
+                                            } catch (e) {}
+                                        }
+                                        return false;
+                                    }"""
                                 ),
                                 timeout=0.08,
                             )
@@ -2519,7 +2547,9 @@ class AmigaClientSession:
             else:
                 now_loop = time.monotonic()
                 if (
-                    getattr(self, "last_audio_time", 0.0) > now_loop - 1.0
+                    getattr(self, "last_audio_time", 0.0) > now_loop - 1.5
+                    or self.is_video_mode
+                    or self._video_element_playing
                     or now_loop < self.active_until
                 ):
                     idle_ticks = 0
@@ -3391,6 +3421,7 @@ class AmigaClientSession:
             if self.context:
                 try:
                     self._creating_tab = True
+                    await self._stop_screencast()
                     new_page = await self.context.new_page()
                     self.tabs.append(new_page)
                     self.active_tab_idx = len(self.tabs) - 1
@@ -3404,6 +3435,8 @@ class AmigaClientSession:
                     else:
                         self.cdp = None
                     await self.page.set_viewport_size({"width": self.width, "height": self.height})
+                    if self.engine == "chromium":
+                        await self._start_screencast()
                     await self._apply_dark_mode(new_page)
                     self._send_progress(20, f"Lade {target}...")
                     await self.page.goto(target, wait_until="commit", timeout=15000)
@@ -3420,6 +3453,7 @@ class AmigaClientSession:
             try:
                 tidx = int(cmd.split(":", 1)[1].strip())
                 if 0 <= tidx < len(self.tabs):
+                    await self._stop_screencast()
                     self.active_tab_idx = tidx
                     self.page = self.tabs[tidx]
                     if self.context and self.engine == "chromium":
@@ -3429,9 +3463,16 @@ class AmigaClientSession:
                             self.cdp = None
                     else:
                         self.cdp = None
+                    try:
+                        await self.page.set_viewport_size({"width": self.width, "height": self.height})
+                    except Exception:
+                        pass
+                    if self.engine == "chromium":
+                        await self._start_screencast()
                     await self._apply_dark_mode(self.page)
                     self._send_nav_update(self.page.url or "")
                     self._trigger_full_refresh(True)
+                    self._schedule_delayed_frames()
             except Exception as exc:
                 logger.warning("Switch tab error: %s", exc)
             return
@@ -3440,6 +3481,7 @@ class AmigaClientSession:
             try:
                 tidx = int(cmd.split(":", 1)[1].strip())
                 if 0 <= tidx < len(self.tabs) and len(self.tabs) > 1:
+                    await self._stop_screencast()
                     p_to_close = self.tabs.pop(tidx)
                     try:
                         await p_to_close.close()
@@ -3455,9 +3497,16 @@ class AmigaClientSession:
                             self.cdp = None
                     else:
                         self.cdp = None
+                    try:
+                        await self.page.set_viewport_size({"width": self.width, "height": self.height})
+                    except Exception:
+                        pass
+                    if self.engine == "chromium":
+                        await self._start_screencast()
                     await self._apply_dark_mode(self.page)
                     self._send_nav_update(self.page.url or "")
                     self._trigger_full_refresh(True)
+                    self._schedule_delayed_frames()
             except Exception as exc:
                 logger.warning("Close tab error: %s", exc)
             return
