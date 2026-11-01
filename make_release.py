@@ -16,6 +16,7 @@ RELEASE_DATE = "29.10.2026"
 STAGING_DIR = os.path.join(DIST_DIR, "staging")
 AMIGA_DRAWER = os.path.join(STAGING_DIR, "VortexBrowser")
 SERVER_LINUX_DRAWER = os.path.join(STAGING_DIR, "Server-Linux")
+SERVER_ELITEDESK_DRAWER = os.path.join(STAGING_DIR, "Server-CachyOS-EliteDesk")
 SERVER_RPI4_DRAWER = os.path.join(STAGING_DIR, "Server-RaspberryPi4")
 
 print(f"=== [1/6] Preparing Staging Directories for {APP_NAME} {VER_STR} ===")
@@ -24,6 +25,7 @@ if os.path.exists(DIST_DIR):
 os.makedirs(AMIGA_DRAWER, exist_ok=True)
 os.makedirs(os.path.join(AMIGA_DRAWER, "icons"), exist_ok=True)
 os.makedirs(SERVER_LINUX_DRAWER, exist_ok=True)
+os.makedirs(SERVER_ELITEDESK_DRAWER, exist_ok=True)
 os.makedirs(SERVER_RPI4_DRAWER, exist_ok=True)
 
 # -------------------------------------------------------------
@@ -802,6 +804,22 @@ os.chmod(os.path.join(SERVER_LINUX_DRAWER, "install_server.sh"), 0o755)
 with open(os.path.join(SERVER_LINUX_DRAWER, "vortexbrowser.service"), "w") as f:
     f.write(SYSTEMD_SERVICE)
 
+# Populate Server-CachyOS-EliteDesk Drawer (1080p@25fps AMD Ryzen PRO Edition)
+shutil.copy2("cachyos-elitedesk-server/server.py", os.path.join(SERVER_ELITEDESK_DRAWER, "server.py"))
+shutil.copy2("cachyos-elitedesk-server/fast_pixconv.c", os.path.join(SERVER_ELITEDESK_DRAWER, "fast_pixconv.c"))
+shutil.copy2("cachyos-elitedesk-server/fast_pixconv.so", os.path.join(SERVER_ELITEDESK_DRAWER, "fast_pixconv.so"))
+shutil.copy2("cachyos-elitedesk-server/darkreader.js", os.path.join(SERVER_ELITEDESK_DRAWER, "darkreader.js"))
+shutil.copy2("cachyos-elitedesk-server/requirements.txt", os.path.join(SERVER_ELITEDESK_DRAWER, "requirements.txt"))
+shutil.copy2("cachyos-elitedesk-server/run_server.sh", os.path.join(SERVER_ELITEDESK_DRAWER, "run_server.sh"))
+os.chmod(os.path.join(SERVER_ELITEDESK_DRAWER, "run_server.sh"), 0o755)
+shutil.copy2("cachyos-elitedesk-server/install_server.sh", os.path.join(SERVER_ELITEDESK_DRAWER, "install_server.sh"))
+os.chmod(os.path.join(SERVER_ELITEDESK_DRAWER, "install_server.sh"), 0o755)
+shutil.copy2("cachyos-elitedesk-server/vortexbrowser.service", os.path.join(SERVER_ELITEDESK_DRAWER, "vortexbrowser.service"))
+if os.path.exists("cachyos-elitedesk-server/README_ELITEDESK.md"):
+    shutil.copy2("cachyos-elitedesk-server/README_ELITEDESK.md", os.path.join(SERVER_ELITEDESK_DRAWER, "README_ELITEDESK.txt"))
+if os.path.exists("cachyos-elitedesk-server/extensions"):
+    shutil.copytree("cachyos-elitedesk-server/extensions", os.path.join(SERVER_ELITEDESK_DRAWER, "extensions"), dirs_exist_ok=True)
+
 # Populate Server-RaspberryPi4 Drawer
 shutil.copy2("rpi4-server/server.py", os.path.join(SERVER_RPI4_DRAWER, "server.py"))
 shutil.copy2("rpi4-server/fast_pixconv.c", os.path.join(SERVER_RPI4_DRAWER, "fast_pixconv.c"))
@@ -851,8 +869,9 @@ VERZEICHNISSTRUKTUR:
   * README.txt         : Englische Kurzanleitung
   * icons/             : Symbolleisten-Icons
 - {APP_NAME}.info      : Workbench-Ordner-Icon fuer den Client-Ordner
-- Server-Linux/        : Der Rendering-Server fuer Linux PC (x86_64)
-- Server-RaspberryPi4/ : Der Rendering-Server optimiert fuer Raspberry Pi 4/5 (ARM64)
+- Server-Linux/            : Der Rendering-Server fuer Linux PC (x86_64)
+- Server-CachyOS-EliteDesk/: Spezial-Server fuer CachyOS & HP EliteDesk 805 G6 (AMD Ryzen PRO, 1080p@25fps, powerprofilesctl)
+- Server-RaspberryPi4/     : Der Rendering-Server optimiert fuer Raspberry Pi 4/5 (ARM64)
 
 SCHNELLSTART:
 -------------
@@ -923,7 +942,7 @@ with zipfile.ZipFile(COMPLETE_ZIP, "w", zipfile.ZIP_DEFLATED) as zf:
 print(f"[+] Created Complete Zip: {COMPLETE_ZIP} ({os.path.getsize(COMPLETE_ZIP)} bytes)")
 
 COMPLETE_LHA = os.path.join(DIST_DIR, f"{APP_NAME}-{VER_STR}-Complete.lha")
-cmd = ["lha", "a", COMPLETE_LHA, APP_NAME, f"{APP_NAME}.info", "Server-Linux", "Server-RaspberryPi4", "ANLEITUNG_DEUTSCH.txt"]
+cmd = ["lha", "a", COMPLETE_LHA, APP_NAME, f"{APP_NAME}.info", "Server-Linux", "Server-CachyOS-EliteDesk", "Server-RaspberryPi4", "ANLEITUNG_DEUTSCH.txt"]
 res = subprocess.run(cmd, cwd=STAGING_DIR, capture_output=True, text=True)
 if res.returncode == 0:
     print(f"[+] Created Complete LHA: {COMPLETE_LHA} ({os.path.getsize(COMPLETE_LHA)} bytes)")

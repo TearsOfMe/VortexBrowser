@@ -516,6 +516,133 @@ static inline uint8_t clamp_u8_int(int v)
     return (v < 0) ? 0U : ((v > 255) ? 255U : (uint8_t)v);
 }
 
+static void upload_rect_yuv420p_to_bitmap(
+    RendererState *r,
+    struct BitMap *bm,
+    const uint8_t *yuv_data,
+    uint16_t       rx,
+    uint16_t       ry,
+    uint16_t       rw,
+    uint16_t       rh
+)
+{
+    (void)r;
+    if (!bm || !yuv_data || rw < 2 || rh < 2) {
+        return;
+    }
+
+    if (r->src_bm_is_yuv) {
+        struct PlanarYUVInfo yuvInfo;
+        memset(&yuvInfo, 0, sizeof(yuvInfo));
+
+        APTR lock = IGraphics->LockBitMapTags(
+            bm,
+            LBM_PlanarYUVInfo, &yuvInfo,
+            TAG_DONE);
+
+        if (lock && yuvInfo.YMemory && yuvInfo.UMemory && yuvInfo.VMemory) {
+            const uint8_t *y_src = yuv_data;
+            const uint8_t *u_src = y_src + (size_t)rw * (size_t)rh;
+            const uint8_t *v_src = u_src + ((size_t)rw / 2) * ((size_t)rh / 2);
+
+            uint8_t *y_dst = (uint8_t *)yuvInfo.YMemory + (size_t)ry * yuvInfo.YBytesPerRow + rx;
+            for (uint16_t y = 0; y < rh; y++) {
+                memcpy(y_dst, y_src, rw);
+                y_src += rw;
+                y_dst += yuvInfo.YBytesPerRow;
+            }
+
+            uint16_t half_x = rx / 2;
+            uint16_t half_y = ry / 2;
+            uint16_t half_w = rw / 2;
+            uint16_t half_h = rh / 2;
+
+            uint8_t *u_dst = (uint8_t *)yuvInfo.UMemory + (size_t)half_y * yuvInfo.UBytesPerRow + half_x;
+            for (uint16_t y = 0; y < half_h; y++) {
+                memcpy(u_dst, u_src, half_w);
+                u_src += half_w;
+                u_dst += yuvInfo.UBytesPerRow;
+            }
+
+            uint8_t *v_dst = (uint8_t *)yuvInfo.VMemory + (size_t)half_y * yuvInfo.VBytesPerRow + half_x;
+            for (uint16_t y = 0; y < half_h; y++) {
+                memcpy(v_dst, v_src, half_w);
+                v_src += half_w;
+                v_dst += yuvInfo.VBytesPerRow;
+            }
+
+            IGraphics->UnlockBitMap(lock);
+            return;
+        }
+        if (lock) {
+            IGraphics->UnlockBitMap(lock);
+        }
+    }
+
+    /* Software fallback into RGB565 or ARGB32 sub-region */
+    const uint8_t *y_plane = yuv_data;
+    const uint8_t *u_plane = y_plane + (size_t)rw * (size_t)rh;
+    const uint8_t *v_plane = u_plane + ((size_t)rw / 2) * ((size_t)rh / 2);
+    uint16_t half_rw = rw / 2;
+
+    uint8_t *base_addr = NULL;
+    uint32   dst_bpr   = 0;
+    APTR lock = IGraphics->LockBitMapTags(
+        bm,
+        LBM_BaseAddress, &base_addr,
+        LBM_BytesPerRow, &dst_bpr,
+        TAG_DONE);
+
+    if (lock && base_addr) {
+        uint32 depth = IGraphics->GetBitMapAttr(bm, BMA_DEPTH);
+        BOOL is_16 = (depth <= 16);
+
+        if (is_16) {
+            for (uint16_t y = 0; y < rh; y++) {
+                const uint8_t *y_row = y_plane + (size_t)y * rw;
+                const uint8_t *u_row = u_plane + (size_t)(y >> 1) * half_rw;
+                const uint8_t *v_row = v_plane + (size_t)(y >> 1) * half_rw;
+                uint16_t *dst16 = (uint16_t *)(base_addr + (size_t)(ry + y) * dst_bpr) + rx;
+                for (uint16_t x = 0; x < rw; x++) {
+                    int y_val = (int)y_row[x];
+                    int u_val = (int)u_row[x >> 1] - 128;
+                    int v_val = (int)v_row[x >> 1] - 128;
+                    int c = y_val - 16;
+                    if (c < 0) c = 0;
+                    int r8 = (298 * c + 409 * v_val + 128) >> 8;
+                    int g8 = (298 * c - 100 * u_val - 208 * v_val + 128) >> 8;
+                    int b8 = (298 * c + 516 * u_val + 128) >> 8;
+                    uint16_t r5 = (uint16_t)(clamp_u8_int(r8) >> 3);
+                    uint16_t g6 = (uint16_t)(clamp_u8_int(g8) >> 2);
+                    uint16_t b5 = (uint16_t)(clamp_u8_int(b8) >> 3);
+                    dst16[x] = (uint16_t)((r5 << 11) | (g6 << 5) | b5);
+                }
+            }
+        } else {
+            for (uint16_t y = 0; y < rh; y++) {
+                const uint8_t *y_row = y_plane + (size_t)y * rw;
+                const uint8_t *u_row = u_plane + (size_t)(y >> 1) * half_rw;
+                const uint8_t *v_row = v_plane + (size_t)(y >> 1) * half_rw;
+                uint32_t *dst32 = (uint32_t *)(base_addr + (size_t)(ry + y) * dst_bpr) + rx;
+                for (uint16_t x = 0; x < rw; x++) {
+                    int y_val = (int)y_row[x];
+                    int u_val = (int)u_row[x >> 1] - 128;
+                    int v_val = (int)v_row[x >> 1] - 128;
+                    int c = y_val - 16;
+                    if (c < 0) c = 0;
+                    uint32_t r8 = clamp_u8_int((298 * c + 409 * v_val + 128) >> 8);
+                    uint32_t g8 = clamp_u8_int((298 * c - 100 * u_val - 208 * v_val + 128) >> 8);
+                    uint32_t b8 = clamp_u8_int((298 * c + 516 * u_val + 128) >> 8);
+                    dst32[x] = 0xFF000000U | (r8 << 16) | (g8 << 8) | b8;
+                }
+            }
+        }
+        IGraphics->UnlockBitMap(lock);
+    } else if (lock) {
+        IGraphics->UnlockBitMap(lock);
+    }
+}
+
 /* Software fallback: convert planar YUV420P (BT.601) into RGB565 or ARGB32 BitMap */
 static void upload_yuv420p_to_rgb_bitmap(
     RendererState *r,
@@ -813,7 +940,12 @@ BOOL renderer_decode_and_present(
             return FALSE;
         }
 
-        uint32_t expected_raw_len = (uint32_t)rw * (uint32_t)rh * bpp;
+        uint32_t expected_raw_len;
+        if (fmt == FMT_YUV420P) {
+            expected_raw_len = (uint32_t)rw * (uint32_t)rh * 3U / 2U;
+        } else {
+            expected_raw_len = (uint32_t)rw * (uint32_t)rh * bpp;
+        }
         if (expected_raw_len == 0 || expected_raw_len > (32 * 1024 * 1024)) {
             return FALSE;
         }
@@ -843,7 +975,11 @@ BOOL renderer_decode_and_present(
         }
 
         r->src_format = fmt;
-        upload_rect_to_bitmap(r, r->src_bm[0], r->raw_frame_buf, w, rx, ry, rw, rh, fmt);
+        if (fmt == FMT_YUV420P) {
+            upload_rect_yuv420p_to_bitmap(r, r->src_bm[0], r->raw_frame_buf, rx, ry, rw, rh);
+        } else {
+            upload_rect_to_bitmap(r, r->src_bm[0], r->raw_frame_buf, w, rx, ry, rw, rh, fmt);
+        }
         r->has_frame = TRUE;
         r->frames_decoded++;
 
@@ -1243,6 +1379,7 @@ void renderer_sync_viewport_size(VortexApp *app)
 
     if (!r->format_sent) {
         net_send_url(app, "@FORMAT:yuv420");
+        net_send_url(app, "@CAP:YUV_RECT");
         char q_cmd[32];
         snprintf(q_cmd, sizeof(q_cmd), "@JPEG_QUALITY:%u", (unsigned)(app->prefs.jpeg_quality ? app->prefs.jpeg_quality : 100));
         net_send_url(app, q_cmd);

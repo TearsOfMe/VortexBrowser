@@ -125,87 +125,57 @@ AMIGA_RAWKEY_MAP = {
 
 
 # ============================================================================
-# Dynamic CPU Governor Management (Performance Mode on Activity)
+# Dynamic Power Profile Management via powerprofilesctl (Performance on Activity)
 # ============================================================================
 class CPUGovernorManager:
-    """Manages CPU scaling governor on Linux/Raspberry Pi.
-    Sets all CPU cores to 'performance' when an Amiga client connects (or when streaming is active),
-    and restores the previous governor (e.g. 'schedutil' or 'ondemand') when clients disconnect or on shutdown.
+    """Manages CPU power scaling profile via 'powerprofilesctl' (NOT cpufreq).
+    Switches the system power profile to 'performance' when an Amiga client connects,
+    and switches to 'power-saver' when no clients are connected or on shutdown.
     """
     def __init__(self, enabled: bool = True):
         self.enabled = enabled
-        self.prev_governors: Dict[str, str] = {}
         self.active_count = 0
         self.is_performance = False
         self._lock = asyncio.Lock()
-        self._use_sudo = False
 
         if self.enabled:
-            paths = self._get_cpu_governor_paths()
-            if not paths:
+            cur = self.read_current_profile()
+            if not cur:
                 self.enabled = False
+                logger.debug("[CPU Power] powerprofilesctl not available or inactive.")
             else:
-                test_path = paths[0]
-                can_write = False
-                try:
-                    cur = open(test_path, "r").read().strip()
-                    with open(test_path, "w") as f:
-                        f.write(f"{cur}\n")
-                    can_write = True
-                except Exception:
-                    pass
-
-                if not can_write:
-                    # Test non-interactive sudo (-n) once. Never prompt interactively!
-                    try:
-                        res = subprocess.run(["sudo", "-n", "true"], capture_output=True, timeout=1.0)
-                        if res.returncode == 0:
-                            self._use_sudo = True
-                            can_write = True
-                    except Exception:
-                        pass
-
-                if not can_write:
-                    self.enabled = False
-                    logger.debug("[CPU Power] CPU governor management disabled (no direct write or passwordless sudo permissions).")
+                if self.set_profile("power-saver"):
+                    logger.info("[CPU Power] Server idle -> powerprofilesctl set to 'power-saver'")
 
     @staticmethod
-    def _get_cpu_governor_paths() -> List[str]:
-        return sorted(glob.glob("/sys/devices/system/cpu/cpu[0-9]*/cpufreq/scaling_governor"))
+    def read_current_profile() -> Optional[str]:
+        try:
+            res = subprocess.run(
+                ["powerprofilesctl", "get"],
+                capture_output=True,
+                text=True,
+                timeout=2.0,
+            )
+            if res.returncode == 0 and res.stdout.strip():
+                return res.stdout.strip()
+        except Exception:
+            pass
+        return None
 
-    def read_current_governors(self) -> Dict[str, str]:
-        govs = {}
-        for path in self._get_cpu_governor_paths():
-            try:
-                with open(path, "r") as f:
-                    govs[path] = f.read().strip()
-            except Exception:
-                pass
-        return govs
-
-    def set_governor(self, gov_name: str) -> bool:
+    def set_profile(self, profile_name: str) -> bool:
         if not self.enabled:
             return False
-        paths = self._get_cpu_governor_paths()
-        if not paths:
+        try:
+            res = subprocess.run(
+                ["powerprofilesctl", "set", profile_name],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=2.0,
+            )
+            return res.returncode == 0
+        except Exception:
             return False
-        success = False
-        if self._use_sudo:
-            cmd = " && ".join(f"echo {gov_name} > {p}" for p in paths)
-            try:
-                res = subprocess.run(["sudo", "-n", "sh", "-c", cmd], check=False, capture_output=True, timeout=2.0)
-                success = (res.returncode == 0)
-            except Exception:
-                pass
-        else:
-            for path in paths:
-                try:
-                    with open(path, "w") as f:
-                        f.write(f"{gov_name}\n")
-                    success = True
-                except Exception:
-                    pass
-        return success
 
     async def client_connected(self) -> None:
         if not self.enabled:
@@ -213,14 +183,11 @@ class CPUGovernorManager:
         async with self._lock:
             self.active_count += 1
             if self.active_count == 1 and not self.is_performance:
-                cur = self.read_current_governors()
-                if cur and not self.prev_governors:
-                    self.prev_governors = cur
-                if self.set_governor("performance"):
+                if self.set_profile("performance"):
                     self.is_performance = True
-                    logger.info("[CPU Power] Amiga client active -> CPU Governor switched to PERFORMANCE (maximum render speed)")
+                    logger.info("[CPU Power] Amiga client active -> powerprofilesctl switched to 'performance'")
                 else:
-                    logger.debug("[CPU Power] Could not set CPU governor to performance")
+                    logger.debug("[CPU Power] Could not set powerprofilesctl to 'performance'")
 
     async def client_disconnected(self) -> None:
         if not self.enabled:
@@ -229,25 +196,19 @@ class CPUGovernorManager:
             self.active_count = max(0, self.active_count - 1)
             if self.active_count == 0 and self.is_performance:
                 self.restore()
-                restored_to = list(self.prev_governors.values())[0] if self.prev_governors else "default"
-                logger.info("[CPU Power] No active clients -> CPU Governor restored to '%s'", restored_to)
+                logger.info("[CPU Power] No active clients -> powerprofilesctl switched to 'power-saver'")
 
     def restore(self) -> None:
-        if self.is_performance and self.prev_governors:
-            if self._use_sudo:
-                cmds = [f"echo {gov} > {path}" for path, gov in self.prev_governors.items()]
-                cmd = " && ".join(cmds)
-                try:
-                    subprocess.run(["sudo", "-n", "sh", "-c", cmd], check=False, capture_output=True, timeout=2.0)
-                except Exception:
-                    pass
-            else:
-                for path, gov in self.prev_governors.items():
-                    try:
-                        with open(path, "w") as f:
-                            f.write(f"{gov}\n")
-                    except Exception:
-                        pass
+        if self.enabled:
+            try:
+                subprocess.run(
+                    ["powerprofilesctl", "set", "power-saver"],
+                    check=False,
+                    capture_output=True,
+                    timeout=2.0,
+                )
+            except Exception:
+                pass
             self.is_performance = False
 
 
@@ -1103,6 +1064,84 @@ class LocalPortalHTTPServer:
 # Native SIMD Pixel Converter & Dirty-Slice Detector (x86_64 & ARM64/RPi4)
 # ============================================================================
 _FAST_PIXCONV = None
+_HAS_NATIVE_PACKET_ENCODER = False
+
+def _bind_fast_pixconv_symbols(_lib) -> bool:
+    global _HAS_NATIVE_PACKET_ENCODER
+    _lib.rgb24_to_be_argb32.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_size_t]
+    _lib.rgb24_to_be_argb32.restype = None
+    _lib.rgb24_to_be_rgb565.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_size_t]
+    _lib.rgb24_to_be_rgb565.restype = None
+    _lib.rgb24_to_yuv420p.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int, ctypes.c_int]
+    _lib.rgb24_to_yuv420p.restype = None
+    _lib.find_and_update_dirty_slice.argtypes = [
+        ctypes.c_char_p,
+        ctypes.c_char_p,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_int),
+    ]
+    _lib.find_and_update_dirty_slice.restype = ctypes.c_int
+    _lib.find_and_update_dirty_rect.argtypes = [
+        ctypes.c_char_p,
+        ctypes.c_char_p,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_int),
+    ]
+    _lib.find_and_update_dirty_rect.restype = ctypes.c_int
+    _lib.pack_sub_rect.argtypes = [
+        ctypes.c_char_p,
+        ctypes.c_char_p,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+    ]
+    _lib.pack_sub_rect.restype = None
+    if hasattr(_lib, "pack_sub_rect_yuv420p"):
+        _lib.pack_sub_rect_yuv420p.argtypes = [
+            ctypes.c_char_p,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+        ]
+        _lib.pack_sub_rect_yuv420p.restype = None
+    _lib.pcm_s16be_is_silent.argtypes = [ctypes.c_char_p, ctypes.c_size_t, ctypes.c_int]
+    _lib.pcm_s16be_is_silent.restype = ctypes.c_int
+    if hasattr(_lib, "encode_jpeg_to_frame_packet"):
+        _lib.encode_jpeg_to_frame_packet.argtypes = [
+            ctypes.c_char_p,
+            ctypes.c_size_t,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_char_p,
+            ctypes.c_char_p,
+            ctypes.c_int,
+        ]
+        _lib.encode_jpeg_to_frame_packet.restype = ctypes.c_int
+        _HAS_NATIVE_PACKET_ENCODER = True
+        return True
+    _HAS_NATIVE_PACKET_ENCODER = False
+    return False
+
 try:
     _base_dir = os.path.dirname(os.path.abspath(__file__))
     _is_arm = platform.machine().lower().startswith(("aarch64", "arm"))
@@ -1113,122 +1152,50 @@ try:
         if os.path.exists(_candidate_path):
             try:
                 _lib = ctypes.CDLL(_candidate_path)
-                _lib.rgb24_to_be_argb32.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_size_t]
-                _lib.rgb24_to_be_argb32.restype = None
-                _lib.rgb24_to_be_rgb565.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_size_t]
-                _lib.rgb24_to_be_rgb565.restype = None
-                _lib.rgb24_to_yuv420p.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int, ctypes.c_int]
-                _lib.rgb24_to_yuv420p.restype = None
-                _lib.find_and_update_dirty_slice.argtypes = [
-                    ctypes.c_char_p,
-                    ctypes.c_char_p,
-                    ctypes.c_int,
-                    ctypes.c_int,
-                    ctypes.c_int,
-                    ctypes.POINTER(ctypes.c_int),
-                    ctypes.POINTER(ctypes.c_int),
-                ]
-                _lib.find_and_update_dirty_slice.restype = ctypes.c_int
-                _lib.find_and_update_dirty_rect.argtypes = [
-                    ctypes.c_char_p,
-                    ctypes.c_char_p,
-                    ctypes.c_int,
-                    ctypes.c_int,
-                    ctypes.c_int,
-                    ctypes.POINTER(ctypes.c_int),
-                    ctypes.POINTER(ctypes.c_int),
-                    ctypes.POINTER(ctypes.c_int),
-                    ctypes.POINTER(ctypes.c_int),
-                ]
-                _lib.find_and_update_dirty_rect.restype = ctypes.c_int
-                _lib.pack_sub_rect.argtypes = [
-                    ctypes.c_char_p,
-                    ctypes.c_char_p,
-                    ctypes.c_int,
-                    ctypes.c_int,
-                    ctypes.c_int,
-                    ctypes.c_int,
-                    ctypes.c_int,
-                    ctypes.c_int,
-                ]
-                _lib.pack_sub_rect.restype = None
-                _lib.pcm_s16be_is_silent.argtypes = [ctypes.c_char_p, ctypes.c_size_t, ctypes.c_int]
-                _lib.pcm_s16be_is_silent.restype = ctypes.c_int
+                _bind_fast_pixconv_symbols(_lib)
                 _FAST_PIXCONV = _lib
                 _loaded_path = _candidate_path
                 break
             except Exception as _cdll_err:
                 logger.debug("Could not load candidate %s: %s", _candidate_path, _cdll_err)
 
-    # If not found or incompatible architecture, attempt on-the-fly compilation if gcc is available
-    if _FAST_PIXCONV is None:
+    # If not found or missing C-native TurboJPEG+LZ4 packet encoder, attempt auto-compilation
+    if _FAST_PIXCONV is None or not _HAS_NATIVE_PACKET_ENCODER:
         _c_src = os.path.join(_base_dir, "fast_pixconv.c")
         if os.path.exists(_c_src):
             _target_so_name = "fast_pixconv_aarch64.so" if _is_arm else "fast_pixconv.so"
             _target_so_path = os.path.join(_base_dir, _target_so_name)
             try:
-                logger.info("Attempting auto-compilation of native SIMD helper (%s)...", _target_so_name)
+                logger.info("Attempting auto-compilation of native SIMD + TurboJPEG + LZ4 helper (%s)...", _target_so_name)
                 if _is_arm:
-                    _compile_cmd = [
-                        "gcc", "-O3", "-march=armv8-a+crc", "-mtune=cortex-a72",
-                        "-shared", "-fPIC", "-o", _target_so_path, _c_src
+                    _compile_cmds = [
+                        ["gcc", "-O3", "-march=armv8-a+crc", "-mtune=cortex-a72", "-fopenmp", "-DHAVE_TURBOJPEG_LZ4", "-shared", "-fPIC", "-o", _target_so_path, _c_src, "-lturbojpeg", "-llz4"],
+                        ["gcc", "-O3", "-march=armv8-a+crc", "-mtune=cortex-a72", "-shared", "-fPIC", "-o", _target_so_path, _c_src],
                     ]
                 else:
-                    _compile_cmd = [
-                        "gcc", "-O3", "-march=native",
-                        "-shared", "-fPIC", "-o", _target_so_path, _c_src
+                    _compile_cmds = [
+                        ["gcc", "-O3", "-march=native", "-mavx2", "-mfma", "-fopenmp", "-DHAVE_TURBOJPEG_LZ4", "-shared", "-fPIC", "-o", _target_so_path, _c_src, "-lturbojpeg", "-llz4"],
+                        ["gcc", "-O3", "-march=native", "-fopenmp", "-DHAVE_TURBOJPEG_LZ4", "-shared", "-fPIC", "-o", _target_so_path, _c_src, "-lturbojpeg", "-llz4"],
+                        ["gcc", "-O3", "-march=native", "-shared", "-fPIC", "-o", _target_so_path, _c_src],
                     ]
-                _ret = subprocess.run(_compile_cmd, capture_output=True, timeout=10)
-                if _ret.returncode == 0 and os.path.exists(_target_so_path):
-                    _lib = ctypes.CDLL(_target_so_path)
-                    _lib.rgb24_to_be_argb32.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_size_t]
-                    _lib.rgb24_to_be_argb32.restype = None
-                    _lib.rgb24_to_be_rgb565.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_size_t]
-                    _lib.rgb24_to_be_rgb565.restype = None
-                    _lib.rgb24_to_yuv420p.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int, ctypes.c_int]
-                    _lib.rgb24_to_yuv420p.restype = None
-                    _lib.find_and_update_dirty_slice.argtypes = [
-                        ctypes.c_char_p,
-                        ctypes.c_char_p,
-                        ctypes.c_int,
-                        ctypes.c_int,
-                        ctypes.c_int,
-                        ctypes.POINTER(ctypes.c_int),
-                        ctypes.POINTER(ctypes.c_int),
-                    ]
-                    _lib.find_and_update_dirty_slice.restype = ctypes.c_int
-                    _lib.find_and_update_dirty_rect.argtypes = [
-                        ctypes.c_char_p,
-                        ctypes.c_char_p,
-                        ctypes.c_int,
-                        ctypes.c_int,
-                        ctypes.c_int,
-                        ctypes.POINTER(ctypes.c_int),
-                        ctypes.POINTER(ctypes.c_int),
-                        ctypes.POINTER(ctypes.c_int),
-                        ctypes.POINTER(ctypes.c_int),
-                    ]
-                    _lib.find_and_update_dirty_rect.restype = ctypes.c_int
-                    _lib.pack_sub_rect.argtypes = [
-                        ctypes.c_char_p,
-                        ctypes.c_char_p,
-                        ctypes.c_int,
-                        ctypes.c_int,
-                        ctypes.c_int,
-                        ctypes.c_int,
-                        ctypes.c_int,
-                        ctypes.c_int,
-                    ]
-                    _lib.pack_sub_rect.restype = None
-                    _lib.pcm_s16be_is_silent.argtypes = [ctypes.c_char_p, ctypes.c_size_t, ctypes.c_int]
-                    _lib.pcm_s16be_is_silent.restype = ctypes.c_int
-                    _FAST_PIXCONV = _lib
-                    _loaded_path = _target_so_path
+                for _cmd in _compile_cmds:
+                    _ret = subprocess.run(_cmd, capture_output=True, timeout=15)
+                    if _ret.returncode == 0 and os.path.exists(_target_so_path):
+                        _lib = ctypes.CDLL(_target_so_path)
+                        _bind_fast_pixconv_symbols(_lib)
+                        _FAST_PIXCONV = _lib
+                        _loaded_path = _target_so_path
+                        break
             except Exception as _comp_err:
                 logger.debug("Auto-compilation failed: %s", _comp_err)
 
     if _FAST_PIXCONV is not None:
-        logger.info("Loaded native SIMD pixel & audio helper: %s (arch=%s)", os.path.basename(_loaded_path), platform.machine())
+        logger.info(
+            "Loaded native SIMD pixel & audio helper: %s (arch=%s, C-TurboJPEG+LZ4=%s)",
+            os.path.basename(_loaded_path),
+            platform.machine(),
+            "YES" if _HAS_NATIVE_PACKET_ENCODER else "NO",
+        )
     else:
         logger.warning("No native fast_pixconv found, falling back to pure Python/Pillow")
 except Exception as _exc:
@@ -1394,12 +1361,13 @@ class AmigaClientSession:
         self.web_font_family: str = "sans-serif"
         self.web_charset: str = "utf-8"
         self.dark_mode: int = 0  # 0 = Light, 1 = Dark, 2 = Auto
+        self.allow_yuv_rect: bool = False
 
         try:
             sock = self.writer.get_extra_info("socket")
             if sock is not None:
                 sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-                sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 512 * 1024)
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1024 * 1024)
         except Exception:
             pass
 
@@ -1413,6 +1381,7 @@ class AmigaClientSession:
         self._rgb565_buf: Optional[ctypes.Array] = None
         self._yuv_buf: Optional[ctypes.Array] = None
         self._rect_buf: Optional[ctypes.Array] = None
+        self._pkt_buf: Optional[ctypes.Array] = None
 
     async def send_packet(self, data: bytes) -> bool:
         if not self.running:
@@ -1893,7 +1862,6 @@ class AmigaClientSession:
             self.last_frame_hash = None
         self.active_until = time.monotonic() + 3.0
         self.force_frame_event.set()
-        self._safe_dispatch_resize()
 
     async def _start_screencast(self) -> bool:
         """Start CDP Page.screencast — push-based frame delivery.
@@ -2198,25 +2166,20 @@ class AmigaClientSession:
                     b64_data = params.get("data")
                     if b64_data:
                         jpeg_bytes = base64.b64decode(b64_data)
-                        await self._encode_and_send_png(jpeg_bytes, force)
+                        await self._encode_and_send_png(jpeg_bytes, self.force_full_frame)
                         return
                 except Exception as exc:
                     logger.debug("Screencast frame decode error: %s", exc)
 
             # If screencast is active and queue was empty, only capture fallback screenshot if:
             # - No initial frame has EVER been sent yet (self.last_frame_hash is None), OR
-            # - A frame is explicitly forced (initial connection, resize, @REFRESH), OR
-            # - We are within an active interaction window (time.monotonic() < self.active_until).
-            # If completely idle on a static page, return to save CPU!
-            now = time.monotonic()
-            is_active = (now < self.active_until)
-            needs_frame = force or self.force_full_frame or (self.last_frame_hash is None) or is_active
+            # - An explicit full refresh was requested (self.force_full_frame).
+            # Never poll synchronous Page.captureScreenshot 25x/sec while screencast is active!
+            needs_frame = self.force_full_frame or (self.last_frame_hash is None)
             if not needs_frame:
                 return
 
-        self._safe_dispatch_resize()
-
-        # Fallback to direct fast CDP screenshot (when screencast queue is empty or screencast not active)
+        # Fallback to direct fast CDP screenshot (when screencast is not active or frame is forced)
         try:
             jpeg_bytes = await self._capture_jpeg_fast()
             if not jpeg_bytes:
@@ -2266,6 +2229,7 @@ class AmigaClientSession:
             bpp = 4
             frame_bytes_len = w * h * 4
 
+        max_pkt_len = frame_bytes_len + (frame_bytes_len // 255) + 4096
         if self.prev_raw_buf is None or len(self.prev_raw_buf) != frame_bytes_len or self.prev_dims != (w, h):
             self.prev_raw_buf = ctypes.create_string_buffer(frame_bytes_len)
             self.prev_dims = (w, h)
@@ -2273,7 +2237,10 @@ class AmigaClientSession:
             self._argb_buf = ctypes.create_string_buffer(num_px * 4)
             self._rgb565_buf = ctypes.create_string_buffer(num_px * 2)
             self._yuv_buf = ctypes.create_string_buffer((num_px * 3) // 2)
+            self._pkt_buf = ctypes.create_string_buffer(max_pkt_len)
             force_full = True
+        elif self._pkt_buf is None or len(self._pkt_buf) < max_pkt_len:
+            self._pkt_buf = ctypes.create_string_buffer(max_pkt_len)
 
         t_decode = time.monotonic()
         loop = asyncio.get_running_loop()
@@ -2290,6 +2257,8 @@ class AmigaClientSession:
             self._argb_buf,
             self._rgb565_buf,
             self._yuv_buf,
+            self._pkt_buf,
+            self.allow_yuv_rect,
         )
         t_encode = time.monotonic()
         if header_and_payload:
@@ -2331,8 +2300,34 @@ class AmigaClientSession:
         argb_buf: Optional[ctypes.Array] = None,
         rgb565_buf: Optional[ctypes.Array] = None,
         yuv_buf: Optional[ctypes.Array] = None,
+        pkt_buf: Optional[ctypes.Array] = None,
+        allow_yuv_rect: bool = False,
     ) -> Optional[bytes]:
         try:
+            # 1. Ultra-Fast C-Native Pipeline (libturbojpeg SIMD + AVX2 dirty-rect + liblz4 in a single C call)
+            if _FAST_PIXCONV is not None and _HAS_NATIVE_PACKET_ENCODER and pkt_buf is not None:
+                work_buf = yuv_buf if pixel_format == FMT_YUV420P else (rgb565_buf if pixel_format == FMT_RGB565 else argb_buf)
+                if work_buf is not None:
+                    lz4_accel = 3 if (width * height >= 1500000) else 2
+                    pkt_len = _FAST_PIXCONV.encode_jpeg_to_frame_packet(
+                        jpeg_bytes,
+                        len(jpeg_bytes),
+                        width,
+                        height,
+                        pixel_format,
+                        1 if force_full else 0,
+                        1 if allow_yuv_rect else 0,
+                        lz4_accel,
+                        prev_buf,
+                        work_buf,
+                        pkt_buf,
+                        len(pkt_buf),
+                    )
+                    if pkt_len == 0:
+                        return None
+                    if pkt_len > 0:
+                        return ctypes.string_at(pkt_buf, pkt_len)
+
             raw_bytes: Optional[bytes] = None
             if _TURBO_JPEG is not None:
                 try:
@@ -2377,9 +2372,8 @@ class AmigaClientSession:
                     img, width, height, pixel_format, argb_buf, rgb565_buf, yuv_buf
                 )
 
-            if pixel_format == FMT_YUV420P:
+            if pixel_format == FMT_YUV420P and not allow_yuv_rect:
                 # 12 bpp Planar YUV420: Stream Y, U, V planes compressed with LZ4
-                # Dirty-rect optimization is supported for YUV420P too (bpp==1 in fast_pixconv.c)
                 if not force_full and prev_buf is not None and len(prev_buf) == len(raw_bytes):
                     if prev_buf.raw == raw_bytes:
                         return None
@@ -2421,8 +2415,12 @@ class AmigaClientSession:
 
                 # 2D Bounding Box optimization: If changed area is < 85% of total viewport, send CODEC_LZ4_RECT!
                 if 0 < rw_val <= width and 0 < rh_val <= height and (rw_val * rh_val < int(width * height * 0.85)):
-                    pack_buf = ctypes.create_string_buffer(rw_val * rh_val * bpp)
-                    _FAST_PIXCONV.pack_sub_rect(raw_bytes, pack_buf, width, bpp, rx_val, ry_val, rw_val, rh_val)
+                    if pixel_format == FMT_YUV420P and hasattr(_FAST_PIXCONV, "pack_sub_rect_yuv420p"):
+                        pack_buf = ctypes.create_string_buffer((rw_val * rh_val * 3) // 2)
+                        _FAST_PIXCONV.pack_sub_rect_yuv420p(raw_bytes, pack_buf, width, height, rx_val, ry_val, rw_val, rh_val)
+                    else:
+                        pack_buf = ctypes.create_string_buffer(rw_val * rh_val * bpp)
+                        _FAST_PIXCONV.pack_sub_rect(raw_bytes, pack_buf, width, bpp, rx_val, ry_val, rw_val, rh_val)
                     comp_rect = lz4.block.compress(pack_buf.raw, store_size=False)
                     rect_payload = STRUCT_RECT_HDR.pack(rx_val, ry_val, rw_val, rh_val) + comp_rect
                     hdr = STRUCT_MSG_FRAME.pack(
@@ -3198,6 +3196,11 @@ class AmigaClientSession:
         if not cmd:
             return
 
+        if cmd.upper() == "@CAP:YUV_RECT":
+            self.allow_yuv_rect = True
+            logger.info("Client enabled 2D YUV420P dirty-rect streaming (CODEC_LZ4_RECT)")
+            return
+
         if cmd.upper().startswith("@CODEC:"):
             c = cmd.split(":", 1)[1].strip().lower()
             if c in ("mjpeg", "jpeg"):
@@ -3240,8 +3243,11 @@ class AmigaClientSession:
         if cmd.upper().startswith("@JPEG_QUALITY:"):
             try:
                 q = int(cmd.split(":", 1)[1].strip())
+                if self.width * self.height >= 1500000 and q > 85:
+                    logger.info("1080p Full HD mode active: clamping requested JPEG quality %d -> 85 for optimal 25 FPS bandwidth", q)
+                    q = 85
                 self.base_jpeg_quality = max(20, min(100, q))
-                self.video_jpeg_quality = min(self.base_jpeg_quality, 60)
+                self.video_jpeg_quality = min(self.base_jpeg_quality, 62)
                 target_q = self.video_jpeg_quality if self.is_video_mode else self.base_jpeg_quality
                 await self._set_screencast_quality(target_q)
                 logger.info("Set JPEG/MJPEG base quality to %d (current=%d)", self.base_jpeg_quality, self.jpeg_quality)
@@ -3272,6 +3278,11 @@ class AmigaClientSession:
                     logger.info("Syncing browser viewport 1:1 to Amiga window: %dx%d", new_w, new_h)
                     self.width = new_w
                     self.height = new_h
+                    if new_w * new_h >= 1500000 and self.base_jpeg_quality > 85:
+                        self.base_jpeg_quality = 85
+                        if not self.is_video_mode:
+                            self.jpeg_quality = 85
+                            self.current_screencast_quality = 85
                     self._trigger_full_refresh(True)
                     await self.page.set_viewport_size({"width": new_w, "height": new_h})
                     if self.engine == "chromium":
@@ -3958,9 +3969,10 @@ def get_gpu_launch_flags(disable_gpu: bool = False) -> Tuple[List[str], bool]:
     gpu_flags = [
         "--ignore-gpu-blocklist",
         "--enable-gpu-rasterization",
+        "--enable-zero-copy",
         "--use-gl=angle",
         "--use-angle=vulkan",
-        "--enable-features=VaapiVideoDecoder,VaapiVideoEncoder",
+        "--enable-features=VaapiVideoDecoder,VaapiVideoEncoder,VaapiIgnoreDriverChecks,CanvasOopRasterization,DefaultANGLEVulkan,VulkanFromANGLE",
     ]
     return gpu_flags, has_dri
 

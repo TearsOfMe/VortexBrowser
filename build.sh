@@ -5,9 +5,24 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONTAINER_ID="${1:-7f239cb96d8c259d2d5489d6df3a79b3ef6b736346acb46960f3f928c40f17fd}"
 
 echo "=== [1/3] Building CachyOS Native SIMD Pixel Converter (fast_pixconv.so) ==="
+gcc -O3 -march=native -mavx2 -mfma -fopenmp -DHAVE_TURBOJPEG_LZ4 -shared -fPIC \
+    "${SCRIPT_DIR}/pi-server/fast_pixconv.c" \
+    -lturbojpeg -llz4 \
+    -o "${SCRIPT_DIR}/pi-server/fast_pixconv.so" 2>/dev/null || \
 gcc -O3 -march=native -shared -fPIC \
     "${SCRIPT_DIR}/pi-server/fast_pixconv.c" \
     -o "${SCRIPT_DIR}/pi-server/fast_pixconv.so"
+
+if [ -f "${SCRIPT_DIR}/cachyos-elitedesk-server/fast_pixconv.c" ]; then
+    gcc -O3 -march=znver2 -mtune=znver2 -mavx2 -mfma -fopenmp -DHAVE_TURBOJPEG_LZ4 -shared -fPIC \
+        "${SCRIPT_DIR}/cachyos-elitedesk-server/fast_pixconv.c" \
+        -lturbojpeg -llz4 \
+        -o "${SCRIPT_DIR}/cachyos-elitedesk-server/fast_pixconv.so" 2>/dev/null || \
+    gcc -O3 -march=native -shared -fPIC \
+        "${SCRIPT_DIR}/cachyos-elitedesk-server/fast_pixconv.c" \
+        -o "${SCRIPT_DIR}/cachyos-elitedesk-server/fast_pixconv.so"
+fi
+
 gcc -O3 -march=native -shared -fPIC \
     "${SCRIPT_DIR}/rpi4-server/fast_pixconv.c" \
     -o "${SCRIPT_DIR}/rpi4-server/fast_pixconv.so" 2>/dev/null || true
