@@ -8,6 +8,12 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# If running interactively and systemd service is active, stop the service first so Chromium profile is not locked
+if [ -z "${INVOCATION_ID:-}" ] && systemctl is-active --quiet vortexbrowser.service 2>/dev/null; then
+    echo "[VortexServer] Stopping background vortexbrowser.service to avoid profile lock..."
+    sudo -n systemctl stop vortexbrowser.service 2>/dev/null || systemctl stop vortexbrowser.service 2>/dev/null || true
+fi
+
 if [ ! -d ".venv" ]; then
     echo "[VortexServer] Python virtual environment not found!"
     echo "[VortexServer] Please run ./install_server.sh first."

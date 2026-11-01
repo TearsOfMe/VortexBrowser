@@ -4,10 +4,9 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# Ensure native SIMD converter is compiled with native CPU optimizations (AVX2/AVX-512 + TurboJPEG + LZ4)
+# Ensure native SIMD converter is compiled with native CPU optimizations (AVX2/AVX-512)
 if [ ! -f "fast_pixconv.so" ] || [ "fast_pixconv.c" -nt "fast_pixconv.so" ]; then
     echo "[VortexBrowse] Compiling native CachyOS SIMD helper (fast_pixconv.so)..."
-    gcc -O3 -march=native -mavx2 -mfma -fopenmp -DHAVE_TURBOJPEG_LZ4 -shared -fPIC fast_pixconv.c -lturbojpeg -llz4 -o fast_pixconv.so 2>/dev/null || \
     gcc -O3 -march=native -shared -fPIC fast_pixconv.c -o fast_pixconv.so
 fi
 
