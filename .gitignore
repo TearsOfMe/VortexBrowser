@@ -1,0 +1,39 @@
+# Compiled binaries & objects
+*.o
+*.stripped
+amiga-client/VortexBrowse
+amiga-client/VortexBrowse.stripped
+amiga-client/VortexBrowser
+amiga-client/VortexBrowser.stripped
+*.so
+!fast_pixconv_aarch64.so
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# Archives & Packages
+*.tar.gz
+*.tar
+*.zip
+
+# Temporary & Editor files
+*.log
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Release staging & clib4 binary
+dist/
+amiga-client/VortexBrowse.clib4
+*.lha
+
+# Secrets & local credentials
+*twitch_token*.txt
+*twitch_cookie*.txt
+*.sqlite
+/tmp/
+

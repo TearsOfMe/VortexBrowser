@@ -1,0 +1,19 @@
+[Unit]
+Description=VortexBrowser CachyOS HP EliteDesk 805 G6 (1080p@25fps) Server for AmigaOS 4
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tears
+WorkingDirectory=/home/tears/Server-CachyOS-EliteDesk
+Environment=PYTHONUNBUFFERED=1
+Environment=OMP_NUM_THREADS=4
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+ExecStart=/home/tears/Server-CachyOS-EliteDesk/run_server.sh
+Restart=always
+RestartSec=2
+Nice=-5
+
+[Install]
+WantedBy=multi-user.target
