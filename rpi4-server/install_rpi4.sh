@@ -57,32 +57,124 @@ $SUDO apt-get install -y \
 CURRENT_USER="${SUDO_USER:-$(id -un)}"
 $SUDO usermod -a -G audio,video,render "$CURRENT_USER" 2>/dev/null || true
 
-# Browser ermitteln (Ungoogled-Chromium, Chromium-Browser, Chromium, Google Chrome, Brave oder Playwright Cache)
-EXISTING_BROWSER=""
-for b in ungoogled-chromium chromium-browser chromium google-chrome google-chrome-stable brave-browser brave /usr/lib/chromium/chromium; do
-    if command -v "$b" >/dev/null 2>&1; then
-        EXISTING_BROWSER="$(command -v "$b" 2>/dev/null)"
-        break
-    elif [ -x "$b" ]; then
-        EXISTING_BROWSER="$b"
+# Browser ermitteln & Interaktive Auswahl mit Empfehlung
+echo ""
+echo "=================================================================="
+echo " VortexBrowser - Browser-Engine Auswahl"
+echo "=================================================================="
+
+CANDIDATE_PATHS=()
+CANDIDATE_NAMES=()
+CANDIDATE_DESCS=()
+CANDIDATE_TAGS=()
+
+add_candidate() {
+    local bin="$1"
+    local name="$2"
+    local desc="$3"
+    local tag="$4"
+    if [ -n "$bin" ] && [ -x "$bin" ]; then
+        for existing in "${CANDIDATE_PATHS[@]}"; do
+            if [ "$existing" = "$bin" ]; then
+                return
+            fi
+        done
+        CANDIDATE_PATHS+=("$bin")
+        CANDIDATE_NAMES+=("$name")
+        CANDIDATE_DESCS+=("$desc")
+        CANDIDATE_TAGS+=("$tag")
+    fi
+}
+
+# 1. System Chromium (auf Raspberry Pi OS speziell fuer BCM2711 / VideoCore VI optimiert)
+for b in /usr/bin/chromium-browser /usr/bin/chromium /usr/lib/chromium-browser/chromium-browser $(command -v chromium-browser 2>/dev/null || true) $(command -v chromium 2>/dev/null || true); do
+    if [ -x "$b" ]; then
+        add_candidate "$b" "Raspberry Pi Chromium" "Offizieller Pi-Browser mit V4L2/DRM Hardwarebeschleunigung" "[EMPFOHLEN]"
         break
     fi
 done
 
-if [ -z "$EXISTING_BROWSER" ]; then
-    PW_CHROME=$(ls -d ~/.cache/ms-playwright/chromium-*/chrome-linux*/chrome 2>/dev/null | tail -n 1 || true)
-    if [ -n "$PW_CHROME" ] && [ -x "$PW_CHROME" ]; then
-        EXISTING_BROWSER="$PW_CHROME"
+# 2. Ungoogled Chromium
+for b in ~/.local/bin/ungoogled-chromium /usr/bin/ungoogled-chromium $(command -v ungoogled-chromium 2>/dev/null || true); do
+    if [ -x "$b" ]; then
+        TAG="[SEHR GUT]"
+        if [ ${#CANDIDATE_PATHS[@]} -eq 0 ]; then
+            TAG="[EMPFOHLEN]"
+        fi
+        add_candidate "$b" "Ungoogled Chromium" "Beste Privatsphaere & Performance, keine Google-Telemetrie" "$TAG"
+        break
     fi
+done
+
+# 3. Playwright Chromium Cache
+PW_CHROME=$(ls -d ~/.cache/ms-playwright/chromium-*/chrome-linux*/chrome 2>/dev/null | tail -n 1 || true)
+if [ -n "$PW_CHROME" ] && [ -x "$PW_CHROME" ]; then
+    TAG="[KOMPATIBEL]"
+    if [ ${#CANDIDATE_PATHS[@]} -eq 0 ]; then
+        TAG="[EMPFOHLEN]"
+    fi
+    add_candidate "$PW_CHROME" "Playwright Chromium (Cache)" "Getestete VortexBrowser Standard-Engine im lokalen Cache" "$TAG"
 fi
 
-if [ -n "$EXISTING_BROWSER" ]; then
-    echo "[OK] Bereits installierter Browser gefunden: $EXISTING_BROWSER (kein Neu-Download erforderlich)"
+CHOSEN_BIN=""
+
+if [ ${#CANDIDATE_PATHS[@]} -gt 0 ]; then
+    echo "Auf Ihrem Raspberry Pi wurden folgende verfuegbare Browser gefunden:"
+    echo ""
+    for i in "${!CANDIDATE_PATHS[@]}"; do
+        idx=$((i + 1))
+        echo "  [${idx}] ${CANDIDATE_NAMES[$i]} ${CANDIDATE_TAGS[$i]}"
+        echo "      Pfad : ${CANDIDATE_PATHS[$i]}"
+        echo "      Info : ${CANDIDATE_DESCS[$i]}"
+        echo ""
+    done
+    OPT_APT=$(( ${#CANDIDATE_PATHS[@]} + 1 ))
+    OPT_MANUAL=$(( ${#CANDIDATE_PATHS[@]} + 2 ))
+    echo "  [${OPT_APT}] Chromium ueber APT neu installieren / aktualisieren"
+    echo "  [${OPT_MANUAL}] Anderen Browser-Pfad manuell eingeben"
+    echo ""
+
+    if [ -t 0 ]; then
+        read -r -p "Welchen Browser moechten Sie verwenden? [1-${OPT_MANUAL}] (Vorschlag/Standard: 1 - ${CANDIDATE_NAMES[0]}): " USER_SEL
+        USER_SEL="${USER_SEL:-1}"
+    else
+        echo "[Info] Nicht-interaktiver Modus -> Verwende empfohlenen Browser (Option 1)."
+        USER_SEL="1"
+    fi
+
+    if [ "$USER_SEL" = "$OPT_APT" ]; then
+        echo "[+] Installiere Chromium ueber APT..."
+        $SUDO apt-get install -y chromium-browser 2>/dev/null || $SUDO apt-get install -y chromium 2>/dev/null || true
+        CHOSEN_BIN="$(command -v chromium-browser 2>/dev/null || command -v chromium 2>/dev/null || true)"
+    elif [ "$USER_SEL" = "$OPT_MANUAL" ]; then
+        if [ -t 0 ]; then
+            read -r -p "Bitte vollstaendigen Pfad eingeben: " MANUAL_PATH
+            if [ -x "$MANUAL_PATH" ]; then
+                CHOSEN_BIN="$MANUAL_PATH"
+            else
+                echo "[!] Warnung: '$MANUAL_PATH' nicht ausfuehrbar. Fallback auf Option 1."
+                CHOSEN_BIN="${CANDIDATE_PATHS[0]}"
+            fi
+        else
+            CHOSEN_BIN="${CANDIDATE_PATHS[0]}"
+        fi
+    elif [[ "$USER_SEL" =~ ^[0-9]+$ ]] && [ "$USER_SEL" -ge 1 ] && [ "$USER_SEL" -le "${#CANDIDATE_PATHS[@]}" ]; then
+        SEL_IDX=$((USER_SEL - 1))
+        CHOSEN_BIN="${CANDIDATE_PATHS[$SEL_IDX]}"
+    else
+        echo "[!] Ungueltige Eingabe. Verwende Option 1."
+        CHOSEN_BIN="${CANDIDATE_PATHS[0]}"
+    fi
 else
-    echo "Installiere Browser (Ungoogled-Chromium oder Chromium)..."
-    $SUDO apt-get install -y ungoogled-chromium 2>/dev/null || \
-    $SUDO apt-get install -y chromium-browser 2>/dev/null || \
-    $SUDO apt-get install -y chromium 2>/dev/null || true
+    echo "Kein vorinstallierter Chromium-Browser gefunden. Installiere ueber APT..."
+    $SUDO apt-get install -y chromium-browser 2>/dev/null || $SUDO apt-get install -y chromium 2>/dev/null || true
+    CHOSEN_BIN="$(command -v chromium-browser 2>/dev/null || command -v chromium 2>/dev/null || true)"
+fi
+
+if [ -n "$CHOSEN_BIN" ]; then
+    echo "$CHOSEN_BIN" > browser_bin.txt
+    echo "[OK] Konfigurierter Browser gespeichert in browser_bin.txt:"
+    echo "     -> $CHOSEN_BIN"
 fi
 
 # 2. Python Virtual Environment (.venv) einrichten

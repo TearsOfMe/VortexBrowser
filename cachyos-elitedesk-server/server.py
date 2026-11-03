@@ -347,6 +347,17 @@ def find_full_chromium_executable(custom_bin: Optional[str] = None) -> Optional[
     if custom_bin and os.path.isfile(custom_bin) and os.access(custom_bin, os.X_OK):
         return custom_bin
 
+    # Check for configured browser from installer in browser_bin.txt
+    cfg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "browser_bin.txt")
+    if os.path.exists(cfg_path):
+        try:
+            with open(cfg_path, "r", encoding="utf-8") as f:
+                saved = f.readline().strip()
+            if saved and os.path.isfile(saved) and os.access(saved, os.X_OK):
+                return saved
+        except Exception:
+            pass
+
     priority_patterns = [
         os.path.expanduser("~/.local/opt/ungoogled-chromium/usr/lib/chromium/chromium"),
         os.path.expanduser("~/.local/bin/ungoogled-chromium"),
@@ -2009,14 +2020,13 @@ class AmigaClientSession:
                     document.addEventListener('DOMContentLoaded', injectUpStyle);
 
                     const syncMoxieShim = () => {
-                        const btn = document.getElementById('add_files');
+                        const btn = document.getElementById('add_files') || document.querySelector('.attach-panel-multi input[type=button]');
                         const shim = document.querySelector('.moxie-shim, .moxie-shim-html5');
                         if (btn && shim) {
-                            const r = btn.getBoundingClientRect();
-                            shim.style.top = (r.top + window.scrollY) + 'px';
-                            shim.style.left = (r.left + window.scrollX) + 'px';
-                            shim.style.width = r.width + 'px';
-                            shim.style.height = r.height + 'px';
+                            shim.style.top = btn.offsetTop + 'px';
+                            shim.style.left = btn.offsetLeft + 'px';
+                            shim.style.width = btn.offsetWidth + 'px';
+                            shim.style.height = btn.offsetHeight + 'px';
                             shim.style.zIndex = '999999';
                         }
                     };
@@ -2035,7 +2045,7 @@ class AmigaClientSession:
                                 }
                             }, 80);
                         }
-                        const addBtn = e.target && e.target.closest ? e.target.closest('#add_files, .attach-panel-multi, [data-subpanel="attach-panel"], .js-attachmentUpload, .js-attachButton') : null;
+                        const addBtn = e.target && e.target.closest ? e.target.closest('#add_files, .attach-panel-multi, .js-attachmentUpload, .js-attachButton') : null;
                         if (addBtn) {
                             let finp = document.querySelector('.moxie-shim input[type="file"], .moxie-shim-html5 input[type="file"]');
                             if (!finp) {
@@ -3231,8 +3241,6 @@ class AmigaClientSession:
                     if dist <= 16:
                         await self.page.mouse.move(down_x, down_y)
                         await self.page.mouse.up(button=btn)
-                        # Explicitly ensure click was registered on the target point
-                        await self.page.mouse.click(down_x, down_y, button=btn)
                     else:
                         await self.page.mouse.move(cx, cy)
                         await self.page.mouse.up(button=btn)
@@ -3270,19 +3278,18 @@ class AmigaClientSession:
                                 }
 
                                 // 4. Button / anchor / upload trigger element
-                                let btn = elem.closest ? elem.closest(
-                                    'button, a, label, [role="button"], input[type="button"], input[type="submit"], ' +
-                                    '.js-attachmentUpload, .js-attachButton, [data-action="upload"], ' +
-                                    '#add_files, .attach-panel-multi, [data-subpanel="attach-panel"], #attach-panel'
+                                let uploadBtn = elem.closest ? elem.closest(
+                                    '#add_files, .attach-panel-multi, .js-attachmentUpload, .js-attachButton, [data-action="upload"], ' +
+                                    'input[type="file"], .moxie-shim, .moxie-shim-html5'
                                 ) : null;
-                                if (btn) {
+                                if (uploadBtn) {
                                     // A) Plupload on page (phpBB, WordPress, etc.)
                                     let moxieInp = document.querySelector('.moxie-shim input[type="file"], .moxie-shim-html5 input[type="file"]');
                                     if (moxieInp) {
                                         moxieInp.click();
                                         return true;
                                     }
-                                    // B) XenForo / Discourse / generic file input
+                                    // B) Generic file input
                                     let allInp = Array.from(document.querySelectorAll('input[type="file"]'));
                                     for (let inp of allInp) {
                                         if (inp.id !== 'fileupload' || allInp.length === 1) {

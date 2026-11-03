@@ -60,5 +60,13 @@ if command -v pactl >/dev/null 2>&1; then
     fi
 fi
 
+BROWSER_ARGS=()
+if [ -f "browser_bin.txt" ]; then
+    SAVED_BIN="$(head -n 1 browser_bin.txt | tr -d '\r\n')"
+    if [ -n "$SAVED_BIN" ] && [ -x "$SAVED_BIN" ]; then
+        BROWSER_ARGS=("--browser-bin" "$SAVED_BIN")
+    fi
+fi
+
 echo "[VortexBrowse] Starte Server auf Raspberry Pi 4 (Port 7788 / 9757, YUV420P TurboJPEG, uBlock, h264ify)..."
-exec .venv/bin/python3 server.py --host 0.0.0.0 --port 7788 --fps 25 --format yuv420p --jpeg-quality 75 "$@"
+exec .venv/bin/python3 server.py --host 0.0.0.0 --port 7788 --fps 25 --format yuv420p --jpeg-quality 75 "${BROWSER_ARGS[@]}" "$@"

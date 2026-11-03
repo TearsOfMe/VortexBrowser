@@ -33,10 +33,20 @@ fi
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-4}"
 ENGINE="${VORTEX_ENGINE:-chromium}"
 
+BROWSER_ARGS=()
+SAVED_BIN=""
+if [ -f "browser_bin.txt" ]; then
+    SAVED_BIN="$(head -n 1 browser_bin.txt | tr -d '\r\n')"
+    if [ -n "$SAVED_BIN" ] && [ -x "$SAVED_BIN" ]; then
+        BROWSER_ARGS=("--browser-bin" "$SAVED_BIN")
+    fi
+fi
+
 echo "============================================================================"
 echo " Starting VortexBrowser Server - CachyOS HP EliteDesk 805 G6 (AMD Ryzen PRO)"
 echo " Resolution: 1920x1080 (Full HD) @ 25 FPS | Format: YUV420P + 2D Dirty-Rect"
-echo " Engine: ${ENGINE} | C-Native TurboJPEG + AVX2 + LZ4 Pipeline Active"
+echo " Engine: ${ENGINE} | Browser: ${SAVED_BIN:-System-Default}"
+echo " C-Native TurboJPEG + AVX2 + LZ4 Pipeline Active"
 echo "============================================================================"
 
 if [ $# -eq 0 ]; then
@@ -49,7 +59,8 @@ if [ $# -eq 0 ]; then
         --format yuv420p \
         --jpeg-quality 82 \
         --codec auto \
-        --engine "$ENGINE"
+        --engine "$ENGINE" \
+        "${BROWSER_ARGS[@]}"
 else
     exec .venv/bin/python server.py "$@"
 fi
