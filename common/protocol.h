@@ -39,6 +39,9 @@ extern "C" {
 #define MSG_CONTEXT_MENU      0x09  /* Pi -> Amiga: Native context menu target info under cursor */
 #define MSG_PAGE_PROGRESS     0x0A  /* Pi -> Amiga: Page loading progress (0-100 percent) */
 #define MSG_CLIPBOARD         0x0B  /* Bi-directional: Native clipboard text sync */
+#define MSG_UPLOAD_REQUEST    0x0C  /* Server -> Amiga: Trigger ASL FileRequester for file upload */
+#define MSG_UPLOAD_RESPONSE   0x0D  /* Amiga -> Server: User selected file info (or cancel) */
+#define MSG_UPLOAD_CHUNK      0x0E  /* Amiga -> Server: 64KB data chunk of file being uploaded */
 
 /* Pixel Formats for MSG_FRAME.format */
 #define FMT_ARGB32            1     /* 32-bit Big-Endian ARGB (PIXF_A8R8G8B8, 4 bytes/px) */
@@ -185,6 +188,37 @@ typedef struct MsgClipboard {
     uint32_t text_len;  /* Byte length of following UTF-8 text string (Big-Endian) */
 } MsgClipboard;
 
+/* 0x0C: MSG_UPLOAD_REQUEST (264 bytes)
+ * Wire layout: [uint8_t msg_type=0x0C] [MsgUploadRequest (264B)]
+ * Python struct format: ">II256s"
+ */
+typedef struct MsgUploadRequest {
+    uint32_t upload_id;         /* Unique upload identifier (Big-Endian) */
+    uint32_t max_size;          /* Max file size allowed, 0 = unlimited (Big-Endian) */
+    char     accept_types[256]; /* Filter / MIME types / extensions, or empty */
+} MsgUploadRequest;
+
+/* 0x0D: MSG_UPLOAD_RESPONSE (266 bytes under pack(2): 4B + 4B + 1B + 1B pad + 256B)
+ * Wire layout: [uint8_t msg_type=0x0D] [MsgUploadResponse (266B)]
+ * Python struct format: ">IIBB256s"
+ */
+typedef struct MsgUploadResponse {
+    uint32_t upload_id;         /* Matching upload identifier (Big-Endian) */
+    uint32_t file_size;         /* Total size of file to upload in bytes (Big-Endian) */
+    uint8_t  accepted;          /* 1 = File chosen, 0 = User cancelled requester */
+    uint8_t  pad;               /* Pad byte to align to 2 bytes */
+    char     filename[256];     /* Null-terminated base filename */
+} MsgUploadResponse;
+
+/* 0x0E: MSG_UPLOAD_CHUNK (8 bytes)
+ * Wire layout: [uint8_t msg_type=0x0E] [MsgUploadChunk (8B)] [uint8_t data[chunk_len]]
+ * Python struct format: ">II"
+ */
+typedef struct MsgUploadChunk {
+    uint32_t upload_id;         /* Matching upload identifier (Big-Endian) */
+    uint32_t chunk_len;         /* Byte length of following raw chunk payload (Big-Endian) */
+} MsgUploadChunk;
+
 /* CODEC_LZ4_RECT: 2D Bounding Box Sub-Rectangle Header (8 bytes)
  * Precedes LZ4 compressed sub-rectangle payload for CODEC_LZ4_RECT
  * Python struct format: ">HHHH"
@@ -210,6 +244,9 @@ typedef char vb_assert_msg_nav_size[(sizeof(MsgNavUpdate) == 512) ? 1 : -1];
 typedef char vb_assert_msg_ctx_size[(sizeof(MsgContextMenu) == 1152) ? 1 : -1];
 typedef char vb_assert_msg_prog_size[(sizeof(MsgProgress) == 66) ? 1 : -1];
 typedef char vb_assert_msg_clip_size[(sizeof(MsgClipboard) == 4) ? 1 : -1];
+typedef char vb_assert_msg_upload_req_size[(sizeof(MsgUploadRequest) == 264) ? 1 : -1];
+typedef char vb_assert_msg_upload_resp_size[(sizeof(MsgUploadResponse) == 266) ? 1 : -1];
+typedef char vb_assert_msg_upload_chunk_size[(sizeof(MsgUploadChunk) == 8) ? 1 : -1];
 typedef char vb_assert_msg_rect_size[(sizeof(MsgRectHdr) == 8) ? 1 : -1];
 
 #ifdef __cplusplus

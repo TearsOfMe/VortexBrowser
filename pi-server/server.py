@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-VortexBrowse - CachyOS / Linux Browser Streaming Server for AmigaOS 4.1 PowerPC
-- Streams LZ4-compressed Big-Endian frames & dirty scanline bands (RGB565 / ARGB32)
+VortexBrowse - CachyOS HP EliteDesk 805 G6 (AMD Ryzen PRO / Radeon Vega) Edition
+- Specially tuned for Full HD (1920x1080) @ 25 FPS streaming to AmigaOS 4.1 PowerPC
+- Uses C-native AVX2 + OpenMP + libturbojpeg + liblz4 pipeline (encode_jpeg_to_frame_packet)
+- Streams 12-bpp Planar YUV420P with 2D Dirty-Rect (CODEC_LZ4_RECT) & full-frame LZ4
 - Captures real browser audio via PipeWire/PulseAudio virtual sink (full Chromium + ozone-headless)
   and streams 22050Hz S16BE Stereo PCM to AmigaOS 4 AHI (ahi.device)
-- Provides an interactive Right-Click Context Menu on links/images/pages (Open Link, ASL Download, Back, etc.)
-- Maintains an explicit redirect-proof navigation history stack for reliable Back/Forward navigation
 """
 
 import argparse
@@ -74,6 +74,9 @@ MSG_NAV_UPDATE        = 0x08
 MSG_CONTEXT_MENU      = 0x09
 MSG_PAGE_PROGRESS     = 0x0A
 MSG_CLIPBOARD         = 0x0B
+MSG_UPLOAD_REQUEST    = 0x0C
+MSG_UPLOAD_RESPONSE   = 0x0D
+MSG_UPLOAD_CHUNK      = 0x0E
 
 FMT_ARGB32 = 1
 FMT_RGB565 = 2
@@ -106,6 +109,9 @@ STRUCT_MSG_AUDIO        = struct.Struct(">BHBBII")
 STRUCT_MSG_NAV_UPDATE   = struct.Struct(">B512s")
 STRUCT_MSG_CTX_MENU     = struct.Struct(">B512s128s512s")
 STRUCT_MSG_PROGRESS     = struct.Struct(">BBx64s")
+STRUCT_MSG_UPLOAD_REQ   = struct.Struct(">BII256s")
+STRUCT_MSG_UPLOAD_RESP  = struct.Struct(">IIBB256s")
+STRUCT_MSG_UPLOAD_CHUNK = struct.Struct(">BII")
 
 DOWNLOAD_CHUNK_SIZE = 64 * 1024
 AUDIO_SAMPLE_RATE   = 22050
@@ -155,10 +161,12 @@ AMIGA_RAWKEY_MAP = {
 class CPUGovernorManager:
     """Manages CPU power scaling profile via 'powerprofilesctl' (NOT cpufreq).
     Switches the system power profile to 'performance' when an Amiga client connects,
-    and switches to 'power-saver' when no clients are connected or on shutdown.
+    and restores the previous profile (e.g. 'balanced' or 'power-saver') when clients
+    disconnect or on shutdown.
     """
     def __init__(self, enabled: bool = True):
         self.enabled = enabled
+        self.prev_profile: Optional[str] = None
         self.active_count = 0
         self.is_performance = False
         self._lock = asyncio.Lock()
@@ -168,9 +176,6 @@ class CPUGovernorManager:
             if not cur:
                 self.enabled = False
                 logger.debug("[CPU Power] powerprofilesctl not available or inactive.")
-            else:
-                if self.set_profile("power-saver"):
-                    logger.info("[CPU Power] Server idle -> powerprofilesctl set to 'power-saver'")
 
     @staticmethod
     def read_current_profile() -> Optional[str]:
@@ -208,11 +213,14 @@ class CPUGovernorManager:
         async with self._lock:
             self.active_count += 1
             if self.active_count == 1 and not self.is_performance:
+                cur = self.read_current_profile()
+                if cur and not self.prev_profile:
+                    self.prev_profile = cur
                 if self.set_profile("performance"):
                     self.is_performance = True
-                    logger.info("[CPU Power] Amiga client active -> powerprofilesctl switched to 'performance'")
+                    logger.info("[CPU Power] Amiga client active -> powerprofilesctl switched to 'performance' (was '%s')", self.prev_profile or "default")
                 else:
-                    logger.debug("[CPU Power] Could not set powerprofilesctl to 'performance'")
+                    logger.debug("[CPU Power] Could not set powerprofilesctl to performance")
 
     async def client_disconnected(self) -> None:
         if not self.enabled:
@@ -220,14 +228,16 @@ class CPUGovernorManager:
         async with self._lock:
             self.active_count = max(0, self.active_count - 1)
             if self.active_count == 0 and self.is_performance:
+                restored_to = self.prev_profile or "balanced"
                 self.restore()
-                logger.info("[CPU Power] No active clients -> powerprofilesctl switched to 'power-saver'")
+                logger.info("[CPU Power] No active clients -> powerprofilesctl restored to '%s'", restored_to)
 
     def restore(self) -> None:
-        if self.enabled:
+        if self.is_performance:
+            target = self.prev_profile if (self.prev_profile and self.prev_profile != "performance") else "balanced"
             try:
                 subprocess.run(
-                    ["powerprofilesctl", "set", "power-saver"],
+                    ["powerprofilesctl", "set", target],
                     check=False,
                     capture_output=True,
                     timeout=2.0,
@@ -235,6 +245,7 @@ class CPUGovernorManager:
             except Exception:
                 pass
             self.is_performance = False
+            self.prev_profile = None
 
 
 cpu_gov_global: Optional[CPUGovernorManager] = None
@@ -1506,6 +1517,8 @@ class AmigaClientSession:
 
         self.next_download_id: int = 1
         self.pending_downloads: Dict[int, asyncio.Future] = {}
+        self.next_upload_id: int = 1
+        self.pending_uploads: Dict[int, Tuple[FileChooser, asyncio.Future]] = {}
         self.background_tasks: set = set()
 
         self.web_zoom_pct: int = 100
@@ -1579,6 +1592,13 @@ class AmigaClientSession:
                 direct = DirectCDPSession(ws_url, fallback_cdp=base_cdp)
                 if await direct.connect():
                     self.cdp = direct
+                    if getattr(self, "_init_turbo_js", None):
+                        try:
+                            await self.cdp.send("Page.enable")
+                            await self.cdp.send("Page.addScriptToEvaluateOnNewDocument", {"source": self._init_turbo_js})
+                            await self.cdp.send("Runtime.evaluate", {"expression": self._init_turbo_js})
+                        except Exception:
+                            pass
                     return
 
         self.cdp = base_cdp
@@ -1615,6 +1635,7 @@ class AmigaClientSession:
         t.add_done_callback(self.background_tasks.discard)
 
     def _setup_page_listeners(self, page: Page) -> None:
+        page.on("filechooser", self._on_filechooser_event)
         page.on("download", self._on_download_event)
         page.on("framenavigated", self._on_main_frame_navigated)
         page.on("load", self._on_page_loaded)
@@ -1786,140 +1807,156 @@ class AmigaClientSession:
             except Exception as _te:
                 logger.debug("Twitch cookie load error: %s", _te)
 
-            # Anti-Bot & Anti-Detection Stealth Script (removes automation flags without breaking window.open)
+            # Anti-Bot & Anti-Detection Stealth + YouTube/Twitch Dirty-Rect Turbo Script
+            self._init_turbo_js = """(() => {
+                if (window.__vortexTurboInjected) return;
+                window.__vortexTurboInjected = true;
+                try {
+                    delete Object.getPrototypeOf(navigator).webdriver;
+                } catch (e) {
+                    try {
+                        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                    } catch (e2) {}
+                }
+                if (!window.chrome) {
+                    window.chrome = {
+                        runtime: {},
+                        loadTimes: function() {},
+                        csi: function() {},
+                        app: { isInstalled: false }
+                    };
+                }
+                if (!navigator.plugins || navigator.plugins.length === 0) {
+                    const fakePlugins = [
+                        { name: 'PDF Viewer', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
+                        { name: 'Chrome PDF Viewer', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
+                        { name: 'Chromium PDF Viewer', filename: 'internal-pdf-viewer', description: 'Portable Document Format' }
+                    ];
+                    Object.defineProperty(navigator, 'plugins', { get: () => fakePlugins });
+                }
+                try {
+                    Object.defineProperty(navigator, 'languages', { get: () => ['de-DE', 'de', 'en-US', 'en'] });
+                } catch (e) {}
+
+                document.addEventListener('click', function(e) {
+                    const a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+                    if (a && a.target && a.target !== '_self') {
+                        a.target = '_self';
+                    }
+                }, true);
+
+                // Media & YouTube Performance Turbo (H.264 only, block 60fps & VP9/AV1, disable Ambient Mode)
+                try {
+                    const origCanPlayType = HTMLMediaElement.prototype.canPlayType;
+                    HTMLMediaElement.prototype.canPlayType = function(type) {
+                        if (!type) return '';
+                        const lower = String(type).toLowerCase();
+                        if (lower.includes('vp9') || lower.includes('vp09') || lower.includes('av01') || lower.includes('av1') || lower.includes('webm')) {
+                            return '';
+                        }
+                        return origCanPlayType.call(this, type);
+                    };
+
+                    if (window.MediaSource && window.MediaSource.isTypeSupported) {
+                        const origIsTypeSupported = window.MediaSource.isTypeSupported.bind(window.MediaSource);
+                        window.MediaSource.isTypeSupported = function(type) {
+                            if (!type) return false;
+                            const lower = String(type).toLowerCase();
+                            if (lower.includes('vp9') || lower.includes('vp09') || lower.includes('vp8') ||
+                                lower.includes('av01') || lower.includes('av1') || lower.includes('webm') ||
+                                lower.includes('framerate=60') || lower.includes('fps=60') || lower.includes('framerate=50')) {
+                                return false;
+                            }
+                            return origIsTypeSupported(type);
+                        };
+                    }
+
+                    const injectYtStyle = () => {
+                        if (document.getElementById('__vortex_yt_style')) return;
+                        const ytStyle = document.createElement('style');
+                        ytStyle.id = '__vortex_yt_style';
+                        ytStyle.textContent = `
+                            #cinematics, #cinematics-container, #background.ytd-cinematics, ytd-cinematics,
+                            canvas.ytd-cinematics, .ytp-ambient-lighting, #movie_player .html5-ambient-video,
+                            ytd-video-preview, #preview, .ytd-video-preview,
+                            tp-yt-paper-spinner-lite, .ytp-spinner {
+                                display: none !important;
+                                visibility: hidden !important;
+                                opacity: 0 !important;
+                                pointer-events: none !important;
+                            }
+                        `;
+                        (document.head || document.documentElement).appendChild(ytStyle);
+                    };
+                    if (document.head || document.documentElement) {
+                        injectYtStyle();
+                    }
+                    document.addEventListener('DOMContentLoaded', injectYtStyle);
+
+                    try {
+                        window.localStorage.setItem('yt-player-quality', JSON.stringify({
+                            data: '{"quality":720,"previousQuality":720}',
+                            creation: Date.now()
+                        }));
+                        window.localStorage.setItem('yt-player-ambient-mode-enabled', JSON.stringify({
+                            data: 'false',
+                            creation: Date.now()
+                        }));
+                    } catch(e) {}
+
+                    setInterval(() => {
+                        injectYtStyle();
+                        const flexy = document.querySelector('ytd-watch-flexy[cinematics-enabled]');
+                        if (flexy) flexy.removeAttribute('cinematics-enabled');
+                        const cin = document.getElementById('cinematics');
+                        if (cin && cin.innerHTML) cin.innerHTML = '';
+                        const player = document.getElementById('movie_player');
+                        if (player && typeof player.setPlaybackQualityRange === 'function') {
+                            try {
+                                player.setPlaybackQualityRange('hd720', 'hd720');
+                            } catch(e) {}
+                        }
+                    }, 1500);
+                } catch(e) {}
+
+                // Twitch Performance Turbo (Pre-set 720p30 / freeze animated emotes / hide bloat)
+                try {
+                    try {
+                        window.localStorage.setItem('video-quality', JSON.stringify({ default: '720p30' }));
+                        window.localStorage.setItem('twilight.player.quality', '"720p30"');
+                        window.localStorage.setItem('lowLatencyMode', 'false');
+                    } catch(e) {}
+
+                    const injectTwStyle = () => {
+                        if (document.getElementById('__vortex_tw_style')) return;
+                        const twStyle = document.createElement('style');
+                        twStyle.id = '__vortex_tw_style';
+                        twStyle.textContent = `
+                            .chat-image, .chat-line__message--emote {
+                                animation-play-state: paused !important;
+                            }
+                            .community-points-summary,
+                            .channel-points-reward-line,
+                            .bits-card,
+                            .tw-carousel,
+                            .carousel-player,
+                            .front-page-carousel,
+                            [data-a-target="player-overlay-mature-accept"],
+                            [data-a-target="user-channel-status-notice"] {
+                                display: none !important;
+                                visibility: hidden !important;
+                            }
+                        `;
+                        (document.head || document.documentElement).appendChild(twStyle);
+                    };
+                    if (document.head || document.documentElement) {
+                        injectTwStyle();
+                    }
+                    document.addEventListener('DOMContentLoaded', injectTwStyle);
+                } catch(e) {}
+            })()"""
             try:
-                await self.context.add_init_script(
-                    """() => {
-                        try {
-                            delete Object.getPrototypeOf(navigator).webdriver;
-                        } catch (e) {
-                            try {
-                                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-                            } catch (e2) {}
-                        }
-                        if (!window.chrome) {
-                            window.chrome = {
-                                runtime: {},
-                                loadTimes: function() {},
-                                csi: function() {},
-                                app: { isInstalled: false }
-                            };
-                        }
-                        if (!navigator.plugins || navigator.plugins.length === 0) {
-                            const fakePlugins = [
-                                { name: 'PDF Viewer', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
-                                { name: 'Chrome PDF Viewer', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
-                                { name: 'Chromium PDF Viewer', filename: 'internal-pdf-viewer', description: 'Portable Document Format' }
-                            ];
-                            Object.defineProperty(navigator, 'plugins', { get: () => fakePlugins });
-                        }
-                        try {
-                            Object.defineProperty(navigator, 'languages', { get: () => ['de-DE', 'de', 'en-US', 'en'] });
-                        } catch (e) {}
-
-                        document.addEventListener('click', function(e) {
-                            const a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
-                            if (a && a.target && a.target !== '_self') {
-                                a.target = '_self';
-                            }
-                        }, true);
-
-                        // Media & YouTube Performance Turbo (H.264 only, block 60fps & VP9/AV1, disable Ambient Mode)
-                        try {
-                            const origCanPlayType = HTMLMediaElement.prototype.canPlayType;
-                            HTMLMediaElement.prototype.canPlayType = function(type) {
-                                if (!type) return '';
-                                const lower = String(type).toLowerCase();
-                                if (lower.includes('vp9') || lower.includes('vp09') || lower.includes('av01') || lower.includes('av1') || lower.includes('webm')) {
-                                    return '';
-                                }
-                                return origCanPlayType.call(this, type);
-                            };
-
-                            if (window.MediaSource && window.MediaSource.isTypeSupported) {
-                                const origIsTypeSupported = window.MediaSource.isTypeSupported.bind(window.MediaSource);
-                                window.MediaSource.isTypeSupported = function(type) {
-                                    if (!type) return false;
-                                    const lower = String(type).toLowerCase();
-                                    if (lower.includes('vp9') || lower.includes('vp09') || lower.includes('vp8') || 
-                                        lower.includes('av01') || lower.includes('av1') || lower.includes('webm') ||
-                                        lower.includes('framerate=60') || lower.includes('fps=60') || lower.includes('framerate=50')) {
-                                        return false;
-                                    }
-                                    return origIsTypeSupported(type);
-                                };
-                            }
-
-                            const ytStyle = document.createElement('style');
-                            ytStyle.textContent = `
-                                #cinematics, #background.ytd-cinematics, ytd-cinematics,
-                                .ytp-ambient-lighting, #movie_player .html5-ambient-video,
-                                ytd-video-preview, #preview, .ytd-video-preview {
-                                    display: none !important;
-                                    visibility: hidden !important;
-                                    opacity: 0 !important;
-                                }
-                            `;
-                            if (document.head) {
-                                document.head.appendChild(ytStyle);
-                            } else {
-                                document.addEventListener('DOMContentLoaded', () => {
-                                    if (document.head) document.head.appendChild(ytStyle);
-                                });
-                            }
-
-                            try {
-                                window.localStorage.setItem('yt-player-quality', JSON.stringify({
-                                    data: '{"quality":720,"previousQuality":720}',
-                                    creation: Date.now()
-                                }));
-                            } catch(e) {}
-
-                            setInterval(() => {
-                                const player = document.getElementById('movie_player');
-                                if (player && typeof player.setPlaybackQualityRange === 'function') {
-                                    try {
-                                        player.setPlaybackQualityRange('medium', 'hd720');
-                                    } catch(e) {}
-                                }
-                            }, 2000);
-                        } catch(e) {}
-
-                        // Twitch Performance Turbo (Pre-set 720p30 / freeze animated emotes / hide bloat)
-                        try {
-                            try {
-                                window.localStorage.setItem('video-quality', JSON.stringify({ default: '720p30' }));
-                                window.localStorage.setItem('twilight.player.quality', '"720p30"');
-                                window.localStorage.setItem('lowLatencyMode', 'false');
-                            } catch(e) {}
-
-                            const twStyle = document.createElement('style');
-                            twStyle.textContent = `
-                                .chat-image, .chat-line__message--emote {
-                                    animation-play-state: paused !important;
-                                }
-                                .community-points-summary,
-                                .channel-points-reward-line,
-                                .bits-card,
-                                .tw-carousel,
-                                .carousel-player,
-                                .front-page-carousel,
-                                [data-a-target="player-overlay-mature-accept"],
-                                [data-a-target="user-channel-status-notice"] {
-                                    display: none !important;
-                                    visibility: hidden !important;
-                                }
-                            `;
-                            if (document.head) {
-                                document.head.appendChild(twStyle);
-                            } else {
-                                document.addEventListener('DOMContentLoaded', () => {
-                                    if (document.head) document.head.appendChild(twStyle);
-                                });
-                            }
-                        } catch(e) {}
-                    }"""
-                )
+                await self.context.add_init_script(self._init_turbo_js)
             except Exception:
                 pass
 
@@ -2011,6 +2048,7 @@ class AmigaClientSession:
                     pass
             for tab in list(self.tabs):
                 try:
+                    tab.remove_listener("filechooser", self._on_filechooser_event)
                     tab.remove_listener("download", self._on_download_event)
                     tab.remove_listener("framenavigated", self._on_main_frame_navigated)
                     tab.remove_listener("load", self._on_page_loaded)
@@ -2474,6 +2512,7 @@ class AmigaClientSession:
             self._yuv_buf,
             self._pkt_buf,
             self.allow_yuv_rect,
+            self.is_video_mode or self._video_element_playing,
         )
         t_encode = time.monotonic()
         if header_and_payload:
@@ -2517,13 +2556,14 @@ class AmigaClientSession:
         yuv_buf: Optional[ctypes.Array] = None,
         pkt_buf: Optional[ctypes.Array] = None,
         allow_yuv_rect: bool = False,
+        is_video_mode: bool = False,
     ) -> Optional[bytes]:
         try:
             # 1. Ultra-Fast C-Native Pipeline (libturbojpeg SIMD + AVX2 dirty-rect + liblz4 in a single C call)
             if _FAST_PIXCONV is not None and _HAS_NATIVE_PACKET_ENCODER and pkt_buf is not None:
                 work_buf = yuv_buf if pixel_format == FMT_YUV420P else (rgb565_buf if pixel_format == FMT_RGB565 else argb_buf)
                 if work_buf is not None:
-                    lz4_accel = 3 if (width * height >= 1500000) else 2
+                    lz4_accel = (3 | 0x100) if is_video_mode else 3
                     pkt_len = _FAST_PIXCONV.encode_jpeg_to_frame_packet(
                         jpeg_bytes,
                         len(jpeg_bytes),
@@ -2954,6 +2994,21 @@ class AmigaClientSession:
                 if fut and not fut.done():
                     fut.set_result(bool(accepted == 1))
 
+            elif msg_type == MSG_UPLOAD_RESPONSE:
+                try:
+                    body = await self.reader.readexactly(STRUCT_MSG_UPLOAD_RESP.size)
+                except asyncio.IncompleteReadError:
+                    break
+                upload_id, file_size, accepted, pad, raw_fname = STRUCT_MSG_UPLOAD_RESP.unpack(body)
+                fname = raw_fname.split(b"\x00", 1)[0].decode("utf-8", errors="replace")
+                logger.info("Received MSG_UPLOAD_RESPONSE: id=%d, size=%d, accepted=%d, fname='%s'",
+                            upload_id, file_size, accepted, fname)
+                entry = self.pending_uploads.get(upload_id)
+                if entry:
+                    fc, fut = entry
+                    if not fut.done():
+                        fut.set_result((bool(accepted == 1), file_size, fname))
+
             elif msg_type == MSG_CLIPBOARD:
                 try:
                     clip_hdr = await self.reader.readexactly(struct.calcsize(">I"))
@@ -3308,13 +3363,71 @@ class AmigaClientSession:
         except Exception as exc:
             logger.debug("emulate_media color_scheme error: %s", exc)
 
+        page_url = ""
+        try:
+            page_url = target_page.url or ""
+        except Exception:
+            pass
+
+        is_twitch = "twitch.tv" in page_url.lower()
+
         if self.cdp is not None and self.engine == "chromium":
             try:
-                await self.cdp.send("Emulation.setAutoDarkModeOverride", {"enabled": is_dark})
+                # Do NOT force Chromium Emulation.setAutoDarkModeOverride on Twitch or YouTube
+                # because AutoDarkMode forcefully inverts video surfaces into solid white/blank boxes!
+                auto_dark = is_dark and not is_twitch
+                await self.cdp.send("Emulation.setAutoDarkModeOverride", {"enabled": auto_dark})
             except Exception as exc:
                 logger.debug("Emulation.setAutoDarkModeOverride error: %s", exc)
 
-        if DARKREADER_JS:
+        if is_twitch:
+            # Native Twitch Dark Theme toggle (preserves video element, flawless dark UI)
+            try:
+                if is_dark:
+                    tw_dark_js = """
+                    (() => {
+                        try {
+                            if (typeof DarkReader !== 'undefined') DarkReader.disable();
+                            let f = document.getElementById('__vb_dark_flash');
+                            if (f) f.remove();
+                            document.documentElement.classList.remove('tw-root--theme-light');
+                            document.documentElement.classList.add('tw-root--theme-dark');
+                            try { localStorage.setItem('twilight.theme', '1'); } catch(e) {}
+                            let s = document.getElementById('__vb_tw_dark_fix');
+                            if (!s && document.head) {
+                                s = document.createElement('style');
+                                s.id = '__vb_tw_dark_fix';
+                                document.head.appendChild(s);
+                            }
+                            if (s) {
+                                s.textContent = `
+                                    .video-player, .video-player__container, .video-player__default-player, video {
+                                        background-color: #000000 !important;
+                                        filter: none !important;
+                                    }
+                                `;
+                            }
+                        } catch(e) {}
+                    })();
+                    """
+                    await target_page.evaluate(tw_dark_js)
+                else:
+                    tw_light_js = """
+                    (() => {
+                        try {
+                            document.documentElement.classList.remove('tw-root--theme-dark');
+                            document.documentElement.classList.add('tw-root--theme-light');
+                            try { localStorage.setItem('twilight.theme', '0'); } catch(e) {}
+                            let s = document.getElementById('__vb_tw_dark_fix');
+                            if (s) s.remove();
+                        } catch(e) {}
+                    })();
+                    """
+                    await target_page.evaluate(tw_light_js)
+            except Exception as exc:
+                logger.debug("Twitch native theme evaluate error: %s", exc)
+
+        elif DARKREADER_JS:
             try:
                 if is_dark:
                     js = (
@@ -4185,6 +4298,115 @@ class AmigaClientSession:
             except Exception:
                 pass
 
+    # ------------------------------------------------------------------------
+    # File Upload Interceptor (Amiga ASL FileRequester -> Server -> Browser)
+    # ------------------------------------------------------------------------
+    def _on_filechooser_event(self, file_chooser: FileChooser) -> None:
+        """Triggered whenever a website clicks an HTML <input type="file">."""
+        t = asyncio.create_task(self._process_filechooser(file_chooser))
+        self.background_tasks.add(t)
+        t.add_done_callback(self.background_tasks.discard)
+
+    async def _process_filechooser(self, file_chooser: FileChooser) -> None:
+        upload_id = self.next_upload_id
+        self.next_upload_id += 1
+
+        element = file_chooser.element
+        accept_types = ""
+        try:
+            if element:
+                accept_types = (await element.get_attribute("accept")) or ""
+        except Exception:
+            pass
+
+        logger.info("Intercepted file upload chooser id=%d (page=%s, accept='%s')",
+                    upload_id, self.page.url if self.page else "", accept_types)
+
+        loop = asyncio.get_running_loop()
+        resp_future = loop.create_future()
+        self.pending_uploads[upload_id] = (file_chooser, resp_future)
+
+        tmp_path = None
+        try:
+            # 1. Send MSG_UPLOAD_REQUEST to Amiga to open ASL FileRequester
+            accept_bytes = accept_types.encode("utf-8", errors="replace")[:255].ljust(256, b"\x00")
+            req_pkt = STRUCT_MSG_UPLOAD_REQ.pack(
+                MSG_UPLOAD_REQUEST,
+                upload_id,
+                0,  # max_size (0 = unconstrained)
+                accept_bytes,
+            )
+            if not await self.send_packet(req_pkt):
+                logger.warning("Could not send MSG_UPLOAD_REQUEST id=%d to Amiga", upload_id)
+                return
+
+            # 2. Wait up to 5 minutes for Amiga user to select a file in ASL FileRequester
+            try:
+                accepted, file_size, filename = await asyncio.wait_for(resp_future, timeout=300.0)
+            except asyncio.TimeoutError:
+                logger.warning("Upload id=%d timed out waiting for Amiga ASL selection", upload_id)
+                return
+
+            if not accepted or file_size == 0:
+                logger.info("Upload id=%d cancelled by Amiga user or empty file", upload_id)
+                return
+
+            logger.info("Upload id=%d confirmed by Amiga: '%s' (%d bytes). Receiving chunks...",
+                        upload_id, filename, file_size)
+
+            # 3. Create temporary file on server to receive uploaded chunks
+            safe_fname = re.sub(r'[^a-zA-Z0-9_.-]', '_', filename) or f"upload_{upload_id}.bin"
+            tmp_fd, tmp_path = tempfile.mkstemp(prefix=f"vb_up_{upload_id}_", suffix=f"_{safe_fname}")
+
+            received_bytes = 0
+            chunk_hdr_size = struct.calcsize(">II")
+
+            with os.fdopen(tmp_fd, "wb") as f:
+                while received_bytes < file_size and self.running:
+                    # Read MSG_UPLOAD_CHUNK type
+                    msg_type_b = await self.reader.readexactly(1)
+                    if msg_type_b[0] != MSG_UPLOAD_CHUNK:
+                        logger.warning("Expected MSG_UPLOAD_CHUNK, got 0x%02x", msg_type_b[0])
+                        break
+                    chunk_hdr = await self.reader.readexactly(chunk_hdr_size)
+                    u_id, chunk_len = struct.unpack(">II", chunk_hdr)
+                    if u_id != upload_id:
+                        logger.warning("Upload ID mismatch in chunk: expected %d, got %d", upload_id, u_id)
+                        break
+                    chunk_data = await self.reader.readexactly(chunk_len)
+                    f.write(chunk_data)
+                    received_bytes += chunk_len
+
+            if received_bytes >= file_size:
+                logger.info("Upload id=%d fully received (%d bytes). Setting files in browser!",
+                            upload_id, received_bytes)
+                await file_chooser.set_files(tmp_path)
+                self._trigger_full_refresh(True)
+                self._schedule_delayed_frames()
+            else:
+                logger.warning("Upload id=%d incomplete: received %d of %d bytes",
+                               upload_id, received_bytes, file_size)
+
+        except Exception as exc:
+            logger.error("Error processing file upload id=%d: %s", upload_id, exc)
+        finally:
+            self.pending_uploads.pop(upload_id, None)
+            if tmp_path:
+                try:
+                    # Allow browser time to finish form submission before deleting temp file
+                    async def _delayed_unlink(p: str):
+                        await asyncio.sleep(60.0)
+                        try:
+                            if os.path.exists(p):
+                                os.remove(p)
+                        except Exception:
+                            pass
+                    t_del = asyncio.create_task(_delayed_unlink(tmp_path))
+                    self.background_tasks.add(t_del)
+                    t_del.add_done_callback(self.background_tasks.discard)
+                except Exception:
+                    pass
+
 
 # ============================================================================
 # GPU Acceleration Helper
@@ -4214,7 +4436,7 @@ def get_gpu_launch_flags(disable_gpu: bool = False) -> Tuple[List[str], bool]:
 
 
 def _cleanup_existing_server_and_locks(port: int, profile_dir: str) -> None:
-    """Stops any older server.py instance holding the TCP port or Chromium profile lock."""
+    """Stops any older server.py instance or orphaned Chromium holding the TCP port or profile lock."""
     my_pid = os.getpid()
     try:
         out = subprocess.check_output(["pgrep", "-f", "server.py"], text=True, timeout=2)
@@ -4226,7 +4448,7 @@ def _cleanup_existing_server_and_locks(port: int, profile_dir: str) -> None:
                     os.kill(pid, 15)
                 except Exception:
                     pass
-            time.sleep(0.8)
+            time.sleep(0.6)
             for pid in other_pids:
                 try:
                     os.kill(pid, 9)
@@ -4255,7 +4477,7 @@ def _cleanup_existing_server_and_locks(port: int, profile_dir: str) -> None:
     except Exception:
         pass
 
-    # Clean stale Chromium SingletonLock if no chromium process is using profile_dir
+    # Clean stale Chromium SingletonLock
     for lock_name in ("SingletonLock", "SingletonCookie", "SingletonSocket"):
         lp = os.path.join(profile_dir, lock_name)
         if os.path.lexists(lp):
@@ -4528,18 +4750,18 @@ async def run_server(args: argparse.Namespace) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="VortexBrowse CachyOS Streaming Server for AmigaOS 4.1")
+    parser = argparse.ArgumentParser(description="VortexBrowse CachyOS HP EliteDesk 805 G6 (AMD Ryzen PRO) 1080p@25fps Server")
     parser.add_argument("--host", default="0.0.0.0", help="Bind address (default: 0.0.0.0)")
     parser.add_argument("--port", type=int, default=7788, help="TCP port (default: 7788, plus 9757 for LAN)")
     parser.add_argument("--portal-port", type=int, default=8089, help="Local start portal HTTP port")
-    parser.add_argument("--width", type=int, default=1024, help="Initial browser width (default: 1024)")
-    parser.add_argument("--height", type=int, default=768, help="Initial browser height (default: 768)")
+    parser.add_argument("--width", type=int, default=1920, help="Initial browser width (default: 1920 Full HD)")
+    parser.add_argument("--height", type=int, default=1080, help="Initial browser height (default: 1080 Full HD)")
     parser.add_argument("--format", choices=["argb32", "rgb565", "yuv420p", "yuv"], default="yuv420p", help="Wire pixel format (default: yuv420p — GPU-native YUV, lowest bandwidth)")
     parser.add_argument("--fps", type=int, default=25, help="Max target FPS (default: 25)")
     parser.add_argument("--url", default="", help="Optional initial URL (default: built-in Amiga portal)")
     parser.add_argument("--browser-bin", default=None, help="Explicit path to Chromium or Ungoogled-Chromium executable")
     parser.add_argument("--codec", choices=["auto", "jpeg", "lz4"], default="auto", help="Streaming codec (default: auto)")
-    parser.add_argument("--jpeg-quality", type=int, default=100, help="JPEG capture quality 20-100 (default: 100 for maximum clarity)")
+    parser.add_argument("--jpeg-quality", type=int, default=82, help="JPEG capture quality 20-100 (default: 82 for Full HD 1080p@25fps)")
     parser.add_argument("--enable-extensions", dest="enable_extensions", action="store_true", default=True, help="Enable browser extensions (uBlock, h264ify) [default: enabled]")
     parser.add_argument("--disable-extensions", dest="enable_extensions", action="store_false", help="Disable all browser extensions")
     parser.add_argument("--disable-gpu", action="store_true", help="Disable GPU hardware acceleration (forces CPU software rasterization)")

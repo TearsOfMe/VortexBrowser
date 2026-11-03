@@ -74,6 +74,9 @@ MSG_NAV_UPDATE        = 0x08
 MSG_CONTEXT_MENU      = 0x09
 MSG_PAGE_PROGRESS     = 0x0A
 MSG_CLIPBOARD         = 0x0B
+MSG_UPLOAD_REQUEST    = 0x0C
+MSG_UPLOAD_RESPONSE   = 0x0D
+MSG_UPLOAD_CHUNK      = 0x0E
 
 FMT_ARGB32 = 1
 FMT_RGB565 = 2
@@ -106,6 +109,9 @@ STRUCT_MSG_AUDIO        = struct.Struct(">BHBBII")
 STRUCT_MSG_NAV_UPDATE   = struct.Struct(">B512s")
 STRUCT_MSG_CTX_MENU     = struct.Struct(">B512s128s512s")
 STRUCT_MSG_PROGRESS     = struct.Struct(">BBx64s")
+STRUCT_MSG_UPLOAD_REQ   = struct.Struct(">BII256s")
+STRUCT_MSG_UPLOAD_RESP  = struct.Struct(">IIBB256s")
+STRUCT_MSG_UPLOAD_CHUNK = struct.Struct(">BII")
 
 DOWNLOAD_CHUNK_SIZE = 64 * 1024
 AUDIO_SAMPLE_RATE   = 22050
@@ -1511,6 +1517,8 @@ class AmigaClientSession:
 
         self.next_download_id: int = 1
         self.pending_downloads: Dict[int, asyncio.Future] = {}
+        self.next_upload_id: int = 1
+        self.pending_uploads: Dict[int, Tuple[FileChooser, asyncio.Future]] = {}
         self.background_tasks: set = set()
 
         self.web_zoom_pct: int = 100
@@ -1627,6 +1635,7 @@ class AmigaClientSession:
         t.add_done_callback(self.background_tasks.discard)
 
     def _setup_page_listeners(self, page: Page) -> None:
+        page.on("filechooser", self._on_filechooser_event)
         page.on("download", self._on_download_event)
         page.on("framenavigated", self._on_main_frame_navigated)
         page.on("load", self._on_page_loaded)
@@ -2039,6 +2048,7 @@ class AmigaClientSession:
                     pass
             for tab in list(self.tabs):
                 try:
+                    tab.remove_listener("filechooser", self._on_filechooser_event)
                     tab.remove_listener("download", self._on_download_event)
                     tab.remove_listener("framenavigated", self._on_main_frame_navigated)
                     tab.remove_listener("load", self._on_page_loaded)
@@ -2984,6 +2994,21 @@ class AmigaClientSession:
                 if fut and not fut.done():
                     fut.set_result(bool(accepted == 1))
 
+            elif msg_type == MSG_UPLOAD_RESPONSE:
+                try:
+                    body = await self.reader.readexactly(STRUCT_MSG_UPLOAD_RESP.size)
+                except asyncio.IncompleteReadError:
+                    break
+                upload_id, file_size, accepted, pad, raw_fname = STRUCT_MSG_UPLOAD_RESP.unpack(body)
+                fname = raw_fname.split(b"\x00", 1)[0].decode("utf-8", errors="replace")
+                logger.info("Received MSG_UPLOAD_RESPONSE: id=%d, size=%d, accepted=%d, fname='%s'",
+                            upload_id, file_size, accepted, fname)
+                entry = self.pending_uploads.get(upload_id)
+                if entry:
+                    fc, fut = entry
+                    if not fut.done():
+                        fut.set_result((bool(accepted == 1), file_size, fname))
+
             elif msg_type == MSG_CLIPBOARD:
                 try:
                     clip_hdr = await self.reader.readexactly(struct.calcsize(">I"))
@@ -3338,13 +3363,71 @@ class AmigaClientSession:
         except Exception as exc:
             logger.debug("emulate_media color_scheme error: %s", exc)
 
+        page_url = ""
+        try:
+            page_url = target_page.url or ""
+        except Exception:
+            pass
+
+        is_twitch = "twitch.tv" in page_url.lower()
+
         if self.cdp is not None and self.engine == "chromium":
             try:
-                await self.cdp.send("Emulation.setAutoDarkModeOverride", {"enabled": is_dark})
+                # Do NOT force Chromium Emulation.setAutoDarkModeOverride on Twitch or YouTube
+                # because AutoDarkMode forcefully inverts video surfaces into solid white/blank boxes!
+                auto_dark = is_dark and not is_twitch
+                await self.cdp.send("Emulation.setAutoDarkModeOverride", {"enabled": auto_dark})
             except Exception as exc:
                 logger.debug("Emulation.setAutoDarkModeOverride error: %s", exc)
 
-        if DARKREADER_JS:
+        if is_twitch:
+            # Native Twitch Dark Theme toggle (preserves video element, flawless dark UI)
+            try:
+                if is_dark:
+                    tw_dark_js = """
+                    (() => {
+                        try {
+                            if (typeof DarkReader !== 'undefined') DarkReader.disable();
+                            let f = document.getElementById('__vb_dark_flash');
+                            if (f) f.remove();
+                            document.documentElement.classList.remove('tw-root--theme-light');
+                            document.documentElement.classList.add('tw-root--theme-dark');
+                            try { localStorage.setItem('twilight.theme', '1'); } catch(e) {}
+                            let s = document.getElementById('__vb_tw_dark_fix');
+                            if (!s && document.head) {
+                                s = document.createElement('style');
+                                s.id = '__vb_tw_dark_fix';
+                                document.head.appendChild(s);
+                            }
+                            if (s) {
+                                s.textContent = `
+                                    .video-player, .video-player__container, .video-player__default-player, video {
+                                        background-color: #000000 !important;
+                                        filter: none !important;
+                                    }
+                                `;
+                            }
+                        } catch(e) {}
+                    })();
+                    """
+                    await target_page.evaluate(tw_dark_js)
+                else:
+                    tw_light_js = """
+                    (() => {
+                        try {
+                            document.documentElement.classList.remove('tw-root--theme-dark');
+                            document.documentElement.classList.add('tw-root--theme-light');
+                            try { localStorage.setItem('twilight.theme', '0'); } catch(e) {}
+                            let s = document.getElementById('__vb_tw_dark_fix');
+                            if (s) s.remove();
+                        } catch(e) {}
+                    })();
+                    """
+                    await target_page.evaluate(tw_light_js)
+            except Exception as exc:
+                logger.debug("Twitch native theme evaluate error: %s", exc)
+
+        elif DARKREADER_JS:
             try:
                 if is_dark:
                     js = (
@@ -4214,6 +4297,115 @@ class AmigaClientSession:
                     os.remove(tmp_path)
             except Exception:
                 pass
+
+    # ------------------------------------------------------------------------
+    # File Upload Interceptor (Amiga ASL FileRequester -> Server -> Browser)
+    # ------------------------------------------------------------------------
+    def _on_filechooser_event(self, file_chooser: FileChooser) -> None:
+        """Triggered whenever a website clicks an HTML <input type="file">."""
+        t = asyncio.create_task(self._process_filechooser(file_chooser))
+        self.background_tasks.add(t)
+        t.add_done_callback(self.background_tasks.discard)
+
+    async def _process_filechooser(self, file_chooser: FileChooser) -> None:
+        upload_id = self.next_upload_id
+        self.next_upload_id += 1
+
+        element = file_chooser.element
+        accept_types = ""
+        try:
+            if element:
+                accept_types = (await element.get_attribute("accept")) or ""
+        except Exception:
+            pass
+
+        logger.info("Intercepted file upload chooser id=%d (page=%s, accept='%s')",
+                    upload_id, self.page.url if self.page else "", accept_types)
+
+        loop = asyncio.get_running_loop()
+        resp_future = loop.create_future()
+        self.pending_uploads[upload_id] = (file_chooser, resp_future)
+
+        tmp_path = None
+        try:
+            # 1. Send MSG_UPLOAD_REQUEST to Amiga to open ASL FileRequester
+            accept_bytes = accept_types.encode("utf-8", errors="replace")[:255].ljust(256, b"\x00")
+            req_pkt = STRUCT_MSG_UPLOAD_REQ.pack(
+                MSG_UPLOAD_REQUEST,
+                upload_id,
+                0,  # max_size (0 = unconstrained)
+                accept_bytes,
+            )
+            if not await self.send_packet(req_pkt):
+                logger.warning("Could not send MSG_UPLOAD_REQUEST id=%d to Amiga", upload_id)
+                return
+
+            # 2. Wait up to 5 minutes for Amiga user to select a file in ASL FileRequester
+            try:
+                accepted, file_size, filename = await asyncio.wait_for(resp_future, timeout=300.0)
+            except asyncio.TimeoutError:
+                logger.warning("Upload id=%d timed out waiting for Amiga ASL selection", upload_id)
+                return
+
+            if not accepted or file_size == 0:
+                logger.info("Upload id=%d cancelled by Amiga user or empty file", upload_id)
+                return
+
+            logger.info("Upload id=%d confirmed by Amiga: '%s' (%d bytes). Receiving chunks...",
+                        upload_id, filename, file_size)
+
+            # 3. Create temporary file on server to receive uploaded chunks
+            safe_fname = re.sub(r'[^a-zA-Z0-9_.-]', '_', filename) or f"upload_{upload_id}.bin"
+            tmp_fd, tmp_path = tempfile.mkstemp(prefix=f"vb_up_{upload_id}_", suffix=f"_{safe_fname}")
+
+            received_bytes = 0
+            chunk_hdr_size = struct.calcsize(">II")
+
+            with os.fdopen(tmp_fd, "wb") as f:
+                while received_bytes < file_size and self.running:
+                    # Read MSG_UPLOAD_CHUNK type
+                    msg_type_b = await self.reader.readexactly(1)
+                    if msg_type_b[0] != MSG_UPLOAD_CHUNK:
+                        logger.warning("Expected MSG_UPLOAD_CHUNK, got 0x%02x", msg_type_b[0])
+                        break
+                    chunk_hdr = await self.reader.readexactly(chunk_hdr_size)
+                    u_id, chunk_len = struct.unpack(">II", chunk_hdr)
+                    if u_id != upload_id:
+                        logger.warning("Upload ID mismatch in chunk: expected %d, got %d", upload_id, u_id)
+                        break
+                    chunk_data = await self.reader.readexactly(chunk_len)
+                    f.write(chunk_data)
+                    received_bytes += chunk_len
+
+            if received_bytes >= file_size:
+                logger.info("Upload id=%d fully received (%d bytes). Setting files in browser!",
+                            upload_id, received_bytes)
+                await file_chooser.set_files(tmp_path)
+                self._trigger_full_refresh(True)
+                self._schedule_delayed_frames()
+            else:
+                logger.warning("Upload id=%d incomplete: received %d of %d bytes",
+                               upload_id, received_bytes, file_size)
+
+        except Exception as exc:
+            logger.error("Error processing file upload id=%d: %s", upload_id, exc)
+        finally:
+            self.pending_uploads.pop(upload_id, None)
+            if tmp_path:
+                try:
+                    # Allow browser time to finish form submission before deleting temp file
+                    async def _delayed_unlink(p: str):
+                        await asyncio.sleep(60.0)
+                        try:
+                            if os.path.exists(p):
+                                os.remove(p)
+                        except Exception:
+                            pass
+                    t_del = asyncio.create_task(_delayed_unlink(tmp_path))
+                    self.background_tasks.add(t_del)
+                    t_del.add_done_callback(self.background_tasks.discard)
+                except Exception:
+                    pass
 
 
 # ============================================================================

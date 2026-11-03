@@ -4,7 +4,10 @@
 
 #include <proto/exec.h>
 #include <proto/intuition.h>
+#include <proto/dos.h>
+#include <proto/asl.h>
 #include <proto/bsdsocket.h>
+#include <libraries/asl.h>
 #include <intuition/pointerclass.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -403,6 +406,130 @@ BOOL net_handle_incoming(VortexApp *app)
                         app_set_status("Text in Zwischenablage kopiert (%u Zeichen)", (unsigned)tlen);
                     }
                     free(clip_buf);
+                }
+            }
+            break;
+        }
+
+        case MSG_UPLOAD_REQUEST: {
+            MsgUploadRequest req;
+            if (!recv_exact(app->sock_fd, &req, sizeof(MsgUploadRequest))) {
+                net_disconnect(app);
+                return FALSE;
+            }
+            uint32_t up_id = VB_BE32(req.upload_id);
+            char chosen_path[1024] = {0};
+            char chosen_file[256] = {0};
+            BOOL chosen = FALSE;
+
+            if (IAsl) {
+                const char *init_drawer = (app->prefs.download_dir[0] != '\0') ? app->prefs.download_dir : "RAM:";
+                struct FileRequester *freq = (struct FileRequester *)IAsl->AllocAslRequestTags(
+                    ASL_FileRequest,
+                    ASLFR_Window,        app->win,
+                    ASLFR_SleepWindow,   TRUE,
+                    ASLFR_TitleText,     "VortexBrowser: Datei zum Hochladen waehlen...",
+                    ASLFR_PositiveText,  "Auswaehlen",
+                    ASLFR_NegativeText,  "Abbrechen",
+                    ASLFR_DoSaveMode,    FALSE,
+                    ASLFR_RejectIcons,   TRUE,
+                    ASLFR_InitialDrawer, (Tag)init_drawer,
+                    TAG_DONE);
+
+                if (freq) {
+                    if (IAsl->AslRequest(freq, NULL)) {
+                        if (freq->fr_File && freq->fr_File[0] != '\0') {
+                            snprintf(chosen_path, sizeof(chosen_path), "%s", freq->fr_Drawer ? freq->fr_Drawer : "");
+                            IDOS->AddPart(chosen_path, freq->fr_File, sizeof(chosen_path));
+                            snprintf(chosen_file, sizeof(chosen_file), "%s", freq->fr_File);
+                            chosen = TRUE;
+                        }
+                    }
+                    IAsl->FreeAslRequest(freq);
+                }
+            }
+
+            if (!chosen) {
+                /* User cancelled upload requester */
+                uint8_t resp_buf[1 + sizeof(MsgUploadResponse)];
+                resp_buf[0] = MSG_UPLOAD_RESPONSE;
+                MsgUploadResponse *resp = (MsgUploadResponse *)(resp_buf + 1);
+                memset(resp, 0, sizeof(MsgUploadResponse));
+                resp->upload_id = VB_BE32(up_id);
+                resp->file_size = 0;
+                resp->accepted  = 0;
+                send_all(app->sock_fd, resp_buf, sizeof(resp_buf));
+                app_set_status("Datei-Upload abgebrochen.");
+            } else {
+                BPTR fh = IDOS->Open(chosen_path, MODE_OLDFILE);
+                if (!fh) {
+                    DBG_LOG("[Upload] Could not open '%s' for reading!\n", chosen_path);
+                    uint8_t resp_buf[1 + sizeof(MsgUploadResponse)];
+                    resp_buf[0] = MSG_UPLOAD_RESPONSE;
+                    MsgUploadResponse *resp = (MsgUploadResponse *)(resp_buf + 1);
+                    memset(resp, 0, sizeof(MsgUploadResponse));
+                    resp->upload_id = VB_BE32(up_id);
+                    resp->file_size = 0;
+                    resp->accepted  = 0;
+                    send_all(app->sock_fd, resp_buf, sizeof(resp_buf));
+                    app_set_status("Fehler beim Oeffnen von: %s", chosen_file);
+                } else {
+                    int64 fsize64 = IDOS->GetFileSize(fh);
+                    uint32_t fsize = (uint32_t)fsize64;
+
+                    /* Send confirmation response */
+                    uint8_t resp_buf[1 + sizeof(MsgUploadResponse)];
+                    resp_buf[0] = MSG_UPLOAD_RESPONSE;
+                    MsgUploadResponse *resp = (MsgUploadResponse *)(resp_buf + 1);
+                    memset(resp, 0, sizeof(MsgUploadResponse));
+                    resp->upload_id = VB_BE32(up_id);
+                    resp->file_size = VB_BE32(fsize);
+                    resp->accepted  = 1;
+                    snprintf(resp->filename, sizeof(resp->filename), "%s", chosen_file);
+                    if (!send_all(app->sock_fd, resp_buf, sizeof(resp_buf))) {
+                        IDOS->Close(fh);
+                        net_disconnect(app);
+                        return FALSE;
+                    }
+
+                    app_set_status("Lade hoch: %s (%u KB)...", chosen_file, (unsigned)(fsize / 1024));
+
+                    /* Stream chunks to server */
+                    const uint32_t chunk_buf_size = 64 * 1024;
+                    uint8_t *chunk_buf = (uint8_t *)malloc(1 + sizeof(MsgUploadChunk) + chunk_buf_size);
+                    if (!chunk_buf) {
+                        IDOS->Close(fh);
+                        net_disconnect(app);
+                        return FALSE;
+                    }
+
+                    chunk_buf[0] = MSG_UPLOAD_CHUNK;
+                    MsgUploadChunk *chunk_hdr = (MsgUploadChunk *)(chunk_buf + 1);
+                    uint8_t *payload_ptr = chunk_buf + 1 + sizeof(MsgUploadChunk);
+
+                    uint32_t sent_total = 0;
+                    while (sent_total < fsize) {
+                        uint32_t to_read = fsize - sent_total;
+                        if (to_read > chunk_buf_size) to_read = chunk_buf_size;
+                        int32 bytes_read = IDOS->Read(fh, payload_ptr, to_read);
+                        if (bytes_read <= 0) break;
+
+                        chunk_hdr->upload_id = VB_BE32(up_id);
+                        chunk_hdr->chunk_len = VB_BE32((uint32_t)bytes_read);
+
+                        uint32_t packet_size = 1 + sizeof(MsgUploadChunk) + bytes_read;
+                        if (!send_all(app->sock_fd, chunk_buf, packet_size)) {
+                            free(chunk_buf);
+                            IDOS->Close(fh);
+                            net_disconnect(app);
+                            return FALSE;
+                        }
+                        sent_total += bytes_read;
+                    }
+
+                    free(chunk_buf);
+                    IDOS->Close(fh);
+                    app_set_status("Datei hochgeladen: %s (%u KB)", chosen_file, (unsigned)(sent_total / 1024));
                 }
             }
             break;
