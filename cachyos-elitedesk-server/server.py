@@ -1638,10 +1638,14 @@ class AmigaClientSession:
                     if getattr(self, "_init_turbo_js", None):
                         try:
                             await self.cdp.send("Page.enable")
+                            await self.cdp.send("Page.setInterceptFileChooserDialog", {"enabled": True})
+                            await self.cdp.send("DOM.enable")
                             await self.cdp.send("Page.addScriptToEvaluateOnNewDocument", {"source": self._init_turbo_js})
                             await self.cdp.send("Runtime.evaluate", {"expression": self._init_turbo_js})
                         except Exception:
                             pass
+                    # Listen for Page.fileChooserOpened on DirectCDP
+                    self.cdp.on("Page.fileChooserOpened", self._on_cdp_file_chooser_opened)
                     return
 
         self.cdp = base_cdp
@@ -4509,6 +4513,129 @@ class AmigaClientSession:
     # ------------------------------------------------------------------------
     # File Upload Interceptor (Amiga ASL FileRequester -> Server -> Browser)
     # ------------------------------------------------------------------------
+    def _on_cdp_file_chooser_opened(self, params: dict) -> None:
+        """Triggered directly by Chromium CDP Page.fileChooserOpened."""
+        logger.info("DirectCDP Page.fileChooserOpened received: %r", params)
+        backend_node_id = params.get("backendNodeId")
+        frame_id = params.get("frameId")
+        mode = params.get("mode", "selectSingle")
+        t = asyncio.create_task(self._process_cdp_filechooser(backend_node_id, mode))
+        self.background_tasks.add(t)
+        t.add_done_callback(self.background_tasks.discard)
+
+    async def _process_cdp_filechooser(self, backend_node_id: Optional[int], mode: str) -> None:
+        upload_id = self.next_upload_id
+        self.next_upload_id += 1
+
+        logger.info("Intercepted CDP file upload chooser id=%d (backendNodeId=%s, mode=%s, page=%s)",
+                    upload_id, backend_node_id, mode, self.page.url if self.page else "")
+
+        loop = asyncio.get_running_loop()
+        resp_future = loop.create_future()
+        chunk_queue = asyncio.Queue()
+        self.pending_uploads[upload_id] = (None, resp_future, chunk_queue)
+
+        tmp_path = None
+        try:
+            # 1. Send MSG_UPLOAD_REQUEST to Amiga to open ASL FileRequester
+            accept_bytes = b"".ljust(256, b"\x00")
+            req_pkt = STRUCT_MSG_UPLOAD_REQ.pack(
+                MSG_UPLOAD_REQUEST,
+                upload_id,
+                0,  # max_size (0 = unconstrained)
+                accept_bytes,
+            )
+            if not await self.send_packet(req_pkt):
+                logger.warning("Could not send MSG_UPLOAD_REQUEST id=%d to Amiga", upload_id)
+                return
+
+            # 2. Wait up to 5 minutes for Amiga user to select a file in ASL FileRequester
+            try:
+                accepted, file_size, filename = await asyncio.wait_for(resp_future, timeout=300.0)
+            except asyncio.TimeoutError:
+                logger.warning("Upload id=%d timed out waiting for Amiga ASL selection", upload_id)
+                return
+
+            if not accepted or file_size == 0:
+                logger.info("Upload id=%d cancelled by Amiga user or empty file", upload_id)
+                return
+
+            logger.info("Upload id=%d confirmed by Amiga: '%s' (%d bytes). Receiving chunks...",
+                        upload_id, filename, file_size)
+
+            # 3. Create temporary file on server to receive uploaded chunks
+            safe_fname = re.sub(r'[^a-zA-Z0-9_.-]', '_', filename) or f"upload_{upload_id}.bin"
+            tmp_fd, tmp_path = tempfile.mkstemp(prefix=f"vb_up_{upload_id}_", suffix=f"_{safe_fname}")
+
+            received_bytes = 0
+            with os.fdopen(tmp_fd, "wb") as f:
+                while received_bytes < file_size and self.running:
+                    try:
+                        chunk_data = await asyncio.wait_for(chunk_queue.get(), timeout=30.0)
+                    except asyncio.TimeoutError:
+                        logger.warning("Upload id=%d timed out waiting for chunk from queue", upload_id)
+                        break
+                    f.write(chunk_data)
+                    received_bytes += len(chunk_data)
+
+            if received_bytes >= file_size:
+                abs_tmp_path = os.path.abspath(tmp_path)
+                logger.info("Upload id=%d fully received (%d bytes). Setting files in browser (%s)!",
+                            upload_id, received_bytes, abs_tmp_path)
+                set_ok = False
+                if self.cdp and isinstance(self.cdp, DirectCDPSession) and backend_node_id:
+                    try:
+                        await self.cdp.send("DOM.setFileInputFiles", {
+                            "files": [abs_tmp_path],
+                            "backendNodeId": backend_node_id
+                        })
+                        set_ok = True
+                        logger.info("Upload id=%d: successfully set files via DirectCDP DOM.setFileInputFiles", upload_id)
+                    except Exception as cdp_err:
+                        logger.warning("Upload id=%d: DOM.setFileInputFiles failed: %s", upload_id, cdp_err)
+
+                if not set_ok and self.page:
+                    for selector in [
+                        '.moxie-shim input[type="file"]',
+                        '.moxie-shim-html5 input[type="file"]',
+                        '#add_files_container input[type="file"]',
+                        'input[type="file"]'
+                    ]:
+                        try:
+                            el = await self.page.query_selector(selector)
+                            if el:
+                                await self.page.set_input_files(selector, [abs_tmp_path])
+                                set_ok = True
+                                logger.info("Upload id=%d: set files via fallback selector '%s'", upload_id, selector)
+                                break
+                        except Exception:
+                            pass
+
+                self._trigger_full_refresh(True)
+                self._schedule_delayed_frames()
+            else:
+                logger.warning("Upload id=%d incomplete: received %d of %d bytes",
+                               upload_id, received_bytes, file_size)
+
+        except Exception as exc:
+            logger.error("Error processing CDP file upload id=%d: %s", upload_id, exc)
+        finally:
+            self.pending_uploads.pop(upload_id, None)
+            if tmp_path:
+                try:
+                    async def _delayed_unlink(p: str):
+                        await asyncio.sleep(60.0)
+                        try:
+                            if os.path.exists(p):
+                                os.remove(p)
+                        except Exception:
+                            pass
+                    t_del = asyncio.create_task(_delayed_unlink(tmp_path))
+                    self.background_tasks.add(t_del)
+                    t_del.add_done_callback(self.background_tasks.discard)
+                except Exception:
+                    pass
+
     def _on_filechooser_event(self, file_chooser: FileChooser) -> None:
         """Triggered whenever a website clicks an HTML <input type="file">."""
         t = asyncio.create_task(self._process_filechooser(file_chooser))

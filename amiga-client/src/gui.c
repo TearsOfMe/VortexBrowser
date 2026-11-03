@@ -2151,6 +2151,14 @@ void gui_tab_set_title(VortexApp *app, uint16 idx, const char *title)
 
 BOOL gui_init(VortexApp *app)
 {
+    app->main_task = IExec->FindTask(NULL);
+    app->mouse_sig_bit = IExec->AllocSignal(-1);
+    if (app->mouse_sig_bit != -1) {
+        app->mouse_sig_mask = (1UL << app->mouse_sig_bit);
+    } else {
+        app->mouse_sig_mask = 0;
+    }
+
     memset(&s_render_hook, 0, sizeof(struct Hook));
     s_render_hook.h_Entry = (HOOKFUNC)space_render_func;
     s_render_hook.h_Data  = app;
@@ -3241,6 +3249,12 @@ void gui_cleanup(VortexApp *app)
         IIntuition->CloseScreen(app->custom_screen);
         app->custom_screen = NULL;
     }
+
+    if (app->mouse_sig_bit != -1) {
+        IExec->FreeSignal(app->mouse_sig_bit);
+        app->mouse_sig_bit = -1;
+        app->mouse_sig_mask = 0;
+    }
 }
 
 void gui_rebuild_window(VortexApp *app)
@@ -3327,7 +3341,7 @@ void gui_reopen_screen(VortexApp *app)
 
 uint32 gui_get_signal_mask(VortexApp *app)
 {
-    uint32 sigmask = 0;
+    uint32 sigmask = app->mouse_sig_mask;
     if (app->win_obj) {
         IIntuition->GetAttr(WINDOW_SigMask, app->win_obj, &sigmask);
     }
