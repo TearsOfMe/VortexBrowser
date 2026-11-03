@@ -238,6 +238,7 @@ typedef struct VortexApp {
     uint32_t       last_move_micros;
     int16_t        last_remote_x;
     int16_t        last_remote_y;
+    BOOL           mouse_lmb_down;
     BOOL           pending_mouse_move;
     int16_t        pending_win_mouse_x;
     int16_t        pending_win_mouse_y;

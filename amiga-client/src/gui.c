@@ -854,8 +854,9 @@ static void dispatch_viewport_mouse_btn(VortexApp *app, int16_t win_x, int16_t w
 
     int16_t rx = 0, ry = 0;
     if (!renderer_map_window_to_remote(app, win_x, win_y, &rx, &ry)) {
-        if (!is_down && s_mouse_lmb_down && btn == 1) {
+        if (!is_down && (s_mouse_lmb_down || app->mouse_lmb_down) && btn == 1) {
             s_mouse_lmb_down = FALSE;
+            app->mouse_lmb_down = FALSE;
             net_send_mouse_button(app, rx, ry, 1, FALSE);
         }
         if ((btn == 3 || btn == 2) && is_down) {
@@ -899,6 +900,7 @@ static void dispatch_viewport_mouse_btn(VortexApp *app, int16_t win_x, int16_t w
 
     if (btn == 1) {
         s_mouse_lmb_down = is_down;
+        app->mouse_lmb_down = is_down;
     }
 
     net_send_mouse_button(app, rx, ry, btn, is_down);

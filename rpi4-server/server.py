@@ -3237,16 +3237,19 @@ class AmigaClientSession:
                     down_y = self._mouse_down_y if self._mouse_down_y >= 0 else cy
                     dist = ((cx - down_x) ** 2 + (cy - down_y) ** 2) ** 0.5
 
-                    # If user released within 16px of mouse down, treat as intentional click
-                    if dist <= 16:
+                    # If user released within 3px of mouse down, treat as clean stationary click
+                    if dist <= 3:
                         await self.page.mouse.move(down_x, down_y)
                         await self.page.mouse.up(button=btn)
                     else:
+                        # User dragged mouse to select text or drag an element
                         await self.page.mouse.move(cx, cy)
                         await self.page.mouse.up(button=btn)
 
+                    self._mouse_down_btn = ""
+
                     # Universal check: if click landed on an upload button or file input
-                    if btn == "left":
+                    if btn == "left" and dist <= 16:
                         try:
                             upload_hit = await self.page.evaluate("""([x, y]) => {
                                 let el = document.elementFromPoint(x, y);
@@ -3325,6 +3328,11 @@ class AmigaClientSession:
                     await self.page.mouse.move(cx, cy)
                 except Exception:
                     pass
+
+                # If left mouse button is held, user is dragging/selecting text: trigger interactive visual feedback
+                if self._mouse_down_btn == "left":
+                    self._trigger_full_refresh(False)
+
                 now = time.monotonic()
                 if (now - self.last_hover_time) >= 0.25:
                     if self.hover_task and not self.hover_task.done():
