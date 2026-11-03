@@ -333,7 +333,6 @@ int main(int argc, char **argv)
         }
         /* Send debounced/throttled mouse move to remote browser outside the IDCMP input task */
         if (g_app.connected && g_app.pending_mouse_move) {
-            g_app.pending_mouse_move = FALSE;
             int16_t rx = 0, ry = 0;
             if (renderer_map_window_to_remote(&g_app, g_app.pending_win_mouse_x, g_app.pending_win_mouse_y, &rx, &ry)) {
                 uint32 s = 0, us = 0;
@@ -342,9 +341,10 @@ int main(int argc, char **argv)
                                 ((int32)us - (int32)g_app.last_move_micros);
                 int16_t dx = rx - g_app.last_remote_x;
                 int16_t dy = ry - g_app.last_remote_y;
-                int32 min_interval_us = g_app.mouse_lmb_down ? 16000 : 33000;
+                int32 min_interval_us = g_app.mouse_lmb_down ? 10000 : 33000;
                 int32 min_dist_sq     = g_app.mouse_lmb_down ? 1 : 4;
                 if ((diff_us >= min_interval_us || diff_us < 0) && (dx * dx + dy * dy >= min_dist_sq)) {
+                    g_app.pending_mouse_move = FALSE;
                     g_app.last_move_secs   = s;
                     g_app.last_move_micros = us;
                     g_app.last_remote_x    = rx;
@@ -352,6 +352,7 @@ int main(int argc, char **argv)
                     net_send_move(&g_app, rx, ry);
                 }
             } else {
+                g_app.pending_mouse_move = FALSE;
                 if (g_app.is_hovering_link) {
                     g_app.is_hovering_link = FALSE;
                 }

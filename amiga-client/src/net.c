@@ -418,6 +418,27 @@ BOOL net_handle_incoming(VortexApp *app)
                 return FALSE;
             }
             uint32_t up_id = VB_BE32(req.upload_id);
+
+            /* Debounce duplicate upload requests arriving within 3.0 seconds */
+            static uint32 s_last_upload_secs = 0;
+            static uint32 s_last_upload_micros = 0;
+            uint32 now_s = 0, now_us = 0;
+            IIntuition->CurrentTime(&now_s, &now_us);
+            int32 diff_s = (int32)now_s - (int32)s_last_upload_secs;
+            int32 diff_us = diff_s * 1000000 + ((int32)now_us - (int32)s_last_upload_micros);
+            if (s_last_upload_secs != 0 && diff_us >= 0 && diff_us < 3000000) {
+                DBG_LOG("[Upload] Rejecting duplicate upload request id=%u (diff=%d ms)\n", (unsigned)up_id, (int)(diff_us / 1000));
+                uint8_t resp_buf[1 + sizeof(MsgUploadResponse)];
+                resp_buf[0] = MSG_UPLOAD_RESPONSE;
+                MsgUploadResponse *resp = (MsgUploadResponse *)(resp_buf + 1);
+                memset(resp, 0, sizeof(MsgUploadResponse));
+                resp->upload_id = VB_BE32(up_id);
+                resp->file_size = 0;
+                resp->accepted  = 0;
+                send_all(app->sock_fd, resp_buf, sizeof(resp_buf));
+                break;
+            }
+
             char chosen_path[1024] = {0};
             char chosen_file[256] = {0};
             BOOL chosen = FALSE;
@@ -448,6 +469,8 @@ BOOL net_handle_incoming(VortexApp *app)
                     IAsl->FreeAslRequest(freq);
                 }
             }
+
+            IIntuition->CurrentTime(&s_last_upload_secs, &s_last_upload_micros);
 
             if (!chosen) {
                 /* User cancelled upload requester */

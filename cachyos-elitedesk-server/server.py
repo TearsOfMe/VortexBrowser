@@ -1584,6 +1584,11 @@ class AmigaClientSession:
         self._mouse_down_y: int = -1
         self._mouse_down_btn: str = ""
         self._mouse_down_time: float = 0.0
+        self._last_click_time: float = 0.0
+        self._last_click_x: int = -1
+        self._last_click_y: int = -1
+        self._click_count: int = 1
+        self.last_upload_intercept_time: float = 0.0
 
         # Pre-allocated pixel conversion buffers (reused across frames to avoid alloc churn)
         self._argb_buf: Optional[ctypes.Array] = None
@@ -2035,6 +2040,14 @@ class AmigaClientSession:
                         }
                     };
 
+                    // Ensure text selection is visibly highlighted in headless Chromium
+                    try {
+                        const selStyle = document.createElement('style');
+                        selStyle.id = '__vortex_selection_style';
+                        selStyle.textContent = '::selection { background-color: #3390ff !important; color: #ffffff !important; } ::-moz-selection { background-color: #3390ff !important; color: #ffffff !important; }';
+                        (document.head || document.documentElement).appendChild(selStyle);
+                    } catch(e) {}
+
                     document.addEventListener('click', (e) => {
                         const tab = e.target && e.target.closest ? e.target.closest('#attach-panel-tab, [data-subpanel="attach-panel"], a[href*="attach"]') : null;
                         if (tab) {
@@ -2048,22 +2061,6 @@ class AmigaClientSession:
                                     syncMoxieShim();
                                 }
                             }, 80);
-                        }
-                        const addBtn = e.target && e.target.closest ? e.target.closest('#add_files, .attach-panel-multi, .js-attachmentUpload, .js-attachButton') : null;
-                        if (addBtn) {
-                            let finp = document.querySelector('.moxie-shim input[type="file"], .moxie-shim-html5 input[type="file"]');
-                            if (!finp) {
-                                let allInp = Array.from(document.querySelectorAll('input[type="file"]'));
-                                for (let inp of allInp) {
-                                    if (inp.id !== 'fileupload' || allInp.length === 1) {
-                                        finp = inp;
-                                        break;
-                                    }
-                                }
-                            }
-                            if (finp && e.target !== finp) {
-                                try { finp.click(); } catch(err) {}
-                            }
                         }
                     }, true);
                 } catch(e) {}
@@ -3208,10 +3205,22 @@ class AmigaClientSession:
                     btn = "right"
                 logger.info("INPUT_MOUSE_DOWN (%s) at (%d, %d)", btn, cx, cy)
 
+                now = time.monotonic()
+                if btn == "left":
+                    if (now - self._last_click_time) < 0.45 and abs(cx - self._last_click_x) <= 6 and abs(cy - self._last_click_y) <= 6:
+                        self._click_count = min(3, self._click_count + 1)
+                    else:
+                        self._click_count = 1
+                    self._last_click_time = now
+                    self._last_click_x = cx
+                    self._last_click_y = cy
+                else:
+                    self._click_count = 1
+
                 self._mouse_down_x = cx
                 self._mouse_down_y = cy
                 self._mouse_down_btn = btn
-                self._mouse_down_time = time.monotonic()
+                self._mouse_down_time = now
 
                 if btn == "right":
                     await self._send_native_context_menu(cx, cy)
@@ -3224,7 +3233,7 @@ class AmigaClientSession:
                     )
                 else:
                     await self.page.mouse.move(cx, cy)
-                    await self.page.mouse.down(button=btn)
+                    await self.page.mouse.down(button=btn, click_count=self._click_count)
                 self._trigger_full_refresh(True)
                 self._schedule_delayed_frames()
 
@@ -3241,19 +3250,15 @@ class AmigaClientSession:
                     down_y = self._mouse_down_y if self._mouse_down_y >= 0 else cy
                     dist = ((cx - down_x) ** 2 + (cy - down_y) ** 2) ** 0.5
 
-                    # If user released within 3px of mouse down, treat as clean stationary click
-                    if dist <= 3:
-                        await self.page.mouse.move(down_x, down_y)
-                        await self.page.mouse.up(button=btn)
-                    else:
-                        # User dragged mouse to select text or drag an element
-                        await self.page.mouse.move(cx, cy)
-                        await self.page.mouse.up(button=btn)
+                    # Move to release position and release mouse button with click_count
+                    await self.page.mouse.move(cx, cy)
+                    await self.page.mouse.up(button=btn, click_count=self._click_count)
 
                     self._mouse_down_btn = ""
 
-                    # Universal check: if click landed on an upload button or file input
-                    if btn == "left" and dist <= 16:
+                    # Universal check: only if stationary click AND no upload is pending/recent
+                    now_up = time.monotonic()
+                    if btn == "left" and dist <= 10 and not self.pending_uploads and (now_up - self.last_upload_intercept_time) >= 3.0:
                         try:
                             upload_hit = await self.page.evaluate("""([x, y]) => {
                                 let el = document.elementFromPoint(x, y);
@@ -3290,13 +3295,11 @@ class AmigaClientSession:
                                     'input[type="file"], .moxie-shim, .moxie-shim-html5'
                                 ) : null;
                                 if (uploadBtn) {
-                                    // A) Plupload on page (phpBB, WordPress, etc.)
                                     let moxieInp = document.querySelector('.moxie-shim input[type="file"], .moxie-shim-html5 input[type="file"]');
                                     if (moxieInp) {
                                         moxieInp.click();
                                         return true;
                                     }
-                                    // B) Generic file input
                                     let allInp = Array.from(document.querySelectorAll('input[type="file"]'));
                                     for (let inp of allInp) {
                                         if (inp.id !== 'fileupload' || allInp.length === 1) {
@@ -3312,13 +3315,27 @@ class AmigaClientSession:
                                 return false;
                             }""", [down_x, down_y])
                             if upload_hit:
-                                logger.info("Direct upload click triggered at (%d, %d)", down_x, down_y)
+                                logger.info("Fallback upload click triggered at (%d, %d)", down_x, down_y)
+                                self.last_upload_intercept_time = time.monotonic()
                         except Exception as e:
                             logger.info("Upload element check notice: %s", e)
 
                     if btn == "left":
                         try:
-                            sel = await self.page.evaluate("window.getSelection() ? window.getSelection().toString() : ''")
+                            # Force a compositor repaint tick for selection highlighting
+                            await self.page.evaluate("document.body && (document.body.style.opacity = document.body.style.opacity === '0.9999' ? '1' : '0.9999')")
+                            # Evaluate selected text from both window and active input/textarea
+                            sel = await self.page.evaluate("""() => {
+                                let s = window.getSelection() ? window.getSelection().toString() : '';
+                                if (s && s.length > 0) return s;
+                                let el = document.activeElement;
+                                if (el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && el.type === 'text'))) {
+                                    try {
+                                        return el.value.substring(el.selectionStart, el.selectionEnd);
+                                    } catch (e) {}
+                                }
+                                return '';
+                            }""")
                             if sel and len(sel.strip()) > 0:
                                 logger.info("Selected text (%d chars): %r", len(sel), sel[:60])
                                 await self.send_clipboard_to_amiga(sel)
@@ -3335,6 +3352,11 @@ class AmigaClientSession:
 
                 # If left mouse button is held, user is dragging/selecting text: trigger interactive visual feedback
                 if self._mouse_down_btn == "left":
+                    # Force compositor repaint tick for selection highlighting in headless Chromium
+                    try:
+                        await self.page.evaluate("document.body && (document.body.style.opacity = document.body.style.opacity === '0.9999' ? '1' : '0.9999')")
+                    except Exception:
+                        pass
                     self._trigger_full_refresh(False)
 
                 now = time.monotonic()
@@ -4516,6 +4538,15 @@ class AmigaClientSession:
     def _on_cdp_file_chooser_opened(self, params: dict) -> None:
         """Triggered directly by Chromium CDP Page.fileChooserOpened."""
         logger.info("DirectCDP Page.fileChooserOpened received: %r", params)
+        now = time.monotonic()
+        if self.pending_uploads:
+            logger.info("Ignoring duplicate Page.fileChooserOpened: upload already in progress (%r)", list(self.pending_uploads.keys()))
+            return
+        if (now - self.last_upload_intercept_time) < 3.0:
+            logger.info("Ignoring duplicate Page.fileChooserOpened: cooldown active (%.2fs)", now - self.last_upload_intercept_time)
+            return
+        self.last_upload_intercept_time = now
+
         backend_node_id = params.get("backendNodeId")
         frame_id = params.get("frameId")
         mode = params.get("mode", "selectSingle")
@@ -4638,6 +4669,15 @@ class AmigaClientSession:
 
     def _on_filechooser_event(self, file_chooser: FileChooser) -> None:
         """Triggered whenever a website clicks an HTML <input type="file">."""
+        now = time.monotonic()
+        if self.pending_uploads:
+            logger.info("Ignoring duplicate filechooser event: upload already in progress (%r)", list(self.pending_uploads.keys()))
+            return
+        if (now - self.last_upload_intercept_time) < 3.0:
+            logger.info("Ignoring duplicate filechooser event: cooldown active (%.2fs)", now - self.last_upload_intercept_time)
+            return
+        self.last_upload_intercept_time = now
+
         t = asyncio.create_task(self._process_filechooser(file_chooser))
         self.background_tasks.add(t)
         t.add_done_callback(self.background_tasks.discard)

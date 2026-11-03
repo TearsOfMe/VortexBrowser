@@ -901,6 +901,9 @@ static void dispatch_viewport_mouse_btn(VortexApp *app, int16_t win_x, int16_t w
     if (btn == 1) {
         s_mouse_lmb_down = is_down;
         app->mouse_lmb_down = is_down;
+        if (app->win) {
+            IIntuition->ReportMouse(TRUE, app->win);
+        }
     }
 
     net_send_mouse_button(app, rx, ry, btn, is_down);
@@ -2881,6 +2884,7 @@ BOOL gui_init(VortexApp *app)
     app->gad_space = IIntuition->NewObject(NULL, "space.gadget",
         GA_ID,             GID_SPACE,
         GA_ReadOnly,       TRUE,
+        GA_FollowMouse,    TRUE,
         SPACE_MinWidth,    640,
         SPACE_MinHeight,   400,
         SPACE_Transparent, TRUE,
@@ -3343,7 +3347,9 @@ uint32 gui_get_signal_mask(VortexApp *app)
 {
     uint32 sigmask = app->mouse_sig_mask;
     if (app->win_obj) {
-        IIntuition->GetAttr(WINDOW_SigMask, app->win_obj, &sigmask);
+        uint32 win_sig = 0;
+        IIntuition->GetAttr(WINDOW_SigMask, app->win_obj, &win_sig);
+        sigmask |= win_sig;
     }
     if (app->pw_win_obj) {
         uint32 pw_sig = 0;
