@@ -10,7 +10,7 @@
 #define VORTEXBROWSE_HOSTPC_PORT    9757
 #endif
 
-/* Reaction Gadget IDs (Odyssey Web Browser Layout) */
+/* Reaction Gadget IDs */
 enum {
     GID_BACK = 1,
     GID_FORWARD,

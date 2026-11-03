@@ -57,8 +57,28 @@ $SUDO apt-get install -y \
 CURRENT_USER="${SUDO_USER:-$(id -un)}"
 $SUDO usermod -a -G audio,video,render "$CURRENT_USER" 2>/dev/null || true
 
-# Browser installieren (Ungoogled-Chromium, Chromium-Browser oder Chromium)
-if ! command -v ungoogled-chromium >/dev/null 2>&1 && ! command -v chromium-browser >/dev/null 2>&1 && ! command -v chromium >/dev/null 2>&1; then
+# Browser ermitteln (Ungoogled-Chromium, Chromium-Browser, Chromium, Google Chrome, Brave oder Playwright Cache)
+EXISTING_BROWSER=""
+for b in ungoogled-chromium chromium-browser chromium google-chrome google-chrome-stable brave-browser brave /usr/lib/chromium/chromium; do
+    if command -v "$b" >/dev/null 2>&1; then
+        EXISTING_BROWSER="$(command -v "$b" 2>/dev/null)"
+        break
+    elif [ -x "$b" ]; then
+        EXISTING_BROWSER="$b"
+        break
+    fi
+done
+
+if [ -z "$EXISTING_BROWSER" ]; then
+    PW_CHROME=$(ls -d ~/.cache/ms-playwright/chromium-*/chrome-linux*/chrome 2>/dev/null | tail -n 1 || true)
+    if [ -n "$PW_CHROME" ] && [ -x "$PW_CHROME" ]; then
+        EXISTING_BROWSER="$PW_CHROME"
+    fi
+fi
+
+if [ -n "$EXISTING_BROWSER" ]; then
+    echo "[OK] Bereits installierter Browser gefunden: $EXISTING_BROWSER (kein Neu-Download erforderlich)"
+else
     echo "Installiere Browser (Ungoogled-Chromium oder Chromium)..."
     $SUDO apt-get install -y ungoogled-chromium 2>/dev/null || \
     $SUDO apt-get install -y chromium-browser 2>/dev/null || \
@@ -68,27 +88,42 @@ fi
 # 2. Python Virtual Environment (.venv) einrichten
 echo ""
 echo "[2/5] Richte Python Virtual Environment (.venv) ein..."
-if [ ! -d ".venv" ]; then
-    python3 -m venv .venv
+DEPS_OK=false
+if [ -d ".venv" ] && .venv/bin/python3 -c "import playwright, lz4, PIL, websockets" >/dev/null 2>&1; then
+    DEPS_OK=true
 fi
 
-# Direkter Aufruf der venv-Binaries - benötigt KEIN 'source' (funktioniert in bash, dash, sh):
-.venv/bin/python3 -m pip install --upgrade pip setuptools wheel
-.venv/bin/python3 -m pip install -r requirements.txt
+if [ "$DEPS_OK" = true ]; then
+    echo "[OK] Python Virtual Environment & Abhaengigkeiten bereits vorhanden (kein Download erforderlich)."
+else
+    if [ ! -d ".venv" ]; then
+        python3 -m venv .venv
+    fi
+    echo "[+] Installiere/Aktualisiere Python-Abhaengigkeiten..."
+    .venv/bin/python3 -m pip install --upgrade pip setuptools wheel
+    .venv/bin/python3 -m pip install -r requirements.txt
+fi
 
 # 3. Native Cortex-A72 SIMD Pixel Converter kompilieren / verifizieren
 echo ""
 echo "[3/5] Prüfe / Optimiere nativen Cortex-A72 NEON SIMD Converter..."
-if command -v gcc >/dev/null 2>&1; then
+SO_FILE="fast_pixconv_aarch64.so"
+if [ "$ARCH" != "aarch64" ] && [ "$ARCH" != "arm64" ]; then
+    SO_FILE="fast_pixconv.so"
+fi
+
+if [ -f "$SO_FILE" ] && [ -f "fast_pixconv.c" ] && [ "$SO_FILE" -nt "fast_pixconv.c" ]; then
+    echo "[OK] $SO_FILE ist bereits aktuell kompiliert."
+elif command -v gcc >/dev/null 2>&1; then
     if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
         gcc -O3 -march=armv8-a+crc -mtune=cortex-a72 -shared -fPIC -o fast_pixconv_aarch64.so fast_pixconv.c 2>/dev/null || \
         gcc -O3 -march=native -shared -fPIC -o fast_pixconv_aarch64.so fast_pixconv.c 2>/dev/null || true
     else
         gcc -O3 -march=native -shared -fPIC -o fast_pixconv.so fast_pixconv.c 2>/dev/null || true
     fi
-    echo "[OK] fast_pixconv_aarch64.so erfolgreich bereitgestellt."
-elif [ -f "fast_pixconv_aarch64.so" ]; then
-    echo "[OK] Verwende vor-kompiliertes fast_pixconv_aarch64.so."
+    echo "[OK] $SO_FILE erfolgreich bereitgestellt."
+elif [ -f "$SO_FILE" ]; then
+    echo "[OK] Verwende vor-kompiliertes $SO_FILE."
 else
     echo "[WARNUNG] Kein gcc gefunden und keine .so vorhanden. Fallback auf Pillow aktiv."
 fi

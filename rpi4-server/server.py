@@ -433,7 +433,7 @@ PORTAL_HTML = """<!DOCTYPE html>
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<title>Odyssey Web Browser - AmigaOS 4.1 Edition</title>
+<title>VortexBrowser - Startseite &amp; Schnellwahl</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -503,7 +503,7 @@ PORTAL_HTML = """<!DOCTYPE html>
     border-color: #2563eb;
     box-shadow: 0 0 0 2px rgba(37,99,235,0.25);
   }
-  .btn-search, .btn-odyssey {
+  .btn-search, .btn-action {
     padding: 8px 16px;
     border-radius: 4px;
     border: 1px solid #64748b;
@@ -516,11 +516,11 @@ PORTAL_HTML = """<!DOCTYPE html>
     display: inline-block;
     box-shadow: 0 1px 2px rgba(0,0,0,0.12);
   }
-  .btn-search:hover, .btn-odyssey:hover {
+  .btn-search:hover, .btn-action:hover {
     background: linear-gradient(180deg, #ffffff 0%, #e2e8f0 100%);
     border-color: #475569;
   }
-  .btn-search:active, .btn-odyssey:active {
+  .btn-search:active, .btn-action:active {
     background: #cbd5e1;
     box-shadow: inset 0 1px 3px rgba(0,0,0,0.25);
   }
@@ -632,12 +632,12 @@ PORTAL_HTML = """<!DOCTYPE html>
     .search-bar input:focus {
       border-color: #3b82f6;
     }
-    .btn-search, .btn-odyssey {
+    .btn-search, .btn-action {
       background: linear-gradient(180deg, #3f3f46 0%, #27272a 100%);
       border-color: #52525b;
       color: #f4f4f5;
     }
-    .btn-search:hover, .btn-odyssey:hover {
+    .btn-search:hover, .btn-action:hover {
       background: linear-gradient(180deg, #52525b 0%, #3f3f46 100%);
     }
     .card {
@@ -693,7 +693,7 @@ function playAmigaSynth() {
 <body>
   <div class="header">
     <div class="title-box">
-      <h1>Odyssey Web Browser / VortexBrowse AmigaOS 4.1</h1>
+      <h1>VortexBrowser &bull; Startseite &amp; Schnellwahl</h1>
       <p>Schnellwahl &bull; Turbo LZ4-Streaming &bull; AHI Stereo-Audio &bull; AmigaOS 4 Kontextmen&uuml; &bull; ASL Download</p>
     </div>
     <div class="badge">AmigaOS 4.1 PPC</div>
@@ -725,7 +725,7 @@ function playAmigaSynth() {
           <p>Aktuelle Nachrichten rund um AmigaOS 4, PowerPC Hardware und Community-Projekte.</p>
         </div>
         <div class="card-action">
-          <a class="btn-odyssey" href="https://www.amiga-news.de">&Ouml;ffnen</a>
+          <a class="btn-action" href="https://www.amiga-news.de">&Ouml;ffnen</a>
         </div>
       </div>
     </div>
@@ -738,21 +738,7 @@ function playAmigaSynth() {
           <p>Das zentrale Archiv f&uuml;r native AmigaOS 4 Software, Bibliotheken und Spiele.</p>
         </div>
         <div class="card-action">
-          <a class="btn-odyssey" href="https://os4depot.net">&Ouml;ffnen</a>
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-top card-top-red"></div>
-      <div class="card-body">
-        <div>
-          <h3>YouTube</h3>
-          <p>Videos &amp; Musik mit direkter 22050Hz AHI-Stereo-Ton&uuml;bertragung auf die Workbench.</p>
-        </div>
-        <div class="card-action">
-          <a class="btn-odyssey" href="https://www.youtube.com">&Ouml;ffnen</a>
-          <a class="btn-odyssey" href="https://m.youtube.com" style="margin-left: 6px; background: linear-gradient(180deg, #d32f2f, #9a0007);">Lite / Mobil</a>
+          <a class="btn-action" href="https://os4depot.net">&Ouml;ffnen</a>
         </div>
       </div>
     </div>
@@ -765,7 +751,7 @@ function playAmigaSynth() {
           <p>Das internationale AmigaOS 4 Forum f&uuml;r Anwender, Entwickler und Erfahrungsaustausch.</p>
         </div>
         <div class="card-action">
-          <a class="btn-odyssey" href="https://www.amigans.net">&Ouml;ffnen</a>
+          <a class="btn-action" href="https://www.amigans.net">&Ouml;ffnen</a>
         </div>
       </div>
     </div>
@@ -778,7 +764,47 @@ function playAmigaSynth() {
           <p>Das weltgr&ouml;&szlig;te Amiga-Softwarearchiv f&uuml;r Classic, PPC und AmigaOS 4.</p>
         </div>
         <div class="card-action">
-          <a class="btn-odyssey" href="https://aminet.net">&Ouml;ffnen</a>
+          <a class="btn-action" href="https://aminet.net">&Ouml;ffnen</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-top" style="background: linear-gradient(135deg, #0ea5e9, #0284c7);"></div>
+      <div class="card-body">
+        <div>
+          <h3>A1k.org Amiga Forum</h3>
+          <p>Das gro&szlig;e deutschsprachige Forum rund um klassische Amigas und AmigaOS.</p>
+        </div>
+        <div class="card-action">
+          <a class="btn-action" href="https://www.a1k.org">&Ouml;ffnen</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-top" style="background: linear-gradient(135deg, #64748b, #334155);"></div>
+      <div class="card-body">
+        <div>
+          <h3>Wikipedia (DE)</h3>
+          <p>Die freie Enzyklop&auml;die mit Millionen Artikeln auf Deutsch.</p>
+        </div>
+        <div class="card-action">
+          <a class="btn-action" href="https://de.wikipedia.org">&Ouml;ffnen</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-top card-top-red"></div>
+      <div class="card-body">
+        <div>
+          <h3>YouTube</h3>
+          <p>Videos &amp; Musik mit direkter 22050Hz AHI-Stereo-Ton&uuml;bertragung auf die Workbench.</p>
+        </div>
+        <div class="card-action">
+          <a class="btn-action" href="https://www.youtube.com">&Ouml;ffnen</a>
+          <a class="btn-action" href="https://m.youtube.com" style="margin-left: 6px; background: linear-gradient(180deg, #d32f2f, #9a0007); color: #fff;">Lite / Mobil</a>
         </div>
       </div>
     </div>
@@ -791,8 +817,8 @@ function playAmigaSynth() {
           <p>Live-Streaming mit Turbo-H.264 &amp; 30 FPS Optimierung. Ton direkt via AHI Stereo.</p>
         </div>
         <div class="card-action">
-          <a class="btn-odyssey" href="https://www.twitch.tv">&Ouml;ffnen</a>
-          <a class="btn-odyssey" href="https://m.twitch.tv" style="margin-left: 6px; background: linear-gradient(180deg, #9146ff, #5c16c5);">Lite / Mobil</a>
+          <a class="btn-action" href="https://www.twitch.tv">&Ouml;ffnen</a>
+          <a class="btn-action" href="https://m.twitch.tv" style="margin-left: 6px; background: linear-gradient(180deg, #9146ff, #5c16c5); color: #fff;">Lite / Mobil</a>
         </div>
       </div>
     </div>
@@ -805,7 +831,7 @@ function playAmigaSynth() {
           <p>Testet AHI 16-Bit Stereo-Ausgabe &uuml;ber PipeWire und direkte Dirty-Slice Bildaktualisierung.</p>
         </div>
         <div class="card-action" style="flex-direction: column; align-items: flex-end;">
-          <button class="btn-odyssey" id="btn-test" onclick="window._clicks=(window._clicks||0)+1; playAmigaSynth(); document.getElementById('click-status').textContent='Ton + Klick OK! ('+window._clicks+'x)';">Ton &amp; Klick-Test</button>
+          <button class="btn-action" id="btn-test" onclick="window._clicks=(window._clicks||0)+1; playAmigaSynth(); document.getElementById('click-status').textContent='Ton + Klick OK! ('+window._clicks+'x)';">Ton &amp; Klick-Test</button>
           <div id="click-status">Bereit f&uuml;r AHI-Sound.</div>
         </div>
       </div>
@@ -888,7 +914,7 @@ def _fetch_search_results_sync(query: str) -> str:
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<title>Odyssey Suche: {q_esc}</title>
+<title>VortexBrowser Suche: {q_esc}</title>
 <style>
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
   body {{
@@ -1964,25 +1990,14 @@ class AmigaClientSession:
                 // Forum/phpBB File Attachment Helper:
                 // Auto-scroll "Dateien hinzufügen" button into center view when "Dateianhänge" tab is clicked,
                 // style button prominently, and ensure click always triggers file chooser.
+                // Universal Forum File Attachment Helper (phpBB Plupload, XenForo, standard inputs)
                 try {
                     const upStyle = document.createElement('style');
                     upStyle.id = '__vb_upload_style';
                     upStyle.textContent = `
-                        #add_files, .attach-panel-multi input[type=button] {
-                            font-size: 15px !important;
-                            font-weight: bold !important;
-                            padding: 10px 24px !important;
-                            background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%) !important;
-                            color: #ffffff !important;
-                            border: 2px solid #1e40af !important;
-                            border-radius: 6px !important;
+                        #add_files, .attach-panel-multi input[type=button], .js-attachmentUpload {
                             cursor: pointer !important;
-                            box-shadow: 0 4px 10px rgba(37,99,235,0.4) !important;
-                            margin: 8px 0 !important;
-                            transition: all 0.2s ease !important;
-                        }
-                        #add_files:hover {
-                            background: linear-gradient(180deg, #1d4ed8 0%, #1e40af 100%) !important;
+                            pointer-events: auto !important;
                         }
                     `;
                     const injectUpStyle = () => {
@@ -2020,9 +2035,18 @@ class AmigaClientSession:
                                 }
                             }, 80);
                         }
-                        const addBtn = e.target && e.target.closest ? e.target.closest('#add_files, .attach-panel-multi, [data-subpanel="attach-panel"]') : null;
+                        const addBtn = e.target && e.target.closest ? e.target.closest('#add_files, .attach-panel-multi, [data-subpanel="attach-panel"], .js-attachmentUpload, .js-attachButton') : null;
                         if (addBtn) {
-                            const finp = document.querySelector('#attach-panel input[type=file], .moxie-shim input[type=file], input[type=file], #fileupload');
+                            let finp = document.querySelector('.moxie-shim input[type="file"], .moxie-shim-html5 input[type="file"]');
+                            if (!finp) {
+                                let allInp = Array.from(document.querySelectorAll('input[type="file"]'));
+                                for (let inp of allInp) {
+                                    if (inp.id !== 'fileupload' || allInp.length === 1) {
+                                        finp = inp;
+                                        break;
+                                    }
+                                }
+                            }
                             if (finp && e.target !== finp) {
                                 try { finp.click(); } catch(err) {}
                             }
@@ -3080,9 +3104,21 @@ class AmigaClientSession:
                             upload_id, file_size, accepted, fname)
                 entry = self.pending_uploads.get(upload_id)
                 if entry:
-                    fc, fut = entry
+                    fc, fut, chunk_queue = entry
                     if not fut.done():
                         fut.set_result((bool(accepted == 1), file_size, fname))
+
+            elif msg_type == MSG_UPLOAD_CHUNK:
+                try:
+                    chunk_hdr = await self.reader.readexactly(struct.calcsize(">II"))
+                    u_id, chunk_len = struct.unpack(">II", chunk_hdr)
+                    chunk_data = await self.reader.readexactly(chunk_len)
+                except asyncio.IncompleteReadError:
+                    break
+                entry = self.pending_uploads.get(u_id)
+                if entry:
+                    _, _, chunk_queue = entry
+                    await chunk_queue.put(chunk_data)
 
             elif msg_type == MSG_CLIPBOARD:
                 try:
@@ -3201,17 +3237,61 @@ class AmigaClientSession:
                         await self.page.mouse.move(cx, cy)
                         await self.page.mouse.up(button=btn)
 
-                    # Check if click landed on an upload button or file input
+                    # Universal check: if click landed on an upload button or file input
                     if btn == "left":
                         try:
                             upload_hit = await self.page.evaluate("""([x, y]) => {
                                 let el = document.elementFromPoint(x, y);
                                 if (!el) return false;
-                                let btn = el.closest('#add_files, .attach-panel-multi, [data-subpanel="attach-panel"], input[type="file"], .moxie-shim, #fileupload');
+                                let elem = el.nodeType === 1 ? el : el.parentElement;
+                                if (!elem) return false;
+
+                                // 1. Direct file input
+                                if (elem.tagName === 'INPUT' && elem.type === 'file') {
+                                    elem.click();
+                                    return true;
+                                }
+
+                                // 2. Contains file input
+                                let finp = elem.querySelector ? elem.querySelector('input[type="file"]') : null;
+                                if (finp) {
+                                    finp.click();
+                                    return true;
+                                }
+
+                                // 3. Label pointing to file input
+                                let lbl = elem.closest ? elem.closest('label') : null;
+                                if (lbl && lbl.htmlFor) {
+                                    let inp = document.getElementById(lbl.htmlFor);
+                                    if (inp && inp.type === 'file') {
+                                        inp.click();
+                                        return true;
+                                    }
+                                }
+
+                                // 4. Button / anchor / upload trigger element
+                                let btn = elem.closest ? elem.closest(
+                                    'button, a, label, [role="button"], input[type="button"], input[type="submit"], ' +
+                                    '.js-attachmentUpload, .js-attachButton, [data-action="upload"], ' +
+                                    '#add_files, .attach-panel-multi, [data-subpanel="attach-panel"], #attach-panel'
+                                ) : null;
                                 if (btn) {
-                                    let finp = document.querySelector('#attach-panel input[type="file"], .moxie-shim input[type="file"], input[type="file"], #fileupload');
-                                    if (finp) {
-                                        finp.click();
+                                    // A) Plupload on page (phpBB, WordPress, etc.)
+                                    let moxieInp = document.querySelector('.moxie-shim input[type="file"], .moxie-shim-html5 input[type="file"]');
+                                    if (moxieInp) {
+                                        moxieInp.click();
+                                        return true;
+                                    }
+                                    // B) XenForo / Discourse / generic file input
+                                    let allInp = Array.from(document.querySelectorAll('input[type="file"]'));
+                                    for (let inp of allInp) {
+                                        if (inp.id !== 'fileupload' || allInp.length === 1) {
+                                            inp.click();
+                                            return true;
+                                        }
+                                    }
+                                    if (allInp.length > 0) {
+                                        allInp[0].click();
                                         return true;
                                     }
                                 }
@@ -3220,7 +3300,7 @@ class AmigaClientSession:
                             if upload_hit:
                                 logger.info("Direct upload click triggered at (%d, %d)", down_x, down_y)
                         except Exception as e:
-                            logger.debug("Upload element check error: %s", e)
+                            logger.info("Upload element check notice: %s", e)
 
                     if btn == "left":
                         try:
@@ -4437,7 +4517,8 @@ class AmigaClientSession:
 
         loop = asyncio.get_running_loop()
         resp_future = loop.create_future()
-        self.pending_uploads[upload_id] = (file_chooser, resp_future)
+        chunk_queue = asyncio.Queue()
+        self.pending_uploads[upload_id] = (file_chooser, resp_future, chunk_queue)
 
         tmp_path = None
         try:
@@ -4472,23 +4553,16 @@ class AmigaClientSession:
             tmp_fd, tmp_path = tempfile.mkstemp(prefix=f"vb_up_{upload_id}_", suffix=f"_{safe_fname}")
 
             received_bytes = 0
-            chunk_hdr_size = struct.calcsize(">II")
 
             with os.fdopen(tmp_fd, "wb") as f:
                 while received_bytes < file_size and self.running:
-                    # Read MSG_UPLOAD_CHUNK type
-                    msg_type_b = await self.reader.readexactly(1)
-                    if msg_type_b[0] != MSG_UPLOAD_CHUNK:
-                        logger.warning("Expected MSG_UPLOAD_CHUNK, got 0x%02x", msg_type_b[0])
+                    try:
+                        chunk_data = await asyncio.wait_for(chunk_queue.get(), timeout=30.0)
+                    except asyncio.TimeoutError:
+                        logger.warning("Upload id=%d timed out waiting for chunk from queue", upload_id)
                         break
-                    chunk_hdr = await self.reader.readexactly(chunk_hdr_size)
-                    u_id, chunk_len = struct.unpack(">II", chunk_hdr)
-                    if u_id != upload_id:
-                        logger.warning("Upload ID mismatch in chunk: expected %d, got %d", upload_id, u_id)
-                        break
-                    chunk_data = await self.reader.readexactly(chunk_len)
                     f.write(chunk_data)
-                    received_bytes += chunk_len
+                    received_bytes += len(chunk_data)
 
             if received_bytes >= file_size:
                 logger.info("Upload id=%d fully received (%d bytes). Setting files in browser!",

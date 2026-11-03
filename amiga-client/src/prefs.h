@@ -39,7 +39,7 @@ enum {
 };
 
 typedef struct ResolutionConfig {
-    uint16_t preset_idx;        /* 0..NUM_RES_PRESETS-1 (Default: 5 = Auto-Fit / Odyssey window) */
+    uint16_t preset_idx;        /* 0..NUM_RES_PRESETS-1 (Default: 5 = Auto-Fit window) */
     uint16_t width;             /* Current active width (1024) */
     uint16_t height;            /* Current active height (768) */
     uint16_t custom_w;          /* If custom: 1024 */

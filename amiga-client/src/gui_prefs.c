@@ -43,7 +43,7 @@ enum {
     GID_P_SERVER_DYN_VIDEO,
     GID_P_SERVER_SAVE_EXIT,
 
-    /* Tab 1: Schnellwahl (Odyssey) */
+    /* Tab 1: Schnellwahl */
     GID_P_QL_CHOOSER = 15,
     GID_P_QL_LBL,
     GID_P_QL_URL,
@@ -90,7 +90,7 @@ enum {
 
 static const char *const s_tab_labels[] = {
     "Server & Streaming",
-    "Schnellwahl (Odyssey)",
+    "Schnellwahl",
     "Bildschirm & Aufloesung",
     "Schrift & Zeichensatz",
     "Lesezeichen",
@@ -559,7 +559,7 @@ void gui_prefs_open(VortexApp *app)
         TAG_DONE);
 
     /* ------------------------------------------------------------------------
-     * Tab 1: Schnellwahl-Buttons (Odyssey-Leiste)
+     * Tab 1: Schnellwahl-Buttons
      * ------------------------------------------------------------------------ */
     struct List ql_list;
     IExec->NewList(&ql_list);
@@ -632,7 +632,7 @@ void gui_prefs_open(VortexApp *app)
     Object *ql_vlayout = IIntuition->NewObject(NULL, "layout.gadget",
         LAYOUT_Orientation,   LAYOUT_ORIENT_VERT,
         LAYOUT_BevelStyle,    BVS_GROUP,
-        LAYOUT_Label,         (Tag)"Odyssey-Schnellwahl-Leiste (Variable Buttons mit Icons)",
+        LAYOUT_Label,         (Tag)"Schnellwahl-Leiste (Variable Buttons mit Icons)",
         LAYOUT_SpaceOuter,    TRUE,
         LAYOUT_DeferLayout,   TRUE,
         LAYOUT_AddChild,      gad_ql_chooser,
@@ -1198,7 +1198,7 @@ void gui_prefs_open(VortexApp *app)
         GA_ID,        GID_P_DL_OPEN_MGR,
         GA_RelVerify, TRUE,
         GA_Text,      "Download-Manager jetzt oeffnen...",
-        GA_HintInfo,  "Oeffnet das Odyssey/IBrowse-Download-Fenster",
+        GA_HintInfo,  "Oeffnet das Download-Fenster",
         TAG_DONE);
 
     Object *dl_vlayout = IIntuition->NewObject(NULL, "layout.gadget",
