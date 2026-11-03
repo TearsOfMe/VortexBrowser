@@ -772,11 +772,20 @@ shutil.copy2("pi-server/darkreader.js", os.path.join(SERVER_LINUX_DRAWER, "darkr
 shutil.copy2("pi-server/requirements.txt", os.path.join(SERVER_LINUX_DRAWER, "requirements.txt"))
 if os.path.exists("pi-server/extensions"):
     shutil.copytree("pi-server/extensions", os.path.join(SERVER_LINUX_DRAWER, "extensions"), dirs_exist_ok=True)
-with open(os.path.join(SERVER_LINUX_DRAWER, "run_server.sh"), "w") as f:
-    f.write(SERVER_RUN_SH)
+if os.path.exists("pi-server/run_server.sh"):
+    shutil.copy2("pi-server/run_server.sh", os.path.join(SERVER_LINUX_DRAWER, "run_server.sh"))
+elif os.path.exists("cachyos-elitedesk-server/run_server.sh"):
+    shutil.copy2("cachyos-elitedesk-server/run_server.sh", os.path.join(SERVER_LINUX_DRAWER, "run_server.sh"))
+else:
+    with open(os.path.join(SERVER_LINUX_DRAWER, "run_server.sh"), "w") as f:
+        f.write(SERVER_RUN_SH)
 os.chmod(os.path.join(SERVER_LINUX_DRAWER, "run_server.sh"), 0o755)
-with open(os.path.join(SERVER_LINUX_DRAWER, "install_server.sh"), "w") as f:
-    f.write(SERVER_INSTALL_SH)
+
+if os.path.exists("cachyos-elitedesk-server/install_server.sh"):
+    shutil.copy2("cachyos-elitedesk-server/install_server.sh", os.path.join(SERVER_LINUX_DRAWER, "install_server.sh"))
+else:
+    with open(os.path.join(SERVER_LINUX_DRAWER, "install_server.sh"), "w") as f:
+        f.write(SERVER_INSTALL_SH)
 os.chmod(os.path.join(SERVER_LINUX_DRAWER, "install_server.sh"), 0o755)
 with open(os.path.join(SERVER_LINUX_DRAWER, "vortexbrowser.service"), "w") as f:
     f.write(SYSTEMD_SERVICE)
