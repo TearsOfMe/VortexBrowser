@@ -1954,6 +1954,30 @@ class AmigaClientSession:
                     }
                     document.addEventListener('DOMContentLoaded', injectTwStyle);
                 } catch(e) {}
+
+                // Forum/phpBB File Attachment Auto-Scroll:
+                // When "Dateianhänge" tab is clicked, automatically scroll "Dateien hinzufügen" button into center view
+                try {
+                    const setupAttachScroll = () => {
+                        const attachTab = document.getElementById('attach-panel-tab');
+                        if (attachTab && !attachTab.__vbScrollAttached) {
+                            attachTab.__vbScrollAttached = true;
+                            attachTab.addEventListener('click', () => {
+                                setTimeout(() => {
+                                    const btn = document.getElementById('add_files');
+                                    if (btn) {
+                                        btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                    }
+                                }, 120);
+                            });
+                        }
+                    };
+                    if (document.readyState === 'loading') {
+                        document.addEventListener('DOMContentLoaded', setupAttachScroll);
+                    } else {
+                        setupAttachScroll();
+                    }
+                } catch(e) {}
             })()"""
             try:
                 await self.context.add_init_script(self._init_turbo_js)
