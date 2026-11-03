@@ -1955,28 +1955,62 @@ class AmigaClientSession:
                     document.addEventListener('DOMContentLoaded', injectTwStyle);
                 } catch(e) {}
 
-                // Forum/phpBB File Attachment Auto-Scroll:
-                // When "Dateianhänge" tab is clicked, automatically scroll "Dateien hinzufügen" button into center view
+                // Forum/phpBB File Attachment Helper:
+                // Auto-scroll "Dateien hinzufügen" button into center view when "Dateianhänge" tab is clicked,
+                // style button prominently, and ensure click always triggers file chooser.
                 try {
-                    const setupAttachScroll = () => {
-                        const attachTab = document.getElementById('attach-panel-tab');
-                        if (attachTab && !attachTab.__vbScrollAttached) {
-                            attachTab.__vbScrollAttached = true;
-                            attachTab.addEventListener('click', () => {
-                                setTimeout(() => {
-                                    const btn = document.getElementById('add_files');
-                                    if (btn) {
-                                        btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                    }
-                                }, 120);
-                            });
+                    const upStyle = document.createElement('style');
+                    upStyle.id = '__vb_upload_style';
+                    upStyle.textContent = `
+                        #add_files, .attach-panel-multi input[type=button] {
+                            font-size: 15px !important;
+                            font-weight: bold !important;
+                            padding: 10px 24px !important;
+                            background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%) !important;
+                            color: #ffffff !important;
+                            border: 2px solid #1e40af !important;
+                            border-radius: 6px !important;
+                            cursor: pointer !important;
+                            box-shadow: 0 4px 10px rgba(37,99,235,0.4) !important;
+                            margin: 8px 0 !important;
+                            transition: all 0.2s ease !important;
+                        }
+                        #add_files:hover {
+                            background: linear-gradient(180deg, #1d4ed8 0%, #1e40af 100%) !important;
+                        }
+                        .moxie-shim, .moxie-shim-html5 {
+                            z-index: 999999 !important;
+                        }
+                    `;
+                    const injectUpStyle = () => {
+                        if (document.head || document.documentElement) {
+                            (document.head || document.documentElement).appendChild(upStyle);
                         }
                     };
-                    if (document.readyState === 'loading') {
-                        document.addEventListener('DOMContentLoaded', setupAttachScroll);
-                    } else {
-                        setupAttachScroll();
-                    }
+                    injectUpStyle();
+                    document.addEventListener('DOMContentLoaded', injectUpStyle);
+
+                    document.addEventListener('click', (e) => {
+                        const tab = e.target && e.target.closest ? e.target.closest('#attach-panel-tab, [data-subpanel="attach-panel"], a[href*="attach"]') : null;
+                        if (tab) {
+                            setTimeout(() => {
+                                const btn = document.getElementById('add_files') || document.querySelector('#attach-panel input[type=button]');
+                                if (btn) {
+                                    btn.scrollIntoView({ behavior: 'auto', block: 'center' });
+                                    if (window.phpbb && window.phpbb.plupload && window.phpbb.plupload.uploader) {
+                                        try { window.phpbb.plupload.uploader.refresh(); } catch(err) {}
+                                    }
+                                }
+                            }, 80);
+                        }
+                        const addBtn = e.target && e.target.closest ? e.target.closest('#add_files') : null;
+                        if (addBtn) {
+                            const finp = document.querySelector('#attach-panel input[type=file], .moxie-shim input[type=file], #fileupload');
+                            if (finp && e.target !== finp) {
+                                finp.click();
+                            }
+                        }
+                    }, true);
                 } catch(e) {}
             })()"""
             try:
