@@ -1542,6 +1542,12 @@ class AmigaClientSession:
         self._screencast_handler = None
         self.last_screencast_frame_time: float = 0.0
 
+        # Mouse click tracking for gesture stabilization & upload trigger
+        self._mouse_down_x: int = -1
+        self._mouse_down_y: int = -1
+        self._mouse_down_btn: str = ""
+        self._mouse_down_time: float = 0.0
+
         # Pre-allocated pixel conversion buffers (reused across frames to avoid alloc churn)
         self._argb_buf: Optional[ctypes.Array] = None
         self._rgb565_buf: Optional[ctypes.Array] = None
@@ -1978,9 +1984,6 @@ class AmigaClientSession:
                         #add_files:hover {
                             background: linear-gradient(180deg, #1d4ed8 0%, #1e40af 100%) !important;
                         }
-                        .moxie-shim, .moxie-shim-html5 {
-                            z-index: 999999 !important;
-                        }
                     `;
                     const injectUpStyle = () => {
                         if (document.head || document.documentElement) {
@@ -1989,6 +1992,19 @@ class AmigaClientSession:
                     };
                     injectUpStyle();
                     document.addEventListener('DOMContentLoaded', injectUpStyle);
+
+                    const syncMoxieShim = () => {
+                        const btn = document.getElementById('add_files');
+                        const shim = document.querySelector('.moxie-shim, .moxie-shim-html5');
+                        if (btn && shim) {
+                            const r = btn.getBoundingClientRect();
+                            shim.style.top = (r.top + window.scrollY) + 'px';
+                            shim.style.left = (r.left + window.scrollX) + 'px';
+                            shim.style.width = r.width + 'px';
+                            shim.style.height = r.height + 'px';
+                            shim.style.zIndex = '999999';
+                        }
+                    };
 
                     document.addEventListener('click', (e) => {
                         const tab = e.target && e.target.closest ? e.target.closest('#attach-panel-tab, [data-subpanel="attach-panel"], a[href*="attach"]') : null;
@@ -2000,14 +2016,15 @@ class AmigaClientSession:
                                     if (window.phpbb && window.phpbb.plupload && window.phpbb.plupload.uploader) {
                                         try { window.phpbb.plupload.uploader.refresh(); } catch(err) {}
                                     }
+                                    syncMoxieShim();
                                 }
                             }, 80);
                         }
-                        const addBtn = e.target && e.target.closest ? e.target.closest('#add_files') : null;
+                        const addBtn = e.target && e.target.closest ? e.target.closest('#add_files, .attach-panel-multi, [data-subpanel="attach-panel"]') : null;
                         if (addBtn) {
-                            const finp = document.querySelector('#attach-panel input[type=file], .moxie-shim input[type=file], #fileupload');
+                            const finp = document.querySelector('#attach-panel input[type=file], .moxie-shim input[type=file], input[type=file], #fileupload');
                             if (finp && e.target !== finp) {
-                                finp.click();
+                                try { finp.click(); } catch(err) {}
                             }
                         }
                     }, true);
@@ -3141,6 +3158,11 @@ class AmigaClientSession:
                     btn = "right"
                 logger.info("INPUT_MOUSE_DOWN (%s) at (%d, %d)", btn, cx, cy)
 
+                self._mouse_down_x = cx
+                self._mouse_down_y = cy
+                self._mouse_down_btn = btn
+                self._mouse_down_time = time.monotonic()
+
                 if btn == "right":
                     await self._send_native_context_menu(cx, cy)
                     return
@@ -3165,8 +3187,41 @@ class AmigaClientSession:
                 logger.info("INPUT_MOUSE_UP (%s) at (%d, %d)", btn, cx, cy)
 
                 if btn != "right":
-                    await self.page.mouse.move(cx, cy)
-                    await self.page.mouse.up(button=btn)
+                    down_x = self._mouse_down_x if self._mouse_down_x >= 0 else cx
+                    down_y = self._mouse_down_y if self._mouse_down_y >= 0 else cy
+                    dist = ((cx - down_x) ** 2 + (cy - down_y) ** 2) ** 0.5
+
+                    # If user released within 16px of mouse down, treat as intentional click
+                    if dist <= 16:
+                        await self.page.mouse.move(down_x, down_y)
+                        await self.page.mouse.up(button=btn)
+                        # Explicitly ensure click was registered on the target point
+                        await self.page.mouse.click(down_x, down_y, button=btn)
+                    else:
+                        await self.page.mouse.move(cx, cy)
+                        await self.page.mouse.up(button=btn)
+
+                    # Check if click landed on an upload button or file input
+                    if btn == "left":
+                        try:
+                            upload_hit = await self.page.evaluate("""([x, y]) => {
+                                let el = document.elementFromPoint(x, y);
+                                if (!el) return false;
+                                let btn = el.closest('#add_files, .attach-panel-multi, [data-subpanel="attach-panel"], input[type="file"], .moxie-shim, #fileupload');
+                                if (btn) {
+                                    let finp = document.querySelector('#attach-panel input[type="file"], .moxie-shim input[type="file"], input[type="file"], #fileupload');
+                                    if (finp) {
+                                        finp.click();
+                                        return true;
+                                    }
+                                }
+                                return false;
+                            }""", [down_x, down_y])
+                            if upload_hit:
+                                logger.info("Direct upload click triggered at (%d, %d)", down_x, down_y)
+                        except Exception as e:
+                            logger.debug("Upload element check error: %s", e)
+
                     if btn == "left":
                         try:
                             sel = await self.page.evaluate("window.getSelection() ? window.getSelection().toString() : ''")
