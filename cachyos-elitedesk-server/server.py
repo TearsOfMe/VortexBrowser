@@ -338,11 +338,31 @@ def unmute_all_browser_sink_inputs() -> None:
         pass
 
 
+def is_snap_binary(path: str) -> bool:
+    """Returns True if the given browser binary is an Ubuntu Snap wrapper."""
+    if not path or not os.path.exists(path):
+        return False
+    if "/snap/" in path or path.startswith("/snap/"):
+        return True
+    try:
+        real = os.path.realpath(path)
+        if "/snap/" in real or real.startswith("/snap/"):
+            return True
+        if os.path.isfile(path) and not os.path.islink(path):
+            with open(path, "rb") as f:
+                header = f.read(512)
+                if b"/snap" in header or b"snap run" in header:
+                    return True
+    except Exception:
+        pass
+    return False
+
+
 def find_full_chromium_executable(custom_bin: Optional[str] = None) -> Optional[str]:
     """
     Finds the full Chromium / Ungoogled-Chromium binary on Linux (x86_64, aarch64, Raspberry Pi 4).
-    Uses full Chromium instead of chrome-headless-shell so that PipeWire / PulseAudio
-    audio output is fully functional.
+    Prefers native (non-snap) binaries and Playwright's native Chromium over Ubuntu Snap wrappers
+    to avoid AppArmor confinement and permission issues.
     """
     if custom_bin and os.path.isfile(custom_bin) and os.access(custom_bin, os.X_OK):
         return custom_bin
@@ -358,24 +378,26 @@ def find_full_chromium_executable(custom_bin: Optional[str] = None) -> Optional[
         except Exception:
             pass
 
-    priority_patterns = [
+    # Tier 1: Real native installed browsers (.deb / native packages)
+    native_patterns = [
         os.path.expanduser("~/.local/opt/ungoogled-chromium/usr/lib/chromium/chromium"),
         os.path.expanduser("~/.local/bin/ungoogled-chromium"),
         "/usr/bin/ungoogled-chromium",
         "/usr/lib/ungoogled-chromium/ungoogled-chromium",
+        "/usr/bin/google-chrome-stable",
+        "/usr/bin/google-chrome",
         "/usr/bin/brave-browser",
         "/usr/bin/brave",
         "/usr/bin/chromium-browser",
         "/usr/bin/chromium",
         "/usr/lib/chromium-browser/chromium-browser",
         "/usr/lib/chromium/chromium",
-        "/snap/bin/chromium",
     ]
-    for p in priority_patterns:
-        if os.path.isfile(p) and os.access(p, os.X_OK):
+    for p in native_patterns:
+        if os.path.isfile(p) and os.access(p, os.X_OK) and not is_snap_binary(p):
             return p
 
-    # Fallback to playwright cache (newest version first)
+    # Tier 2: Playwright native Chromium (clean, standalone, no snap confinement, has audio!)
     pw_patterns = [
         os.path.expanduser("~/.cache/ms-playwright/chromium-*/chrome-linux64/chrome"),
         os.path.expanduser("~/.cache/ms-playwright/chromium-*/chrome-linux/chrome"),
@@ -387,6 +409,18 @@ def find_full_chromium_executable(custom_bin: Optional[str] = None) -> Optional[
     for c in candidates:
         if os.path.isfile(c) and os.access(c, os.X_OK):
             return c
+
+    # Tier 3: Ubuntu Snap Chromium as last fallback (may have confinement issues)
+    snap_patterns = [
+        "/usr/bin/chromium-browser",
+        "/usr/bin/chromium",
+        "/snap/bin/chromium",
+    ]
+    for p in snap_patterns:
+        if os.path.isfile(p) and os.access(p, os.X_OK):
+            logger.warning("Using Ubuntu Snap Chromium (%s) as fallback. Snap may enforce strict AppArmor restrictions.", p)
+            return p
+
     return None
 
 
@@ -5048,7 +5082,34 @@ async def run_server(args: argparse.Namespace) -> None:
         all_exts = find_all_extension_paths() if enable_exts else []
 
         profile_dir = os.path.expanduser("~/.config/vortexbrowse/chromium_profile")
-        os.makedirs(profile_dir, exist_ok=True)
+        try:
+            os.makedirs(profile_dir, exist_ok=True)
+            test_file = os.path.join(profile_dir, ".write_test")
+            with open(test_file, "w") as f:
+                f.write("ok")
+            os.unlink(test_file)
+        except Exception as e:
+            fallback_dir = os.path.join(tempfile.gettempdir(), f"vortexbrowse_chromium_profile_{os.getuid()}")
+            logger.warning("Profile directory '%s' is not writable (%s). Falling back to temporary directory '%s'", profile_dir, e, fallback_dir)
+            profile_dir = fallback_dir
+            os.makedirs(profile_dir, exist_ok=True)
+
+        # Clean up stale SingletonLock/Socket/Cookie from prior crashes or killed processes
+        for lock_file in ("SingletonLock", "SingletonCookie", "SingletonSocket"):
+            lp = os.path.join(profile_dir, lock_file)
+            if os.path.exists(lp) or os.path.islink(lp):
+                try:
+                    os.unlink(lp)
+                    logger.info("Cleaned up stale lock file: %s", lp)
+                except Exception as e:
+                    logger.warning("Could not remove lock file %s: %s", lp, e)
+
+        if os.getuid() == 0:
+            logger.warning("=" * 68)
+            logger.warning(" HINWEIS: Der VortexBrowser Server laeuft als ROOT (UID 0)!")
+            logger.warning(" Es wird dringend empfohlen, den Server als normaler Benutzer")
+            logger.warning(" (OHNE sudo) auszufuehren, um Berechtigungskonflikte zu vermeiden.")
+            logger.warning("=" * 68)
 
         gpu_flags, has_dri = get_gpu_launch_flags(disable_gpu=getattr(args, "disable_gpu", False))
         if getattr(args, "disable_gpu", False):
