@@ -341,7 +341,7 @@ int main(int argc, char **argv)
                                 ((int32)us - (int32)g_app.last_move_micros);
                 int16_t dx = rx - g_app.last_remote_x;
                 int16_t dy = ry - g_app.last_remote_y;
-                int32 min_interval_us = g_app.mouse_lmb_down ? 10000 : 33000;
+                int32 min_interval_us = g_app.mouse_lmb_down ? 8000 : 33000;
                 int32 min_dist_sq     = g_app.mouse_lmb_down ? 1 : 4;
                 if ((diff_us >= min_interval_us || diff_us < 0) && (dx * dx + dy * dy >= min_dist_sq)) {
                     g_app.pending_mouse_move = FALSE;
@@ -365,6 +365,11 @@ int main(int argc, char **argv)
         }
         audio_poll(&g_app);
         if (!g_app.running) break;
+
+        /* Reset mouse signal bit so WaitSelect blocks cleanly */
+        if (g_app.mouse_sig_mask) {
+            IExec->SetSignal(0, g_app.mouse_sig_mask);
+        }
 
         uint32 win_sig   = gui_get_signal_mask(&g_app);
         uint32 audio_sig = audio_get_signal_mask(&g_app);

@@ -2044,7 +2044,7 @@ class AmigaClientSession:
                     try {
                         const selStyle = document.createElement('style');
                         selStyle.id = '__vortex_selection_style';
-                        selStyle.textContent = '::selection { background-color: #3390ff !important; color: #ffffff !important; } ::-moz-selection { background-color: #3390ff !important; color: #ffffff !important; }';
+                        selStyle.textContent = '*::selection, ::selection, *::-moz-selection, ::-moz-selection { background-color: #3390ff !important; color: #ffffff !important; -webkit-text-fill-color: #ffffff !important; }';
                         (document.head || document.documentElement).appendChild(selStyle);
                     } catch(e) {}
 
@@ -3250,8 +3250,11 @@ class AmigaClientSession:
                     down_y = self._mouse_down_y if self._mouse_down_y >= 0 else cy
                     dist = ((cx - down_x) ** 2 + (cy - down_y) ** 2) ** 0.5
 
-                    # Move to release position and release mouse button with click_count
-                    await self.page.mouse.move(cx, cy)
+                    # Move to release position with steps if drag was active, then release mouse button with click_count
+                    if self._mouse_down_btn == "left" and dist > 4:
+                        await self.page.mouse.move(cx, cy, steps=2)
+                    else:
+                        await self.page.mouse.move(cx, cy)
                     await self.page.mouse.up(button=btn, click_count=self._click_count)
 
                     self._mouse_down_btn = ""
@@ -3346,18 +3349,19 @@ class AmigaClientSession:
 
             elif event_type == INPUT_MOUSE_MOVE:
                 try:
-                    await self.page.mouse.move(cx, cy)
+                    if self._mouse_down_btn == "left":
+                        # Multi-step move so Chromium Blink SelectionController tracks continuous drag gesture
+                        await self.page.mouse.move(cx, cy, steps=3)
+                        # Force compositor repaint tick for selection highlighting in headless Chromium
+                        try:
+                            await self.page.evaluate("document.body && (document.body.style.opacity = document.body.style.opacity === '0.9999' ? '1' : '0.9999')")
+                        except Exception:
+                            pass
+                        self._trigger_full_refresh(False)
+                    else:
+                        await self.page.mouse.move(cx, cy)
                 except Exception:
                     pass
-
-                # If left mouse button is held, user is dragging/selecting text: trigger interactive visual feedback
-                if self._mouse_down_btn == "left":
-                    # Force compositor repaint tick for selection highlighting in headless Chromium
-                    try:
-                        await self.page.evaluate("document.body && (document.body.style.opacity = document.body.style.opacity === '0.9999' ? '1' : '0.9999')")
-                    except Exception:
-                        pass
-                    self._trigger_full_refresh(False)
 
                 now = time.monotonic()
                 if (now - self.last_hover_time) >= 0.25:

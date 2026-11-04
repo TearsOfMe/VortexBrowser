@@ -3659,11 +3659,6 @@ void gui_handle_events(VortexApp *app)
                         break;
 
                     case GID_SPACE:
-                        if (app->win) {
-                            uint32 secs = 0, micros = 0;
-                            IIntuition->CurrentTime(&secs, &micros);
-                            dispatch_viewport_mouse_btn(app, app->win->MouseX, app->win->MouseY, 1, TRUE, secs, micros);
-                        }
                         break;
 
                     case GID_CONNECT: {
