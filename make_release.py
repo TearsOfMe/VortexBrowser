@@ -9,9 +9,9 @@ import zipfile
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DIST_DIR = os.path.join(SCRIPT_DIR, "dist")
 
-VER_STR = "0.99-RC1"
+VER_STR = "0.99-RC2"
 APP_NAME = "VortexBrowser"
-RELEASE_DATE = "29.10.2026"
+RELEASE_DATE = "04.11.2026"
 
 STAGING_DIR = os.path.join(DIST_DIR, "staging")
 AMIGA_DRAWER = os.path.join(STAGING_DIR, "VortexBrowser")
@@ -34,15 +34,15 @@ os.makedirs(SERVER_ELITEDESK_DRAWER, exist_ok=True)
 GUIDE_CONTENT = """@database "VortexBrowser.guide"
 @author "TearsOfMe"
 @(c) "2026 VortexBrowser Project"
-@$VER: VortexBrowser.guide 0.99 RC1 (29.10.2026)
+@$VER: VortexBrowser.guide 0.99 RC2 (04.11.2026)
 
-@node "Main" "VortexBrowser 0.99 RC1 - Benutzerhandbuch"
+@node "Main" "VortexBrowser 0.99 RC2 - Benutzerhandbuch"
 @{b}========================================================================@{ub}
-           @{b}VORTEXBROWSER 0.99 RC1 FUER AMIGAOS 4.1@{ub}
+           @{b}VORTEXBROWSER 0.99 RC2 FUER AMIGAOS 4.1@{ub}
       Moderner Web-Browser mit Remote-Rendering & Streaming
 @{b}========================================================================@{ub}
 
-Willkommen zu @{b}VortexBrowser 0.99 RC1@{ub}!
+Willkommen zu @{b}VortexBrowser 0.99 RC2@{ub}!
 
 VortexBrowser ermoeglicht modernes Surfen im World Wide Web auf Ihrem AmigaOS 4.1
 System mit voller Unterstuetzung fuer moderne Web-Standards (HTML5, CSS3,
@@ -138,7 +138,7 @@ authentischen Look & Feel von AmigaOS 4!
    @{b}./run_server.sh@{ub}  (bzw. @{b}./run_rpi4.sh@{ub})
 
 @{b}Schritt 2: VortexBrowser auf dem AmigaOS 4 starten@{ub}
-1. Entpacken Sie das Archiv @{b}VortexBrowser-0.99-RC1-AmigaOS4.lha@{ub} an Ihren
+1. Entpacken Sie das Archiv @{b}VortexBrowser-0.99-RC2-AmigaOS4.lha@{ub} an Ihren
    gewuenschten Ort (z. B. @{b}Work:Internet/VortexBrowser@{ub}).
 2. Starten Sie @{b}VortexBrowser@{ub} per Doppelklick auf das Programm-Icon.
 3. Beim ersten Start fragt VortexBrowser Sie direkt nach der IP-Adresse Ihres Servers
@@ -445,7 +445,7 @@ was die CPU-Auslastung auf 20-30% senkt!
 @node "EnglishDoc" "English Documentation Summary"
 @{b}English Documentation Summary@{ub}
 
-@{b}VortexBrowser 0.99 RC1@{ub} is a remote web rendering browser client for AmigaOS 4.1.
+@{b}VortexBrowser 0.99 RC2@{ub} is a remote web rendering browser client for AmigaOS 4.1.
 It renders modern web pages (HTML5, CSS3, ES2024 JavaScript, WebGL, YouTube, etc.)
 on a companion Linux PC or Raspberry Pi 4/5 server, streaming ultra-smooth visuals
 and 16-bit 48kHz audio directly to AmigaOS with native Reaction GUI controls.
@@ -480,7 +480,7 @@ with open(os.path.join(AMIGA_DRAWER, f"{APP_NAME}.guide"), "w", encoding="iso-88
 # German Quickstart Readme: LIESMICH.txt
 # -------------------------------------------------------------
 LIESMICH_CONTENT = f"""==============================================================================
-                    {APP_NAME.upper()} 0.99 RC1 FUER AMIGAOS 4.1
+                    {APP_NAME.upper()} 0.99 RC2 FUER AMIGAOS 4.1
                  Schnellstartanleitung & Kurzanleitung
 ==============================================================================
 
@@ -559,7 +559,7 @@ with open(os.path.join(AMIGA_DRAWER, "LIESMICH.txt"), "w", encoding="iso-8859-1"
 # English Quickstart Readme: README.txt
 # -------------------------------------------------------------
 README_CONTENT = f"""==============================================================================
-                    {APP_NAME.upper()} 0.99 RC1 FOR AMIGAOS 4.1
+                    {APP_NAME.upper()} 0.99 RC2 FOR AMIGAOS 4.1
                  Quick Start Guide & Feature Overview
 ==============================================================================
 
@@ -852,10 +852,10 @@ else:
 # Overall German and English Readmes for Complete Archive
 # -------------------------------------------------------------
 OVERALL_DE_TXT = f"""==============================================================================
-            {APP_NAME.upper()} 0.99 RC1 - GESAMTPAKET FUER AMIGAOS 4 & SERVER
+            {APP_NAME.upper()} 0.99 RC2 - GESAMTPAKET FUER AMIGAOS 4 & SERVER
 ==============================================================================
 
-Dieses Komplettpaket enthaelt alles fuer den Betrieb von {APP_NAME} 0.99 RC1
+Dieses Komplettpaket enthaelt alles fuer den Betrieb von {APP_NAME} 0.99 RC2
 auf AmigaOS 4.1 sowie dem Rendering-Server auf Linux oder Raspberry Pi 4/5.
 
 VERZEICHNISSTRUKTUR:

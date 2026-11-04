@@ -57,11 +57,10 @@ fi
 if curl -s --connect-timeout 2 --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd "ftp://192.168.178.15/Work2/" >/dev/null 2>&1; then
     echo "=== Auto-Uploading to Amiga FTP (192.168.178.15 /Work2/VortexBrowser) ==="
     curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser.stripped" "ftp://192.168.178.15/Work2/VortexBrowser/VortexBrowser" >/dev/null 2>&1 || true
-    if [ -f "${SCRIPT_DIR}/dist/VortexBrowser-0.99-RC1-AmigaOS4.lha" ]; then
-        curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/dist/VortexBrowser-0.99-RC1-AmigaOS4.lha" "ftp://192.168.178.15/Work2/VortexBrowser/VortexBrowser-0.99-RC1-AmigaOS4.lha" >/dev/null 2>&1 || true
-        curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/dist/VortexBrowser-0.99-RC1-AmigaOS4.lha" "ftp://192.168.178.15/Work2/VortexBrowser-0.99-RC1-AmigaOS4.lha" >/dev/null 2>&1 || true
+    if [ -f "${SCRIPT_DIR}/dist/VortexBrowser-0.99-RC2-AmigaOS4.lha" ]; then
+        curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/dist/VortexBrowser-0.99-RC2-AmigaOS4.lha" "ftp://192.168.178.15/Work2/VortexBrowser/VortexBrowser-0.99-RC2-AmigaOS4.lha" >/dev/null 2>&1 || true
     fi
     echo "[+] Amiga FTP updated successfully!"
 fi
 
-echo "Build complete: VortexBrowser 0.99 RC1 (Newlib) created!"
+echo "Build complete: VortexBrowser 0.99 RC2 (Newlib) created!"

@@ -65,7 +65,7 @@ cd cachyos-elitedesk-server   # oder pi-server / rpi4-server
 ```
 
 ### 3. Client auf AmigaOS 4.1 starten
-1. Archiv `VortexBrowser-0.99-RC1-AmigaOS4.lha` auf dem Amiga entpacken (z. B. nach `Work:Internet/VortexBrowser`).
+1. Archiv `VortexBrowser-0.99-RC2-AmigaOS4.lha` auf dem Amiga entpacken (z. B. nach `Work:Internet/VortexBrowser`).
 2. Doppelklick auf das `VortexBrowser`-Icon.
 3. Server-IP eintragen (oder `Amiga+1` drücken) und auf **Verbinden** klicken!
 
