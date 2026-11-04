@@ -677,6 +677,16 @@ SERVER_RUN_SH = """#!/usr/bin/env bash
 # ==============================================================================
 set -e
 
+if [ "$EUID" -eq 0 ] && [ -n "$SUDO_USER" ]; then
+    echo "===================================================================="
+    echo " [!] FEHLER: run_server.sh darf NICHT mit 'sudo' gestartet werden!"
+    echo " Chromium verweigert aus Sicherheitsgruenden den Start als Root."
+    echo " Bitte starten Sie den Server als normaler Benutzer '${SUDO_USER}':"
+    echo "     ./run_server.sh"
+    echo "===================================================================="
+    exit 1
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
@@ -711,6 +721,17 @@ SERVER_INSTALL_SH = """#!/usr/bin/env bash
 # VortexBrowser Server - Automated 1-Click Installer
 # ==============================================================================
 set -e
+
+if [ "$EUID" -eq 0 ] && [ -n "$SUDO_USER" ]; then
+    echo "===================================================================="
+    echo " [!] FEHLER: install_server.sh darf NICHT mit 'sudo' gestartet werden!"
+    echo " Die Python-Umgebung und der Browser muessen dem Benutzer '${SUDO_USER}' gehoeren."
+    echo " Bitte starten Sie das Skript einfach ohne sudo:"
+    echo "     ./install_server.sh"
+    echo " Das Skript fragt bei Bedarf selbst nach sudo fuer Systempakete."
+    echo "===================================================================="
+    exit 1
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
