@@ -350,6 +350,8 @@ int main(int argc, char **argv)
                     g_app.last_remote_x    = rx;
                     g_app.last_remote_y    = ry;
                     net_send_move(&g_app, rx, ry);
+                } else if (dx == 0 && dy == 0) {
+                    g_app.pending_mouse_move = FALSE;
                 }
             } else {
                 g_app.pending_mouse_move = FALSE;

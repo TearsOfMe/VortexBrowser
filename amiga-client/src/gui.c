@@ -901,6 +901,8 @@ static void dispatch_viewport_mouse_btn(VortexApp *app, int16_t win_x, int16_t w
     if (btn == 1) {
         s_mouse_lmb_down = is_down;
         app->mouse_lmb_down = is_down;
+        app->last_remote_x = rx;
+        app->last_remote_y = ry;
         if (app->win) {
             IIntuition->ReportMouse(TRUE, app->win);
         }
@@ -3523,24 +3525,9 @@ void gui_handle_events(VortexApp *app)
             case WMHI_MOUSEMOVE:
                 break;
 
-            case WMHI_MOUSEBUTTONS: {
-                if (!app->win) break;
-                uint16 mcode = (uint16)(result & WMHI_KEYMASK);
-                uint32 secs = 0, micros = 0;
-                IIntuition->CurrentTime(&secs, &micros);
-                if (mcode == SELECTDOWN) {
-                    dispatch_viewport_mouse_btn(app, app->win->MouseX, app->win->MouseY, 1, TRUE, secs, micros);
-                } else if (mcode == SELECTUP) {
-                    dispatch_viewport_mouse_btn(app, app->win->MouseX, app->win->MouseY, 1, FALSE, secs, micros);
-                } else if (mcode == MIDDLEDOWN) {
-                    dispatch_viewport_mouse_btn(app, app->win->MouseX, app->win->MouseY, 2, TRUE, secs, micros);
-                } else if (mcode == MIDDLEUP) {
-                    dispatch_viewport_mouse_btn(app, app->win->MouseX, app->win->MouseY, 2, FALSE, secs, micros);
-                } else if (mcode == MENUDOWN) {
-                    dispatch_viewport_mouse_btn(app, app->win->MouseX, app->win->MouseY, 3, TRUE, secs, micros);
-                }
+            case WMHI_MOUSEBUTTONS:
+                /* Mouse buttons are captured with microsecond precision in idcmp_hook_func (WINDOW_IDCMPHook) */
                 break;
-            }
 
             case WMHI_VANILLAKEY: {
                 uint16 ascii = (uint16)(result & WMHI_KEYMASK);

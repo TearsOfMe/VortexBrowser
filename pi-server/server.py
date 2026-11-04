@@ -3207,7 +3207,7 @@ class AmigaClientSession:
 
                 now = time.monotonic()
                 if btn == "left":
-                    if (now - self._last_click_time) < 0.45 and abs(cx - self._last_click_x) <= 6 and abs(cy - self._last_click_y) <= 6:
+                    if (now - self._last_click_time) < 0.35 and abs(cx - self._last_click_x) <= 4 and abs(cy - self._last_click_y) <= 4:
                         self._click_count = min(3, self._click_count + 1)
                     else:
                         self._click_count = 1
@@ -3250,8 +3250,9 @@ class AmigaClientSession:
                     down_y = self._mouse_down_y if self._mouse_down_y >= 0 else cy
                     dist = ((cx - down_x) ** 2 + (cy - down_y) ** 2) ** 0.5
 
-                    # Move to release position with steps if drag was active, then release mouse button with click_count
-                    if self._mouse_down_btn == "left" and dist > 4:
+                    # If user dragged, release with click_count=1 to finalize the freeform selection
+                    if dist > 4:
+                        self._click_count = 1
                         await self.page.mouse.move(cx, cy, steps=2)
                     else:
                         await self.page.mouse.move(cx, cy)
@@ -3350,6 +3351,10 @@ class AmigaClientSession:
             elif event_type == INPUT_MOUSE_MOVE:
                 try:
                     if self._mouse_down_btn == "left":
+                        # If user moves mouse with button down, reset click_count to 1 so release is clean freeform selection
+                        dist = ((cx - self._mouse_down_x) ** 2 + (cy - self._mouse_down_y) ** 2) ** 0.5
+                        if dist > 4:
+                            self._click_count = 1
                         # Multi-step move so Chromium Blink SelectionController tracks continuous drag gesture
                         await self.page.mouse.move(cx, cy, steps=3)
                         # Force compositor repaint tick for selection highlighting in headless Chromium
