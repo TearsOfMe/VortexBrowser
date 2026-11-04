@@ -1841,21 +1841,49 @@ class AmigaClientSession:
             except Exception:
                 pass
 
-            # Pre-load Twitch auth-token if configured (bypasses Kasada login bot block entirely)
+            # Pre-load Twitch auth / full session cookies if configured (bypasses bot blocks entirely)
             try:
-                for t_path in ["twitch_token.txt", "twitch_cookie.txt", os.path.expanduser("~/.config/vortexbrowse/twitch_token.txt")]:
-                    if os.path.exists(t_path):
-                        with open(t_path, "r", encoding="utf-8") as f:
-                            t_val = f.read().strip()
-                            if t_val:
-                                await self.context.add_cookies([{
-                                    "name": "auth-token",
-                                    "value": t_val,
-                                    "domain": ".twitch.tv",
-                                    "path": "/"
-                                }])
-                                logger.info("Pre-loaded Twitch auth-token from %s", t_path)
+                loaded_twitch = False
+                for j_path in ["twitch_cookies.json", os.path.expanduser("~/.config/vortexbrowse/twitch_cookies.json"), "/tmp/twitch_cookies.json"]:
+                    if os.path.exists(j_path):
+                        try:
+                            with open(j_path, "r", encoding="utf-8") as f:
+                                raw_cookies = json.load(f)
+                            clean_list = []
+                            for c in raw_cookies:
+                                ck = {
+                                    "name": c["name"],
+                                    "value": c["value"],
+                                    "domain": c["domain"],
+                                    "path": c.get("path", "/"),
+                                    "secure": c.get("secure", True),
+                                    "httpOnly": c.get("httpOnly", False)
+                                }
+                                if "sameSite" in c and c["sameSite"] in ("Strict", "Lax", "None"):
+                                    ck["sameSite"] = c["sameSite"]
+                                clean_list.append(ck)
+                            if clean_list:
+                                await self.context.add_cookies(clean_list)
+                                logger.info("Pre-loaded %d Twitch session cookies from %s", len(clean_list), j_path)
+                                loaded_twitch = True
                                 break
+                        except Exception as _je:
+                            logger.debug("Twitch json cookie load error: %s", _je)
+
+                if not loaded_twitch:
+                    for t_path in ["twitch_token.txt", "twitch_cookie.txt", os.path.expanduser("~/.config/vortexbrowse/twitch_token.txt")]:
+                        if os.path.exists(t_path):
+                            with open(t_path, "r", encoding="utf-8") as f:
+                                t_val = f.read().strip()
+                                if t_val:
+                                    await self.context.add_cookies([{
+                                        "name": "auth-token",
+                                        "value": t_val,
+                                        "domain": ".twitch.tv",
+                                        "path": "/"
+                                    }])
+                                    logger.info("Pre-loaded Twitch auth-token from %s", t_path)
+                                    break
             except Exception as _te:
                 logger.debug("Twitch cookie load error: %s", _te)
 
@@ -1977,6 +2005,14 @@ class AmigaClientSession:
                         window.localStorage.setItem('video-quality', JSON.stringify({ default: '720p30' }));
                         window.localStorage.setItem('twilight.player.quality', '"720p30"');
                         window.localStorage.setItem('lowLatencyMode', 'false');
+                        if (location.hostname.includes('twitch.tv')) {
+                            try {
+                                const m = document.cookie.match(/(?:^|;\s*)auth-token=([^;]+)/);
+                                if (m && !window.localStorage.getItem('auth-token')) {
+                                    window.localStorage.setItem('auth-token', decodeURIComponent(m[1]));
+                                }
+                            } catch(e) {}
+                        }
                     } catch(e) {}
 
                     const injectTwStyle = () => {

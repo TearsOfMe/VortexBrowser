@@ -34,6 +34,8 @@ amiga-client/VortexBrowse.clib4
 # Secrets & local credentials
 *twitch_token*.txt
 *twitch_cookie*.txt
+*twitch_cookies*.json
+*storage_state*.json
 *.sqlite
 /tmp/
 
