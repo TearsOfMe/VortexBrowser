@@ -17,12 +17,8 @@
 
 #include "renderer.h"
 #include "net.h"
-
-/* Fast memory copy compatible with all PowerPC CPUs (no AltiVec required) */
-static inline void fast_memcpy(void * restrict dst, const void * restrict src, size_t n)
-{
-    memcpy(dst, src, n);
-}
+#include "renderer_altivec.h"
+#include <exec/exectags.h>
 
 void renderer_init(VortexApp *app)
 {
@@ -30,6 +26,13 @@ void renderer_init(VortexApp *app)
     app->renderer.src_width   = VORTEXBROWSE_DEFAULT_WIDTH;
     app->renderer.src_height  = VORTEXBROWSE_DEFAULT_HEIGHT;
     app->renderer.src_format  = FMT_RGB565;
+
+    uint32 vec_unit = VECTORTYPE_NONE;
+    IExec->GetCPUInfoTags(GCIT_VectorUnit, &vec_unit, TAG_DONE);
+    app->renderer.has_altivec = (vec_unit == VECTORTYPE_ALTIVEC || vec_unit == 2);
+    printf("[VortexBrowser] CPU Vector Unit: %lu -> AltiVec SIMD %s\n",
+           (unsigned long)vec_unit,
+           app->renderer.has_altivec ? "ACTIVE (AmigaOne X1000 / G4 detected)" : "DISABLED (X5000 / A1222+ / Sam460 / G3 scalar mode)");
 }
 
 static void free_source_bitmaps(RendererState *r)
@@ -256,13 +259,21 @@ static void upload_slice_to_bitmap(
         if (is_16bit) {
             /* 16-Bit VRAM Destination */
             if (fmt == FMT_RGB565) {
-                /* Fast-Path: 16-bit RGB565 -> 16-bit RGB565 BitMap: ZERO-CONVERSION DIRECT MEMCPY! */
+                /* Fast-Path: 16-bit RGB565 -> 16-bit RGB565 BitMap: DIRECT MEMCPY */
                 const uint8_t *src_row = pixels;
                 if (dst_bpr == dst_row_bytes) {
-                    fast_memcpy(dst_row, src_row, (size_t)dst_row_bytes * slice_h);
+                    if (r->has_altivec) {
+                        altivec_fast_memcpy(dst_row, src_row, (size_t)dst_row_bytes * slice_h);
+                    } else {
+                        memcpy(dst_row, src_row, (size_t)dst_row_bytes * slice_h);
+                    }
                 } else {
                     for (uint16_t y = 0; y < slice_h; y++) {
-                        fast_memcpy(dst_row, src_row, dst_row_bytes);
+                        if (r->has_altivec) {
+                            altivec_fast_memcpy(dst_row, src_row, dst_row_bytes);
+                        } else {
+                            memcpy(dst_row, src_row, dst_row_bytes);
+                        }
                         src_row += dst_row_bytes;
                         dst_row += dst_bpr;
                     }
@@ -272,12 +283,16 @@ static void upload_slice_to_bitmap(
                 const uint32_t * restrict src32 = (const uint32_t *)pixels;
                 for (uint16_t y = 0; y < slice_h; y++) {
                     uint16_t * restrict dst16 = (uint16_t *)dst_row;
-                    for (uint16_t x = 0; x < w; x++) {
-                        uint32_t c = src32[x];
-                        uint16_t r5 = (uint16_t)((c >> 19) & 0x1FU);
-                        uint16_t g6 = (uint16_t)((c >> 10) & 0x3FU);
-                        uint16_t b5 = (uint16_t)((c >> 3)  & 0x1FU);
-                        dst16[x] = (uint16_t)((r5 << 11) | (g6 << 5) | b5);
+                    if (r->has_altivec) {
+                        altivec_convert_argb32_to_rgb565(src32, dst16, w);
+                    } else {
+                        for (uint16_t x = 0; x < w; x++) {
+                            uint32_t c = src32[x];
+                            uint16_t r5 = (uint16_t)((c >> 19) & 0x1FU);
+                            uint16_t g6 = (uint16_t)((c >> 10) & 0x3FU);
+                            uint16_t b5 = (uint16_t)((c >> 3)  & 0x1FU);
+                            dst16[x] = (uint16_t)((r5 << 11) | (g6 << 5) | b5);
+                        }
                     }
                     src32 += w;
                     dst_row += dst_bpr;
@@ -288,17 +303,29 @@ static void upload_slice_to_bitmap(
             if (fmt == FMT_RGB565) {
                 const uint16_t * restrict src16 = (const uint16_t *)pixels;
                 for (uint16_t y = 0; y < slice_h; y++) {
-                    convert_rgb565_row_to_argb32(src16, (uint32_t *)dst_row, w);
+                    if (r->has_altivec) {
+                        altivec_convert_rgb565_to_argb32(src16, (uint32_t *)dst_row, w);
+                    } else {
+                        convert_rgb565_row_to_argb32(src16, (uint32_t *)dst_row, w);
+                    }
                     src16   += w;
                     dst_row += dst_bpr;
                 }
             } else {
                 const uint8_t *src_row = pixels;
                 if (dst_bpr == dst_row_bytes) {
-                    fast_memcpy(dst_row, src_row, (size_t)dst_row_bytes * slice_h);
+                    if (r->has_altivec) {
+                        altivec_fast_memcpy(dst_row, src_row, (size_t)dst_row_bytes * slice_h);
+                    } else {
+                        memcpy(dst_row, src_row, (size_t)dst_row_bytes * slice_h);
+                    }
                 } else {
                     for (uint16_t y = 0; y < slice_h; y++) {
-                        fast_memcpy(dst_row, src_row, dst_row_bytes);
+                        if (r->has_altivec) {
+                            altivec_fast_memcpy(dst_row, src_row, dst_row_bytes);
+                        } else {
+                            memcpy(dst_row, src_row, dst_row_bytes);
+                        }
                         src_row += dst_row_bytes;
                         dst_row += dst_bpr;
                     }
@@ -325,7 +352,11 @@ static void upload_slice_to_bitmap(
         const uint16_t *src16 = (const uint16_t *)pixels;
         uint32_t       *dst32 = r->conv_argb_buf;
         for (uint16_t y = 0; y < slice_h; y++) {
-            convert_rgb565_row_to_argb32(src16, dst32, w);
+            if (r->has_altivec) {
+                altivec_convert_rgb565_to_argb32(src16, dst32, w);
+            } else {
+                convert_rgb565_row_to_argb32(src16, dst32, w);
+            }
             src16 += w;
             dst32 += w;
         }
@@ -388,13 +419,21 @@ static void upload_rect_to_bitmap(
         if (is_16bit && fmt == FMT_RGB565) {
             /* 16-bit to 16-bit: fast memcpy */
             for (uint16_t y = 0; y < rh; y++) {
-                fast_memcpy(dst_start + (size_t)y * dst_bpr, src_row, dst_row_bytes);
+                if (r->has_altivec) {
+                    altivec_fast_memcpy(dst_start + (size_t)y * dst_bpr, src_row, dst_row_bytes);
+                } else {
+                    memcpy(dst_start + (size_t)y * dst_bpr, src_row, dst_row_bytes);
+                }
                 src_row += src_row_bytes;
             }
         } else if (!is_16bit && fmt == FMT_ARGB32) {
             /* 32-bit to 32-bit: fast memcpy */
             for (uint16_t y = 0; y < rh; y++) {
-                fast_memcpy(dst_start + (size_t)y * dst_bpr, src_row, dst_row_bytes);
+                if (r->has_altivec) {
+                    altivec_fast_memcpy(dst_start + (size_t)y * dst_bpr, src_row, dst_row_bytes);
+                } else {
+                    memcpy(dst_start + (size_t)y * dst_bpr, src_row, dst_row_bytes);
+                }
                 src_row += src_row_bytes;
             }
         } else if (!is_16bit && fmt == FMT_RGB565) {
@@ -402,20 +441,28 @@ static void upload_rect_to_bitmap(
             for (uint16_t y = 0; y < rh; y++) {
                 const uint16_t * restrict src16 = (const uint16_t *)src_row;
                 uint32_t * restrict dst32 = (uint32_t *)(dst_start + (size_t)y * dst_bpr);
-                convert_rgb565_row_to_argb32(src16, dst32, rw);
+                if (r->has_altivec) {
+                    altivec_convert_rgb565_to_argb32(src16, dst32, rw);
+                } else {
+                    convert_rgb565_row_to_argb32(src16, dst32, rw);
+                }
                 src_row += src_row_bytes;
             }
         } else if (is_16bit && fmt == FMT_ARGB32) {
-            /* 32-bit to 16-bit: Convert per row via AltiVec SIMD */
+            /* 32-bit to 16-bit: Convert per row */
             for (uint16_t y = 0; y < rh; y++) {
                 const uint32_t * restrict src32 = (const uint32_t *)src_row;
                 uint16_t * restrict dst16 = (uint16_t *)(dst_start + (size_t)y * dst_bpr);
-                for (uint16_t x = 0; x < rw; x++) {
-                    uint32_t c = src32[x];
-                    uint16_t r5 = (uint16_t)((c >> 19) & 0x1FU);
-                    uint16_t g6 = (uint16_t)((c >> 10) & 0x3FU);
-                    uint16_t b5 = (uint16_t)((c >> 3)  & 0x1FU);
-                    dst16[x] = (uint16_t)((r5 << 11) | (g6 << 5) | b5);
+                if (r->has_altivec) {
+                    altivec_convert_argb32_to_rgb565(src32, dst16, rw);
+                } else {
+                    for (uint16_t x = 0; x < rw; x++) {
+                        uint32_t c = src32[x];
+                        uint16_t r5 = (uint16_t)((c >> 19) & 0x1FU);
+                        uint16_t g6 = (uint16_t)((c >> 10) & 0x3FU);
+                        uint16_t b5 = (uint16_t)((c >> 3)  & 0x1FU);
+                        dst16[x] = (uint16_t)((r5 << 11) | (g6 << 5) | b5);
+                    }
                 }
                 src_row += src_row_bytes;
             }

@@ -17,7 +17,6 @@ STAGING_DIR = os.path.join(DIST_DIR, "staging")
 AMIGA_DRAWER = os.path.join(STAGING_DIR, "VortexBrowser")
 SERVER_LINUX_DRAWER = os.path.join(STAGING_DIR, "Server-Linux")
 SERVER_RPI4_DRAWER = os.path.join(STAGING_DIR, "Server-RaspberryPi4")
-SERVER_ELITEDESK_DRAWER = os.path.join(STAGING_DIR, "Server-CachyOS-EliteDesk")
 
 print(f"=== [1/6] Preparing Staging Directories for {APP_NAME} {VER_STR} ===")
 if os.path.exists(DIST_DIR):
@@ -26,7 +25,6 @@ os.makedirs(AMIGA_DRAWER, exist_ok=True)
 os.makedirs(os.path.join(AMIGA_DRAWER, "icons"), exist_ok=True)
 os.makedirs(SERVER_LINUX_DRAWER, exist_ok=True)
 os.makedirs(SERVER_RPI4_DRAWER, exist_ok=True)
-os.makedirs(SERVER_ELITEDESK_DRAWER, exist_ok=True)
 
 # -------------------------------------------------------------
 # AmigaGuide Documentation
@@ -34,7 +32,7 @@ os.makedirs(SERVER_ELITEDESK_DRAWER, exist_ok=True)
 GUIDE_CONTENT = """@database "VortexBrowser.guide"
 @author "TearsOfMe"
 @(c) "2026 VortexBrowser Project"
-@$VER: VortexBrowser.guide 0.99 RC2 (04.11.2026)
+@$VER: VortexBrowser.guide 0.99 RC2 (29.10.2026)
 
 @node "Main" "VortexBrowser 0.99 RC2 - Benutzerhandbuch"
 @{b}========================================================================@{ub}
@@ -138,7 +136,7 @@ authentischen Look & Feel von AmigaOS 4!
    @{b}./run_server.sh@{ub}  (bzw. @{b}./run_rpi4.sh@{ub})
 
 @{b}Schritt 2: VortexBrowser auf dem AmigaOS 4 starten@{ub}
-1. Entpacken Sie das Archiv @{b}VortexBrowser-0.99-RC2-AmigaOS4.lha@{ub} an Ihren
+1. Entpacken Sie das Archiv @{b}VortexBrowser-0.99-RC1-AmigaOS4.lha@{ub} an Ihren
    gewuenschten Ort (z. B. @{b}Work:Internet/VortexBrowser@{ub}).
 2. Starten Sie @{b}VortexBrowser@{ub} per Doppelklick auf das Programm-Icon.
 3. Beim ersten Start fragt VortexBrowser Sie direkt nach der IP-Adresse Ihres Servers
@@ -492,8 +490,12 @@ WebGL, etc.) fluessig und ressourcenschonend auf den Amiga bringt.
 ------------------------------------------------------------------------------
 1. INHALT DIESES ARCHIVS
 ------------------------------------------------------------------------------
-- {APP_NAME}             : Ausfuehrbares Programm fuer AmigaOS 4 (newlib.library)
+- {APP_NAME}             : Universelles AmigaOS 4 Programm mit dynamischer AltiVec-Erkennung
+                           (laeuft sicher auf X5000, A1222+, Sam460, Sam440, G4, G3 -
+                           nutzt 128-Bit AltiVec SIMD automatisch auf X1000 und G4!)
+- {APP_NAME}-AltiVec     : Speziell fuer AmigaOne X1000 und G4 AltiVec-optimiertes Programm
 - {APP_NAME}.info        : Echtes AmigaOS 4 Icon im VideoVortex-Look
+- {APP_NAME}-AltiVec.info: Echtes AmigaOS 4 Icon fuer die AltiVec-Version
 - {APP_NAME}.guide       : Ausfuehrliches AmigaGuide-Handbuch mit allen Details
 - LIESMICH.txt          : Diese Schnellstartanleitung (Deutsch)
 - README.txt            : Schnellstartanleitung (Englisch)
@@ -571,8 +573,12 @@ YouTube, and Twitch with low Amiga CPU usage and native Reaction GUI.
 ------------------------------------------------------------------------------
 1. PACKAGE CONTENTS
 ------------------------------------------------------------------------------
-- {APP_NAME}             : Standard AmigaOS 4 executable (newlib.library)
+- {APP_NAME}             : Universal AmigaOS 4 binary with dynamic AltiVec detection
+                           (safe for X5000, A1222+, Sam460, Sam440, G4, G3 -
+                           auto-activates 128-bit AltiVec SIMD on X1000 and G4!)
+- {APP_NAME}-AltiVec     : Dedicated pure AltiVec-vectorized binary for AmigaOne X1000 & G4
 - {APP_NAME}.info        : Native AmigaOS 4 Icon in cosmic vortex look
+- {APP_NAME}-AltiVec.info: Native AmigaOS 4 Icon for the AltiVec build
 - {APP_NAME}.guide       : Comprehensive AmigaGuide manual
 - LIESMICH.txt          : German quickstart guide
 - README.txt            : English quickstart guide
@@ -625,6 +631,12 @@ with open(os.path.join(AMIGA_DRAWER, "README.txt"), "w", encoding="utf-8") as f:
 print("=== [2/6] Copying AmigaOS 4 Client Binaries and Icons ===")
 shutil.copy2("amiga-client/VortexBrowser.stripped", os.path.join(AMIGA_DRAWER, APP_NAME))
 shutil.copy2("amiga-client/VortexBrowser.info", os.path.join(AMIGA_DRAWER, f"{APP_NAME}.info"))
+if os.path.exists("amiga-client/VortexBrowser-AltiVec.stripped"):
+    shutil.copy2("amiga-client/VortexBrowser-AltiVec.stripped", os.path.join(AMIGA_DRAWER, f"{APP_NAME}-AltiVec"))
+if os.path.exists("amiga-client/VortexBrowser-AltiVec.info"):
+    shutil.copy2("amiga-client/VortexBrowser-AltiVec.info", os.path.join(AMIGA_DRAWER, f"{APP_NAME}-AltiVec.info"))
+elif os.path.exists("amiga-client/VortexBrowser.info"):
+    shutil.copy2("amiga-client/VortexBrowser.info", os.path.join(AMIGA_DRAWER, f"{APP_NAME}-AltiVec.info"))
 
 # Copy Icons to icons/
 for icon in os.listdir("amiga-client/icons"):
@@ -772,20 +784,11 @@ shutil.copy2("pi-server/darkreader.js", os.path.join(SERVER_LINUX_DRAWER, "darkr
 shutil.copy2("pi-server/requirements.txt", os.path.join(SERVER_LINUX_DRAWER, "requirements.txt"))
 if os.path.exists("pi-server/extensions"):
     shutil.copytree("pi-server/extensions", os.path.join(SERVER_LINUX_DRAWER, "extensions"), dirs_exist_ok=True)
-if os.path.exists("pi-server/run_server.sh"):
-    shutil.copy2("pi-server/run_server.sh", os.path.join(SERVER_LINUX_DRAWER, "run_server.sh"))
-elif os.path.exists("cachyos-elitedesk-server/run_server.sh"):
-    shutil.copy2("cachyos-elitedesk-server/run_server.sh", os.path.join(SERVER_LINUX_DRAWER, "run_server.sh"))
-else:
-    with open(os.path.join(SERVER_LINUX_DRAWER, "run_server.sh"), "w") as f:
-        f.write(SERVER_RUN_SH)
+with open(os.path.join(SERVER_LINUX_DRAWER, "run_server.sh"), "w") as f:
+    f.write(SERVER_RUN_SH)
 os.chmod(os.path.join(SERVER_LINUX_DRAWER, "run_server.sh"), 0o755)
-
-if os.path.exists("cachyos-elitedesk-server/install_server.sh"):
-    shutil.copy2("cachyos-elitedesk-server/install_server.sh", os.path.join(SERVER_LINUX_DRAWER, "install_server.sh"))
-else:
-    with open(os.path.join(SERVER_LINUX_DRAWER, "install_server.sh"), "w") as f:
-        f.write(SERVER_INSTALL_SH)
+with open(os.path.join(SERVER_LINUX_DRAWER, "install_server.sh"), "w") as f:
+    f.write(SERVER_INSTALL_SH)
 os.chmod(os.path.join(SERVER_LINUX_DRAWER, "install_server.sh"), 0o755)
 with open(os.path.join(SERVER_LINUX_DRAWER, "vortexbrowser.service"), "w") as f:
     f.write(SYSTEMD_SERVICE)
@@ -819,35 +822,6 @@ if os.path.exists("rpi4-server/README_RPI4.md"):
 with open(os.path.join(SERVER_RPI4_DRAWER, "vortexbrowser.service"), "w") as f:
     f.write(SYSTEMD_SERVICE)
 
-# Populate Server-CachyOS-EliteDesk Drawer
-shutil.copy2("cachyos-elitedesk-server/server.py", os.path.join(SERVER_ELITEDESK_DRAWER, "server.py"))
-shutil.copy2("cachyos-elitedesk-server/fast_pixconv.c", os.path.join(SERVER_ELITEDESK_DRAWER, "fast_pixconv.c"))
-if os.path.exists("cachyos-elitedesk-server/fast_pixconv.so"):
-    shutil.copy2("cachyos-elitedesk-server/fast_pixconv.so", os.path.join(SERVER_ELITEDESK_DRAWER, "fast_pixconv.so"))
-shutil.copy2("cachyos-elitedesk-server/darkreader.js", os.path.join(SERVER_ELITEDESK_DRAWER, "darkreader.js"))
-shutil.copy2("cachyos-elitedesk-server/requirements.txt", os.path.join(SERVER_ELITEDESK_DRAWER, "requirements.txt"))
-if os.path.exists("cachyos-elitedesk-server/extensions"):
-    shutil.copytree("cachyos-elitedesk-server/extensions", os.path.join(SERVER_ELITEDESK_DRAWER, "extensions"), dirs_exist_ok=True)
-if os.path.exists("cachyos-elitedesk-server/install_server.sh"):
-    shutil.copy2("cachyos-elitedesk-server/install_server.sh", os.path.join(SERVER_ELITEDESK_DRAWER, "install_server.sh"))
-else:
-    with open(os.path.join(SERVER_ELITEDESK_DRAWER, "install_server.sh"), "w") as f:
-        f.write(SERVER_INSTALL_SH)
-os.chmod(os.path.join(SERVER_ELITEDESK_DRAWER, "install_server.sh"), 0o755)
-if os.path.exists("cachyos-elitedesk-server/run_server.sh"):
-    shutil.copy2("cachyos-elitedesk-server/run_server.sh", os.path.join(SERVER_ELITEDESK_DRAWER, "run_server.sh"))
-else:
-    with open(os.path.join(SERVER_ELITEDESK_DRAWER, "run_server.sh"), "w") as f:
-        f.write(SERVER_RUN_SH)
-os.chmod(os.path.join(SERVER_ELITEDESK_DRAWER, "run_server.sh"), 0o755)
-if os.path.exists("cachyos-elitedesk-server/README_ELITEDESK.md"):
-    shutil.copy2("cachyos-elitedesk-server/README_ELITEDESK.md", os.path.join(SERVER_ELITEDESK_DRAWER, "README_ELITEDESK.txt"))
-if os.path.exists("cachyos-elitedesk-server/vortexbrowser.service"):
-    shutil.copy2("cachyos-elitedesk-server/vortexbrowser.service", os.path.join(SERVER_ELITEDESK_DRAWER, "vortexbrowser.service"))
-else:
-    with open(os.path.join(SERVER_ELITEDESK_DRAWER, "vortexbrowser.service"), "w") as f:
-        f.write(SYSTEMD_SERVICE)
-
 # -------------------------------------------------------------
 # Overall German and English Readmes for Complete Archive
 # -------------------------------------------------------------
@@ -861,8 +835,10 @@ auf AmigaOS 4.1 sowie dem Rendering-Server auf Linux oder Raspberry Pi 4/5.
 VERZEICHNISSTRUKTUR:
 --------------------
 - {APP_NAME}/          : Der vollstaendige AmigaOS 4 Client-Ordner
-  * {APP_NAME}         : Ausfuehrbares Programm (Newlib-Version)
+  * {APP_NAME}         : Universelles Programm mit automatischer AltiVec-Erkennung (fuer X5000, A1222+, Sam460, Sam440, G4, G3)
+  * {APP_NAME}-AltiVec : Speziell fuer AmigaOne X1000 & G4 AltiVec-optimierte Version
   * {APP_NAME}.info    : Echtes AmigaOS 4 Icon im VideoVortex-Look
+  * {APP_NAME}-AltiVec.info : Echtes AmigaOS 4 Icon fuer die AltiVec-Version
   * {APP_NAME}.guide   : Ausfuehrliches AmigaGuide-Handbuch
   * LIESMICH.txt       : Deutsche Kurzanleitung
   * README.txt         : Englische Kurzanleitung
@@ -926,18 +902,6 @@ with zipfile.ZipFile(RPI4_ZIP, "w", zipfile.ZIP_DEFLATED) as zf:
             rel_path = os.path.join("Server-RaspberryPi4", os.path.relpath(full_path, SERVER_RPI4_DRAWER))
             zf.write(full_path, rel_path)
 print(f"[+] Created Raspberry Pi 4 Server Zip: {RPI4_ZIP} ({os.path.getsize(RPI4_ZIP)} bytes)")
-
-# -------------------------------------------------------------
-# Create 3b: CachyOS HP EliteDesk Server Zip Archive
-# -------------------------------------------------------------
-ELITEDESK_ZIP = os.path.join(DIST_DIR, f"{APP_NAME}-{VER_STR}-CachyOS-EliteDesk.zip")
-with zipfile.ZipFile(ELITEDESK_ZIP, "w", zipfile.ZIP_DEFLATED) as zf:
-    for root, dirs, files in os.walk(SERVER_ELITEDESK_DRAWER):
-        for file in files:
-            full_path = os.path.join(root, file)
-            rel_path = os.path.join("Server-CachyOS-EliteDesk", os.path.relpath(full_path, SERVER_ELITEDESK_DRAWER))
-            zf.write(full_path, rel_path)
-print(f"[+] Created CachyOS EliteDesk Server Zip: {ELITEDESK_ZIP} ({os.path.getsize(ELITEDESK_ZIP)} bytes)")
 
 # -------------------------------------------------------------
 # Create 4: Complete Zip Archive

@@ -1421,7 +1421,8 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
                 "Dekodierte Frames: %u\n\n"
                 "=== AUDIO & OPTIMIERUNG ===\n"
                 "Audio-Engine: AHI 16-Bit Stereo (22050 Hz PCM Low-Latency)\n"
-                "CPU-Ziel: PowerPC Universal (X5000, A1222+, Sam460, Sam440, G4, G3)\n"
+                "CPU-Ziel: PowerPC Universal (Dynamische CPU-Erkennung)\n"
+                "Vector-SIMD: %s\n"
                 "Kompression: LZ4 Realtime Stream Decompressor",
                 app->server_host, (unsigned)app->server_port,
                 conn_str,
@@ -1430,7 +1431,8 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
                 app->win ? (int)app->win->LeftEdge : 0, app->win ? (int)app->win->TopEdge : 0,
                 (unsigned)vp_w, (unsigned)vp_h,
                 (unsigned)app->renderer.src_width, (unsigned)app->renderer.src_height, fmt_str,
-                (unsigned)app->renderer.frames_decoded);
+                (unsigned)app->renderer.frames_decoded,
+                app->renderer.has_altivec ? "AltiVec 128-Bit SIMD (Aktiviert - X1000/G4)" : "Scalar Baseline (Sicher fuer X5000/A1222+/Sam460/G3)");
 
             struct EasyStruct es;
             memset(&es, 0, sizeof(es));
