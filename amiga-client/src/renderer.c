@@ -14,29 +14,14 @@
 #include <liblz4/lz4.h>
 #include <jpeglib.h>
 #include <setjmp.h>
-#include <altivec.h>
 
 #include "renderer.h"
 #include "net.h"
 
-/* Fast AltiVec-accelerated 128-bit SIMD memory copy for 16-byte aligned buffers */
-static inline void altivec_memcpy_fast(void * restrict dst, const void * restrict src, size_t n)
+/* Fast memory copy compatible with all PowerPC CPUs (no AltiVec required) */
+static inline void fast_memcpy(void * restrict dst, const void * restrict src, size_t n)
 {
-    uint8_t * restrict d = (uint8_t *)dst;
-    const uint8_t * restrict s = (const uint8_t *)src;
-    if ((((uintptr_t)d | (uintptr_t)s) & 15) == 0) {
-        size_t n16 = n >> 4;
-        for (size_t i = 0; i < n16; i++) {
-            vector unsigned char v = vec_ld(0, s + (i << 4));
-            vec_st(v, 0, d + (i << 4));
-        }
-        size_t rem = n & 15;
-        if (rem) {
-            memcpy(d + (n - rem), s + (n - rem), rem);
-        }
-    } else {
-        memcpy(d, s, n);
-    }
+    memcpy(dst, src, n);
 }
 
 void renderer_init(VortexApp *app)
@@ -271,13 +256,13 @@ static void upload_slice_to_bitmap(
         if (is_16bit) {
             /* 16-Bit VRAM Destination */
             if (fmt == FMT_RGB565) {
-                /* Fast-Path: 16-bit RGB565 -> 16-bit RGB565 BitMap: ZERO-CONVERSION ALTIVEC DIRECT MEMCPY! */
+                /* Fast-Path: 16-bit RGB565 -> 16-bit RGB565 BitMap: ZERO-CONVERSION DIRECT MEMCPY! */
                 const uint8_t *src_row = pixels;
                 if (dst_bpr == dst_row_bytes) {
-                    altivec_memcpy_fast(dst_row, src_row, (size_t)dst_row_bytes * slice_h);
+                    fast_memcpy(dst_row, src_row, (size_t)dst_row_bytes * slice_h);
                 } else {
                     for (uint16_t y = 0; y < slice_h; y++) {
-                        altivec_memcpy_fast(dst_row, src_row, dst_row_bytes);
+                        fast_memcpy(dst_row, src_row, dst_row_bytes);
                         src_row += dst_row_bytes;
                         dst_row += dst_bpr;
                     }
@@ -310,10 +295,10 @@ static void upload_slice_to_bitmap(
             } else {
                 const uint8_t *src_row = pixels;
                 if (dst_bpr == dst_row_bytes) {
-                    altivec_memcpy_fast(dst_row, src_row, (size_t)dst_row_bytes * slice_h);
+                    fast_memcpy(dst_row, src_row, (size_t)dst_row_bytes * slice_h);
                 } else {
                     for (uint16_t y = 0; y < slice_h; y++) {
-                        altivec_memcpy_fast(dst_row, src_row, dst_row_bytes);
+                        fast_memcpy(dst_row, src_row, dst_row_bytes);
                         src_row += dst_row_bytes;
                         dst_row += dst_bpr;
                     }
@@ -401,19 +386,19 @@ static void upload_rect_to_bitmap(
         const uint8_t *src_row = pixels;
 
         if (is_16bit && fmt == FMT_RGB565) {
-            /* 16-bit to 16-bit: AltiVec fast memcpy */
+            /* 16-bit to 16-bit: fast memcpy */
             for (uint16_t y = 0; y < rh; y++) {
-                altivec_memcpy_fast(dst_start + (size_t)y * dst_bpr, src_row, dst_row_bytes);
+                fast_memcpy(dst_start + (size_t)y * dst_bpr, src_row, dst_row_bytes);
                 src_row += src_row_bytes;
             }
         } else if (!is_16bit && fmt == FMT_ARGB32) {
-            /* 32-bit to 32-bit: AltiVec fast memcpy */
+            /* 32-bit to 32-bit: fast memcpy */
             for (uint16_t y = 0; y < rh; y++) {
-                altivec_memcpy_fast(dst_start + (size_t)y * dst_bpr, src_row, dst_row_bytes);
+                fast_memcpy(dst_start + (size_t)y * dst_bpr, src_row, dst_row_bytes);
                 src_row += src_row_bytes;
             }
         } else if (!is_16bit && fmt == FMT_RGB565) {
-            /* 16-bit to 32-bit: Convert per row via AltiVec SIMD */
+            /* 16-bit to 32-bit: Convert per row */
             for (uint16_t y = 0; y < rh; y++) {
                 const uint16_t * restrict src16 = (const uint16_t *)src_row;
                 uint32_t * restrict dst32 = (uint32_t *)(dst_start + (size_t)y * dst_bpr);

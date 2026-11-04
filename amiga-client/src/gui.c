@@ -1421,7 +1421,7 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
                 "Dekodierte Frames: %u\n\n"
                 "=== AUDIO & OPTIMIERUNG ===\n"
                 "Audio-Engine: AHI 16-Bit Stereo (22050 Hz PCM Low-Latency)\n"
-                "AltiVec SIMD: Aktiviert (PPC 7450 / 7455)\n"
+                "CPU-Ziel: PowerPC Universal (X5000, A1222+, Sam460, Sam440, G4, G3)\n"
                 "Kompression: LZ4 Realtime Stream Decompressor",
                 app->server_host, (unsigned)app->server_port,
                 conn_str,

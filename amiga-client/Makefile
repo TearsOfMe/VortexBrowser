@@ -2,7 +2,10 @@ CC      = /opt/ppc-amigaos/bin/ppc-amigaos-gcc
 STRIP   = /opt/ppc-amigaos/bin/ppc-amigaos-strip
 SDK     = /opt/ppc-amigaos/ppc-amigaos/SDK
 
-OPTIMIZE = -O3 -mcpu=7450 -maltivec -mabi=altivec -mno-vrsave \
+# Universal AmigaOS 4 PowerPC baseline (Compatible with ALL AmigaOS 4 machines:
+# AmigaOne X5000, A1222/A1222+, Sam460, Sam440, G4, G3, Classic PPC)
+# STRICTLY NO -maltivec, NO -mabi=altivec, NO -mcpu=7450!
+OPTIMIZE = -O2 -mcpu=powerpc \
            -fomit-frame-pointer -fno-strict-aliasing \
            -finline-functions -fweb -frename-registers $(DEBUG_CFLAGS)
 
