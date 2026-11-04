@@ -2053,6 +2053,85 @@ class AmigaClientSession:
                         (document.head || document.documentElement).appendChild(selStyle);
                     } catch(e) {}
 
+                    // Direct DOM-level selection controller using caretRangeFromPoint for 100% reliable freeform drag selection
+                    window.__vortex_selection = {
+                        startX: -1,
+                        startY: -1,
+                        isDragging: false,
+
+                        start: function(x, y) {
+                            this.startX = x;
+                            this.startY = y;
+                            this.isDragging = false;
+                            let el = document.elementFromPoint(x, y);
+                            if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+                            let r = document.caretRangeFromPoint ? document.caretRangeFromPoint(x, y) : null;
+                            if (r) {
+                                let s = window.getSelection();
+                                if (s) {
+                                    s.removeAllRanges();
+                                    s.addRange(r);
+                                }
+                            }
+                        },
+
+                        update: function(x, y) {
+                            if (this.startX < 0 || this.startY < 0) return;
+                            let dist = Math.hypot(x - this.startX, y - this.startY);
+                            if (dist < 4) return;
+                            this.isDragging = true;
+
+                            let el = document.elementFromPoint(this.startX, this.startY);
+                            if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) return;
+
+                            let r1 = document.caretRangeFromPoint ? document.caretRangeFromPoint(this.startX, this.startY) : null;
+                            let r2 = document.caretRangeFromPoint ? document.caretRangeFromPoint(x, y) : null;
+                            if (!r1 || !r2) return;
+
+                            let range = document.createRange();
+                            let comp = r1.startContainer.compareDocumentPosition(r2.startContainer);
+                            if (comp === 0) {
+                                if (r1.startOffset <= r2.startOffset) {
+                                    range.setStart(r1.startContainer, r1.startOffset);
+                                    range.setEnd(r2.startContainer, r2.startOffset);
+                                } else {
+                                    range.setStart(r2.startContainer, r2.startOffset);
+                                    range.setEnd(r1.startContainer, r1.startOffset);
+                                }
+                            } else if (comp & Node.DOCUMENT_POSITION_FOLLOWING) {
+                                range.setStart(r1.startContainer, r1.startOffset);
+                                range.setEnd(r2.startContainer, r2.startOffset);
+                            } else {
+                                range.setStart(r2.startContainer, r2.startOffset);
+                                range.setEnd(r1.startContainer, r1.startOffset);
+                            }
+
+                            let s = window.getSelection();
+                            if (s) {
+                                s.removeAllRanges();
+                                s.addRange(range);
+                            }
+                        },
+
+                        finish: function(x, y) {
+                            let dragged = this.isDragging;
+                            this.startX = -1;
+                            this.startY = -1;
+                            this.isDragging = false;
+                            let s = window.getSelection() ? window.getSelection().toString() : '';
+                            if (s && s.length > 0) return { dragged: dragged, text: s };
+
+                            let el = document.activeElement;
+                            if (el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && el.type === 'text'))) {
+                                try {
+                                    let sub = el.value.substring(el.selectionStart, el.selectionEnd);
+                                    if (sub && sub.length > 0) return { dragged: dragged, text: sub };
+                                } catch (e) {}
+                            }
+                            return { dragged: dragged, text: '' };
+                        }
+                    };
+
                     document.addEventListener('click', (e) => {
                         const tab = e.target && e.target.closest ? e.target.closest('#attach-panel-tab, [data-subpanel="attach-panel"], a[href*="attach"]') : null;
                         if (tab) {
@@ -3243,11 +3322,9 @@ class AmigaClientSession:
                         f"window.scrollTo(0, Math.max(0, (document.documentElement.scrollHeight - window.innerHeight) * {ratio:.4f}))"
                     )
                 else:
-                    # If this is a fresh single click (click_count == 1), clear existing text selection
-                    # so that clicking and dragging creates a fresh freeform selection instead of HTML5 dragging
-                    if btn == "left" and self._click_count == 1:
+                    if btn == "left":
                         try:
-                            await self.page.evaluate("window.getSelection() && window.getSelection().removeAllRanges()")
+                            await self.page.evaluate("([x, y]) => window.__vortex_selection && window.__vortex_selection.start(x, y)", [cx, cy])
                         except Exception:
                             pass
                     await self.page.mouse.move(cx, cy)
@@ -3268,19 +3345,28 @@ class AmigaClientSession:
                     down_y = self._mouse_down_y if self._mouse_down_y >= 0 else cy
                     dist = ((cx - down_x) ** 2 + (cy - down_y) ** 2) ** 0.5
 
+                    dragged = False
+                    sel_text = ""
+                    if btn == "left":
+                        try:
+                            res = await self.page.evaluate("([x, y]) => window.__vortex_selection ? window.__vortex_selection.finish(x, y) : {dragged: false, text: ''}", [cx, cy])
+                            if res and isinstance(res, dict):
+                                dragged = bool(res.get("dragged", False))
+                                sel_text = res.get("text", "") or ""
+                        except Exception:
+                            pass
+
                     # If user dragged, release with click_count=1 to finalize the freeform selection
-                    if dist > 4:
+                    if dist > 4 or dragged:
                         self._click_count = 1
-                        await self.page.mouse.move(cx, cy)
-                    else:
-                        await self.page.mouse.move(cx, cy)
+                    await self.page.mouse.move(cx, cy)
                     await self.page.mouse.up(button=btn, click_count=self._click_count)
 
                     self._mouse_down_btn = ""
 
-                    # Universal check: only if stationary click AND no upload is pending/recent
+                    # Universal check: only if stationary click AND not dragged AND no upload is pending/recent
                     now_up = time.monotonic()
-                    if btn == "left" and dist <= 10 and not self.pending_uploads and (now_up - self.last_upload_intercept_time) >= 3.0:
+                    if btn == "left" and dist <= 10 and not dragged and not self.pending_uploads and (now_up - self.last_upload_intercept_time) >= 3.0:
                         try:
                             upload_hit = await self.page.evaluate("""([x, y]) => {
                                 let el = document.elementFromPoint(x, y);
@@ -3343,36 +3429,41 @@ class AmigaClientSession:
                             logger.info("Upload element check notice: %s", e)
 
                     if btn == "left":
-                        try:
-                            # Force a compositor repaint tick for selection highlighting
-                            await self.page.evaluate("document.body && (document.body.style.opacity = document.body.style.opacity === '0.9999' ? '1' : '0.9999')")
-                            # Evaluate selected text from both window and active input/textarea
-                            sel = await self.page.evaluate("""() => {
-                                let s = window.getSelection() ? window.getSelection().toString() : '';
-                                if (s && s.length > 0) return s;
-                                let el = document.activeElement;
-                                if (el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && el.type === 'text'))) {
-                                    try {
-                                        return el.value.substring(el.selectionStart, el.selectionEnd);
-                                    } catch (e) {}
-                                }
-                                return '';
-                            }""")
-                            if sel and len(sel.strip()) > 0:
-                                logger.info("Selected text (%d chars): %r", len(sel), sel[:60])
-                                await self.send_clipboard_to_amiga(sel)
-                        except Exception:
-                            pass
+                        if sel_text and len(sel_text.strip()) > 0:
+                            logger.info("Selected text (%d chars): %r", len(sel_text), sel_text[:60])
+                            await self.send_clipboard_to_amiga(sel_text)
+                        else:
+                            try:
+                                sel = await self.page.evaluate("""() => {
+                                    let s = window.getSelection() ? window.getSelection().toString() : '';
+                                    if (s && s.length > 0) return s;
+                                    let el = document.activeElement;
+                                    if (el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && el.type === 'text'))) {
+                                        try {
+                                            return el.value.substring(el.selectionStart, el.selectionEnd);
+                                        } catch (e) {}
+                                    }
+                                    return '';
+                                }""")
+                                if sel and len(sel.strip()) > 0:
+                                    logger.info("Selected text (%d chars): %r", len(sel), sel[:60])
+                                    await self.send_clipboard_to_amiga(sel)
+                            except Exception:
+                                pass
                 self._trigger_full_refresh(True)
                 self._schedule_delayed_frames()
 
             elif event_type == INPUT_MOUSE_MOVE:
                 try:
                     if self._mouse_down_btn == "left":
-                        # If user moves mouse with button down, reset click_count to 1 so release is clean freeform selection
+                        # If user moves mouse with button down, update selection directly via caretRangeFromPoint
                         dist = ((cx - self._mouse_down_x) ** 2 + (cy - self._mouse_down_y) ** 2) ** 0.5
                         if dist > 4:
                             self._click_count = 1
+                            try:
+                                await self.page.evaluate("([x, y]) => window.__vortex_selection && window.__vortex_selection.update(x, y)", [cx, cy])
+                            except Exception:
+                                pass
                         await self.page.mouse.move(cx, cy)
                         self._trigger_full_refresh(False)
                     else:

@@ -3561,15 +3561,7 @@ void gui_handle_events(VortexApp *app)
 
             case WMHI_VANILLAKEY: {
                 uint16 ascii = (uint16)(result & WMHI_KEYMASK);
-                if (ascii == 0x03) { /* Ctrl+C: Copy */
-                    net_send_key(app, INPUT_KEY_DOWN, 3, "Copy");
-                } else if (ascii == 0x16) { /* Ctrl+V: Paste */
-                    char *clip_str = clipboard_read_text();
-                    if (clip_str) {
-                        net_send_clipboard(app, clip_str);
-                        free(clip_str);
-                    }
-                } else if (ascii == 0x08) {
+                if (ascii == 0x08) {
                     net_send_key(app, INPUT_KEY_DOWN, ascii, "Backspace");
                 } else if (ascii == 0x09) {
                     net_send_key(app, INPUT_KEY_DOWN, ascii, "Tab");
