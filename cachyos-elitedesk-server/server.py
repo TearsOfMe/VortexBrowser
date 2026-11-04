@@ -2040,6 +2040,11 @@ class AmigaClientSession:
                         }
                     };
 
+                    // Prevent HTML5 drag-and-drop from hijacking text selections over links/images
+                    window.addEventListener('dragstart', (e) => {
+                        e.preventDefault();
+                    }, true);
+
                     // Ensure text selection is visibly highlighted in headless Chromium
                     try {
                         const selStyle = document.createElement('style');
@@ -2114,18 +2119,24 @@ class AmigaClientSession:
             if self.audio_enabled:
                 tasks.append(asyncio.create_task(self._audio_stream_loop()))
 
+            curr_url = self.page.url if self.page else ""
+            has_existing_page = bool(curr_url and not curr_url.startswith("about:") and curr_url != self.portal_url)
+
             initial_url = self.start_url if self.start_url else self.portal_url
-            logger.info("Navigating initial viewport (%dx%d) to %s", self.width, self.height, initial_url)
+            logger.info("Navigating initial viewport (%dx%d) to %s (has_existing_page=%s)", self.width, self.height, initial_url, has_existing_page)
             async def _init_nav():
-                try:
-                    await self.page.goto(initial_url, wait_until="domcontentloaded", timeout=12000)
-                except Exception as nav_exc:
-                    logger.warning("Initial navigation warning (%s), falling back to portal", nav_exc)
-                    if initial_url != self.portal_url:
-                        try:
-                            await self.page.goto(self.portal_url, wait_until="domcontentloaded", timeout=8000)
-                        except Exception:
-                            pass
+                if not has_existing_page:
+                    try:
+                        await self.page.goto(initial_url, wait_until="domcontentloaded", timeout=12000)
+                    except Exception as nav_exc:
+                        logger.warning("Initial navigation warning (%s), falling back to portal", nav_exc)
+                        if initial_url != self.portal_url:
+                            try:
+                                await self.page.goto(self.portal_url, wait_until="domcontentloaded", timeout=8000)
+                            except Exception:
+                                pass
+                else:
+                    self._send_nav_update(self.page.url)
                 self.active_until = time.monotonic() + 3.0
                 self._trigger_full_refresh(True)
                 self._schedule_delayed_frames()
@@ -3232,6 +3243,13 @@ class AmigaClientSession:
                         f"window.scrollTo(0, Math.max(0, (document.documentElement.scrollHeight - window.innerHeight) * {ratio:.4f}))"
                     )
                 else:
+                    # If this is a fresh single click (click_count == 1), clear existing text selection
+                    # so that clicking and dragging creates a fresh freeform selection instead of HTML5 dragging
+                    if btn == "left" and self._click_count == 1:
+                        try:
+                            await self.page.evaluate("window.getSelection() && window.getSelection().removeAllRanges()")
+                        except Exception:
+                            pass
                     await self.page.mouse.move(cx, cy)
                     await self.page.mouse.down(button=btn, click_count=self._click_count)
                 self._trigger_full_refresh(True)
@@ -3253,7 +3271,7 @@ class AmigaClientSession:
                     # If user dragged, release with click_count=1 to finalize the freeform selection
                     if dist > 4:
                         self._click_count = 1
-                        await self.page.mouse.move(cx, cy, steps=2)
+                        await self.page.mouse.move(cx, cy)
                     else:
                         await self.page.mouse.move(cx, cy)
                     await self.page.mouse.up(button=btn, click_count=self._click_count)
@@ -3355,13 +3373,7 @@ class AmigaClientSession:
                         dist = ((cx - self._mouse_down_x) ** 2 + (cy - self._mouse_down_y) ** 2) ** 0.5
                         if dist > 4:
                             self._click_count = 1
-                        # Multi-step move so Chromium Blink SelectionController tracks continuous drag gesture
-                        await self.page.mouse.move(cx, cy, steps=3)
-                        # Force compositor repaint tick for selection highlighting in headless Chromium
-                        try:
-                            await self.page.evaluate("document.body && (document.body.style.opacity = document.body.style.opacity === '0.9999' ? '1' : '0.9999')")
-                        except Exception:
-                            pass
+                        await self.page.mouse.move(cx, cy)
                         self._trigger_full_refresh(False)
                     else:
                         await self.page.mouse.move(cx, cy)

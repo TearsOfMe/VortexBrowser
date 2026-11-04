@@ -403,15 +403,34 @@ void prefs_capture_tabs(VortexApp *app)
 {
     if (!app) return;
     if (app->num_tabs > 0) {
+        int real_tabs = 0;
+        for (int i = 0; i < app->num_tabs && i < VB_MAX_TABS; i++) {
+            const char *u = app->tabs[i].url;
+            if (u && u[0] != '\0' && u[0] != '@' &&
+                strncmp(u, "about:", 6) != 0 &&
+                strncmp(u, "http://127.0.0.1:", 17) != 0 &&
+                strncmp(u, "http://localhost:", 17) != 0) {
+                real_tabs++;
+            }
+        }
+
         uint16_t count = 0;
         for (int i = 0; i < app->num_tabs && count < VB_MAX_TABS; i++) {
             const char *u = app->tabs[i].url;
             const char *t = app->tabs[i].title;
-            if (u && u[0] == '@') continue;
+            BOOL is_startpage = (!u || u[0] == '\0' || u[0] == '@' ||
+                                 strncmp(u, "about:", 6) == 0 ||
+                                 strncmp(u, "http://127.0.0.1:", 17) == 0 ||
+                                 strncmp(u, "http://localhost:", 17) == 0 ||
+                                 (t && strcmp(t, "Startseite") == 0 && (!u || u[0] == '\0')));
+            /* If there is at least one old web tab, don't persist redundant startpage tabs */
+            if (real_tabs > 0 && is_startpage) {
+                continue;
+            }
             strncpy(app->prefs.saved_tab_urls[count], u ? u : "", sizeof(app->prefs.saved_tab_urls[0]) - 1);
             app->prefs.saved_tab_urls[count][sizeof(app->prefs.saved_tab_urls[0]) - 1] = '\0';
 
-            strncpy(app->prefs.saved_tab_titles[count], (t && t[0]) ? t : "Startseite", sizeof(app->prefs.saved_tab_titles[0]) - 1);
+            strncpy(app->prefs.saved_tab_titles[count], (t && t[0]) ? t : "Web", sizeof(app->prefs.saved_tab_titles[0]) - 1);
             app->prefs.saved_tab_titles[count][sizeof(app->prefs.saved_tab_titles[0]) - 1] = '\0';
 
             count++;

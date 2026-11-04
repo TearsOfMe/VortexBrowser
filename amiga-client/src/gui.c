@@ -1969,24 +1969,54 @@ void gui_tabs_init(VortexApp *app)
      * (screen change, prefs, adding quicklinks ...). */
     if (app->num_tabs == 0) {
         if (app->prefs.saved_num_tabs > 0) {
-            app->num_tabs = app->prefs.saved_num_tabs;
-            if (app->num_tabs > VB_MAX_TABS) app->num_tabs = VB_MAX_TABS;
-            app->active_tab_idx = app->prefs.saved_active_tab;
-            if (app->active_tab_idx >= app->num_tabs) {
-                app->active_tab_idx = (uint16)(app->num_tabs - 1);
+            /* Count tabs that contain a real web URL (not empty, not startpage/portal) */
+            int real_tabs = 0;
+            for (int i = 0; i < app->prefs.saved_num_tabs && i < VB_MAX_TABS; i++) {
+                const char *u = app->prefs.saved_tab_urls[i];
+                if (u && u[0] != '\0' && u[0] != '@' &&
+                    strncmp(u, "about:", 6) != 0 &&
+                    strncmp(u, "http://127.0.0.1:", 17) != 0 &&
+                    strncmp(u, "http://localhost:", 17) != 0) {
+                    real_tabs++;
+                }
             }
-            for (int i = 0; i < app->num_tabs; i++) {
-                app->tabs[i].id = (uint32_t)i;
-                strncpy(app->tabs[i].url, app->prefs.saved_tab_urls[i], sizeof(app->tabs[0].url) - 1);
-                app->tabs[i].url[sizeof(app->tabs[0].url) - 1] = '\0';
+
+            int count = 0;
+            for (int i = 0; i < app->prefs.saved_num_tabs && i < VB_MAX_TABS; i++) {
+                const char *u = app->prefs.saved_tab_urls[i];
                 const char *t = app->prefs.saved_tab_titles[i];
-                strncpy(app->tabs[i].title, (t && t[0]) ? t : "Startseite", sizeof(app->tabs[0].title) - 1);
-                app->tabs[i].title[sizeof(app->tabs[0].title) - 1] = '\0';
+                BOOL is_startpage = (!u || u[0] == '\0' || u[0] == '@' ||
+                                     strncmp(u, "about:", 6) == 0 ||
+                                     strncmp(u, "http://127.0.0.1:", 17) == 0 ||
+                                     strncmp(u, "http://localhost:", 17) == 0 ||
+                                     (t && strcmp(t, "Startseite") == 0 && (!u || u[0] == '\0')));
+                /* If there is at least one old web tab, remove/skip redundant startpage tab */
+                if (real_tabs > 0 && is_startpage) {
+                    continue;
+                }
+                app->tabs[count].id = (uint32_t)count;
+                strncpy(app->tabs[count].url, u ? u : "", sizeof(app->tabs[0].url) - 1);
+                app->tabs[count].url[sizeof(app->tabs[0].url) - 1] = '\0';
+                strncpy(app->tabs[count].title, (t && t[0]) ? t : "Web", sizeof(app->tabs[0].title) - 1);
+                app->tabs[count].title[sizeof(app->tabs[0].title) - 1] = '\0';
+                count++;
             }
-            const char *act_url = app->tabs[app->active_tab_idx].url;
-            if (act_url && act_url[0] && act_url[0] != '@') {
-                strncpy(app->current_url, act_url, sizeof(app->current_url) - 1);
-                app->current_url[sizeof(app->current_url) - 1] = '\0';
+            if (count == 0) {
+                app->active_tab_idx = 0;
+                app->tabs[0].id     = 0;
+                strncpy(app->tabs[0].title, "Startseite", sizeof(app->tabs[0].title) - 1);
+                app->tabs[0].title[sizeof(app->tabs[0].title) - 1] = '\0';
+                strncpy(app->tabs[0].url, app->current_url, sizeof(app->tabs[0].url) - 1);
+                app->tabs[0].url[sizeof(app->tabs[0].url) - 1] = '\0';
+                app->num_tabs = 1;
+            } else {
+                app->num_tabs = count;
+                app->active_tab_idx = (app->prefs.saved_active_tab < count) ? app->prefs.saved_active_tab : 0;
+                const char *act_url = app->tabs[app->active_tab_idx].url;
+                if (act_url && act_url[0] && act_url[0] != '@') {
+                    strncpy(app->current_url, act_url, sizeof(app->current_url) - 1);
+                    app->current_url[sizeof(app->current_url) - 1] = '\0';
+                }
             }
         } else {
             app->active_tab_idx = 0;
