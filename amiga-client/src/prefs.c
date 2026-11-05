@@ -91,6 +91,7 @@ void prefs_init(VortexApp *app)
     strncpy(app->prefs.server_host, DEFAULT_SERVER_HOST, sizeof(app->prefs.server_host) - 1);
     app->prefs.server_host[sizeof(app->prefs.server_host) - 1] = '\0';
     app->prefs.server_port                  = DEFAULT_SERVER_PORT;
+    app->prefs.target_fps                   = 25;  /* Default: 25 FPS (PAL Standard) */
     app->prefs.jpeg_quality                 = 100; /* Default: 100% */
     app->prefs.dynamic_video_quality        = TRUE;
     app->prefs.save_server_on_exit          = TRUE;
@@ -244,6 +245,9 @@ static BOOL load_from_file(VortexApp *app, const char *path)
         } else if (strcmp(key, "server_port") == 0) {
             int p = atoi(val);
             if (p > 0 && p <= 65535) app->prefs.server_port = (uint16_t)p;
+        } else if (strcmp(key, "target_fps") == 0) {
+            int f = atoi(val);
+            if (f >= 1 && f <= 60) app->prefs.target_fps = (uint8_t)f;
         } else if (strcmp(key, "jpeg_quality") == 0) {
             int q = atoi(val);
             if (q >= 20 && q <= 100) app->prefs.jpeg_quality = (uint8_t)q;
@@ -336,6 +340,7 @@ static BOOL load_from_file(VortexApp *app, const char *path)
     if (app->prefs.font.web_zoom_pct == 0)  app->prefs.font.web_zoom_pct  = 100;
     if (app->prefs.font.web_font_size == 0) app->prefs.font.web_font_size = 16;
     if (app->prefs.search_engine >= NUM_SEARCH_ENGINES) app->prefs.search_engine = 0;
+    if (app->prefs.target_fps == 0 || app->prefs.target_fps > 60) app->prefs.target_fps = 25;
     if (app->prefs.jpeg_quality == 0) app->prefs.jpeg_quality = 100;
     if (app->prefs.server_port == 0) {
         app->prefs.server_port = DEFAULT_SERVER_PORT;
@@ -483,6 +488,7 @@ static BOOL save_to_file(const VortexApp *app, const char *path)
                     (app->server_port ? app->server_port : DEFAULT_SERVER_PORT);
     fprintf(fp, "server_host=%s\n", sh);
     fprintf(fp, "server_port=%u\n", (unsigned)sp);
+    fprintf(fp, "target_fps=%u\n", (unsigned)(app->prefs.target_fps ? app->prefs.target_fps : 25));
     fprintf(fp, "jpeg_quality=%u\n", (unsigned)(app->prefs.jpeg_quality ? app->prefs.jpeg_quality : 100));
     fprintf(fp, "dynamic_video_quality=%d\n", app->prefs.dynamic_video_quality ? 1 : 0);
     fprintf(fp, "save_server_on_exit=%d\n\n", app->prefs.save_server_on_exit ? 1 : 0);
@@ -687,6 +693,13 @@ void prefs_apply(VortexApp *app)
         char qcmd[32];
         snprintf(qcmd, sizeof(qcmd), "@JPEG_QUALITY:%u", (unsigned)(app->prefs.jpeg_quality ? app->prefs.jpeg_quality : 100));
         net_send_url(app, qcmd);
+
+        /* Target FPS */
+        if (app->prefs.target_fps >= 1 && app->prefs.target_fps <= 60) {
+            char fcmd[32];
+            snprintf(fcmd, sizeof(fcmd), "@FPS:%u", (unsigned)app->prefs.target_fps);
+            net_send_url(app, fcmd);
+        }
     }
 }
 

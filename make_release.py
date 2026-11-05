@@ -325,6 +325,7 @@ Das Einstellungsfenster ist uebersichtlich in fuenf Reiter unterteilt:
 5. @{b}Streaming Server:@{ub}
    - @{b}Server IP / Host & Port:@{ub} Manuelle Eingabe des Streaming-Servers (z. B. 192.168.178.50:7788)
    - @{b}Stream-Aufloesung:@{ub} Nativ (1:1), 720p HD, 540p qHD (siehe Performance!)
+   - @{b}Bildrate (FPS):@{ub} Waehlbar zwischen 15, 25, 30, 50 und 60 FPS (Default: 25 FPS)
    - @{b}JPEG-Qualitaet:@{ub} Slider von 20% bis 100%
    - @{b}Video-Optimierung:@{ub} Dynamische Bildrate bei Videowiedergabe
    - @{b}Aktuellen Server beim Beenden automatisch speichern@{ub}
@@ -544,10 +545,10 @@ SCHRITT 2: {APP_NAME} auf dem Amiga starten
   - Gespeichertes Login automatisch eintragen: Amiga+L
   - Sichere Blowfish-Verschluesselung in PROGDIR:passwords.dat!
 
-* TIPP ZUR CPU-ENTLASTUNG (fuer SAM440, SAM460, G4):
+* TIPP ZUR CPU-ENTLASTUNG & FLUESSIEGEM STREAMING:
   - Menue "Ansicht -> Stream: 720p HD" oder "Stream: 540p qHD" waehlen.
-  - Die Radeon-Grafikkarte skaliert das Bild ueber Hardware-CompositeTags()!
-  - Senkt die Amiga-CPU-Last um 50-70%!
+  - Die Radeon-Grafikkarte skaliert das Bild ueber Hardware-CompositeTags() (spart 50-70% CPU!).
+  - Framerate anpassen: Menue "Ansicht -> FPS" (15 FPS fuer langsame CPUs bis 50/60 FPS fuer High-Speed).
 
 Ausfuehrliche Informationen finden Sie in "{APP_NAME}.guide"!
 Viel Spass beim modernen Surfen auf AmigaOS 4!

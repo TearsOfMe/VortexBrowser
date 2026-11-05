@@ -89,6 +89,12 @@ static struct NewMenu s_main_menu[] = {
     { NM_ITEM,  (STRPTR)"Stream: 540p qHD (960x540) [Turbo]",          NULL,        0, 0, (APTR)MID_STREAM_RES_540P },
     { NM_ITEM,  (STRPTR)"Stream: 1080p FHD (1920x1080)",               NULL,        0, 0, (APTR)MID_STREAM_RES_1080P },
     { NM_ITEM,  NM_BARLABEL,                                           NULL,        0, 0, NULL },
+    { NM_ITEM,  (STRPTR)"FPS: 15 FPS (Stromsparend / Langsame CPU)",   NULL,        0, 0, (APTR)MID_FPS_15 },
+    { NM_ITEM,  (STRPTR)"FPS: 25 FPS (Standard / PAL flüssig)",       NULL,        0, 0, (APTR)MID_FPS_25 },
+    { NM_ITEM,  (STRPTR)"FPS: 30 FPS (Empfohlen für YouTube / NTSC)",  NULL,        0, 0, (APTR)MID_FPS_30 },
+    { NM_ITEM,  (STRPTR)"FPS: 50 FPS (PAL High-Speed)",                NULL,        0, 0, (APTR)MID_FPS_50 },
+    { NM_ITEM,  (STRPTR)"FPS: 60 FPS (Maximal / Gaming / PiStorm)",    NULL,        0, 0, (APTR)MID_FPS_60 },
+    { NM_ITEM,  NM_BARLABEL,                                           NULL,        0, 0, NULL },
     { NM_ITEM,  (STRPTR)"Dunkles Theme (Dark Mode) an/aus",            (STRPTR)"U", 0, 0, (APTR)MID_TOGGLE_DARK_THEME },
     { NM_ITEM,  NM_BARLABEL,                                           NULL,        0, 0, NULL },
     { NM_ITEM,  (STRPTR)"Vollbild / Bildschirm umschalten (F11)",      NULL,        0, 0, (APTR)MID_TOGGLE_SCREEN },
@@ -1338,6 +1344,29 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
             app->renderer.reported_h = 0;
             renderer_sync_viewport_size(app);
             app_set_status("Stream-Aufloesung: 1920x1080 (1080p Full HD)");
+            break;
+
+        case MID_FPS_15:
+        case MID_FPS_25:
+        case MID_FPS_30:
+        case MID_FPS_50:
+        case MID_FPS_60:
+            {
+                uint8_t fps_val = 25;
+                if (item_id == MID_FPS_15) fps_val = 15;
+                else if (item_id == MID_FPS_25) fps_val = 25;
+                else if (item_id == MID_FPS_30) fps_val = 30;
+                else if (item_id == MID_FPS_50) fps_val = 50;
+                else if (item_id == MID_FPS_60) fps_val = 60;
+                app->prefs.target_fps = fps_val;
+                prefs_save(app, TRUE);
+                if (app->connected) {
+                    char fcmd[32];
+                    snprintf(fcmd, sizeof(fcmd), "@FPS:%u", (unsigned)fps_val);
+                    net_send_url(app, fcmd);
+                }
+                app_set_status("Framerate gesetzt: %u FPS", (unsigned)fps_val);
+            }
             break;
 
         case MID_TOGGLE_DARK_THEME:

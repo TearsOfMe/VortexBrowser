@@ -7,8 +7,9 @@ VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwrigh
 
 ## Highlights & Features
 
-1. **Ultra-schnelles Video- & Web-Streaming (1080p @ 25 FPS):**
-   - **Planar YUV420p (12-Bit):** Direkte hardwarenahe Übertragung ohne RGB-Overhead.
+1. **Ultra-schnelles Video- & Web-Streaming (bis zu 60 FPS):**
+   - **Planar YUV420p (12-Bit) & High-Speed JPEG:** Direkte hardwarenahe Übertragung ohne RGB-Overhead.
+   - **Wählbare Framerate (15 / 25 / 30 / 50 / 60 FPS):** Vom Amiga aus flexibel einstellbar via Menü oder Einstellungen – schont schwächere CPUs oder liefert maximale Flüssigkeit bei YouTube/Twitch.
    - **2D Dirty-Rectangles (`CODEC_LZ4_RECT`):** Bei Videos (z. B. YouTube oder Twitch) wird nur der tatsächlich veränderte Bildausschnitt des Videoplayers aktualisiert, nicht die gesamte Webseite.
    - **AVX2-Mikroprädiktor:** Verdoppelt die LZ4-Kompressionsrate bei vollen 8-Bit Farbtiefe (PSNR > 44 dB, verlustfreie Wahrnehmung) ohne CPU-Last auf dem Amiga.
    - **Rustwright + DirectCDP Core:** Direkte WebSocket-Screencast-Anbindung ohne Node.js-Treiber-Overhead.
@@ -34,8 +35,9 @@ VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwrigh
 6. **Audio-Streaming:**
    - Synchroner 16-Bit Stereo-Audiostream über separaten Port 9757 direkt an AmigaOS 4 AHI (`ahi.device`).
 
-7. **Radeon GPU-Skalierung:**
+7. **Radeon GPU-Skalierung & FPS-Tuning:**
    - Hardware-Composite-Skalierung über `IGraphics->CompositeTags()` (z. B. 720p HD oder 540p qHD auf volle Bildschirmgröße) entlastet Amiga-CPUs (G4, SAM440, SAM460, X1000, X5000) um bis zu 70%.
+   - Einstellbare Ziel-Framerate direkt in den Client-Einstellungen und im Menü `Ansicht` (15, 25, 30, 50, 60 FPS).
 
 ---
 

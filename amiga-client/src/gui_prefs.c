@@ -39,6 +39,7 @@ enum {
     GID_P_SERVER_HOST,
     GID_P_SERVER_PORT,
     GID_P_SERVER_STREAM_RES,
+    GID_P_SERVER_FPS,
     GID_P_SERVER_JPEG_QUALITY,
     GID_P_SERVER_DYN_VIDEO,
     GID_P_SERVER_SAVE_EXIT,
@@ -125,6 +126,17 @@ static const char *const s_stream_res_labels[] = {
     "1080p Full HD (1920x1080)",
     NULL
 };
+
+/* Target FPS Presets */
+static const char *const s_fps_labels[] = {
+    "15 FPS (Energiesparend / Langsame CPU)",
+    "25 FPS (Standard / PAL flüssig)",
+    "30 FPS (Empfohlen für YouTube / NTSC)",
+    "50 FPS (PAL High-Speed)",
+    "60 FPS (Maximal / Gaming / PiStorm)",
+    NULL
+};
+static const uint8_t s_fps_values[] = { 15, 25, 30, 50, 60 };
 
 /* Color Theme (Light, Dark, Auto) */
 static const char *const s_theme_labels[] = {
@@ -430,6 +442,22 @@ void gui_prefs_open(VortexApp *app)
         GA_HintInfo,        "Server-Aufloesung waehlen (wird per GPU/Composite skaliert)",
         TAG_DONE);
 
+    uint16 init_fps_sel = 1; /* Default: 25 FPS */
+    uint8_t cur_fps = app->prefs.target_fps ? app->prefs.target_fps : 25;
+    for (uint16 i = 0; i < 5; i++) {
+        if (s_fps_values[i] == cur_fps) {
+            init_fps_sel = i;
+            break;
+        }
+    }
+    Object *gad_fps_chooser = IIntuition->NewObject(NULL, "chooser.gadget",
+        GA_ID,              GID_P_SERVER_FPS,
+        GA_RelVerify,       TRUE,
+        CHOOSER_LabelArray, s_fps_labels,
+        CHOOSER_Selected,   init_fps_sel,
+        GA_HintInfo,        "Streaming-Bildrate (FPS) festlegen",
+        TAG_DONE);
+
     uint32 cur_q = app->prefs.jpeg_quality ? app->prefs.jpeg_quality : 100;
     if (cur_q < 20 || cur_q > 100) cur_q = 100;
 
@@ -511,6 +539,18 @@ void gui_prefs_open(VortexApp *app)
                                                             TAG_DONE),
                                   CHILD_WeightedWidth,  28,
                                   LAYOUT_AddChild,      gad_stream_res_chooser,
+                                  CHILD_WeightedWidth,  72,
+                                  TAG_DONE),
+        CHILD_WeightedHeight, 0,
+        LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
+                                  LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
+                                  LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
+                                                            GA_Text,              (Tag)"Bildrate (FPS):",
+                                                            GA_ReadOnly,          TRUE,
+                                                            BUTTON_Justification, BCJ_RIGHT,
+                                                            TAG_DONE),
+                                  CHILD_WeightedWidth,  28,
+                                  LAYOUT_AddChild,      gad_fps_chooser,
                                   CHILD_WeightedWidth,  72,
                                   TAG_DONE),
         CHILD_WeightedHeight, 0,
@@ -1616,6 +1656,13 @@ void gui_prefs_open(VortexApp *app)
         BOOL stream_res_changed = ((uint8_t)stream_sel != app->prefs.stream_res_mode);
         app->prefs.stream_res_mode = (uint8_t)stream_sel;
 
+        uint32 fps_sel = 1;
+        IIntuition->GetAttr(CHOOSER_Selected, gad_fps_chooser, &fps_sel);
+        if (fps_sel > 4) fps_sel = 1;
+        uint8_t new_fps = s_fps_values[fps_sel];
+        BOOL fps_changed = (app->prefs.target_fps != new_fps);
+        app->prefs.target_fps = new_fps;
+
         uint32 q_val = 100;
         IIntuition->GetAttr(SLIDER_Level, gad_jpeg_quality, &q_val);
         if (q_val < 20) q_val = 20;
@@ -1658,10 +1705,17 @@ void gui_prefs_open(VortexApp *app)
 
         if (server_changed) {
             net_connect(app, app->server_host, app->server_port);
-        } else if (jpeg_q_changed && app->connected) {
-            char qcmd[32];
-            snprintf(qcmd, sizeof(qcmd), "@JPEG_QUALITY:%u", (unsigned)app->prefs.jpeg_quality);
-            net_send_url(app, qcmd);
+        } else {
+            if (fps_changed && app->connected) {
+                char fcmd[32];
+                snprintf(fcmd, sizeof(fcmd), "@FPS:%u", (unsigned)app->prefs.target_fps);
+                net_send_url(app, fcmd);
+            }
+            if (jpeg_q_changed && app->connected) {
+                char qcmd[32];
+                snprintf(qcmd, sizeof(qcmd), "@JPEG_QUALITY:%u", (unsigned)app->prefs.jpeg_quality);
+                net_send_url(app, qcmd);
+            }
         }
 
         /* 1. Commit Schnellwahl items */
