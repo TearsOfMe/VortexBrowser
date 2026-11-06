@@ -38,4 +38,7 @@ amiga-client/VortexBrowse.clib4
 *storage_state*.json
 *.sqlite
 /tmp/
+*ftp_auth*
+*.ftp_auth*
+*browser_bin.txt
 

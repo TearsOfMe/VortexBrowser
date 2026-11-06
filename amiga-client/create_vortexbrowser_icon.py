@@ -12,6 +12,7 @@ Creates VortexBrowser.info with:
 
 import os
 import sys
+import tempfile
 from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
 
 # Use our amigainfo package
@@ -24,7 +25,8 @@ from amigainfo.models import (
 )
 
 def render_vortex_icon_states():
-    clean_base_path = "/home/tears/.gemini/antigravity/brain/c2984b2a-1531-47e4-9dc5-b90aca1b2d93/vv_base_clean.png"
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    clean_base_path = os.environ.get("VORTEX_ICON_BASE", os.path.join(script_dir, "vv_base_clean.png"))
     clean = Image.open(clean_base_path).convert("RGBA")
     font_path = "/usr/share/fonts/TTF/FiraSans-ExtraBoldItalic.ttf"
 
@@ -187,10 +189,10 @@ def make_info_file(im_norm, im_sel, icon_type=IconType.TOOL, output_path="Vortex
 
 if __name__ == "__main__":
     im_norm, im_sel = render_vortex_icon_states()
-    im_norm.save("/home/tears/.gemini/antigravity/brain/c2984b2a-1531-47e4-9dc5-b90aca1b2d93/VortexBrowser_norm.png")
-    im_sel.save("/home/tears/.gemini/antigravity/brain/c2984b2a-1531-47e4-9dc5-b90aca1b2d93/VortexBrowser_sel.png")
-
     script_dir = os.path.dirname(os.path.abspath(__file__))
+    tmp_dir = tempfile.gettempdir()
+    im_norm.save(os.path.join(tmp_dir, "VortexBrowser_norm.png"))
+    im_sel.save(os.path.join(tmp_dir, "VortexBrowser_sel.png"))
     tool_info_path = os.path.join(script_dir, "VortexBrowser.info")
     make_info_file(im_norm, im_sel, IconType.TOOL, tool_info_path)
 

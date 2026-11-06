@@ -2,6 +2,7 @@
 # ==============================================================================
 # VortexBrowser - Automated Twitch Login & Session Sync Tool
 # Restores and verifies Twitch authenticated session in Ungoogled-Chromium/Chromium
+# Completely portable: dynamically detects user home, system paths, and ownership.
 # ==============================================================================
 import argparse
 import asyncio
@@ -20,66 +21,177 @@ except ImportError:
     sys.exit(1)
 
 
-def scan_local_browser_cookies():
-    """Scans local LibreWolf and Firefox profiles for active Twitch cookies."""
-    candidates = (
-        glob.glob(os.path.expanduser("~/.config/librewolf/librewolf/*/cookies.sqlite")) +
-        glob.glob(os.path.expanduser("~/.mozilla/firefox/*/cookies.sqlite"))
-    )
-    for c in candidates:
-        if not os.path.isfile(c):
-            continue
-        tmp_db = f"/tmp/vortex_tw_{os.getpid()}.sqlite"
-        tmp_wal = f"{tmp_db}-wal"
-        wal = f"{c}-wal"
+def get_target_user_and_home():
+    """
+    Dynamically determines the non-root user (UID, GID) and home directory.
+    Works reliably whether executed directly as a user, via sudo, or as root.
+    """
+    uid = os.getuid()
+    gid = os.getgid()
+    home = os.path.expanduser("~")
+
+    if uid != 0:
+        return uid, gid, home
+
+    # Running as root: detect actual non-root user
+    # 1. Check SUDO_USER environment variable
+    sudo_user = os.environ.get("SUDO_USER")
+    if sudo_user and sudo_user != "root":
         try:
-            shutil.copy2(c, tmp_db)
-            if os.path.isfile(wal):
-                shutil.copy2(wal, tmp_wal)
-            con = sqlite3.connect(tmp_db)
-            cur = con.cursor()
-            rows = cur.execute(
-                "SELECT name, value, host, path, expiry, isSecure, isHttpOnly, sameSite "
-                "FROM moz_cookies WHERE host LIKE '%twitch%'"
-            ).fetchall()
-            if rows:
-                cookies = []
-                for r in rows:
-                    same_site_map = {0: "None", 1: "Lax", 2: "Strict"}
-                    ss = same_site_map.get(r[7], "None")
-                    cookies.append({
-                        "name": r[0],
-                        "value": r[1],
-                        "domain": r[2],
-                        "path": r[3] or "/",
-                        "expires": float(r[4]) if r[4] else None,
-                        "secure": bool(r[5]),
-                        "httpOnly": bool(r[6]),
-                        "sameSite": ss
-                    })
-                # Check if auth-token is present
-                if any(ck["name"] == "auth-token" for ck in cookies):
-                    print(f"[+] Found {len(cookies)} Twitch cookies in local profile: {c}")
-                    return cookies
+            import pwd
+            pw = pwd.getpwnam(sudo_user)
+            return pw.pw_uid, pw.pw_gid, pw.pw_dir
         except Exception:
             pass
-        finally:
-            if os.path.exists(tmp_db):
-                os.remove(tmp_db)
-            if os.path.exists(tmp_wal):
-                os.remove(tmp_wal)
+
+    # 2. Check the owner of the script directory
+    try:
+        import pwd
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        st = os.stat(script_dir)
+        if st.st_uid != 0:
+            pw = pwd.getpwuid(st.st_uid)
+            return pw.pw_uid, pw.pw_gid, pw.pw_dir
+    except Exception:
+        pass
+
+    # 3. Check existing /home/* directories containing .config/vortexbrowse
+    for vb_dir in glob.glob("/home/*/.config/vortexbrowse"):
+        try:
+            import pwd
+            st = os.stat(vb_dir)
+            if st.st_uid != 0:
+                pw = pwd.getpwuid(st.st_uid)
+                return pw.pw_uid, pw.pw_gid, pw.pw_dir
+        except Exception:
+            pass
+
+    # 4. Check any normal user home under /home (UID >= 1000)
+    for h in sorted(glob.glob("/home/*")):
+        try:
+            import pwd
+            st = os.stat(h)
+            if st.st_uid >= 1000:
+                pw = pwd.getpwuid(st.st_uid)
+                return pw.pw_uid, pw.pw_gid, pw.pw_dir
+        except Exception:
+            pass
+
+    return uid, gid, home
+
+
+def scan_local_browser_cookies():
+    """
+    Scans local browser profiles (LibreWolf, Firefox, Flatpaks, Snap)
+    for active Twitch cookies using safe SQLite URI access.
+    """
+    _, _, user_home = get_target_user_and_home()
+    globs = [
+        os.path.join(user_home, ".config/librewolf/librewolf/*/cookies.sqlite"),
+        os.path.join(user_home, ".librewolf/*/cookies.sqlite"),
+        os.path.join(user_home, ".mozilla/firefox/*/cookies.sqlite"),
+        os.path.join(user_home, ".var/app/io.gitlab.librewolf-community/.librewolf/*/cookies.sqlite"),
+        os.path.join(user_home, ".var/app/org.mozilla.firefox/.mozilla/firefox/*/cookies.sqlite"),
+        os.path.join(user_home, "snap/firefox/common/.mozilla/firefox/*/cookies.sqlite"),
+        os.path.expanduser("~/.config/librewolf/librewolf/*/cookies.sqlite"),
+        os.path.expanduser("~/.librewolf/*/cookies.sqlite"),
+        os.path.expanduser("~/.mozilla/firefox/*/cookies.sqlite"),
+    ]
+
+    candidates = []
+    seen = set()
+    for g in globs:
+        for p in glob.glob(g):
+            if p not in seen and os.path.isfile(p):
+                seen.add(p)
+                candidates.append(p)
+
+    for c in candidates:
+        cookies = _read_cookies_from_sqlite(c)
+        if cookies and any(ck["name"] == "auth-token" for ck in cookies):
+            print(f"[+] Found {len(cookies)} Twitch cookies in local profile: {c}")
+            return cookies
     return None
 
 
+def _read_cookies_from_sqlite(sqlite_path):
+    """Safely reads moz_cookies from sqlite, supporting read-only immutable access and WAL fallback."""
+    # Method 1: Direct immutable URI read (safe even if browser is actively running and locked)
+    try:
+        con = sqlite3.connect(f"file:{sqlite_path}?immutable=1", uri=True, timeout=1.0)
+        cur = con.cursor()
+        rows = cur.execute(
+            "SELECT name, value, host, path, expiry, isSecure, isHttpOnly, sameSite "
+            "FROM moz_cookies WHERE host LIKE '%twitch%'"
+        ).fetchall()
+        con.close()
+        if rows:
+            return _format_sqlite_rows(rows)
+    except Exception:
+        pass
+
+    # Method 2: Copy to temporary file with WAL
+    tmp_db = f"/tmp/vortex_tw_{os.getpid()}_{int(time.time()*1000)}.sqlite"
+    tmp_wal = f"{tmp_db}-wal"
+    wal = f"{sqlite_path}-wal"
+    try:
+        shutil.copy2(sqlite_path, tmp_db)
+        if os.path.isfile(wal):
+            shutil.copy2(wal, tmp_wal)
+        con = sqlite3.connect(tmp_db, timeout=2.0)
+        cur = con.cursor()
+        rows = cur.execute(
+            "SELECT name, value, host, path, expiry, isSecure, isHttpOnly, sameSite "
+            "FROM moz_cookies WHERE host LIKE '%twitch%'"
+        ).fetchall()
+        con.close()
+        if rows:
+            return _format_sqlite_rows(rows)
+    except Exception:
+        pass
+    finally:
+        if os.path.exists(tmp_db):
+            os.remove(tmp_db)
+        if os.path.exists(tmp_wal):
+            os.remove(tmp_wal)
+
+    return None
+
+
+def _format_sqlite_rows(rows):
+    cookies = []
+    same_site_map = {0: "None", 1: "Lax", 2: "Strict"}
+    for r in rows:
+        cookies.append({
+            "name": r[0],
+            "value": r[1],
+            "domain": r[2],
+            "path": r[3] or "/",
+            "expires": float(r[4]) if r[4] else None,
+            "secure": bool(r[5]),
+            "httpOnly": bool(r[6]),
+            "sameSite": same_site_map.get(r[7], "None")
+        })
+    return cookies
+
+
 def load_cached_cookies(search_paths=None):
-    """Loads saved Twitch cookies from JSON backup files."""
+    """Loads saved Twitch cookies from JSON backup files using dynamic system paths."""
     if search_paths is None:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        _, _, user_home = get_target_user_and_home()
         search_paths = [
-            os.path.join(os.path.dirname(os.path.abspath(__file__)), "twitch_cookies.json"),
+            os.path.join(script_dir, "twitch_cookies.json"),
+            os.path.join(user_home, ".config", "vortexbrowse", "twitch_cookies.json"),
             os.path.expanduser("~/.config/vortexbrowse/twitch_cookies.json"),
-            "$HOME/Server-CachyOS-Linux/twitch_cookies.json",
             "/tmp/twitch_cookies.json",
         ]
+        # Also check all /home/*/Server-*/twitch_cookies.json
+        search_paths.extend(glob.glob("/home/*/Server-*/twitch_cookies.json"))
+        # De-duplicate while preserving order
+        seen = set()
+        search_paths = [p for p in search_paths if not (p in seen or seen.add(p))]
+
     for p in search_paths:
         if os.path.isfile(p):
             try:
@@ -94,12 +206,19 @@ def load_cached_cookies(search_paths=None):
 
 
 def load_token_text():
-    """Loads plain auth-token string if available."""
+    """Loads plain auth-token string using dynamic system paths."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    _, _, user_home = get_target_user_and_home()
     search_paths = [
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "twitch_token.txt"),
+        os.path.join(script_dir, "twitch_token.txt"),
+        os.path.join(user_home, ".config", "vortexbrowse", "twitch_token.txt"),
         os.path.expanduser("~/.config/vortexbrowse/twitch_token.txt"),
-        "$HOME/Server-CachyOS-Linux/twitch_token.txt",
+        "/tmp/twitch_token.txt",
     ]
+    search_paths.extend(glob.glob("/home/*/Server-*/twitch_token.txt"))
+    seen = set()
+    search_paths = [p for p in search_paths if not (p in seen or seen.add(p))]
+
     for p in search_paths:
         if os.path.isfile(p):
             try:
@@ -206,7 +325,6 @@ async def sync_twitch(cookies_to_inject, token_val=None, login_user=None, cdp_ur
             pass
 
         print("[*] Verifying login state...")
-        # Give Twitch React SPA up to 10 seconds to mount auth headers
         verified = False
         user_avatar = ""
         user_name = ""
@@ -231,26 +349,35 @@ async def sync_twitch(cookies_to_inject, token_val=None, login_user=None, cdp_ur
         if verified:
             print("==================================================================")
             print(" [SUCCESS] Twitch Login erfolgreich verifiziert! 🎉")
-            print(f"   Benutzer: {login_user}")
+            if login_user or user_name:
+                print(f"   Benutzer: {user_name or login_user}")
             if user_avatar:
                 print(f"   Profilbild: {user_avatar[:70]}...")
             print("==================================================================")
 
-            # Persist full storage state to disk across relevant directories
-            target_dirs = [
-                os.path.expanduser("~/.config/vortexbrowse"),
-                "$HOME/.config/vortexbrowse",
-                "$HOME/Server-CachyOS-Linux",
-            ]
+            # Persist full storage state to disk across dynamically discovered locations
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            target_uid, target_gid, user_home = get_target_user_and_home()
+
+            target_dirs = []
+            c1 = os.path.join(user_home, ".config", "vortexbrowse")
+            c2 = script_dir
+            c3 = os.path.expanduser("~/.config/vortexbrowse")
+            for d in [c1, c2, c3]:
+                if d and d not in target_dirs:
+                    target_dirs.append(d)
+
             for cfg_dir in target_dirs:
-                if not os.path.exists(os.path.dirname(cfg_dir)):
+                try:
+                    os.makedirs(cfg_dir, exist_ok=True)
+                except Exception:
                     continue
-                os.makedirs(cfg_dir, exist_ok=True)
+
                 storage_path = os.path.join(cfg_dir, "chromium_storage_state.json")
                 try:
                     await ctx.storage_state(path=storage_path)
                     print(f"[+] Browser-Status dauerhaft gesichert in: {storage_path}")
-                except Exception as se:
+                except Exception:
                     pass
 
                 cookie_backup = os.path.join(cfg_dir, "twitch_cookies.json")
@@ -258,7 +385,7 @@ async def sync_twitch(cookies_to_inject, token_val=None, login_user=None, cdp_ur
                     with open(cookie_backup, "w", encoding="utf-8") as f:
                         json.dump(clean_cookies, f, indent=2)
                     print(f"[+] Cookies-Backup gesichert in: {cookie_backup}")
-                except Exception as ce:
+                except Exception:
                     pass
 
                 if token_val:
@@ -269,17 +396,15 @@ async def sync_twitch(cookies_to_inject, token_val=None, login_user=None, cdp_ur
                     except Exception:
                         pass
 
-                # Fix file ownership for user tears if run as root
-                if os.getuid() == 0:
-                    try:
-                        import pwd
-                        pw = pwd.getpwnam("tears")
-                        for fn in ["chromium_storage_state.json", "twitch_cookies.json", "twitch_token.txt"]:
-                            fp = os.path.join(cfg_dir, fn)
-                            if os.path.exists(fp):
-                                os.chown(fp, pw.pw_uid, pw.pw_gid)
-                    except Exception:
-                        pass
+                # Fix file ownership dynamically for non-root target user
+                if os.getuid() == 0 and target_uid != 0:
+                    for fn in ["chromium_storage_state.json", "twitch_cookies.json", "twitch_token.txt"]:
+                        fp = os.path.join(cfg_dir, fn)
+                        if os.path.exists(fp):
+                            try:
+                                os.chown(fp, target_uid, target_gid)
+                            except Exception:
+                                pass
 
             return True
         else:

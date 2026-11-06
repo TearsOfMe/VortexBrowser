@@ -48,42 +48,62 @@ if [ -f "${SCRIPT_DIR}/amiga-client/VortexBrowser.info" ]; then
     cp -f "${SCRIPT_DIR}/amiga-client/VortexBrowser.info" "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI.info"
 fi
 
-echo "=== [3/3] Deploying to QEMU Shared Folder (SHARED:Download/VortexBrowser) ==="
-if [ -d "$HOME/kyvos-2.2.0-linux64/amigaos4/Download" ]; then
-    mkdir -p $HOME/kyvos-2.2.0-linux64/amigaos4/Download/VortexBrowser
-    cp "${SCRIPT_DIR}/amiga-client/VortexBrowser" $HOME/kyvos-2.2.0-linux64/amigaos4/Download/VortexBrowser/VortexBrowser
-    cp "${SCRIPT_DIR}/amiga-client/VortexBrowser.stripped" $HOME/kyvos-2.2.0-linux64/amigaos4/Download/VortexBrowser/VortexBrowser.stripped
-    cp "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec" $HOME/kyvos-2.2.0-linux64/amigaos4/Download/VortexBrowser/VortexBrowser-AltiVec
-    cp "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.stripped" $HOME/kyvos-2.2.0-linux64/amigaos4/Download/VortexBrowser/VortexBrowser-AltiVec.stripped
-    cp "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI" $HOME/kyvos-2.2.0-linux64/amigaos4/Download/VortexBrowser/VortexBrowser-MUI
-    cp "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI.stripped" $HOME/kyvos-2.2.0-linux64/amigaos4/Download/VortexBrowser/VortexBrowser-MUI.stripped
+echo "=== [3/3] Deploying to QEMU Shared Folder ==="
+KYVOS_DOWNLOAD_DIR="${KYVOS_DOWNLOAD_DIR:-${HOME}/kyvos-2.2.0-linux64/amigaos4/Download}"
+if [ -d "${KYVOS_DOWNLOAD_DIR}" ]; then
+    TARGET_DRAWER="${KYVOS_DOWNLOAD_DIR}/VortexBrowser"
+    mkdir -p "${TARGET_DRAWER}"
+    cp "${SCRIPT_DIR}/amiga-client/VortexBrowser" "${TARGET_DRAWER}/VortexBrowser"
+    cp "${SCRIPT_DIR}/amiga-client/VortexBrowser.stripped" "${TARGET_DRAWER}/VortexBrowser.stripped"
+    cp "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec" "${TARGET_DRAWER}/VortexBrowser-AltiVec"
+    cp "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.stripped" "${TARGET_DRAWER}/VortexBrowser-AltiVec.stripped"
+    cp "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI" "${TARGET_DRAWER}/VortexBrowser-MUI"
+    cp "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI.stripped" "${TARGET_DRAWER}/VortexBrowser-MUI.stripped"
     if [ -f "${SCRIPT_DIR}/amiga-client/VortexBrowser.info" ]; then
-        cp "${SCRIPT_DIR}/amiga-client/VortexBrowser.info" $HOME/kyvos-2.2.0-linux64/amigaos4/Download/VortexBrowser/VortexBrowser.info
-        cp "${SCRIPT_DIR}/amiga-client/VortexBrowser.info" $HOME/kyvos-2.2.0-linux64/amigaos4/Download/VortexBrowser/VortexBrowser-AltiVec.info
-        cp "${SCRIPT_DIR}/amiga-client/VortexBrowser.info" $HOME/kyvos-2.2.0-linux64/amigaos4/Download/VortexBrowser/VortexBrowser-MUI.info
+        cp "${SCRIPT_DIR}/amiga-client/VortexBrowser.info" "${TARGET_DRAWER}/VortexBrowser.info"
+        cp "${SCRIPT_DIR}/amiga-client/VortexBrowser.info" "${TARGET_DRAWER}/VortexBrowser-AltiVec.info"
+        cp "${SCRIPT_DIR}/amiga-client/VortexBrowser.info" "${TARGET_DRAWER}/VortexBrowser-MUI.info"
     fi
     if [ -d "${SCRIPT_DIR}/amiga-client/icons" ]; then
-        mkdir -p $HOME/kyvos-2.2.0-linux64/amigaos4/Download/VortexBrowser/icons
-        cp -r "${SCRIPT_DIR}/amiga-client/icons/." $HOME/kyvos-2.2.0-linux64/amigaos4/Download/VortexBrowser/icons/
+        mkdir -p "${TARGET_DRAWER}/icons"
+        cp -r "${SCRIPT_DIR}/amiga-client/icons/." "${TARGET_DRAWER}/icons/"
+    fi
+    echo "[+] QEMU Shared Folder updated: ${TARGET_DRAWER}"
+fi
+
+# Optional: Auto-Deploy to Amiga FTPS server if configured
+# Credentials can be set via environment ($AMIGA_FTP_AUTH) or local uncommitted config file
+if [ -z "$AMIGA_FTP_AUTH" ]; then
+    if [ -f "${SCRIPT_DIR}/.ftp_auth" ]; then
+        # shellcheck disable=SC1091
+        source "${SCRIPT_DIR}/.ftp_auth"
+    elif [ -f "${HOME}/.config/vortexbrowse/ftp_auth.env" ]; then
+        # shellcheck disable=SC1090
+        source "${HOME}/.config/vortexbrowse/ftp_auth.env"
     fi
 fi
 
-# Optional: Auto-Deploy to Amiga FTP (192.168.178.15) if available
-if curl -s --connect-timeout 2 --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd "ftp://192.168.178.15/Work2/" >/dev/null 2>&1; then
-    echo "=== Auto-Uploading to Amiga FTP (192.168.178.15 /Work2/VortexBrowser) ==="
-    curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser.stripped" "ftp://192.168.178.15/Work2/VortexBrowser/VortexBrowser" >/dev/null 2>&1 || true
-    curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.stripped" "ftp://192.168.178.15/Work2/VortexBrowser/VortexBrowser-AltiVec" >/dev/null 2>&1 || true
-    curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI.stripped" "ftp://192.168.178.15/Work2/VortexBrowser/VortexBrowser-MUI" >/dev/null 2>&1 || true
-    if [ -f "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI.info" ]; then
-        curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI.info" "ftp://192.168.178.15/Work2/VortexBrowser/VortexBrowser-MUI.info" >/dev/null 2>&1 || true
+if [ -n "$AMIGA_FTP_AUTH" ] && [ -n "${AMIGA_FTP_HOST:-192.168.178.15}" ]; then
+    FTP_HOST="${AMIGA_FTP_HOST:-192.168.178.15}"
+    FTP_BASE_DIR="${AMIGA_FTP_DIR:-/Work2/VortexBrowser}"
+    FTP_URL="ftp://${FTP_HOST}${FTP_BASE_DIR}"
+
+    if curl -s --connect-timeout 2 --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd "ftp://${FTP_HOST}/Work2/" >/dev/null 2>&1; then
+        echo "=== Auto-Uploading to Amiga FTP (${FTP_URL}) ==="
+        curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser.stripped" "${FTP_URL}/VortexBrowser" >/dev/null 2>&1 || true
+        curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.stripped" "${FTP_URL}/VortexBrowser-AltiVec" >/dev/null 2>&1 || true
+        curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI.stripped" "${FTP_URL}/VortexBrowser-MUI" >/dev/null 2>&1 || true
+        if [ -f "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI.info" ]; then
+            curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI.info" "${FTP_URL}/VortexBrowser-MUI.info" >/dev/null 2>&1 || true
+        fi
+        if [ -f "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.info" ]; then
+            curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.info" "${FTP_URL}/VortexBrowser-AltiVec.info" >/dev/null 2>&1 || true
+        fi
+        if [ -f "${SCRIPT_DIR}/dist/VortexBrowser-0.99-RC2-AmigaOS4.lha" ]; then
+            curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/dist/VortexBrowser-0.99-RC2-AmigaOS4.lha" "${FTP_URL}/VortexBrowser-0.99-RC2-AmigaOS4.lha" >/dev/null 2>&1 || true
+        fi
+        echo "[+] Amiga FTP updated successfully!"
     fi
-    if [ -f "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.info" ]; then
-        curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.info" "ftp://192.168.178.15/Work2/VortexBrowser/VortexBrowser-AltiVec.info" >/dev/null 2>&1 || true
-    fi
-    if [ -f "${SCRIPT_DIR}/dist/VortexBrowser-0.99-RC2-AmigaOS4.lha" ]; then
-        curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/dist/VortexBrowser-0.99-RC2-AmigaOS4.lha" "ftp://192.168.178.15/Work2/VortexBrowser/VortexBrowser-0.99-RC2-AmigaOS4.lha" >/dev/null 2>&1 || true
-    fi
-    echo "[+] Amiga FTP updated successfully!"
 fi
 
 echo "Build complete: VortexBrowser 0.99 RC2 (Newlib) created!"

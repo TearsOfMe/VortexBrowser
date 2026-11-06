@@ -646,9 +646,10 @@ for icon in os.listdir("amiga-client/icons"):
         shutil.copy2(os.path.join("amiga-client/icons", icon), os.path.join(AMIGA_DRAWER, "icons", icon))
 
 # Copy Info Files from Kyvos OS4 ISO / repository if available
-KYVOS_DOCS_INFO = "$HOME/kyvos-2.2.0-linux64/amigaos4/Download/VideoVortex/Data/MPlayer/Docs.info"
-KYVOS_README_INFO = "$HOME/kyvos-2.2.0-linux64/amigaos4/Download/VideoVortex/Data/MPlayer/Docs/README.info"
-KYVOS_GUIDE_INFO = "$HOME/kyvos-2.2.0-linux64/ISO/AmigaOS 4.1 Final Edition Update 2/Content/Workbench/Documentation/Commodities/ContextMenus.guide.info"
+KYVOS_DIR = os.environ.get("KYVOS_DIR", os.path.expanduser("~/kyvos-2.2.0-linux64"))
+KYVOS_DOCS_INFO = os.path.join(KYVOS_DIR, "amigaos4/Download/VideoVortex/Data/MPlayer/Docs.info")
+KYVOS_README_INFO = os.path.join(KYVOS_DIR, "amigaos4/Download/VideoVortex/Data/MPlayer/Docs/README.info")
+KYVOS_GUIDE_INFO = os.path.join(KYVOS_DIR, "ISO/AmigaOS 4.1 Final Edition Update 2/Content/Workbench/Documentation/Commodities/ContextMenus.guide.info")
 
 if os.path.exists(KYVOS_DOCS_INFO):
     shutil.copy2(KYVOS_DOCS_INFO, os.path.join(AMIGA_DRAWER, "icons.info"))
