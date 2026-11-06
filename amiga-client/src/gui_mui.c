@@ -39,12 +39,6 @@ extern struct PopupMenuIFace *IPopupMenu;
 #undef get
 #define get(obj, attr, valptr) IIntuition->GetAttr((attr), (Object *)(obj), (uint32 *)(valptr))
 
-
-#define VORTEXBROWSE_RPI_HOST    DEFAULT_SERVER_HOST
-#define VORTEXBROWSE_RPI_PORT    DEFAULT_SERVER_PORT
-#define VORTEXBROWSE_HOSTPC_HOST DEFAULT_SERVER_HOST
-#define VORTEXBROWSE_HOSTPC_PORT DEFAULT_SERVER_PORT
-
 static const char *s_server_entries[] = {
     "RasPi 4 (192.168.178.2:7788)",
     "Host-PC (192.168.178.60:9757)",
@@ -82,6 +76,13 @@ static struct NewMenu s_mui_menu[] = {
     { NM_ITEM,  (char *)"Serveradresse manuell eingeben...", NULL, 0, 0, (APTR)MID_SERVER_CUSTOM },
     { NM_ITEM,  NM_BARLABEL, NULL, 0, 0, (APTR)0 },
     { NM_ITEM,  (char *)"Verbindung trennen", NULL, 0, 0, (APTR)MID_DISCONNECT },
+
+    { NM_TITLE, (char *)"Ansicht", NULL, 0, 0, (APTR)0 },
+    { NM_ITEM,  (char *)"FPS: 15 FPS (Stromsparend)", NULL, 0, 0, (APTR)MID_FPS_15 },
+    { NM_ITEM,  (char *)"FPS: 25 FPS (Standard / PAL flüssig)", NULL, 0, 0, (APTR)MID_FPS_25 },
+    { NM_ITEM,  (char *)"FPS: 30 FPS (Empfohlen für YouTube)", NULL, 0, 0, (APTR)MID_FPS_30 },
+    { NM_ITEM,  (char *)"FPS: 50 FPS (PAL High-Speed)", NULL, 0, 0, (APTR)MID_FPS_50 },
+    { NM_ITEM,  (char *)"FPS: 60 FPS (Maximal / Gaming)", NULL, 0, 0, (APTR)MID_FPS_60 },
 
     { NM_END,   NULL, NULL, 0, 0, (APTR)0 }
 };
@@ -354,6 +355,13 @@ static void parse_host_port(const char *input, char *out_host, size_t host_cap, 
         strncpy(out_host, input, host_cap - 1);
         out_host[host_cap - 1] = '\0';
     }
+}
+
+static void prompt_server_address_mui(VortexApp *app);
+
+void prompt_server_address(VortexApp *app)
+{
+    prompt_server_address_mui(app);
 }
 
 static void prompt_server_address_mui(VortexApp *app)
@@ -889,6 +897,28 @@ void gui_mui_handle_action(VortexApp *app, uint32 action_id)
             app_set_status("Cache-Bereinigung angefordert.");
             break;
 
+        case MID_FPS_15:
+        case MID_FPS_25:
+        case MID_FPS_30:
+        case MID_FPS_50:
+        case MID_FPS_60:
+            {
+                uint8_t fps_val = 25;
+                if (action_id == MID_FPS_15) fps_val = 15;
+                else if (action_id == MID_FPS_25) fps_val = 25;
+                else if (action_id == MID_FPS_30) fps_val = 30;
+                else if (action_id == MID_FPS_50) fps_val = 50;
+                else if (action_id == MID_FPS_60) fps_val = 60;
+                app->prefs.target_fps = fps_val;
+                if (app->connected) {
+                    char fcmd[32];
+                    snprintf(fcmd, sizeof(fcmd), "@FPS:%u", (unsigned)fps_val);
+                    net_send_url(app, fcmd);
+                }
+                app_set_status("Framerate gesetzt: %u FPS", (unsigned)fps_val);
+            }
+            break;
+
         case MID_ABOUT:
             MUI_Request(app->mui_app, app->mui_win, 0,
                         "Ueber VortexBrowse (MUI)",
@@ -1155,4 +1185,20 @@ void gui_mui_handle_events(VortexApp *app)
             }
         }
     }
+}
+
+/* Stubs for Download Manager in MUI edition */
+void gui_download_manager_update(VortexApp *app)
+{
+    (void)app;
+}
+
+void gui_open_download_manager(VortexApp *app)
+{
+    (void)app;
+}
+
+void gui_close_download_manager(VortexApp *app)
+{
+    (void)app;
 }

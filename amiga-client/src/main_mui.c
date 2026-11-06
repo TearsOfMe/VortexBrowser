@@ -18,6 +18,7 @@
 
 #include "app.h"
 #include "gui_mui.h"
+#include "prefs.h"
 #include "net.h"
 #include "renderer.h"
 #include "favorites.h"
@@ -160,13 +161,17 @@ int main(int argc, char **argv)
 
     printf("============================================================\n");
     printf(" VortexBrowse (MUI Edition) 1.0 (AmigaOS 4.1 PowerPC)\n");
-    printf(" Server: %s:%u\n", g_app.server_host, (unsigned)g_app.server_port);
+    printf(" Server: %s:%u\n", g_app.server_host, g_app.server_port);
     printf("============================================================\n");
 
     if (!open_libs()) {
         close_libs();
         return 1;
     }
+
+    g_app.is_mui = TRUE;
+    prefs_init(&g_app);
+    prefs_load(&g_app);
 
     renderer_init(&g_app);
     download_init(&g_app);
@@ -194,7 +199,7 @@ int main(int argc, char **argv)
     /* Auto-connect on startup */
     if (net_connect(&g_app, g_app.server_host, g_app.server_port)) {
         const char *su = (g_app.current_url[0] && g_app.current_url[0] != '@') ? g_app.current_url : "@HOME";
-        gui_update_url_bar(&g_app, (su[0] != '@') ? su : "");
+        gui_mui_update_url_bar(&g_app, (su[0] != '@') ? su : "");
         net_send_url(&g_app, su);
     }
 

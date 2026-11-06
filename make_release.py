@@ -9,9 +9,9 @@ import zipfile
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DIST_DIR = os.path.join(SCRIPT_DIR, "dist")
 
-VER_STR = "0.99-RC2"
+VER_STR = "0.99-RC1"
 APP_NAME = "VortexBrowser"
-RELEASE_DATE = "04.11.2026"
+RELEASE_DATE = "29.10.2026"
 
 STAGING_DIR = os.path.join(DIST_DIR, "staging")
 AMIGA_DRAWER = os.path.join(STAGING_DIR, "VortexBrowser")
@@ -32,15 +32,15 @@ os.makedirs(SERVER_RPI4_DRAWER, exist_ok=True)
 GUIDE_CONTENT = """@database "VortexBrowser.guide"
 @author "TearsOfMe"
 @(c) "2026 VortexBrowser Project"
-@$VER: VortexBrowser.guide 0.99 RC2 (29.10.2026)
+@$VER: VortexBrowser.guide 0.99 RC1 (29.10.2026)
 
-@node "Main" "VortexBrowser 0.99 RC2 - Benutzerhandbuch"
+@node "Main" "VortexBrowser 0.99 RC1 - Benutzerhandbuch"
 @{b}========================================================================@{ub}
-           @{b}VORTEXBROWSER 0.99 RC2 FUER AMIGAOS 4.1@{ub}
+           @{b}VORTEXBROWSER 0.99 RC1 FUER AMIGAOS 4.1@{ub}
       Moderner Web-Browser mit Remote-Rendering & Streaming
 @{b}========================================================================@{ub}
 
-Willkommen zu @{b}VortexBrowser 0.99 RC2@{ub}!
+Willkommen zu @{b}VortexBrowser 0.99 RC1@{ub}!
 
 VortexBrowser ermoeglicht modernes Surfen im World Wide Web auf Ihrem AmigaOS 4.1
 System mit voller Unterstuetzung fuer moderne Web-Standards (HTML5, CSS3,
@@ -325,7 +325,6 @@ Das Einstellungsfenster ist uebersichtlich in fuenf Reiter unterteilt:
 5. @{b}Streaming Server:@{ub}
    - @{b}Server IP / Host & Port:@{ub} Manuelle Eingabe des Streaming-Servers (z. B. 192.168.178.50:7788)
    - @{b}Stream-Aufloesung:@{ub} Nativ (1:1), 720p HD, 540p qHD (siehe Performance!)
-   - @{b}Bildrate (FPS):@{ub} Waehlbar zwischen 15, 25, 30, 50 und 60 FPS (Default: 25 FPS)
    - @{b}JPEG-Qualitaet:@{ub} Slider von 20% bis 100%
    - @{b}Video-Optimierung:@{ub} Dynamische Bildrate bei Videowiedergabe
    - @{b}Aktuellen Server beim Beenden automatisch speichern@{ub}
@@ -444,7 +443,7 @@ was die CPU-Auslastung auf 20-30% senkt!
 @node "EnglishDoc" "English Documentation Summary"
 @{b}English Documentation Summary@{ub}
 
-@{b}VortexBrowser 0.99 RC2@{ub} is a remote web rendering browser client for AmigaOS 4.1.
+@{b}VortexBrowser 0.99 RC1@{ub} is a remote web rendering browser client for AmigaOS 4.1.
 It renders modern web pages (HTML5, CSS3, ES2024 JavaScript, WebGL, YouTube, etc.)
 on a companion Linux PC or Raspberry Pi 4/5 server, streaming ultra-smooth visuals
 and 16-bit 48kHz audio directly to AmigaOS with native Reaction GUI controls.
@@ -479,7 +478,7 @@ with open(os.path.join(AMIGA_DRAWER, f"{APP_NAME}.guide"), "w", encoding="iso-88
 # German Quickstart Readme: LIESMICH.txt
 # -------------------------------------------------------------
 LIESMICH_CONTENT = f"""==============================================================================
-                    {APP_NAME.upper()} 0.99 RC2 FUER AMIGAOS 4.1
+                    {APP_NAME.upper()} 0.99 RC1 FUER AMIGAOS 4.1
                  Schnellstartanleitung & Kurzanleitung
 ==============================================================================
 
@@ -491,12 +490,8 @@ WebGL, etc.) fluessig und ressourcenschonend auf den Amiga bringt.
 ------------------------------------------------------------------------------
 1. INHALT DIESES ARCHIVS
 ------------------------------------------------------------------------------
-- {APP_NAME}             : Universelles AmigaOS 4 Programm mit dynamischer AltiVec-Erkennung
-                           (laeuft sicher auf X5000, A1222+, Sam460, Sam440, G4, G3 -
-                           nutzt 128-Bit AltiVec SIMD automatisch auf X1000 und G4!)
-- {APP_NAME}-AltiVec     : Speziell fuer AmigaOne X1000 und G4 AltiVec-optimiertes Programm
+- {APP_NAME}             : Ausfuehrbares Programm fuer AmigaOS 4 (newlib.library)
 - {APP_NAME}.info        : Echtes AmigaOS 4 Icon im VideoVortex-Look
-- {APP_NAME}-AltiVec.info: Echtes AmigaOS 4 Icon fuer die AltiVec-Version
 - {APP_NAME}.guide       : Ausfuehrliches AmigaGuide-Handbuch mit allen Details
 - LIESMICH.txt          : Diese Schnellstartanleitung (Deutsch)
 - README.txt            : Schnellstartanleitung (Englisch)
@@ -545,10 +540,10 @@ SCHRITT 2: {APP_NAME} auf dem Amiga starten
   - Gespeichertes Login automatisch eintragen: Amiga+L
   - Sichere Blowfish-Verschluesselung in PROGDIR:passwords.dat!
 
-* TIPP ZUR CPU-ENTLASTUNG & FLUESSIEGEM STREAMING:
+* TIPP ZUR CPU-ENTLASTUNG (fuer SAM440, SAM460, G4):
   - Menue "Ansicht -> Stream: 720p HD" oder "Stream: 540p qHD" waehlen.
-  - Die Radeon-Grafikkarte skaliert das Bild ueber Hardware-CompositeTags() (spart 50-70% CPU!).
-  - Framerate anpassen: Menue "Ansicht -> FPS" (15 FPS fuer langsame CPUs bis 50/60 FPS fuer High-Speed).
+  - Die Radeon-Grafikkarte skaliert das Bild ueber Hardware-CompositeTags()!
+  - Senkt die Amiga-CPU-Last um 50-70%!
 
 Ausfuehrliche Informationen finden Sie in "{APP_NAME}.guide"!
 Viel Spass beim modernen Surfen auf AmigaOS 4!
@@ -562,7 +557,7 @@ with open(os.path.join(AMIGA_DRAWER, "LIESMICH.txt"), "w", encoding="iso-8859-1"
 # English Quickstart Readme: README.txt
 # -------------------------------------------------------------
 README_CONTENT = f"""==============================================================================
-                    {APP_NAME.upper()} 0.99 RC2 FOR AMIGAOS 4.1
+                    {APP_NAME.upper()} 0.99 RC1 FOR AMIGAOS 4.1
                  Quick Start Guide & Feature Overview
 ==============================================================================
 
@@ -574,12 +569,8 @@ YouTube, and Twitch with low Amiga CPU usage and native Reaction GUI.
 ------------------------------------------------------------------------------
 1. PACKAGE CONTENTS
 ------------------------------------------------------------------------------
-- {APP_NAME}             : Universal AmigaOS 4 binary with dynamic AltiVec detection
-                           (safe for X5000, A1222+, Sam460, Sam440, G4, G3 -
-                           auto-activates 128-bit AltiVec SIMD on X1000 and G4!)
-- {APP_NAME}-AltiVec     : Dedicated pure AltiVec-vectorized binary for AmigaOne X1000 & G4
+- {APP_NAME}             : Standard AmigaOS 4 executable (newlib.library)
 - {APP_NAME}.info        : Native AmigaOS 4 Icon in cosmic vortex look
-- {APP_NAME}-AltiVec.info: Native AmigaOS 4 Icon for the AltiVec build
 - {APP_NAME}.guide       : Comprehensive AmigaGuide manual
 - LIESMICH.txt          : German quickstart guide
 - README.txt            : English quickstart guide
@@ -632,12 +623,6 @@ with open(os.path.join(AMIGA_DRAWER, "README.txt"), "w", encoding="utf-8") as f:
 print("=== [2/6] Copying AmigaOS 4 Client Binaries and Icons ===")
 shutil.copy2("amiga-client/VortexBrowser.stripped", os.path.join(AMIGA_DRAWER, APP_NAME))
 shutil.copy2("amiga-client/VortexBrowser.info", os.path.join(AMIGA_DRAWER, f"{APP_NAME}.info"))
-if os.path.exists("amiga-client/VortexBrowser-AltiVec.stripped"):
-    shutil.copy2("amiga-client/VortexBrowser-AltiVec.stripped", os.path.join(AMIGA_DRAWER, f"{APP_NAME}-AltiVec"))
-if os.path.exists("amiga-client/VortexBrowser-AltiVec.info"):
-    shutil.copy2("amiga-client/VortexBrowser-AltiVec.info", os.path.join(AMIGA_DRAWER, f"{APP_NAME}-AltiVec.info"))
-elif os.path.exists("amiga-client/VortexBrowser.info"):
-    shutil.copy2("amiga-client/VortexBrowser.info", os.path.join(AMIGA_DRAWER, f"{APP_NAME}-AltiVec.info"))
 
 # Copy Icons to icons/
 for icon in os.listdir("amiga-client/icons"):
@@ -678,16 +663,6 @@ SERVER_RUN_SH = """#!/usr/bin/env bash
 # ==============================================================================
 set -e
 
-if [ "$EUID" -eq 0 ] && [ -n "$SUDO_USER" ]; then
-    echo "===================================================================="
-    echo " [!] FEHLER: run_server.sh darf NICHT mit 'sudo' gestartet werden!"
-    echo " Chromium verweigert aus Sicherheitsgruenden den Start als Root."
-    echo " Bitte starten Sie den Server als normaler Benutzer '${SUDO_USER}':"
-    echo "     ./run_server.sh"
-    echo "===================================================================="
-    exit 1
-fi
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
@@ -722,17 +697,6 @@ SERVER_INSTALL_SH = """#!/usr/bin/env bash
 # VortexBrowser Server - Automated 1-Click Installer
 # ==============================================================================
 set -e
-
-if [ "$EUID" -eq 0 ] && [ -n "$SUDO_USER" ]; then
-    echo "===================================================================="
-    echo " [!] FEHLER: install_server.sh darf NICHT mit 'sudo' gestartet werden!"
-    echo " Die Python-Umgebung und der Browser muessen dem Benutzer '${SUDO_USER}' gehoeren."
-    echo " Bitte starten Sie das Skript einfach ohne sudo:"
-    echo "     ./install_server.sh"
-    echo " Das Skript fragt bei Bedarf selbst nach sudo fuer Systempakete."
-    echo "===================================================================="
-    exit 1
-fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
@@ -848,19 +812,17 @@ with open(os.path.join(SERVER_RPI4_DRAWER, "vortexbrowser.service"), "w") as f:
 # Overall German and English Readmes for Complete Archive
 # -------------------------------------------------------------
 OVERALL_DE_TXT = f"""==============================================================================
-            {APP_NAME.upper()} 0.99 RC2 - GESAMTPAKET FUER AMIGAOS 4 & SERVER
+            {APP_NAME.upper()} 0.99 RC1 - GESAMTPAKET FUER AMIGAOS 4 & SERVER
 ==============================================================================
 
-Dieses Komplettpaket enthaelt alles fuer den Betrieb von {APP_NAME} 0.99 RC2
+Dieses Komplettpaket enthaelt alles fuer den Betrieb von {APP_NAME} 0.99 RC1
 auf AmigaOS 4.1 sowie dem Rendering-Server auf Linux oder Raspberry Pi 4/5.
 
 VERZEICHNISSTRUKTUR:
 --------------------
 - {APP_NAME}/          : Der vollstaendige AmigaOS 4 Client-Ordner
-  * {APP_NAME}         : Universelles Programm mit automatischer AltiVec-Erkennung (fuer X5000, A1222+, Sam460, Sam440, G4, G3)
-  * {APP_NAME}-AltiVec : Speziell fuer AmigaOne X1000 & G4 AltiVec-optimierte Version
+  * {APP_NAME}         : Ausfuehrbares Programm (Newlib-Version)
   * {APP_NAME}.info    : Echtes AmigaOS 4 Icon im VideoVortex-Look
-  * {APP_NAME}-AltiVec.info : Echtes AmigaOS 4 Icon fuer die AltiVec-Version
   * {APP_NAME}.guide   : Ausfuehrliches AmigaGuide-Handbuch
   * LIESMICH.txt       : Deutsche Kurzanleitung
   * README.txt         : Englische Kurzanleitung

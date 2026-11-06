@@ -57,7 +57,13 @@ enum {
     MID_SERVER_RPI,
     MID_SERVER_PC,
     MID_SERVER_CUSTOM,
-    MID_DISCONNECT
+    MID_DISCONNECT,
+
+    MID_FPS_15 = 200,
+    MID_FPS_25,
+    MID_FPS_30,
+    MID_FPS_50,
+    MID_FPS_60
 };
 
 BOOL gui_mui_init(VortexApp *app);

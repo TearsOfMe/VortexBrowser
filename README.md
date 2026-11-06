@@ -14,7 +14,11 @@ VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwrigh
    - **AVX2-Mikroprädiktor:** Verdoppelt die LZ4-Kompressionsrate bei vollen 8-Bit Farbtiefe (PSNR > 44 dB, verlustfreie Wahrnehmung) ohne CPU-Last auf dem Amiga.
    - **Rustwright + DirectCDP Core:** Direkte WebSocket-Screencast-Anbindung ohne Node.js-Treiber-Overhead.
 
-2. **Multi-Tab-Browsing & Sitzungswiederherstellung:**
+2. **Zwei native GUI-Engines zur Auswahl (ReAction & MUI):**
+   - **Standard ReAction (`VortexBrowser` & `VortexBrowser-AltiVec`):** Klassisches AmigaOS 4 System-Look-and-Feel mit Tabs (`clicktab.gadget`), Font-Zoom, Screen-Cloning und GPU-Composite-Skalierung.
+   - **MUI Edition (`VortexBrowser-MUI`):** Voll anpassbare Benutzeroberfläche über Magic User Interface (MUI 4/5) mit flexibler Skalierung, Themen, Cycle-Gadgets und eigenem MUI-Viewport.
+
+3. **Multi-Tab-Browsing & Sitzungswiederherstellung:**
    - Echte Tabs über `clicktab.gadget` mit AmigaOS 4 Standard-Bedienung (`Amiga+T` für neuen Tab, `Amiga+W` zum Schließen).
    - **Tab-Persistenz:** Sämtliche geöffneten Tabs, Titel und der aktive Tab werden beim Beenden automatisch in `ENVARC:` gespeichert und beim nächsten Start nahtlos wiederhergestellt.
 

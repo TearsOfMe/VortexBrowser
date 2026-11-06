@@ -38,11 +38,14 @@ docker cp "${CONTAINER_ID}:/tmp/vb_build/amiga-client/VortexBrowser" "${SCRIPT_D
 docker cp "${CONTAINER_ID}:/tmp/vb_build/amiga-client/VortexBrowser.stripped" "${SCRIPT_DIR}/amiga-client/VortexBrowser.stripped"
 docker cp "${CONTAINER_ID}:/tmp/vb_build/amiga-client/VortexBrowser-AltiVec" "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec"
 docker cp "${CONTAINER_ID}:/tmp/vb_build/amiga-client/VortexBrowser-AltiVec.stripped" "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.stripped"
+docker cp "${CONTAINER_ID}:/tmp/vb_build/amiga-client/VortexBrowser-MUI" "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI"
+docker cp "${CONTAINER_ID}:/tmp/vb_build/amiga-client/VortexBrowser-MUI.stripped" "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI.stripped"
 cp -f "${SCRIPT_DIR}/amiga-client/VortexBrowser" "${SCRIPT_DIR}/amiga-client/VortexBrowse"
 cp -f "${SCRIPT_DIR}/amiga-client/VortexBrowser.stripped" "${SCRIPT_DIR}/amiga-client/VortexBrowse.stripped"
 
 if [ -f "${SCRIPT_DIR}/amiga-client/VortexBrowser.info" ]; then
     cp -f "${SCRIPT_DIR}/amiga-client/VortexBrowser.info" "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.info"
+    cp -f "${SCRIPT_DIR}/amiga-client/VortexBrowser.info" "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI.info"
 fi
 
 echo "=== [3/3] Deploying to QEMU Shared Folder (SHARED:Download/VortexBrowser) ==="
@@ -52,9 +55,12 @@ if [ -d "$HOME/kyvos-2.2.0-linux64/amigaos4/Download" ]; then
     cp "${SCRIPT_DIR}/amiga-client/VortexBrowser.stripped" $HOME/kyvos-2.2.0-linux64/amigaos4/Download/VortexBrowser/VortexBrowser.stripped
     cp "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec" $HOME/kyvos-2.2.0-linux64/amigaos4/Download/VortexBrowser/VortexBrowser-AltiVec
     cp "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.stripped" $HOME/kyvos-2.2.0-linux64/amigaos4/Download/VortexBrowser/VortexBrowser-AltiVec.stripped
+    cp "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI" $HOME/kyvos-2.2.0-linux64/amigaos4/Download/VortexBrowser/VortexBrowser-MUI
+    cp "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI.stripped" $HOME/kyvos-2.2.0-linux64/amigaos4/Download/VortexBrowser/VortexBrowser-MUI.stripped
     if [ -f "${SCRIPT_DIR}/amiga-client/VortexBrowser.info" ]; then
         cp "${SCRIPT_DIR}/amiga-client/VortexBrowser.info" $HOME/kyvos-2.2.0-linux64/amigaos4/Download/VortexBrowser/VortexBrowser.info
         cp "${SCRIPT_DIR}/amiga-client/VortexBrowser.info" $HOME/kyvos-2.2.0-linux64/amigaos4/Download/VortexBrowser/VortexBrowser-AltiVec.info
+        cp "${SCRIPT_DIR}/amiga-client/VortexBrowser.info" $HOME/kyvos-2.2.0-linux64/amigaos4/Download/VortexBrowser/VortexBrowser-MUI.info
     fi
     if [ -d "${SCRIPT_DIR}/amiga-client/icons" ]; then
         mkdir -p $HOME/kyvos-2.2.0-linux64/amigaos4/Download/VortexBrowser/icons
@@ -67,6 +73,10 @@ if curl -s --connect-timeout 2 --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd "ftp
     echo "=== Auto-Uploading to Amiga FTP (192.168.178.15 /Work2/VortexBrowser) ==="
     curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser.stripped" "ftp://192.168.178.15/Work2/VortexBrowser/VortexBrowser" >/dev/null 2>&1 || true
     curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.stripped" "ftp://192.168.178.15/Work2/VortexBrowser/VortexBrowser-AltiVec" >/dev/null 2>&1 || true
+    curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI.stripped" "ftp://192.168.178.15/Work2/VortexBrowser/VortexBrowser-MUI" >/dev/null 2>&1 || true
+    if [ -f "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI.info" ]; then
+        curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI.info" "ftp://192.168.178.15/Work2/VortexBrowser/VortexBrowser-MUI.info" >/dev/null 2>&1 || true
+    fi
     if [ -f "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.info" ]; then
         curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.info" "ftp://192.168.178.15/Work2/VortexBrowser/VortexBrowser-AltiVec.info" >/dev/null 2>&1 || true
     fi

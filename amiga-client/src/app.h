@@ -186,6 +186,22 @@ typedef struct VortexApp {
     int16_t        active_quicklink_idx;
     char           win_title[512];
 
+    /* MUI GUI objects (for VortexBrowser-MUI) */
+    BOOL           is_mui;
+    Object        *mui_app;
+    Object        *mui_win;
+    Object        *mui_viewport;
+    Object        *mui_url;
+    Object        *mui_search;
+    Object        *mui_status;
+    Object        *mui_gauge;
+    Object        *mui_fav_cycle;
+    Object        *mui_server_cycle;
+    char         **mui_fav_entries;
+    int            mui_fav_entries_count;
+    struct IBox    mui_viewport_box;
+    struct RastPort *mui_rp;
+
     /* Preferences */
     VortexPrefs    prefs;
 
