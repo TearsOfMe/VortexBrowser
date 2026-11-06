@@ -100,8 +100,8 @@ static const char *const s_tab_labels[] = {
 };
 
 static const char *const s_server_preset_labels[] = {
-    "Host-PC (192.168.178.60:9757)",
-    "Raspberry Pi 4 (192.168.178.2:7788)",
+    "Sekundaerer Server (127.0.0.1:9757)",
+    "Standard Server (127.0.0.1:7788)",
     "Benutzerdefiniert (Manuelle Adresse)",
     NULL
 };

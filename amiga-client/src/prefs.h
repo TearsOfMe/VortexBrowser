@@ -102,7 +102,7 @@ typedef struct VortexPrefs {
     uint16_t         num_quick_links;
     uint8_t          stream_res_mode;   /* STREAM_RES_NATIVE, STREAM_RES_720P, etc. */
     uint8_t          dark_theme;        /* 0 = Hell (Standard), 1 = Dunkel (Dark Mode), 2 = Auto */
-    char             server_host[128];  /* Gespeicherte Server-Adresse (z.B. 192.168.178.60) */
+    char             server_host[128];  /* Gespeicherte Server-Adresse (z.B. 127.0.0.1) */
     uint16_t         server_port;       /* Gespeicherter Server-Port (z.B. 9757 oder 7788) */
     uint8_t          target_fps;        /* Gewuenschte Streaming-Framerate (1..60, Default: 25) */
     uint8_t          jpeg_quality;      /* JPEG Streaming Qualitaet 20..100 (Default: 100) */

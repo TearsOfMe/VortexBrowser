@@ -21,9 +21,9 @@
 #endif
 
 #define VB_APP_NAME      "VortexBrowser"
-#define VB_APP_VERSION   "0.99 RC2"
-#define VB_APP_DATE      "(04.11.2026)"
-#define VB_APP_TITLE     "VortexBrowser 0.99 RC2"
+#define VB_APP_VERSION   "0.99 RC3"
+#define VB_APP_DATE      "(06.11.2026)"
+#define VB_APP_TITLE     "VortexBrowser 0.99 RC3"
 #define VB_MAX_FAVORITES 64
 #ifndef VB_MAX_URL_LEN
 #define VB_MAX_URL_LEN   512

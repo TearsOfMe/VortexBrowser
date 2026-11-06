@@ -20,7 +20,7 @@ Spezial-Build des VortexBrowser Rendering-Servers für **CachyOS Linux** auf dem
 4. **Automatische CPU-Skalierung via `powerprofilesctl` (`amd_pstate`)**:
    - Schaltet das System-Powerprofil der AMD Ryzen PRO APU bei Verbindung des AmigaOS 4 Clients automatisch via `powerprofilesctl set performance` auf maximale Leistung und beim Trennen wieder zurück auf `power-saver` (`powerprofilesctl set power-saver`).
 
-## Installation & Start auf CachyOS (192.168.178.2)
+## Installation & Start auf CachyOS / Arch Linux
 
 ```bash
 cd Server-CachyOS-Linux

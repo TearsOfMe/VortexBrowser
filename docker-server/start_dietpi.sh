@@ -52,7 +52,7 @@ IP=$(hostname -I | awk '{print $1}')
 echo ""
 echo "=================================================================="
 echo " [ERFOLG] VortexBrowse Server läuft im Docker-Container!"
-echo " IP-Adresse: ${IP:-192.168.178.2}"
+echo " IP-Adresse: ${IP:-127.0.0.1}"
 echo " Port:       7788"
 echo ""
 echo " AmigaOS 4 Verbindung:"

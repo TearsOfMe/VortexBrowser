@@ -58,7 +58,7 @@ docker compose down
 ## 3. Verbindung vom AmigaOS 4 Client
 
 In **VortexBrowse** (ReAction oder MUI) auf dem Amiga:
-- Server-Auswahl: **Raspberry Pi 4** (Standard-IP `192.168.178.2:7788`)
+- Server-Auswahl: **Linux Server** (Standard-IP `127.0.0.1:7788`)
 - Oder manuell eingeben: `<DietPi-IP>:7788`
 
 ---

@@ -9,9 +9,9 @@ import zipfile
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DIST_DIR = os.path.join(SCRIPT_DIR, "dist")
 
-VER_STR = "0.99-RC1"
+VER_STR = "0.99-RC3"
 APP_NAME = "VortexBrowser"
-RELEASE_DATE = "29.10.2026"
+RELEASE_DATE = "06.11.2026"
 
 STAGING_DIR = os.path.join(DIST_DIR, "staging")
 AMIGA_DRAWER = os.path.join(STAGING_DIR, "VortexBrowser")
@@ -34,15 +34,15 @@ os.makedirs(SERVER_RPI4_DRAWER, exist_ok=True)
 GUIDE_CONTENT = """@database "VortexBrowser.guide"
 @author "TearsOfMe"
 @(c) "2026 VortexBrowser Project"
-@$VER: VortexBrowser.guide 0.99 RC1 (29.10.2026)
+@$VER: VortexBrowser.guide 0.99 RC3 (06.11.2026)
 
-@node "Main" "VortexBrowser 0.99 RC1 - Benutzerhandbuch"
+@node "Main" "VortexBrowser 0.99 RC3 - Benutzerhandbuch"
 @{b}========================================================================@{ub}
-           @{b}VORTEXBROWSER 0.99 RC1 FUER AMIGAOS 4.1@{ub}
+           @{b}VORTEXBROWSER 0.99 RC3 FUER AMIGAOS 4.1@{ub}
       Moderner Web-Browser mit Remote-Rendering & Streaming
 @{b}========================================================================@{ub}
 
-Willkommen zu @{b}VortexBrowser 0.99 RC1@{ub}!
+Willkommen zu @{b}VortexBrowser 0.99 RC3@{ub}!
 
 VortexBrowser ermoeglicht modernes Surfen im World Wide Web auf Ihrem AmigaOS 4.1
 System mit voller Unterstuetzung fuer moderne Web-Standards (HTML5, CSS3,
@@ -133,7 +133,7 @@ authentischen Look & Feel von AmigaOS 4!
    Das Skript richtet automatisch die virtuelle Umgebung ein, installiert alle
    Abhaengigkeiten und Chromium und kompiliert bei Bedarf die SIMD-Beschleunigung.
 4. Notieren Sie sich die am Ende des Skripts angezeigte @{b}Server-IP-Adresse@{ub}
-   (z. B. 192.168.178.50).
+   (z. B. 127.0.0.1 oder Ihre lokale Server-IP).
 5. Starten Sie den Server mit:
    @{b}./run_server.sh@{ub}  (bzw. @{b}./run_rpi4.sh@{ub})
 
@@ -325,7 +325,7 @@ Das Einstellungsfenster ist uebersichtlich in fuenf Reiter unterteilt:
    - Option: Vor jedem Download Zielverzeichnis abfragen
 
 5. @{b}Streaming Server:@{ub}
-   - @{b}Server IP / Host & Port:@{ub} Manuelle Eingabe des Streaming-Servers (z. B. 192.168.178.50:7788)
+   - @{b}Server IP / Host & Port:@{ub} Manuelle Eingabe des Streaming-Servers (z. B. 127.0.0.1:7788 oder Server-IP)
    - @{b}Stream-Aufloesung:@{ub} Nativ (1:1), 720p HD, 540p qHD (siehe Performance!)
    - @{b}JPEG-Qualitaet:@{ub} Slider von 20% bis 100%
    - @{b}Video-Optimierung:@{ub} Dynamische Bildrate bei Videowiedergabe
@@ -445,7 +445,7 @@ was die CPU-Auslastung auf 20-30% senkt!
 @node "EnglishDoc" "English Documentation Summary"
 @{b}English Documentation Summary@{ub}
 
-@{b}VortexBrowser 0.99 RC1@{ub} is a remote web rendering browser client for AmigaOS 4.1.
+@{b}VortexBrowser 0.99 RC3@{ub} is a remote web rendering browser client for AmigaOS 4.1.
 It renders modern web pages (HTML5, CSS3, ES2024 JavaScript, WebGL, YouTube, etc.)
 on a companion Linux PC or Raspberry Pi 4/5 server, streaming ultra-smooth visuals
 and 16-bit 48kHz audio directly to AmigaOS with native Reaction GUI controls.
@@ -480,7 +480,7 @@ with open(os.path.join(AMIGA_DRAWER, f"{APP_NAME}.guide"), "w", encoding="iso-88
 # German Quickstart Readme: LIESMICH.txt
 # -------------------------------------------------------------
 LIESMICH_CONTENT = f"""==============================================================================
-                    {APP_NAME.upper()} 0.99 RC1 FUER AMIGAOS 4.1
+                    {APP_NAME.upper()} 0.99 RC3 FUER AMIGAOS 4.1
                  Schnellstartanleitung & Kurzanleitung
 ==============================================================================
 
@@ -509,7 +509,7 @@ SCHRITT 1: Server starten (auf Linux-PC oder Raspberry Pi 4/5)
       ./install_server.sh
 3. Starten Sie anschliessend den Server mit:
       ./run_server.sh
-4. Merken Sie sich die angezeigte IP-Adresse (z. B. 192.168.178.50).
+4. Merken Sie sich die angezeigte IP-Adresse (z. B. 127.0.0.1 oder lokale LAN-IP).
 
 SCHRITT 2: {APP_NAME} auf dem Amiga starten
 1. Starten Sie "{APP_NAME}" per Doppelklick.
@@ -559,7 +559,7 @@ with open(os.path.join(AMIGA_DRAWER, "LIESMICH.txt"), "w", encoding="iso-8859-1"
 # English Quickstart Readme: README.txt
 # -------------------------------------------------------------
 README_CONTENT = f"""==============================================================================
-                    {APP_NAME.upper()} 0.99 RC1 FOR AMIGAOS 4.1
+                    {APP_NAME.upper()} 0.99 RC3 FOR AMIGAOS 4.1
                  Quick Start Guide & Feature Overview
 ==============================================================================
 
@@ -588,7 +588,7 @@ STEP 1: Start Server (Linux PC or Raspberry Pi 4/5)
       ./install_server.sh
 3. Start the server with:
       ./run_server.sh
-4. Note your server's local LAN IP address (e.g. 192.168.178.50).
+4. Note your server's local IP address (e.g. 127.0.0.1 or your LAN IP).
 
 STEP 2: Start {APP_NAME} on AmigaOS 4
 1. Launch "{APP_NAME}".
@@ -793,8 +793,10 @@ os.chmod(os.path.join(SERVER_LINUX_DRAWER, "run_server.sh"), 0o755)
 with open(os.path.join(SERVER_LINUX_DRAWER, "install_server.sh"), "w") as f:
     f.write(SERVER_INSTALL_SH)
 os.chmod(os.path.join(SERVER_LINUX_DRAWER, "install_server.sh"), 0o755)
-with open(os.path.join(SERVER_LINUX_DRAWER, "vortexbrowser.service"), "w") as f:
-    f.write(SYSTEMD_SERVICE)
+shutil.copy2("cachyos-linux-server/sync_twitch_login.py", os.path.join(SERVER_LINUX_DRAWER, "sync_twitch_login.py"))
+if os.path.exists("sync_twitch_login.sh"):
+    shutil.copy2("sync_twitch_login.sh", os.path.join(SERVER_LINUX_DRAWER, "sync_twitch_login.sh"))
+    os.chmod(os.path.join(SERVER_LINUX_DRAWER, "sync_twitch_login.sh"), 0o755)
 
 # Populate Server-CachyOS-Linux Drawer
 shutil.copy2("cachyos-linux-server/server.py", os.path.join(SERVER_CACHYOS_DRAWER, "server.py"))
@@ -804,6 +806,9 @@ if os.path.exists("cachyos-linux-server/fast_pixconv.so"):
 shutil.copy2("cachyos-linux-server/darkreader.js", os.path.join(SERVER_CACHYOS_DRAWER, "darkreader.js"))
 shutil.copy2("cachyos-linux-server/requirements.txt", os.path.join(SERVER_CACHYOS_DRAWER, "requirements.txt"))
 shutil.copy2("cachyos-linux-server/sync_twitch_login.py", os.path.join(SERVER_CACHYOS_DRAWER, "sync_twitch_login.py"))
+if os.path.exists("sync_twitch_login.sh"):
+    shutil.copy2("sync_twitch_login.sh", os.path.join(SERVER_CACHYOS_DRAWER, "sync_twitch_login.sh"))
+    os.chmod(os.path.join(SERVER_CACHYOS_DRAWER, "sync_twitch_login.sh"), 0o755)
 if os.path.exists("cachyos-linux-server/extensions"):
     shutil.copytree("cachyos-linux-server/extensions", os.path.join(SERVER_CACHYOS_DRAWER, "extensions"), dirs_exist_ok=True)
 shutil.copy2("cachyos-linux-server/install_server.sh", os.path.join(SERVER_CACHYOS_DRAWER, "install_server.sh"))
@@ -840,17 +845,19 @@ os.chmod(os.path.join(SERVER_RPI4_DRAWER, "run_server.sh"), 0o755)
 
 if os.path.exists("rpi4-server/README_RPI4.md"):
     shutil.copy2("rpi4-server/README_RPI4.md", os.path.join(SERVER_RPI4_DRAWER, "README_RPI4.txt"))
-with open(os.path.join(SERVER_RPI4_DRAWER, "vortexbrowser.service"), "w") as f:
-    f.write(SYSTEMD_SERVICE)
+shutil.copy2("rpi4-server/sync_twitch_login.py", os.path.join(SERVER_RPI4_DRAWER, "sync_twitch_login.py"))
+if os.path.exists("sync_twitch_login.sh"):
+    shutil.copy2("sync_twitch_login.sh", os.path.join(SERVER_RPI4_DRAWER, "sync_twitch_login.sh"))
+    os.chmod(os.path.join(SERVER_RPI4_DRAWER, "sync_twitch_login.sh"), 0o755)
 
 # -------------------------------------------------------------
 # Overall German and English Readmes for Complete Archive
 # -------------------------------------------------------------
 OVERALL_DE_TXT = f"""==============================================================================
-            {APP_NAME.upper()} 0.99 RC1 - GESAMTPAKET FUER AMIGAOS 4 & SERVER
+            {APP_NAME.upper()} 0.99 RC3 - GESAMTPAKET FUER AMIGAOS 4 & SERVER
 ==============================================================================
 
-Dieses Komplettpaket enthaelt alles fuer den Betrieb von {APP_NAME} 0.99 RC1
+Dieses Komplettpaket enthaelt alles fuer den Betrieb von {APP_NAME} 0.99 RC3
 auf AmigaOS 4.1 sowie dem Rendering-Server auf Linux oder Raspberry Pi 4/5.
 
 VERZEICHNISSTRUKTUR:

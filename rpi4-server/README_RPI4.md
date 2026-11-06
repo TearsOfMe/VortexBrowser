@@ -60,7 +60,7 @@ Der Server lauscht standardmäßig auf **Port 7788** (und Port 9757 für Abwärt
 1. Starte `VortexBrowse` auf deinem AmigaOS 4 System (z. B. AmigaOne, Sam460, Pegasos II oder X5000).
 2. Gib in den Verbindungseinstellungen oder der Tooltype-Konfiguration die IP-Adresse deines Raspberry Pi 4 ein, z. B.:
    ```text
-   HOST=192.168.178.xx
+   HOST=192.168.1.xx (oder IP Ihres Servers)
    PORT=7788
    ```
 3. Klicke auf Verbinden – der Browser und das Webstreaming erscheinen sofort auf deiner Workbench!

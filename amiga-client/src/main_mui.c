@@ -118,7 +118,7 @@ static void close_libs(void)
 int main(int argc, char **argv)
 {
     memset(&g_app, 0, sizeof(VortexApp));
-    strncpy(g_app.server_host, "192.168.178.2", sizeof(g_app.server_host) - 1);
+    strncpy(g_app.server_host, "127.0.0.1", sizeof(g_app.server_host) - 1);
     g_app.server_port = 7788;
     g_app.sock_fd     = -1;
     g_app.running     = TRUE;

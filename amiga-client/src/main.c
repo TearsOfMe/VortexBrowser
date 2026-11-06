@@ -28,7 +28,7 @@
 #include "audio.h"
 #include "clipboard.h"
 
-static const char *used_verstag __attribute__((used)) = "\0$VER: VortexBrowser 0.99 RC2 (04.11.2026)";
+static const char *used_verstag __attribute__((used)) = "\0$VER: VortexBrowser 0.99 RC3 (06.11.2026)";
 static const char *used_stack   __attribute__((used)) = "\0$STACK:524288";
 uint32 __stack = 524288;
 

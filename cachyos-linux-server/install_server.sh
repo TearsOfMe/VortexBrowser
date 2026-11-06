@@ -244,7 +244,7 @@ Nice=-5
 WantedBy=multi-user.target
 EOF
 
-IP_ADDR=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "192.168.178.2")
+IP_ADDR=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
 
 echo ""
 echo "============================================================================"

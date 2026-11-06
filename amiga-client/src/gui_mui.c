@@ -41,8 +41,8 @@ extern struct PopupMenuIFace *IPopupMenu;
 #define get(obj, attr, valptr) IIntuition->GetAttr((attr), (Object *)(obj), (uint32 *)(valptr))
 
 static const char *s_server_entries[] = {
-    "RasPi 4 (192.168.178.2:7788)",
-    "Host-PC (192.168.178.60:9757)",
+    "Standard Server (127.0.0.1:7788)",
+    "Sekundaerer Server (127.0.0.1:9757)",
     "Server manuell...",
     NULL
 };
@@ -75,8 +75,8 @@ static struct NewMenu s_mui_menu[] = {
     { NM_ITEM,  (char *)"Wikipedia (AmigaOS)", (char *)"6", 0, 0, (APTR)MID_BM_WIKI },
 
     { NM_TITLE, (char *)"Server", NULL, 0, 0, (APTR)MID_SERVER },
-    { NM_ITEM,  (char *)"Raspberry Pi 4 (192.168.178.2:7788)", NULL, 0, 0, (APTR)MID_SERVER_RPI },
-    { NM_ITEM,  (char *)"Host-PC (192.168.178.60:9757)", NULL, 0, 0, (APTR)MID_SERVER_PC },
+    { NM_ITEM,  (char *)"Standard Server (127.0.0.1:7788)", NULL, 0, 0, (APTR)MID_SERVER_RPI },
+    { NM_ITEM,  (char *)"Sekundaerer Server (127.0.0.1:9757)", NULL, 0, 0, (APTR)MID_SERVER_PC },
     { NM_ITEM,  (char *)"Serveradresse manuell eingeben...", NULL, 0, 0, (APTR)MID_SERVER_CUSTOM },
     { NM_ITEM,  NM_BARLABEL, NULL, 0, 0, (APTR)0 },
     { NM_ITEM,  (char *)"Verbindung trennen", NULL, 0, 0, (APTR)MID_DISCONNECT },

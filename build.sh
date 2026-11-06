@@ -99,11 +99,13 @@ if [ -n "$AMIGA_FTP_AUTH" ] && [ -n "$AMIGA_FTP_HOST" ]; then
         if [ -f "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.info" ]; then
             curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.info" "${FTP_URL}/VortexBrowser-AltiVec.info" >/dev/null 2>&1 || true
         fi
-        if [ -f "${SCRIPT_DIR}/dist/VortexBrowser-0.99-RC2-AmigaOS4.lha" ]; then
-            curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/dist/VortexBrowser-0.99-RC2-AmigaOS4.lha" "${FTP_URL}/VortexBrowser-0.99-RC2-AmigaOS4.lha" >/dev/null 2>&1 || true
+        LHA_FILE=$(ls -t "${SCRIPT_DIR}/dist/VortexBrowser-"*"-AmigaOS4.lha" 2>/dev/null | head -n1 || true)
+        if [ -n "$LHA_FILE" ]; then
+            LHA_NAME=$(basename "$LHA_FILE")
+            curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${LHA_FILE}" "${FTP_URL}/${LHA_NAME}" >/dev/null 2>&1 || true
         fi
         echo "[+] Amiga FTP updated successfully!"
     fi
 fi
 
-echo "Build complete: VortexBrowser 0.99 RC2 (Newlib) created!"
+echo "Build complete: VortexBrowser 0.99 RC3 (Universal + AltiVec + MUI) created!"

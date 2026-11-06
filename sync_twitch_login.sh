@@ -8,7 +8,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SERVER_IP="${VORTEX_SERVER_IP:-192.168.178.2}"
+SERVER_IP="${VORTEX_SERVER_IP:-127.0.0.1}"
 TOKEN=""
 TW_USER=""
 RESTORE_PC=0
