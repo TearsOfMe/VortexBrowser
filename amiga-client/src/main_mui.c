@@ -214,6 +214,12 @@ int main(int argc, char **argv)
             gui_mui_handle_action(&g_app, id);
         }
 
+        if (g_app.reopen_gui_needed && g_app.running) {
+            g_app.reopen_gui_needed = FALSE;
+            gui_mui_rebuild_quicklinks(&g_app);
+            gui_mui_rebuild_fav_cycle(&g_app);
+        }
+
         gui_mui_handle_events(&g_app);
         audio_poll(&g_app);
         if (!g_app.running) break;

@@ -27,12 +27,18 @@ enum {
     GID_CONNECT,
     GID_MENU,
     GID_STATUS,
-    GID_GAUGE
+    GID_GAUGE,
+    GID_QUICK_ADD,
+    GID_QUICK_REMOVE,
+    GID_PREFS,
+    GID_QUICK_BASE = 50,
+    GID_QUICK_MAX  = 50 + VB_MAX_QUICKLINKS
 };
 
 /* Menu IDs */
 enum {
     MID_PROJECT = 100,
+    MID_SETTINGS,
     MID_ABOUT,
     MID_CLEAR_CACHE,
     MID_QUIT,
@@ -46,6 +52,8 @@ enum {
 
     MID_BOOKMARKS,
     MID_ADD_FAV,
+    MID_QUICK_ADD,
+    MID_QUICK_REMOVE,
     MID_BM_AMIGANEWS,
     MID_BM_OS4DEPOT,
     MID_BM_AMIGANS,
@@ -73,5 +81,6 @@ void gui_mui_handle_action(VortexApp *app, uint32 action_id);
 void gui_mui_flush_dirty(VortexApp *app);
 void gui_mui_update_url_bar(VortexApp *app, const char *url);
 void gui_mui_rebuild_fav_cycle(VortexApp *app);
+void gui_mui_rebuild_quicklinks(VortexApp *app);
 
 #endif /* VORTEXBROWSE_GUI_MUI_H */

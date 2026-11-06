@@ -34,7 +34,7 @@ LDFLAGS = -L$(SDK)/local/newlib/lib -llz4 -ljpeg -lauto
 
 SRCS_COMMON = src/net.c src/renderer.c src/favorites.c src/download.c src/audio.c src/prefs.c src/clipboard.c src/passwords.c
 SRCS_ALL    = src/main.c src/gui.c src/gui_prefs.c src/gui_passwords.c src/gui_download.c $(SRCS_COMMON)
-SRCS_MUI    = src/main_mui.c src/gui_mui.c $(SRCS_COMMON)
+SRCS_MUI    = src/main_mui.c src/gui_mui.c src/gui_prefs.c $(SRCS_COMMON)
 
 # Universal objects (Hybrid: scalar app code + isolated AltiVec SIMD unit for dynamic dispatch)
 OBJS_UNIVERSAL = $(SRCS_ALL:.c=.o) src/renderer_altivec.o

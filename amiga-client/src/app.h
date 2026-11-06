@@ -197,6 +197,11 @@ typedef struct VortexApp {
     Object        *mui_gauge;
     Object        *mui_fav_cycle;
     Object        *mui_server_cycle;
+    Object        *mui_quick_group;
+    Object        *mui_quick_btn[VB_MAX_QUICKLINKS];
+    Object        *mui_btn_add_ql;
+    Object        *mui_btn_rem_ql;
+    Object        *mui_btn_prefs;
     char         **mui_fav_entries;
     int            mui_fav_entries_count;
     struct IBox    mui_viewport_box;

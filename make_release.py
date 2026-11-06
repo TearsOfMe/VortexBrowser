@@ -624,6 +624,20 @@ print("=== [2/6] Copying AmigaOS 4 Client Binaries and Icons ===")
 shutil.copy2("amiga-client/VortexBrowser.stripped", os.path.join(AMIGA_DRAWER, APP_NAME))
 shutil.copy2("amiga-client/VortexBrowser.info", os.path.join(AMIGA_DRAWER, f"{APP_NAME}.info"))
 
+if os.path.exists("amiga-client/VortexBrowser-AltiVec.stripped"):
+    shutil.copy2("amiga-client/VortexBrowser-AltiVec.stripped", os.path.join(AMIGA_DRAWER, "VortexBrowser-AltiVec"))
+    if os.path.exists("amiga-client/VortexBrowser-AltiVec.info"):
+        shutil.copy2("amiga-client/VortexBrowser-AltiVec.info", os.path.join(AMIGA_DRAWER, "VortexBrowser-AltiVec.info"))
+    else:
+        shutil.copy2("amiga-client/VortexBrowser.info", os.path.join(AMIGA_DRAWER, "VortexBrowser-AltiVec.info"))
+
+if os.path.exists("amiga-client/VortexBrowser-MUI.stripped"):
+    shutil.copy2("amiga-client/VortexBrowser-MUI.stripped", os.path.join(AMIGA_DRAWER, "VortexBrowser-MUI"))
+    if os.path.exists("amiga-client/VortexBrowser-MUI.info"):
+        shutil.copy2("amiga-client/VortexBrowser-MUI.info", os.path.join(AMIGA_DRAWER, "VortexBrowser-MUI.info"))
+    else:
+        shutil.copy2("amiga-client/VortexBrowser.info", os.path.join(AMIGA_DRAWER, "VortexBrowser-MUI.info"))
+
 # Copy Icons to icons/
 for icon in os.listdir("amiga-client/icons"):
     if icon.endswith(".png"):

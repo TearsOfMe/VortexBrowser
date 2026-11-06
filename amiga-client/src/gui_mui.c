@@ -21,6 +21,7 @@
 
 #include "app.h"
 #include "gui_mui.h"
+#include "gui_prefs.h"
 #include "net.h"
 #include "renderer.h"
 #include "favorites.h"
@@ -48,6 +49,7 @@ static const char *s_server_entries[] = {
 
 static struct NewMenu s_mui_menu[] = {
     { NM_TITLE, (char *)"Projekt", NULL, 0, 0, (APTR)MID_PROJECT },
+    { NM_ITEM,  (char *)"Einstellungen...", (char *)"E", 0, 0, (APTR)MID_SETTINGS },
     { NM_ITEM,  (char *)"Ueber VortexBrowse...", (char *)"?", 0, 0, (APTR)MID_ABOUT },
     { NM_ITEM,  (char *)"Cache / Speicher leeren", (char *)"K", 0, 0, (APTR)MID_CLEAR_CACHE },
     { NM_ITEM,  NM_BARLABEL, NULL, 0, 0, (APTR)0 },
@@ -62,6 +64,8 @@ static struct NewMenu s_mui_menu[] = {
 
     { NM_TITLE, (char *)"Lesezeichen", NULL, 0, 0, (APTR)MID_BOOKMARKS },
     { NM_ITEM,  (char *)"Aktuelle Seite hinzufuegen (+Fav)", (char *)"+", 0, 0, (APTR)MID_ADD_FAV },
+    { NM_ITEM,  (char *)"Schnellwahl hinzufuegen (+Quick)", NULL, 0, 0, (APTR)MID_QUICK_ADD },
+    { NM_ITEM,  (char *)"Schnellwahl entfernen (-Quick)", NULL, 0, 0, (APTR)MID_QUICK_REMOVE },
     { NM_ITEM,  NM_BARLABEL, NULL, 0, 0, (APTR)0 },
     { NM_ITEM,  (char *)"Amiga-News.de", (char *)"1", 0, 0, (APTR)MID_BM_AMIGANEWS },
     { NM_ITEM,  (char *)"OS4Depot.net", (char *)"2", 0, 0, (APTR)MID_BM_OS4DEPOT },
@@ -460,6 +464,260 @@ void gui_mui_rebuild_fav_cycle(VortexApp *app)
     }
 }
 
+static BOOL resolve_icon_path(const char *icon_name, const char *url, char *out_spec, size_t max_len)
+{
+    char domain_cand[64];
+    domain_cand[0] = '\0';
+    if (url && url[0] != '\0') {
+        const char *p = url;
+        if (strncmp(p, "http://", 7) == 0) p += 7;
+        else if (strncmp(p, "https://", 8) == 0) p += 8;
+        if (strncmp(p, "www.", 4) == 0) p += 4;
+        else if (strncmp(p, "m.", 2) == 0) p += 2;
+        else if (strncmp(p, "de.", 3) == 0) p += 3;
+        size_t di = 0;
+        while (*p && *p != '.' && *p != '/' && *p != ':' && di < sizeof(domain_cand) - 1) {
+            domain_cand[di++] = *p++;
+        }
+        domain_cand[di] = '\0';
+    }
+
+    const char *cand[10];
+    int num_c = 0;
+    if (icon_name && icon_name[0] != '\0') cand[num_c++] = icon_name;
+    if (domain_cand[0] != '\0')            cand[num_c++] = domain_cand;
+    cand[num_c++] = "bookmark";
+    cand[num_c++] = "globe";
+    cand[num_c++] = "drawer";
+    cand[num_c++] = "favorite";
+
+    const char *prefixes[2] = { "PROGDIR:icons/", "TBIMAGES:" };
+
+    for (int i = 0; i < num_c; i++) {
+        for (int d = 0; d < 2; d++) {
+            char path[160];
+            snprintf(path, sizeof(path), "%s%s.png", prefixes[d], cand[i]);
+            BPTR lk = IDOS ? IDOS->Lock(path, SHARED_LOCK) : ZERO;
+            if (lk != ZERO) {
+                IDOS->UnLock(lk);
+                snprintf(out_spec, max_len, "5:%s", path);
+                return TRUE;
+            }
+            snprintf(path, sizeof(path), "%s%s", prefixes[d], cand[i]);
+            lk = IDOS ? IDOS->Lock(path, SHARED_LOCK) : ZERO;
+            if (lk != ZERO) {
+                IDOS->UnLock(lk);
+                snprintf(out_spec, max_len, "5:%s", path);
+                return TRUE;
+            }
+        }
+    }
+    return FALSE;
+}
+
+static APTR make_quicklink_button(const char *label, const char *url, const char *icon_name)
+{
+    char icon_spec[180];
+    BOOL has_icon = resolve_icon_path(icon_name, url, icon_spec, sizeof(icon_spec));
+
+    APTR btn = NULL;
+    if (has_icon) {
+        APTR img = ImageObject,
+            MUIA_Image_Spec, icon_spec,
+            MUIA_Image_CopySpec, TRUE,
+            MUIA_Image_FontMatchHeight, TRUE,
+            MUIA_Image_FreeHoriz, FALSE,
+            MUIA_Image_FreeVert, FALSE,
+        End;
+
+        btn = HGroup,
+            MUIA_Frame, MUIV_Frame_Button,
+            MUIA_Background, MUII_ButtonBack,
+            MUIA_InputMode, MUIV_InputMode_RelVerify,
+            MUIA_ShortHelp, url ? (STRPTR)url : NULL,
+            Child, img,
+            Child, TextObject,
+                MUIA_Text_Contents, label ? (STRPTR)label : "",
+                MUIA_Text_PreParse, "\33c",
+            End,
+        End;
+    } else {
+        btn = TextObject,
+            ButtonFrame,
+            MUIA_Font, MUIV_Font_Button,
+            MUIA_Text_Contents, label ? (STRPTR)label : "",
+            MUIA_Text_PreParse, "\33c",
+            MUIA_InputMode, MUIV_InputMode_RelVerify,
+            MUIA_Background, MUII_ButtonBack,
+            MUIA_ShortHelp, url ? (STRPTR)url : NULL,
+        End;
+    }
+    return btn;
+}
+
+void gui_mui_rebuild_quicklinks(VortexApp *app)
+{
+    if (!app || !app->mui_quick_group) return;
+
+    if (DoMethod(app->mui_quick_group, MUIM_Group_InitChange)) {
+        for (int i = 0; i < VB_MAX_QUICKLINKS; i++) {
+            if (app->mui_quick_btn[i]) {
+                DoMethod(app->mui_quick_group, OM_REMMEMBER, app->mui_quick_btn[i]);
+                MUI_DisposeObject(app->mui_quick_btn[i]);
+                app->mui_quick_btn[i] = NULL;
+            }
+        }
+        if (app->mui_btn_add_ql) {
+            DoMethod(app->mui_quick_group, OM_REMMEMBER, app->mui_btn_add_ql);
+            MUI_DisposeObject(app->mui_btn_add_ql);
+            app->mui_btn_add_ql = NULL;
+        }
+        if (app->mui_btn_rem_ql) {
+            DoMethod(app->mui_quick_group, OM_REMMEMBER, app->mui_btn_rem_ql);
+            MUI_DisposeObject(app->mui_btn_rem_ql);
+            app->mui_btn_rem_ql = NULL;
+        }
+        if (app->mui_btn_prefs) {
+            DoMethod(app->mui_quick_group, OM_REMMEMBER, app->mui_btn_prefs);
+            MUI_DisposeObject(app->mui_btn_prefs);
+            app->mui_btn_prefs = NULL;
+        }
+
+        for (int i = 0; i < app->prefs.num_quick_links && i < VB_MAX_QUICKLINKS; i++) {
+            app->mui_quick_btn[i] = make_quicklink_button(
+                app->prefs.quick_links[i].label,
+                app->prefs.quick_links[i].url,
+                app->prefs.quick_links[i].icon
+            );
+            if (app->mui_quick_btn[i]) {
+                DoMethod(app->mui_quick_group, OM_ADDMEMBER, app->mui_quick_btn[i]);
+                DoMethod(app->mui_quick_btn[i], MUIM_Notify, MUIA_Pressed, FALSE,
+                         app->mui_app, 2, MUIM_Application_ReturnID, GID_QUICK_BASE + i);
+            }
+        }
+
+        app->mui_btn_add_ql = SimpleButton("+");
+        if (app->mui_btn_add_ql) {
+            DoMethod(app->mui_quick_group, OM_ADDMEMBER, app->mui_btn_add_ql);
+            DoMethod(app->mui_btn_add_ql, MUIM_Notify, MUIA_Pressed, FALSE,
+                     app->mui_app, 2, MUIM_Application_ReturnID, GID_QUICK_ADD);
+        }
+
+        app->mui_btn_rem_ql = SimpleButton("-");
+        if (app->mui_btn_rem_ql) {
+            DoMethod(app->mui_quick_group, OM_ADDMEMBER, app->mui_btn_rem_ql);
+            DoMethod(app->mui_btn_rem_ql, MUIM_Notify, MUIA_Pressed, FALSE,
+                     app->mui_app, 2, MUIM_Application_ReturnID, GID_QUICK_REMOVE);
+        }
+
+        app->mui_btn_prefs = SimpleButton("Prefs");
+        if (app->mui_btn_prefs) {
+            DoMethod(app->mui_quick_group, OM_ADDMEMBER, app->mui_btn_prefs);
+            DoMethod(app->mui_btn_prefs, MUIM_Notify, MUIA_Pressed, FALSE,
+                     app->mui_app, 2, MUIM_Application_ReturnID, GID_PREFS);
+        }
+
+        DoMethod(app->mui_quick_group, MUIM_Group_ExitChange);
+    }
+}
+
+static void prompt_add_quicklink_mui(VortexApp *app)
+{
+    if (!app) return;
+
+    char *url_buf = NULL;
+    get(app->mui_url, MUIA_String_Contents, &url_buf);
+    const char *u = (url_buf && url_buf[0] != '\0') ? url_buf : app->current_url;
+
+    if (!u || u[0] == '\0') {
+        gui_prefs_open(app);
+        return;
+    }
+
+    char label[32];
+    const char *p = u;
+    if (strncmp(p, "http://", 7) == 0) p += 7;
+    else if (strncmp(p, "https://", 8) == 0) p += 8;
+    if (strncmp(p, "www.", 4) == 0) p += 4;
+    strncpy(label, p, sizeof(label) - 1);
+    label[sizeof(label) - 1] = '\0';
+    char *slash = strchr(label, '/');
+    if (slash) *slash = '\0';
+    if (label[0] == '\0') strncpy(label, "Link", sizeof(label) - 1);
+
+    struct EasyStruct es = {
+        sizeof(struct EasyStruct),
+        0,
+        "Schnellwahl hinzufuegen",
+        "Moechten Sie diese Seite zur Schnellwahl hinzufuegen?\n\nTitel: %s\nURL: %s",
+        "Hinzufuegen|Schnellwahl anpassen...|Abbrechen"
+    };
+
+    LONG res = IIntuition->EasyRequest(app->win, &es, NULL, label, u);
+    if (res == 1) {
+        if (prefs_quicklink_add(app, label, u, "bookmark")) {
+            prefs_save(app, TRUE);
+            app_set_status("Schnellwahl hinzugefuegt: %s", label);
+            gui_mui_rebuild_quicklinks(app);
+        } else {
+            app_set_status("Schnellwahl-Leiste voll (max. %d)!", VB_MAX_QUICKLINKS);
+        }
+    } else if (res == 2) {
+        gui_prefs_open(app);
+    }
+}
+
+static void remove_current_quicklink_mui(VortexApp *app)
+{
+    if (!app || app->prefs.num_quick_links <= 0) {
+        app_set_status("Keine Schnellwahl zum Entfernen vorhanden.");
+        return;
+    }
+
+    int target_idx = -1;
+    char *url_buf = NULL;
+    get(app->mui_url, MUIA_String_Contents, &url_buf);
+    const char *cur = (url_buf && url_buf[0] != '\0') ? url_buf : app->current_url;
+
+    if (cur && cur[0] != '\0') {
+        for (int i = 0; i < app->prefs.num_quick_links; i++) {
+            if (strcasecmp(app->prefs.quick_links[i].url, cur) == 0) {
+                target_idx = i;
+                break;
+            }
+        }
+    }
+
+    if (target_idx < 0 && app->active_quicklink_idx >= 0 && app->active_quicklink_idx < app->prefs.num_quick_links) {
+        target_idx = app->active_quicklink_idx;
+    }
+
+    if (target_idx < 0) {
+        target_idx = app->prefs.num_quick_links - 1;
+    }
+
+    char rem_name[80];
+    snprintf(rem_name, sizeof(rem_name), "%s", app->prefs.quick_links[target_idx].label);
+
+    for (int j = target_idx; j < app->prefs.num_quick_links - 1; j++) {
+        app->prefs.quick_links[j] = app->prefs.quick_links[j + 1];
+    }
+    app->prefs.num_quick_links--;
+    app->active_quicklink_idx = -1;
+    prefs_save(app, TRUE);
+
+    gui_mui_rebuild_quicklinks(app);
+
+    if (app->prefs.num_quick_links == 0) {
+        gui_mui_update_url_bar(app, "@HOME");
+        net_send_url(app, "@HOME");
+        app_set_status("Schnellwahl entfernt: %s (Startseite geladen)", rem_name);
+    } else {
+        app_set_status("Schnellwahl entfernt: %s", rem_name);
+    }
+}
+
+
 BOOL gui_mui_init(VortexApp *app)
 {
     if (!IMUIMaster) {
@@ -479,7 +737,6 @@ BOOL gui_mui_init(VortexApp *app)
 
     APTR btn_back, btn_fwd, btn_reload, btn_stop, btn_home;
     APTR btn_clear_url, btn_go, btn_search_go;
-    APTR btn_bm_an, btn_bm_os4, btn_bm_ans, btn_bm_net, btn_bm_yt, btn_bm_wiki;
     APTR btn_add_fav, btn_connect, btn_menu;
     APTR row1, row2, status_row;
 
@@ -512,15 +769,21 @@ BOOL gui_mui_init(VortexApp *app)
     End;
 
     /* ------------------------------------------------------------------------
-     * Row 2: Bookmarks, Lesezeichen Cycle & Server Chooser
+     * Row 2: Schnellwahl / Quicklinks, Lesezeichen Cycle & Server Chooser
      * ------------------------------------------------------------------------ */
+    app->mui_quick_group = HGroup,
+        MUIA_Group_Horiz, TRUE,
+    End;
+
+    for (int i = 0; i < VB_MAX_QUICKLINKS; i++) {
+        app->mui_quick_btn[i] = NULL;
+    }
+    app->mui_btn_add_ql = NULL;
+    app->mui_btn_rem_ql = NULL;
+    app->mui_btn_prefs  = NULL;
+
     row2 = HGroup,
-        Child, btn_bm_an           = SimpleButton("Amiga-News"),
-        Child, btn_bm_os4          = SimpleButton("OS4Depot"),
-        Child, btn_bm_ans          = SimpleButton("Amigans"),
-        Child, btn_bm_net          = SimpleButton("Aminet"),
-        Child, btn_bm_yt           = SimpleButton("YouTube"),
-        Child, btn_bm_wiki         = SimpleButton("Wikipedia"),
+        Child, app->mui_quick_group,
         Child, btn_add_fav         = SimpleButton("+Lesez."),
         Child, app->mui_fav_cycle  = CycleObject,
             MUIA_Cycle_Entries, app->mui_fav_entries,
@@ -602,13 +865,8 @@ BOOL gui_mui_init(VortexApp *app)
     DoMethod(btn_go,        MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_GO);
     DoMethod(btn_search_go, MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_SEARCH_GO);
 
-    /* Bookmarks Toolbar */
-    DoMethod(btn_bm_an,   MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_BM_AMIGANEWS);
-    DoMethod(btn_bm_os4,  MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_BM_OS4DEPOT);
-    DoMethod(btn_bm_ans,  MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_BM_AMIGANS);
-    DoMethod(btn_bm_net,  MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_BM_AMINET);
-    DoMethod(btn_bm_yt,   MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_BM_YOUTUBE);
-    DoMethod(btn_bm_wiki, MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_BM_WIKI);
+    /* Populate Dynamic Quicklinks with Favicons */
+    gui_mui_rebuild_quicklinks(app);
 
     DoMethod(btn_add_fav, MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_ADD_FAV);
     DoMethod(btn_menu,    MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_MENU);
@@ -935,7 +1193,32 @@ void gui_mui_handle_action(VortexApp *app, uint32 action_id)
             app->running = FALSE;
             break;
 
+        case GID_QUICK_ADD:
+        case MID_QUICK_ADD:
+            prompt_add_quicklink_mui(app);
+            break;
+
+        case GID_QUICK_REMOVE:
+        case MID_QUICK_REMOVE:
+            remove_current_quicklink_mui(app);
+            break;
+
+        case GID_PREFS:
+        case MID_SETTINGS:
+            gui_prefs_open(app);
+            break;
+
         default:
+            if (action_id >= GID_QUICK_BASE && action_id < GID_QUICK_BASE + app->prefs.num_quick_links) {
+                int qidx = (int)(action_id - GID_QUICK_BASE);
+                const char *u = app->prefs.quick_links[qidx].url;
+                if (u && u[0] != '\0') {
+                    app->active_quicklink_idx = qidx;
+                    gui_mui_update_url_bar(app, u);
+                    net_send_url(app, u);
+                    app_set_status("Schnellstart: %s", app->prefs.quick_links[qidx].label);
+                }
+            }
             break;
     }
 }
