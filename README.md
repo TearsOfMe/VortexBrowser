@@ -49,7 +49,7 @@ VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwrigh
 
 - `amiga-client/`: Quelltext und Assets des AmigaOS 4 Clients
 - `cachyos-linux-server/`: High-End Rendering-Server für CachyOS / Arch / Fedora (Ryzen PRO, AVX2, powerprofilesctl)
-- `pi-server/`: Standard-Linux-Server (x86_64 / ARM64)
+- `Linux server/`: Standard-Linux-Server (x86_64 / ARM64)
 - `rpi4-server/`: Optimierter Server für Raspberry Pi 4 / 5
 - `make_release.py`: Erstellt automatisch alle fertigen Release-Archive (`.lha`, `.zip`)
 
