@@ -221,6 +221,29 @@ fi
 
 chmod +x run_server.sh
 
+CURRENT_USER="${SUDO_USER:-$(id -un)}"
+cat <<EOF > vortexbrowser.service
+[Unit]
+Description=VortexBrowser Server for AmigaOS 4
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=$CURRENT_USER
+WorkingDirectory=$SCRIPT_DIR
+Environment=PYTHONUNBUFFERED=1
+Environment=OMP_NUM_THREADS=4
+Environment=XDG_RUNTIME_DIR=/run/user/\$(id -u "$CURRENT_USER" 2>/dev/null || echo 1000)
+ExecStart=$SCRIPT_DIR/run_server.sh
+Restart=always
+RestartSec=2
+Nice=-5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
 IP_ADDR=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "192.168.178.2")
 
 echo ""

@@ -83,8 +83,8 @@ if [ -z "$AMIGA_FTP_AUTH" ]; then
     fi
 fi
 
-if [ -n "$AMIGA_FTP_AUTH" ] && [ -n "${AMIGA_FTP_HOST:-192.168.178.15}" ]; then
-    FTP_HOST="${AMIGA_FTP_HOST:-192.168.178.15}"
+if [ -n "$AMIGA_FTP_AUTH" ] && [ -n "$AMIGA_FTP_HOST" ]; then
+    FTP_HOST="$AMIGA_FTP_HOST"
     FTP_BASE_DIR="${AMIGA_FTP_DIR:-/Work2/VortexBrowser}"
     FTP_URL="ftp://${FTP_HOST}${FTP_BASE_DIR}"
 
