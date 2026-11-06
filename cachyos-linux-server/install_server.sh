@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# VortexBrowser Server - CachyOS & HP EliteDesk 805 G6 (AMD Ryzen PRO) Installer
+# VortexBrowser Server - CachyOS-Linux Installer
 # ==============================================================================
 set -e
 
@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 echo "============================================================================"
-echo "  VortexBrowser Server - CachyOS HP EliteDesk 805 G6 (1080p@25fps) Setup    "
+echo "  VortexBrowser Server - CachyOS Linux (1080p@25fps) Setup    "
 echo "============================================================================"
 
 # 1. Systempakete pruefen und nur bei Bedarf installieren

@@ -1,7 +1,7 @@
 # VortexBrowser – High-Performance Headless Web Browser Streaming System
-**(Linux PC / CachyOS HP EliteDesk / Raspberry Pi 4/5 Server $\rightarrow$ AmigaOS 4.1 PowerPC Client)**
+**(Linux PC / CachyOS-Linux / Raspberry Pi 4/5 Server $\rightarrow$ AmigaOS 4.1 PowerPC Client)**
 
-VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwright / Rustwright + DirectCDP WebSocket) auf einem **Linux-Server** (Standard-PC, AMD Ryzen HP EliteDesk oder Raspberry Pi 4/5) und streamt die Bilddaten hocheffizient komprimiert per **Planar YUV420P + 2D Dirty-Rect + LZ4** an einen nativen **AmigaOS 4.1 PowerPC Reaction-Client**.
+VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwright / Rustwright + DirectCDP WebSocket) auf einem **Linux-Server** (Standard-PC, CachyOS-Linux PC oder Raspberry Pi 4/5) und streamt die Bilddaten hocheffizient komprimiert per **Planar YUV420P + 2D Dirty-Rect + LZ4** an einen nativen **AmigaOS 4.1 PowerPC Reaction-Client**.
 
 ---
 
@@ -48,7 +48,7 @@ VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwrigh
 ## Verzeichnisstruktur des Gesamtpakets
 
 - `amiga-client/`: Quelltext und Assets des AmigaOS 4 Clients
-- `cachyos-elitedesk-server/`: High-End Rendering-Server für CachyOS / Arch / Fedora (Ryzen PRO, AVX2, powerprofilesctl)
+- `cachyos-linux-server/`: High-End Rendering-Server für CachyOS / Arch / Fedora (Ryzen PRO, AVX2, powerprofilesctl)
 - `pi-server/`: Standard-Linux-Server (x86_64 / ARM64)
 - `rpi4-server/`: Optimierter Server für Raspberry Pi 4 / 5
 - `make_release.py`: Erstellt automatisch alle fertigen Release-Archive (`.lha`, `.zip`)
@@ -59,13 +59,13 @@ VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwrigh
 
 ### 1. Release-Pakete schnüren
 ```bash
-# Kompiliert das SIMD-Modul und baut alle Release-Archive (LHA für Amiga, ZIPs für Linux/Pi/EliteDesk)
+# Kompiliert das SIMD-Modul und baut alle Release-Archive (LHA für Amiga, ZIPs für Linux/Pi/CachyOS)
 python3 make_release.py
 ```
 
 ### 2. Server starten (Linux PC, CachyOS oder Raspberry Pi)
 ```bash
-cd cachyos-elitedesk-server   # oder pi-server / rpi4-server
+cd cachyos-linux-server   # oder pi-server / rpi4-server
 ./install_server.sh           # Einmalige automatische Einrichtung
 ./run_server.sh               # Server starten
 ```

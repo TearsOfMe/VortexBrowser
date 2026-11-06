@@ -49,7 +49,7 @@ if [ "$IS_LOCAL" -eq 1 ]; then
     if [ -n "$TOKEN" ]; then
         ARGS+=("--token" "$TOKEN")
     fi
-    exec "$PYTHON" cachyos-elitedesk-server/sync_twitch_login.py "${ARGS[@]}"
+    exec "$PYTHON" cachyos-linux-server/sync_twitch_login.py "${ARGS[@]}"
 fi
 
 # We are on the workstation/client machine connecting to remote server
@@ -99,10 +99,10 @@ fi
 
 # 2. Deploy script to server and execute
 echo "[*] Synchronizing sync script to server..."
-scp "${SCRIPT_DIR}/cachyos-elitedesk-server/sync_twitch_login.py" "root@${SERVER_IP}:/home/tears/Server-CachyOS-EliteDesk/sync_twitch_login.py" >/dev/null
+scp "${SCRIPT_DIR}/cachyos-linux-server/sync_twitch_login.py" "root@${SERVER_IP}:$HOME/Server-CachyOS-Linux/sync_twitch_login.py" >/dev/null
 
 echo "[*] Executing login synchronization on server..."
-REMOTE_CMD="python3 /home/tears/Server-CachyOS-EliteDesk/sync_twitch_login.py"
+REMOTE_CMD="python3 $HOME/Server-CachyOS-Linux/sync_twitch_login.py"
 if [ -n "$TOKEN" ]; then
     REMOTE_CMD="${REMOTE_CMD} --token ${TOKEN}"
 fi

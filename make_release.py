@@ -16,6 +16,7 @@ RELEASE_DATE = "29.10.2026"
 STAGING_DIR = os.path.join(DIST_DIR, "staging")
 AMIGA_DRAWER = os.path.join(STAGING_DIR, "VortexBrowser")
 SERVER_LINUX_DRAWER = os.path.join(STAGING_DIR, "Server-Linux")
+SERVER_CACHYOS_DRAWER = os.path.join(STAGING_DIR, "Server-CachyOS-Linux")
 SERVER_RPI4_DRAWER = os.path.join(STAGING_DIR, "Server-RaspberryPi4")
 
 print(f"=== [1/6] Preparing Staging Directories for {APP_NAME} {VER_STR} ===")
@@ -24,6 +25,7 @@ if os.path.exists(DIST_DIR):
 os.makedirs(AMIGA_DRAWER, exist_ok=True)
 os.makedirs(os.path.join(AMIGA_DRAWER, "icons"), exist_ok=True)
 os.makedirs(SERVER_LINUX_DRAWER, exist_ok=True)
+os.makedirs(SERVER_CACHYOS_DRAWER, exist_ok=True)
 os.makedirs(SERVER_RPI4_DRAWER, exist_ok=True)
 
 # -------------------------------------------------------------
@@ -793,6 +795,24 @@ os.chmod(os.path.join(SERVER_LINUX_DRAWER, "install_server.sh"), 0o755)
 with open(os.path.join(SERVER_LINUX_DRAWER, "vortexbrowser.service"), "w") as f:
     f.write(SYSTEMD_SERVICE)
 
+# Populate Server-CachyOS-Linux Drawer
+shutil.copy2("cachyos-linux-server/server.py", os.path.join(SERVER_CACHYOS_DRAWER, "server.py"))
+shutil.copy2("cachyos-linux-server/fast_pixconv.c", os.path.join(SERVER_CACHYOS_DRAWER, "fast_pixconv.c"))
+if os.path.exists("cachyos-linux-server/fast_pixconv.so"):
+    shutil.copy2("cachyos-linux-server/fast_pixconv.so", os.path.join(SERVER_CACHYOS_DRAWER, "fast_pixconv.so"))
+shutil.copy2("cachyos-linux-server/darkreader.js", os.path.join(SERVER_CACHYOS_DRAWER, "darkreader.js"))
+shutil.copy2("cachyos-linux-server/requirements.txt", os.path.join(SERVER_CACHYOS_DRAWER, "requirements.txt"))
+shutil.copy2("cachyos-linux-server/sync_twitch_login.py", os.path.join(SERVER_CACHYOS_DRAWER, "sync_twitch_login.py"))
+if os.path.exists("cachyos-linux-server/extensions"):
+    shutil.copytree("cachyos-linux-server/extensions", os.path.join(SERVER_CACHYOS_DRAWER, "extensions"), dirs_exist_ok=True)
+shutil.copy2("cachyos-linux-server/install_server.sh", os.path.join(SERVER_CACHYOS_DRAWER, "install_server.sh"))
+os.chmod(os.path.join(SERVER_CACHYOS_DRAWER, "install_server.sh"), 0o755)
+shutil.copy2("cachyos-linux-server/run_server.sh", os.path.join(SERVER_CACHYOS_DRAWER, "run_server.sh"))
+os.chmod(os.path.join(SERVER_CACHYOS_DRAWER, "run_server.sh"), 0o755)
+shutil.copy2("cachyos-linux-server/vortexbrowser.service", os.path.join(SERVER_CACHYOS_DRAWER, "vortexbrowser.service"))
+if os.path.exists("cachyos-linux-server/README_CACHYOS.md"):
+    shutil.copy2("cachyos-linux-server/README_CACHYOS.md", os.path.join(SERVER_CACHYOS_DRAWER, "README_CACHYOS.txt"))
+
 # Populate Server-RaspberryPi4 Drawer
 shutil.copy2("rpi4-server/server.py", os.path.join(SERVER_RPI4_DRAWER, "server.py"))
 shutil.copy2("rpi4-server/fast_pixconv.c", os.path.join(SERVER_RPI4_DRAWER, "fast_pixconv.c"))
@@ -835,14 +855,17 @@ auf AmigaOS 4.1 sowie dem Rendering-Server auf Linux oder Raspberry Pi 4/5.
 VERZEICHNISSTRUKTUR:
 --------------------
 - {APP_NAME}/          : Der vollstaendige AmigaOS 4 Client-Ordner
-  * {APP_NAME}         : Ausfuehrbares Programm (Newlib-Version)
+  * {APP_NAME}         : Ausfuehrbares Programm (ReAction Standard)
+  * {APP_NAME}-AltiVec : Ausfuehrbares Programm (PowerPC G4 AltiVec SIMD)
+  * {APP_NAME}-MUI     : Ausfuehrbares Programm (MUI 4/5 Oberflaeche)
   * {APP_NAME}.info    : Echtes AmigaOS 4 Icon im VideoVortex-Look
   * {APP_NAME}.guide   : Ausfuehrliches AmigaGuide-Handbuch
   * LIESMICH.txt       : Deutsche Kurzanleitung
   * README.txt         : Englische Kurzanleitung
   * icons/             : Symbolleisten-Icons
 - {APP_NAME}.info      : Workbench-Ordner-Icon fuer den Client-Ordner
-- Server-Linux/        : Der Rendering-Server fuer Linux PC (x86_64)
+- Server-Linux/        : Der Rendering-Server fuer Standard-Linux-PCs (x86_64)
+- Server-CachyOS-Linux/: High-Performance Server fuer CachyOS/Arch (Full HD 1080p, AVX2, AMD/Intel GPU)
 - Server-RaspberryPi4/ : Der Rendering-Server optimiert fuer Raspberry Pi 4/5 (ARM64)
 
 SCHNELLSTART:
@@ -888,6 +911,18 @@ with zipfile.ZipFile(LINUX_ZIP, "w", zipfile.ZIP_DEFLATED) as zf:
             rel_path = os.path.join("Server-Linux", os.path.relpath(full_path, SERVER_LINUX_DRAWER))
             zf.write(full_path, rel_path)
 print(f"[+] Created Linux Server Zip: {LINUX_ZIP} ({os.path.getsize(LINUX_ZIP)} bytes)")
+
+# -------------------------------------------------------------
+# Create 2b: CachyOS-Linux Server Zip Archive
+# -------------------------------------------------------------
+CACHYOS_ZIP = os.path.join(DIST_DIR, f"{APP_NAME}-{VER_STR}-CachyOS-Linux.zip")
+with zipfile.ZipFile(CACHYOS_ZIP, "w", zipfile.ZIP_DEFLATED) as zf:
+    for root, dirs, files in os.walk(SERVER_CACHYOS_DRAWER):
+        for file in files:
+            full_path = os.path.join(root, file)
+            rel_path = os.path.join("Server-CachyOS-Linux", os.path.relpath(full_path, SERVER_CACHYOS_DRAWER))
+            zf.write(full_path, rel_path)
+print(f"[+] Created CachyOS-Linux Server Zip: {CACHYOS_ZIP} ({os.path.getsize(CACHYOS_ZIP)} bytes)")
 
 # -------------------------------------------------------------
 # Create 3: Raspberry Pi 4 Server Zip Archive

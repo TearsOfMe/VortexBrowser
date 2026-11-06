@@ -13,14 +13,14 @@ gcc -O3 -march=native -shared -fPIC \
     "${SCRIPT_DIR}/pi-server/fast_pixconv.c" \
     -o "${SCRIPT_DIR}/pi-server/fast_pixconv.so"
 
-if [ -f "${SCRIPT_DIR}/cachyos-elitedesk-server/fast_pixconv.c" ]; then
+if [ -f "${SCRIPT_DIR}/cachyos-linux-server/fast_pixconv.c" ]; then
     gcc -O3 -march=znver2 -mtune=znver2 -mavx2 -mfma -fopenmp -DHAVE_TURBOJPEG_LZ4 -shared -fPIC \
-        "${SCRIPT_DIR}/cachyos-elitedesk-server/fast_pixconv.c" \
+        "${SCRIPT_DIR}/cachyos-linux-server/fast_pixconv.c" \
         -lturbojpeg -llz4 \
-        -o "${SCRIPT_DIR}/cachyos-elitedesk-server/fast_pixconv.so" 2>/dev/null || \
+        -o "${SCRIPT_DIR}/cachyos-linux-server/fast_pixconv.so" 2>/dev/null || \
     gcc -O3 -march=native -shared -fPIC \
-        "${SCRIPT_DIR}/cachyos-elitedesk-server/fast_pixconv.c" \
-        -o "${SCRIPT_DIR}/cachyos-elitedesk-server/fast_pixconv.so"
+        "${SCRIPT_DIR}/cachyos-linux-server/fast_pixconv.c" \
+        -o "${SCRIPT_DIR}/cachyos-linux-server/fast_pixconv.so"
 fi
 
 gcc -O3 -march=native -shared -fPIC \

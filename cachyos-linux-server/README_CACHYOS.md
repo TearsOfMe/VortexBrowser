@@ -1,4 +1,4 @@
-# VortexBrowser Server – CachyOS & HP EliteDesk 805 G6 (AMD Ryzen PRO) Edition
+# VortexBrowser Server – CachyOS-Linux Edition
 
 Spezial-Build des VortexBrowser Rendering-Servers für **CachyOS Linux** auf dem **HP EliteDesk 805 G6 Mini PC (AMD Ryzen 5 PRO / Ryzen 3 PRO 4000G Renoir APU mit Radeon Vega Grafik)**.
 
@@ -23,7 +23,7 @@ Spezial-Build des VortexBrowser Rendering-Servers für **CachyOS Linux** auf dem
 ## Installation & Start auf CachyOS (192.168.178.2)
 
 ```bash
-cd Server-CachyOS-EliteDesk
+cd Server-CachyOS-Linux
 ./install_server.sh
 ./run_server.sh
 ```

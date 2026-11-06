@@ -77,7 +77,7 @@ def load_cached_cookies(search_paths=None):
         search_paths = [
             os.path.join(os.path.dirname(os.path.abspath(__file__)), "twitch_cookies.json"),
             os.path.expanduser("~/.config/vortexbrowse/twitch_cookies.json"),
-            "/home/tears/Server-CachyOS-EliteDesk/twitch_cookies.json",
+            "$HOME/Server-CachyOS-Linux/twitch_cookies.json",
             "/tmp/twitch_cookies.json",
         ]
     for p in search_paths:
@@ -98,7 +98,7 @@ def load_token_text():
     search_paths = [
         os.path.join(os.path.dirname(os.path.abspath(__file__)), "twitch_token.txt"),
         os.path.expanduser("~/.config/vortexbrowse/twitch_token.txt"),
-        "/home/tears/Server-CachyOS-EliteDesk/twitch_token.txt",
+        "$HOME/Server-CachyOS-Linux/twitch_token.txt",
     ]
     for p in search_paths:
         if os.path.isfile(p):
@@ -240,7 +240,7 @@ async def sync_twitch(cookies_to_inject, token_val=None, login_user=None, cdp_ur
             target_dirs = [
                 os.path.expanduser("~/.config/vortexbrowse"),
                 "$HOME/.config/vortexbrowse",
-                "/home/tears/Server-CachyOS-EliteDesk",
+                "$HOME/Server-CachyOS-Linux",
             ]
             for cfg_dir in target_dirs:
                 if not os.path.exists(os.path.dirname(cfg_dir)):

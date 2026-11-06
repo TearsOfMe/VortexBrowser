@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# VortexBrowser Server - CachyOS & HP EliteDesk 805 G6 (AMD Ryzen PRO) Edition
+# VortexBrowser Server - CachyOS & CachyOS Linux Edition
 # Full HD (1920x1080) @ 25 FPS Startup Script
 # ==============================================================================
 set -e
@@ -43,7 +43,7 @@ if [ -f "browser_bin.txt" ]; then
 fi
 
 echo "============================================================================"
-echo " Starting VortexBrowser Server - CachyOS HP EliteDesk 805 G6 (AMD Ryzen PRO)"
+echo " Starting VortexBrowser Server - CachyOS CachyOS Linux"
 echo " Resolution: 1920x1080 (Full HD) @ 25 FPS | Format: YUV420P + 2D Dirty-Rect"
 echo " Engine: ${ENGINE} | Browser: ${SAVED_BIN:-System-Default}"
 echo " C-Native TurboJPEG + AVX2 + LZ4 Pipeline Active"
