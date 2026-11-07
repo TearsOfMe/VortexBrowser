@@ -16,8 +16,8 @@ Creates:
 
 Self-contained pure Python + Pillow writer (no external amigainfo dependency):
   - DiskObject + OS2/OS4 DrawerData (for WBDRAWER) + ToolTypes (for WBTOOL)
-  - Classic 8-bitplane planar fallback
-  - IFF FORM ICON: FACE (frameless) + IMAG (251-color GlowIcon) + ARGB (32-bit zlib OS4)
+  - Classic 2-bitplane planar fallback (matching AmigaOS 4.1 FE standard icons)
+  - IFF FORM ICON: FACE (0x02 truecolor mode) + ARGB (normal & selected 32-bit zlib OS4)
 """
 
 import os
@@ -205,75 +205,60 @@ def _iff_chunk(cid, payload):
     return cid + struct.pack(">I", len(payload)) + payload + pad
 
 
-def _encode_coloricon_imag(img):
+def _encode_classic_2bit(img):
+    """Encode standard 2-bitplane planar fallback matching official AmigaOS 4.1 FE icons."""
     w, h = img.size
-    r, g, b, a = img.split()
-    rgb = Image.merge("RGB", (r, g, b))
-    rgb_q = rgb.quantize(colors=250, method=Image.Quantize.MEDIANCUT)
-    pal_raw = rgb_q.getpalette()[:250 * 3]
-    if len(pal_raw) < 250 * 3:
-        pal_raw = pal_raw + [0] * (250 * 3 - len(pal_raw))
-    pal_bytes = bytes([0, 0, 0] + pal_raw)  # 251 * 3 = 753 bytes
-
-    a_bytes = a.tobytes()
-    q_bytes = rgb_q.tobytes()
-    px = bytearray(w * h)
-    for i in range(w * h):
-        px[i] = 0 if a_bytes[i] < 64 else (q_bytes[i] + 1)
-
-    # 10-byte ColorIcon IMAG header
-    hdr = struct.pack(
-        ">BBBBBBHH",
-        0,              # transparent index 0
-        250,            # num_colors - 1 (251 colors)
-        0x03,           # IMGF_TRANSPARENT | IMGF_COLORMAP
-        0,              # uncompressed pixels
-        0,              # uncompressed palette
-        8,              # depth = 8
-        w * h - 1,      # image bytes - 1
-        len(pal_bytes) - 1,
-    )
-    return hdr + bytes(px) + pal_bytes, bytes(px)
-
-
-def _encode_classic_image(px_indices, w, h):
+    rgba = img.tobytes()
     bpr = ((w + 15) // 16) * 2
-    planes = [bytearray(bpr * h) for _ in range(8)]
+    plane0 = bytearray(bpr * h)
+    plane1 = bytearray(bpr * h)
+
     for y in range(h):
-        row_off = y * w
+        row_px = y * w * 4
         p_row = y * bpr
         for x in range(w):
-            val = px_indices[row_off + x]
-            if val:
+            off = row_px + x * 4
+            r, g, b, a = rgba[off], rgba[off + 1], rgba[off + 2], rgba[off + 3]
+            if a < 96:
+                idx = 0  # Transparent background
+            else:
+                luma = (r * 77 + g * 150 + b * 29) >> 8
+                if luma < 85:
+                    idx = 1  # Dark / black pen
+                elif luma > 185:
+                    idx = 2  # Highlight / white pen
+                else:
+                    idx = 3  # Midtone / blue-accent pen
+            if idx:
                 byte_idx = p_row + (x >> 3)
                 mask = 1 << (7 - (x & 7))
-                for p in range(8):
-                    if (val >> p) & 1:
-                        planes[p][byte_idx] |= mask
-    # struct Image header (20 bytes) + 8 bitplanes
-    img_hdr = struct.pack(">hhhhHIBBI", 0, 0, w, h, 8, 1, 0xFF, 0x00, 0)
-    return img_hdr + b"".join(bytes(p) for p in planes)
+                if idx & 1:
+                    plane0[byte_idx] |= mask
+                if idx & 2:
+                    plane1[byte_idx] |= mask
+
+    # struct Image header (20 bytes): depth=2, ImageData=1 (non-null), PlanePick=0x03, PlaneOnOff=0x00
+    img_hdr = struct.pack(">hhhhHIBBI", 0, 0, w, h, 2, 1, 0x03, 0x00, 0)
+    return img_hdr + bytes(plane0) + bytes(plane1)
 
 
 def _encode_os4_argb(img):
+    """Encode AmigaOS 4.1 32-bit ARGB zlib chunk payload."""
     rgba = img.tobytes()
     argb = bytearray(len(rgba))
-    argb[0::4] = rgba[3::4]
-    argb[1::4] = rgba[0::4]
-    argb[2::4] = rgba[1::4]
-    argb[3::4] = rgba[2::4]
-    zdata = zlib.compress(bytes(argb), 9)
+    argb[0::4] = rgba[3::4]  # A
+    argb[1::4] = rgba[0::4]  # R
+    argb[2::4] = rgba[1::4]  # G
+    argb[3::4] = rgba[2::4]  # B
+    zdata = zlib.compress(bytes(argb))  # Standard zlib header 0x789c matching OS4 z.library
     hdr = struct.pack(">IIH", 1, len(zdata) - 1, 0)
     return hdr + zdata
 
 
 def write_amiga_info(im_norm, im_sel, icon_type, output_path, tooltypes=None, stack_size=200000):
     w, h = im_norm.size
-    imag_norm_bytes, px_norm = _encode_coloricon_imag(im_norm)
-    imag_sel_bytes, px_sel = _encode_coloricon_imag(im_sel)
-
-    classic_norm = _encode_classic_image(px_norm, w, h)
-    classic_sel = _encode_classic_image(px_sel, w, h)
+    classic_norm = _encode_classic_2bit(im_norm)
+    classic_sel = _encode_classic_2bit(im_sel)
 
     has_drawer = (icon_type == WBDRAWER)
     has_tt = bool(tooltypes)
@@ -287,10 +272,10 @@ def write_amiga_info(im_norm, im_sel, icon_type, output_path, tooltypes=None, st
         0x0006,     # Flags: GADGIMAGE | GADGHIMAGE
         0x0001,     # Activation: RELVERIFY
         0x0001,     # GadgetType: BOOLGADGET
-        1, 1,       # GadgetRender, SelectRender (non-zero pointers)
+        1, 1,       # GadgetRender, SelectRender (non-zero presence pointers)
         0, 0, 0,    # GadgetText, MutualExclude, SpecialInfo
         0,          # GadgetID
-        1,          # UserData = 1 (OS2.x DrawerData2 revision)
+        1,          # UserData = WB_DISKREVISION (1)
     )
 
     # struct DiskObject (4 + 44 + 30 = 78 bytes)
@@ -312,7 +297,7 @@ def write_amiga_info(im_norm, im_sel, icon_type, output_path, tooltypes=None, st
     if has_drawer:
         # 56-byte OldDrawerData (NewWindow 48B + dd_CurrentX/Y 8B) matching native OS4 drawers
         old_dd = bytes.fromhex(
-            "0050004001c00100ffff000000000200107f00000000000000000000000000000000000000000068005fffffffff0001"
+            "004d003201be00feffff000000000200107f00000000000000000000000000000000000000000068005fffffffff0001"
             "0000000000000000"
         )
         out.extend(old_dd)
@@ -330,14 +315,14 @@ def write_amiga_info(im_norm, im_sel, icon_type, output_path, tooltypes=None, st
         # 6-byte DrawerData2 (dd_Flags=2 show all files, dd_ViewModes=1 icon view)
         out.extend(b"\x00\x00\x00\x02\x00\x01")
 
-    # IFF FORM ICON (FACE frameless + ColorIcon IMAG + OS4 32-bit ARGB)
-    face_chunk = _iff_chunk(b"FACE", bytes([w - 1, h - 1, 0x02, 0x00, 0x00, 250]))
-    imag1_chunk = _iff_chunk(b"IMAG", imag_norm_bytes)
-    imag2_chunk = _iff_chunk(b"IMAG", imag_sel_bytes)
+    # Genuine AmigaOS 4.1 IFF FORM ICON:
+    # Note: In OS4 icon.library, FACE.flags bit 1 (0x02) selects 32-bit ARGB mode and MUST NOT
+    # be mixed with 8-bit IMAG chunks (otherwise icon.library aborts with ERROR_OBJECT_WRONG_TYPE=212).
+    face_chunk = _iff_chunk(b"FACE", bytes([w - 1, h - 1, 0x02, 0x00, 0x00, 0x01]))
     argb1_chunk = _iff_chunk(b"ARGB", _encode_os4_argb(im_norm))
     argb2_chunk = _iff_chunk(b"ARGB", _encode_os4_argb(im_sel))
 
-    icon_body = b"ICON" + face_chunk + imag1_chunk + imag2_chunk + argb1_chunk + argb2_chunk
+    icon_body = b"ICON" + face_chunk + argb1_chunk + argb2_chunk
     form_iff = b"FORM" + struct.pack(">I", len(icon_body)) + icon_body
     out.extend(form_iff)
 
