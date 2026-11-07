@@ -8,10 +8,19 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# If running interactively and systemd service is active, stop the service first so Chromium profile is not locked
-if [ -z "${INVOCATION_ID:-}" ] && systemctl is-active --quiet vortexbrowser.service 2>/dev/null; then
-    echo "[VortexServer] Stopping background vortexbrowser.service to avoid profile lock..."
-    sudo -n systemctl stop vortexbrowser.service 2>/dev/null || systemctl stop vortexbrowser.service 2>/dev/null || true
+# If running interactively and a systemd service (user or system) is active, stop it first
+# so systemd (Restart=always) does not respawn after 3s and send SIGTERM to this session.
+if [ -z "${INVOCATION_ID:-}" ]; then
+    for svc in vortexbrowser.service vortexbrowse-cachyos.service vortexbrowse.service; do
+        if systemctl --user is-active --quiet "$svc" 2>/dev/null; then
+            echo "[VortexServer] Stopping background user service $svc..."
+            systemctl --user stop "$svc" 2>/dev/null || true
+        fi
+        if systemctl is-active --quiet "$svc" 2>/dev/null; then
+            echo "[VortexServer] Stopping background system service $svc..."
+            sudo -n systemctl stop "$svc" 2>/dev/null || systemctl stop "$svc" 2>/dev/null || true
+        fi
+    done
 fi
 
 if [ ! -d ".venv" ]; then
