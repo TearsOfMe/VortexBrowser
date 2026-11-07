@@ -2041,7 +2041,7 @@ class AmigaClientSession:
                         window.localStorage.setItem('lowLatencyMode', 'false');
                         if (location.hostname.includes('twitch.tv')) {
                             try {
-                                const m = document.cookie.match(/(?:^|;\s*)auth-token=([^;]+)/);
+                                const m = document.cookie.match(/(?:^|;\\s*)auth-token=([^;]+)/);
                                 if (m && !window.localStorage.getItem('auth-token')) {
                                     window.localStorage.setItem('auth-token', decodeURIComponent(m[1]));
                                 }
