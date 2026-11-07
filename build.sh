@@ -44,8 +44,8 @@ cp -f "${SCRIPT_DIR}/amiga-client/VortexBrowser" "${SCRIPT_DIR}/amiga-client/Vor
 cp -f "${SCRIPT_DIR}/amiga-client/VortexBrowser.stripped" "${SCRIPT_DIR}/amiga-client/VortexBrowse.stripped"
 
 if [ -f "${SCRIPT_DIR}/amiga-client/VortexBrowser.info" ]; then
-    cp -f "${SCRIPT_DIR}/amiga-client/VortexBrowser.info" "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.info"
-    cp -f "${SCRIPT_DIR}/amiga-client/VortexBrowser.info" "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI.info"
+    [ -f "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.info" ] || cp -f "${SCRIPT_DIR}/amiga-client/VortexBrowser.info" "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.info"
+    [ -f "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI.info" ] || cp -f "${SCRIPT_DIR}/amiga-client/VortexBrowser.info" "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI.info"
 fi
 
 echo "=== [3/3] Deploying to QEMU Shared Folder ==="
@@ -59,10 +59,14 @@ if [ -d "${KYVOS_DOWNLOAD_DIR}" ]; then
     cp "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.stripped" "${TARGET_DRAWER}/VortexBrowser-AltiVec.stripped"
     cp "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI" "${TARGET_DRAWER}/VortexBrowser-MUI"
     cp "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI.stripped" "${TARGET_DRAWER}/VortexBrowser-MUI.stripped"
-    if [ -f "${SCRIPT_DIR}/amiga-client/VortexBrowser.info" ]; then
-        cp "${SCRIPT_DIR}/amiga-client/VortexBrowser.info" "${TARGET_DRAWER}/VortexBrowser.info"
-        cp "${SCRIPT_DIR}/amiga-client/VortexBrowser.info" "${TARGET_DRAWER}/VortexBrowser-AltiVec.info"
-        cp "${SCRIPT_DIR}/amiga-client/VortexBrowser.info" "${TARGET_DRAWER}/VortexBrowser-MUI.info"
+    [ -f "${SCRIPT_DIR}/amiga-client/VortexBrowser.info" ] && cp "${SCRIPT_DIR}/amiga-client/VortexBrowser.info" "${TARGET_DRAWER}/VortexBrowser.info"
+    [ -f "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.info" ] && cp "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.info" "${TARGET_DRAWER}/VortexBrowser-AltiVec.info"
+    [ -f "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI.info" ] && cp "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI.info" "${TARGET_DRAWER}/VortexBrowser-MUI.info"
+    [ -f "${SCRIPT_DIR}/amiga-client/VortexBrowser_drawer.info" ] && cp "${SCRIPT_DIR}/amiga-client/VortexBrowser_drawer.info" "${KYVOS_DOWNLOAD_DIR}/VortexBrowser.info"
+    if [ -d "${SCRIPT_DIR}/amiga-client/alt-icons" ]; then
+        mkdir -p "${TARGET_DRAWER}/Alternative-Icons"
+        cp -r "${SCRIPT_DIR}/amiga-client/alt-icons/." "${TARGET_DRAWER}/Alternative-Icons/"
+        [ -f "${SCRIPT_DIR}/amiga-client/alt-icons/VortexBrowser_drawer.info" ] && cp "${SCRIPT_DIR}/amiga-client/alt-icons/VortexBrowser_drawer.info" "${TARGET_DRAWER}/Alternative-Icons.info"
     fi
     if [ -d "${SCRIPT_DIR}/amiga-client/icons" ]; then
         mkdir -p "${TARGET_DRAWER}/icons"
@@ -93,11 +97,15 @@ if [ -n "$AMIGA_FTP_AUTH" ] && [ -n "$AMIGA_FTP_HOST" ]; then
         curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser.stripped" "${FTP_URL}/VortexBrowser" >/dev/null 2>&1 || true
         curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.stripped" "${FTP_URL}/VortexBrowser-AltiVec" >/dev/null 2>&1 || true
         curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI.stripped" "${FTP_URL}/VortexBrowser-MUI" >/dev/null 2>&1 || true
-        if [ -f "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI.info" ]; then
-            curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI.info" "${FTP_URL}/VortexBrowser-MUI.info" >/dev/null 2>&1 || true
-        fi
-        if [ -f "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.info" ]; then
-            curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.info" "${FTP_URL}/VortexBrowser-AltiVec.info" >/dev/null 2>&1 || true
+        [ -f "${SCRIPT_DIR}/amiga-client/VortexBrowser.info" ] && curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser.info" "${FTP_URL}/VortexBrowser.info" >/dev/null 2>&1 || true
+        [ -f "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI.info" ] && curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI.info" "${FTP_URL}/VortexBrowser-MUI.info" >/dev/null 2>&1 || true
+        [ -f "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.info" ] && curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.info" "${FTP_URL}/VortexBrowser-AltiVec.info" >/dev/null 2>&1 || true
+        [ -f "${SCRIPT_DIR}/amiga-client/VortexBrowser_drawer.info" ] && curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser_drawer.info" "${FTP_URL}.info" >/dev/null 2>&1 || true
+        if [ -d "${SCRIPT_DIR}/amiga-client/alt-icons" ]; then
+            [ -f "${SCRIPT_DIR}/amiga-client/alt-icons/VortexBrowser_drawer.info" ] && curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/alt-icons/VortexBrowser_drawer.info" "${FTP_URL}/Alternative-Icons.info" >/dev/null 2>&1 || true
+            for af in "${SCRIPT_DIR}/amiga-client/alt-icons/"*.info; do
+                [ -f "$af" ] && curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd --ftp-create-dirs -T "$af" "${FTP_URL}/Alternative-Icons/$(basename "$af")" >/dev/null 2>&1 || true
+            done
         fi
         LHA_FILE=$(ls -t "${SCRIPT_DIR}/dist/VortexBrowser-"*"-AmigaOS4.lha" 2>/dev/null | head -n1 || true)
         if [ -n "$LHA_FILE" ]; then

@@ -659,6 +659,36 @@ if os.path.exists(KYVOS_README_INFO):
 if os.path.exists(KYVOS_GUIDE_INFO):
     shutil.copy2(KYVOS_GUIDE_INFO, os.path.join(AMIGA_DRAWER, f"{APP_NAME}.guide.info"))
 
+# Copy Alternative Circular Icons (3D Titanium Glossy Orb) into Alternative-Icons/ drawer
+ALT_ICONS_SRC = "amiga-client/alt-icons"
+if os.path.isdir(ALT_ICONS_SRC):
+    ALT_ICONS_DST = os.path.join(AMIGA_DRAWER, "Alternative-Icons")
+    os.makedirs(ALT_ICONS_DST, exist_ok=True)
+    for fname in ("VortexBrowser.info", "VortexBrowser-AltiVec.info", "VortexBrowser-MUI.info", "VortexBrowser_drawer.info"):
+        src_info = os.path.join(ALT_ICONS_SRC, fname)
+        if os.path.exists(src_info):
+            shutil.copy2(src_info, os.path.join(ALT_ICONS_DST, fname))
+    alt_drawer_src = os.path.join(ALT_ICONS_SRC, "VortexBrowser_drawer.info")
+    if os.path.exists(alt_drawer_src):
+        shutil.copy2(alt_drawer_src, os.path.join(AMIGA_DRAWER, "Alternative-Icons.info"))
+    elif os.path.exists(KYVOS_DOCS_INFO):
+        shutil.copy2(KYVOS_DOCS_INFO, os.path.join(AMIGA_DRAWER, "Alternative-Icons.info"))
+    alt_readme_txt = (
+        "Alternative kreisrunde Icons (Variante: 3D Titanium Glossy Orb, 64x64 ARGB)\n"
+        "===========================================================================\n\n"
+        "Zum Wechseln einfach die gewuenschten .info-Dateien aus diesem Ordner in das\n"
+        "Hauptverzeichnis 'VortexBrowser/' kopieren (oder im Workbench-Fenster\n"
+        "'Piktogramm -> Informationen...' per Drag & Drop austauschen).\n\n"
+        "- VortexBrowser.info          : Standard ReAction Edition\n"
+        "- VortexBrowser-AltiVec.info  : PowerPC AltiVec Edition (mit AltiVec-Badge)\n"
+        "- VortexBrowser-MUI.info      : MUI 4/5 Edition (mit MUI-Badge)\n"
+        "- VortexBrowser_drawer.info   : Ordner-Icon (als VortexBrowser.info eine Ebene hoeher)\n"
+    )
+    with open(os.path.join(ALT_ICONS_DST, "LIESMICH.txt"), "w", encoding="iso-8859-1") as f:
+        f.write(alt_readme_txt)
+    if os.path.exists(KYVOS_README_INFO):
+        shutil.copy2(KYVOS_README_INFO, os.path.join(ALT_ICONS_DST, "LIESMICH.txt.info"))
+
 # Drawer Icon for VortexBrowser drawer
 if os.path.exists("amiga-client/VortexBrowser_drawer.info"):
     shutil.copy2("amiga-client/VortexBrowser_drawer.info", os.path.join(STAGING_DIR, f"{APP_NAME}.info"))
