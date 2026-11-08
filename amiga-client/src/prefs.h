@@ -106,6 +106,7 @@ typedef struct VortexPrefs {
     uint16_t         server_port;       /* Gespeicherter Server-Port (z.B. 9757 oder 7788) */
     uint8_t          target_fps;        /* Gewuenschte Streaming-Framerate (1..60, Default: 25) */
     uint8_t          jpeg_quality;      /* JPEG Streaming Qualitaet 20..100 (Default: 100) */
+    uint8_t          video_stream_mode; /* STREAM_VIDEO_AUTO (0), STREAM_VIDEO_DIRTYRECT (1), STREAM_VIDEO_H264 (2) */
     BOOL             dynamic_video_quality; /* TRUE = Dynamische Video-Qualitaet bei Video (Default: TRUE) */
     BOOL             save_server_on_exit;   /* TRUE = Aktuellen Server beim Beenden merken (Default: TRUE) */
     char             download_dir[256];     /* Standard Download-Ordner (Default: "RAM:") */

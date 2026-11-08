@@ -13,6 +13,7 @@ import asyncio
 import atexit
 import base64
 import ctypes
+import fcntl
 import glob
 import hashlib
 import html
@@ -87,6 +88,11 @@ CODEC_LZ4       = 1
 CODEC_LZ4_SLICE = 2
 CODEC_JPEG      = 3
 CODEC_LZ4_RECT  = 4
+CODEC_H264      = 5
+
+STREAM_VIDEO_AUTO      = 0
+STREAM_VIDEO_DIRTYRECT = 1
+STREAM_VIDEO_H264      = 2
 
 INPUT_CLICK      = 1
 INPUT_MOUSE_MOVE = 2
@@ -1513,6 +1519,128 @@ class DirectCDPSession:
 
 
 # ============================================================================
+# H.264 Live Stream Hardware/Software Encoder Pipe (va.library / VA-API)
+# ============================================================================
+class H264LiveStreamEncoder:
+    """Ultra-low latency H.264 live stream encoder using an asynchronous ffmpeg pipe.
+    Supports hardware VA-API on Linux (AMD/Intel VCN/VA-API) or ultrafast libx264 zerolatency.
+    Feeds YUV420P frames and yields Annex-B NAL packets.
+    """
+    def __init__(self, width: int, height: int, fps: int = 25, bitrate_k: int = 4000):
+        self.width = width
+        self.height = height
+        self.fps = max(1, min(60, fps))
+        self.bitrate_k = bitrate_k
+        self.proc: Optional[subprocess.Popen] = None
+        self._fd: Optional[int] = None
+        self._start_encoder()
+
+    def _start_encoder(self) -> None:
+        self.stop()
+        use_vaapi = os.path.exists("/dev/dri/renderD128")
+        cmd = None
+        if use_vaapi:
+            cmd = [
+                "ffmpeg", "-y", "-loglevel", "error",
+                "-init_hw_device", "vaapi=va:/dev/dri/renderD128",
+                "-filter_hw_device", "va",
+                "-f", "rawvideo", "-pix_fmt", "yuv420p",
+                "-s", f"{self.width}x{self.height}",
+                "-r", str(self.fps),
+                "-i", "-",
+                "-vf", "format=nv12,hwupload",
+                "-c:v", "h264_vaapi",
+                "-b:v", f"{self.bitrate_k}k",
+                "-maxrate", f"{self.bitrate_k * 3 // 2}k",
+                "-bufsize", f"{self.bitrate_k // 2}k",
+                "-g", str(self.fps),
+                "-bf", "0",
+                "-f", "h264", "-"
+            ]
+        try:
+            if cmd:
+                self.proc = subprocess.Popen(
+                    cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
+                )
+        except Exception:
+            self.proc = None
+
+        if self.proc is None or self.proc.poll() is not None:
+            # Fallback to libx264 ultrafast zerolatency
+            cmd_x264 = [
+                "ffmpeg", "-y", "-loglevel", "error",
+                "-f", "rawvideo", "-pix_fmt", "yuv420p",
+                "-s", f"{self.width}x{self.height}",
+                "-r", str(self.fps),
+                "-i", "-",
+                "-c:v", "libx264",
+                "-preset", "ultrafast",
+                "-tune", "zerolatency",
+                "-g", str(self.fps),
+                "-bf", "0",
+                "-b:v", f"{self.bitrate_k}k",
+                "-maxrate", f"{self.bitrate_k * 3 // 2}k",
+                "-bufsize", f"{self.bitrate_k // 2}k",
+                "-f", "h264", "-"
+            ]
+            try:
+                self.proc = subprocess.Popen(
+                    cmd_x264, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
+                )
+            except Exception as e:
+                logger.warning("Could not launch ffmpeg H.264 encoder: %s", e)
+                self.proc = None
+                return
+
+        if self.proc and self.proc.stdout:
+            self._fd = self.proc.stdout.fileno()
+            fl = fcntl.fcntl(self._fd, fcntl.F_GETFL)
+            fcntl.fcntl(self._fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+
+    def encode_frame(self, yuv_bytes: bytes) -> Optional[bytes]:
+        if not self.proc or not self.proc.stdin or self._fd is None:
+            return None
+        if self.proc.poll() is not None:
+            self._start_encoder()
+            if not self.proc or not self.proc.stdin or self._fd is None:
+                return None
+        try:
+            self.proc.stdin.write(yuv_bytes)
+            self.proc.stdin.flush()
+        except (BrokenPipeError, OSError):
+            self._start_encoder()
+            return None
+
+        chunks = []
+        for _ in range(20):
+            try:
+                chunk = os.read(self._fd, 65536)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+            except BlockingIOError:
+                break
+            except OSError:
+                break
+        return b"".join(chunks) if chunks else None
+
+    def stop(self) -> None:
+        if self.proc:
+            try:
+                if self.proc.stdin:
+                    self.proc.stdin.close()
+                self.proc.terminate()
+                self.proc.wait(timeout=0.2)
+            except Exception:
+                try:
+                    self.proc.kill()
+                except Exception:
+                    pass
+            self.proc = None
+            self._fd = None
+
+
+# ============================================================================
 # Client Session Handler
 # ============================================================================
 class AmigaClientSession:
@@ -1533,6 +1661,7 @@ class AmigaClientSession:
         jpeg_quality: int = 100,
         codec_mode: str = "auto",
         engine: str = "chromium",
+        stream_mode: str = "auto",
     ):
         self.reader = reader
         self.writer = writer
@@ -1557,6 +1686,9 @@ class AmigaClientSession:
         self._frames_last_sec: int = 0
         self._sec_start_time: float = time.monotonic()
         self.codec_mode: str = codec_mode
+        self.stream_mode: str = stream_mode.lower()
+        self._h264_encoder: Optional[H264LiveStreamEncoder] = None
+        self._total_h264_frames: int = 0
 
         self.write_lock = asyncio.Lock()
         self.running = True
@@ -1630,6 +1762,17 @@ class AmigaClientSession:
         self._yuv_buf: Optional[ctypes.Array] = None
         self._rect_buf: Optional[ctypes.Array] = None
         self._pkt_buf: Optional[ctypes.Array] = None
+
+    def _get_h264_encoder(self, width: int, height: int) -> Optional[H264LiveStreamEncoder]:
+        if (
+            self._h264_encoder is not None
+            and (self._h264_encoder.width != width or self._h264_encoder.height != height or self._h264_encoder.fps != self.target_fps)
+        ):
+            self._h264_encoder.stop()
+            self._h264_encoder = None
+        if self._h264_encoder is None:
+            self._h264_encoder = H264LiveStreamEncoder(width, height, self.target_fps)
+        return self._h264_encoder
 
     async def _attach_direct_cdp(self, target_page: Page) -> None:
         """Creates a DirectCDP WebSocket connection directly to Chromium's DevTools port,
@@ -2305,6 +2448,9 @@ class AmigaClientSession:
             logger.error("Session error: %s", exc)
         finally:
             self.running = False
+            if self._h264_encoder is not None:
+                self._h264_encoder.stop()
+                self._h264_encoder = None
             await self._stop_screencast()
             if self.cdp is not None and isinstance(self.cdp, DirectCDPSession):
                 try:
@@ -2741,6 +2887,52 @@ class AmigaClientSession:
             )
             await self.send_packet(hdr + png_bytes)
             return
+
+        should_h264 = (
+            (self.codec_mode == "h264")
+            or (self.stream_mode == "h264")
+            or (self.stream_mode == "auto" and (self.is_video_mode or self._video_element_playing))
+        )
+        if should_h264:
+            yuv_raw = None
+            if _TURBO_JPEG is not None:
+                try:
+                    yarr, _ = _TURBO_JPEG.decode_to_yuv(png_bytes, pad=1)
+                    if len(yarr) == (w * h * 3) // 2:
+                        yuv_raw = yarr.tobytes()
+                except Exception:
+                    pass
+            if yuv_raw is None:
+                try:
+                    im = Image.open(io.BytesIO(png_bytes)).convert("YCbCr")
+                    if im.size != (w, h):
+                        im = im.resize((w, h))
+                    y, cb, cr = im.split()
+                    y_b = y.tobytes()
+                    cb_sub = cb.resize((w // 2, h // 2), Image.Resampling.BILINEAR).tobytes()
+                    cr_sub = cr.resize((w // 2, h // 2), Image.Resampling.BILINEAR).tobytes()
+                    yuv_raw = y_b + cb_sub + cr_sub
+                except Exception:
+                    pass
+            if yuv_raw:
+                enc = self._get_h264_encoder(w, h)
+                if enc:
+                    h264_pkt = enc.encode_frame(yuv_raw)
+                    if h264_pkt:
+                        hdr = STRUCT_MSG_FRAME.pack(
+                            MSG_FRAME,
+                            w,
+                            h,
+                            FMT_YUV420P,
+                            CODEC_H264,
+                            len(h264_pkt),
+                        )
+                        await self.send_packet(hdr + h264_pkt)
+                        self._total_h264_frames += 1
+                        if (self._total_h264_frames % 50) == 1:
+                            logger.info("Sent H.264 video frame #%d: len=%d (%dx%d via VA-API/libx264)",
+                                        self._total_h264_frames, len(h264_pkt), w, h)
+                        return
 
         if fmt == FMT_YUV420P:
             bpp = 1
@@ -3959,6 +4151,23 @@ class AmigaClientSession:
             logger.info("Client enabled 2D YUV420P dirty-rect streaming (CODEC_LZ4_RECT)")
             return
 
+        if cmd.upper().startswith("@STREAM_MODE:"):
+            m = cmd.split(":", 1)[1].strip().lower()
+            if m in ("h264", "video"):
+                self.stream_mode = "h264"
+                logger.info("Client requested STREAM_MODE: H.264 continuous video stream")
+            elif m in ("dirtyrect", "lz4"):
+                self.stream_mode = "lz4"
+                if self._h264_encoder:
+                    self._h264_encoder.stop()
+                    self._h264_encoder = None
+                logger.info("Client requested STREAM_MODE: LZ4 dirty-rect (classic)")
+            elif m in ("auto", "adaptive"):
+                self.stream_mode = "auto"
+                logger.info("Client requested STREAM_MODE: Auto (adaptive H.264 for video, LZ4 for browsing)")
+            self._trigger_full_refresh(True)
+            return
+
         if cmd.upper().startswith("@CODEC:"):
             c = cmd.split(":", 1)[1].strip().lower()
             if c in ("mjpeg", "jpeg"):
@@ -3967,6 +4176,9 @@ class AmigaClientSession:
             elif c == "lz4":
                 self.codec_mode = "lz4"
                 logger.info("Switched streaming codec to LZ4 (CODEC_LZ4)")
+            elif c in ("h264", "vaapi"):
+                self.codec_mode = "h264"
+                logger.info("Switched streaming codec to H.264 (CODEC_H264)")
             elif c == "auto":
                 self.codec_mode = "auto"
                 logger.info("Switched streaming codec to Auto")
@@ -5276,6 +5488,7 @@ async def run_server(args: argparse.Namespace) -> None:
                         jpeg_quality=getattr(args, "jpeg_quality", 100),
                         codec_mode=getattr(args, "codec", "auto"),
                         engine=engine,
+                        stream_mode=getattr(args, "stream_mode", "auto"),
                     )
                     active_session = session
 
@@ -5339,7 +5552,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fps", type=int, default=25, help="Max target FPS (default: 25)")
     parser.add_argument("--url", default="", help="Optional initial URL (default: built-in Amiga portal)")
     parser.add_argument("--browser-bin", default=None, help="Explicit path to Chromium or Ungoogled-Chromium executable")
-    parser.add_argument("--codec", choices=["auto", "jpeg", "lz4"], default="auto", help="Streaming codec (default: auto)")
+    parser.add_argument("--codec", choices=["auto", "jpeg", "lz4", "h264"], default="auto", help="Streaming codec (default: auto)")
+    parser.add_argument("--stream-mode", choices=["auto", "lz4", "h264"], default="auto", help="Video streaming mode (default: auto = adaptive H.264 on video, LZ4 otherwise)")
     parser.add_argument("--jpeg-quality", type=int, default=82, help="JPEG capture quality 20-100 (default: 82 for Full HD 1080p@25fps)")
     parser.add_argument("--enable-extensions", dest="enable_extensions", action="store_true", default=True, help="Enable browser extensions (uBlock, h264ify) [default: enabled]")
     parser.add_argument("--disable-extensions", dest="enable_extensions", action="store_false", help="Disable all browser extensions")

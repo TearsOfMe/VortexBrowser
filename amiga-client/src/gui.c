@@ -68,6 +68,7 @@ static struct NewMenu s_main_menu[] = {
     { NM_ITEM,  (STRPTR)"Passwort-Manager...",                         (STRPTR)"K", 0, 0, (APTR)MID_PROJ_PASSWORDS },
     { NM_ITEM,  (STRPTR)"Auto-Login fuer Seite...",                    (STRPTR)"L", 0, 0, (APTR)MID_PROJ_AUTOLOGIN },
     { NM_ITEM,  (STRPTR)"Download-Manager...",                         (STRPTR)"D", 0, 0, (APTR)MID_PROJ_DOWNLOADS },
+    { NM_ITEM,  (STRPTR)"In VideoVortex abspielen",                    (STRPTR)"Y", 0, 0, (APTR)MID_PROJ_VIDEOVORTEX },
     { NM_ITEM,  NM_BARLABEL,                                           NULL,        0, 0, NULL },
     { NM_ITEM,  (STRPTR)"Server konfigurieren...",                     (STRPTR)"1", 0, 0, (APTR)MID_SET_SERVER_CUSTOM },
     { NM_ITEM,  (STRPTR)"Mit Server verbinden",                        (STRPTR)"2", 0, 0, (APTR)MID_PROJ_CONNECT },
@@ -94,6 +95,10 @@ static struct NewMenu s_main_menu[] = {
     { NM_ITEM,  (STRPTR)"FPS: 30 FPS (Empfohlen für YouTube / NTSC)",  NULL,        0, 0, (APTR)MID_FPS_30 },
     { NM_ITEM,  (STRPTR)"FPS: 50 FPS (PAL High-Speed)",                NULL,        0, 0, (APTR)MID_FPS_50 },
     { NM_ITEM,  (STRPTR)"FPS: 60 FPS (Maximal / Gaming / PiStorm)",    NULL,        0, 0, (APTR)MID_FPS_60 },
+    { NM_ITEM,  NM_BARLABEL,                                           NULL,        0, 0, NULL },
+    { NM_ITEM,  (STRPTR)"Video-Stream: Auto (H.264 via va.library)",   NULL,        0, 0, (APTR)MID_STREAM_VIDEO_AUTO },
+    { NM_ITEM,  (STRPTR)"Video-Stream: Nur Dirty-Rect (LZ4)",          NULL,        0, 0, (APTR)MID_STREAM_VIDEO_LZ4 },
+    { NM_ITEM,  (STRPTR)"Video-Stream: Nur H.264 (Dauerhaft)",         NULL,        0, 0, (APTR)MID_STREAM_VIDEO_H264 },
     { NM_ITEM,  NM_BARLABEL,                                           NULL,        0, 0, NULL },
     { NM_ITEM,  (STRPTR)"Dunkles Theme (Dark Mode) an/aus",            (STRPTR)"U", 0, 0, (APTR)MID_TOGGLE_DARK_THEME },
     { NM_ITEM,  NM_BARLABEL,                                           NULL,        0, 0, NULL },
@@ -1498,6 +1503,45 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
         case MID_PROJ_QUIT:
             app->running = FALSE;
             break;
+
+        case MID_PROJ_VIDEOVORTEX: {
+            if (IDOS) {
+                if (app->current_url[0] && app->current_url[0] != '@') {
+                    char sys_cmd[1024];
+                    snprintf(sys_cmd, sizeof(sys_cmd), "Run <>NIL: APPDIR:VideoVortex URL \"%s\"", app->current_url);
+                    IDOS->SystemTags(sys_cmd, TAG_DONE);
+                    app_set_status("Uebergebe Video an VideoVortex: %s", app->current_url);
+                } else {
+                    IDOS->SystemTags("Run <>NIL: APPDIR:VideoVortex", TAG_DONE);
+                    app_set_status("Starte VideoVortex...");
+                }
+            }
+            break;
+        }
+
+        case MID_STREAM_VIDEO_AUTO: {
+            app->prefs.video_stream_mode = STREAM_VIDEO_AUTO;
+            prefs_save(app, FALSE);
+            if (app->connected) net_send_url(app, "@STREAM_MODE:auto");
+            app_set_status("Streaming: Auto (H.264 bei Video via va.library, sonst LZ4)");
+            break;
+        }
+
+        case MID_STREAM_VIDEO_LZ4: {
+            app->prefs.video_stream_mode = STREAM_VIDEO_DIRTYRECT;
+            prefs_save(app, FALSE);
+            if (app->connected) net_send_url(app, "@STREAM_MODE:lz4");
+            app_set_status("Streaming: Nur Dirty-Rect / LZ4 (Klassisch)");
+            break;
+        }
+
+        case MID_STREAM_VIDEO_H264: {
+            app->prefs.video_stream_mode = STREAM_VIDEO_H264;
+            prefs_save(app, FALSE);
+            if (app->connected) net_send_url(app, "@STREAM_MODE:h264");
+            app_set_status("Streaming: Nur H.264 (Dauerhafter Videostream)");
+            break;
+        }
 
         case MID_EDIT_CUT:
             net_send_key(app, INPUT_KEY_DOWN, 24, "Cut");
