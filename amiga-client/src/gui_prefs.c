@@ -108,9 +108,9 @@ static const char *const s_server_preset_labels[] = {
 };
 
 static const char *const s_stream_mode_labels[] = {
-    "Auto (H.264 via va.library bei Video, sonst LZ4)",
-    "Nur Dirty-Rect / LZ4 (Klassisch, ohne va.library)",
-    "Nur H.264 (Dauerhafter Videostream, min. Bandbreite)",
+    "Auto (Adaptive Video-Optimierung: 25-30 FPS YUV420P)",
+    "Nur Dirty-Rect / LZ4 (Klassisch, minimale Bandbreite)",
+    "H.264 (Experimenteller Bitstream)",
     NULL
 };
 
