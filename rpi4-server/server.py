@@ -338,66 +338,33 @@ def unmute_all_browser_sink_inputs() -> None:
         pass
 
 
-def is_snap_binary(path: str) -> bool:
-    """Returns True if the given browser binary is an Ubuntu Snap wrapper."""
-    if not path or not os.path.exists(path):
-        return False
-    if "/snap/" in path or path.startswith("/snap/"):
-        return True
-    try:
-        real = os.path.realpath(path)
-        if "/snap/" in real or real.startswith("/snap/"):
-            return True
-        if os.path.isfile(path) and not os.path.islink(path):
-            with open(path, "rb") as f:
-                header = f.read(512)
-                if b"/snap" in header or b"snap run" in header:
-                    return True
-    except Exception:
-        pass
-    return False
-
-
 def find_full_chromium_executable(custom_bin: Optional[str] = None) -> Optional[str]:
     """
     Finds the full Chromium / Ungoogled-Chromium binary on Linux (x86_64, aarch64, Raspberry Pi 4).
-    Prefers native (non-snap) binaries and Playwright's native Chromium over Ubuntu Snap wrappers
-    to avoid AppArmor confinement and permission issues.
+    Uses full Chromium instead of chrome-headless-shell so that PipeWire / PulseAudio
+    audio output is fully functional.
     """
     if custom_bin and os.path.isfile(custom_bin) and os.access(custom_bin, os.X_OK):
         return custom_bin
 
-    # Check for configured browser from installer in browser_bin.txt
-    cfg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "browser_bin.txt")
-    if os.path.exists(cfg_path):
-        try:
-            with open(cfg_path, "r", encoding="utf-8") as f:
-                saved = f.readline().strip()
-            if saved and os.path.isfile(saved) and os.access(saved, os.X_OK):
-                return saved
-        except Exception:
-            pass
-
-    # Tier 1: Real native installed browsers (.deb / native packages)
-    native_patterns = [
+    priority_patterns = [
         os.path.expanduser("~/.local/opt/ungoogled-chromium/usr/lib/chromium/chromium"),
         os.path.expanduser("~/.local/bin/ungoogled-chromium"),
         "/usr/bin/ungoogled-chromium",
         "/usr/lib/ungoogled-chromium/ungoogled-chromium",
-        "/usr/bin/google-chrome-stable",
-        "/usr/bin/google-chrome",
         "/usr/bin/brave-browser",
         "/usr/bin/brave",
         "/usr/bin/chromium-browser",
         "/usr/bin/chromium",
         "/usr/lib/chromium-browser/chromium-browser",
         "/usr/lib/chromium/chromium",
+        "/snap/bin/chromium",
     ]
-    for p in native_patterns:
-        if os.path.isfile(p) and os.access(p, os.X_OK) and not is_snap_binary(p):
+    for p in priority_patterns:
+        if os.path.isfile(p) and os.access(p, os.X_OK):
             return p
 
-    # Tier 2: Playwright native Chromium (clean, standalone, no snap confinement, has audio!)
+    # Fallback to playwright cache (newest version first)
     pw_patterns = [
         os.path.expanduser("~/.cache/ms-playwright/chromium-*/chrome-linux64/chrome"),
         os.path.expanduser("~/.cache/ms-playwright/chromium-*/chrome-linux/chrome"),
@@ -409,18 +376,6 @@ def find_full_chromium_executable(custom_bin: Optional[str] = None) -> Optional[
     for c in candidates:
         if os.path.isfile(c) and os.access(c, os.X_OK):
             return c
-
-    # Tier 3: Ubuntu Snap Chromium as last fallback (may have confinement issues)
-    snap_patterns = [
-        "/usr/bin/chromium-browser",
-        "/usr/bin/chromium",
-        "/snap/bin/chromium",
-    ]
-    for p in snap_patterns:
-        if os.path.isfile(p) and os.access(p, os.X_OK):
-            logger.warning("Using Ubuntu Snap Chromium (%s) as fallback. Snap may enforce strict AppArmor restrictions.", p)
-            return p
-
     return None
 
 
@@ -1618,11 +1573,6 @@ class AmigaClientSession:
         self._mouse_down_y: int = -1
         self._mouse_down_btn: str = ""
         self._mouse_down_time: float = 0.0
-        self._last_click_time: float = 0.0
-        self._last_click_x: int = -1
-        self._last_click_y: int = -1
-        self._click_count: int = 1
-        self.last_upload_intercept_time: float = 0.0
 
         # Pre-allocated pixel conversion buffers (reused across frames to avoid alloc churn)
         self._argb_buf: Optional[ctypes.Array] = None
@@ -1677,14 +1627,10 @@ class AmigaClientSession:
                     if getattr(self, "_init_turbo_js", None):
                         try:
                             await self.cdp.send("Page.enable")
-                            await self.cdp.send("Page.setInterceptFileChooserDialog", {"enabled": True})
-                            await self.cdp.send("DOM.enable")
                             await self.cdp.send("Page.addScriptToEvaluateOnNewDocument", {"source": self._init_turbo_js})
                             await self.cdp.send("Runtime.evaluate", {"expression": self._init_turbo_js})
                         except Exception:
                             pass
-                    # Listen for Page.fileChooserOpened on DirectCDP
-                    self.cdp.on("Page.fileChooserOpened", self._on_cdp_file_chooser_opened)
                     return
 
         self.cdp = base_cdp
@@ -1875,49 +1821,21 @@ class AmigaClientSession:
             except Exception:
                 pass
 
-            # Pre-load Twitch auth / full session cookies if configured (bypasses bot blocks entirely)
+            # Pre-load Twitch auth-token if configured (bypasses Kasada login bot block entirely)
             try:
-                loaded_twitch = False
-                for j_path in ["twitch_cookies.json", os.path.expanduser("~/.config/vortexbrowse/twitch_cookies.json"), "/tmp/twitch_cookies.json"]:
-                    if os.path.exists(j_path):
-                        try:
-                            with open(j_path, "r", encoding="utf-8") as f:
-                                raw_cookies = json.load(f)
-                            clean_list = []
-                            for c in raw_cookies:
-                                ck = {
-                                    "name": c["name"],
-                                    "value": c["value"],
-                                    "domain": c["domain"],
-                                    "path": c.get("path", "/"),
-                                    "secure": c.get("secure", True),
-                                    "httpOnly": c.get("httpOnly", False)
-                                }
-                                if "sameSite" in c and c["sameSite"] in ("Strict", "Lax", "None"):
-                                    ck["sameSite"] = c["sameSite"]
-                                clean_list.append(ck)
-                            if clean_list:
-                                await self.context.add_cookies(clean_list)
-                                logger.info("Pre-loaded %d Twitch session cookies from %s", len(clean_list), j_path)
-                                loaded_twitch = True
+                for t_path in ["twitch_token.txt", "twitch_cookie.txt", os.path.expanduser("~/.config/vortexbrowse/twitch_token.txt")]:
+                    if os.path.exists(t_path):
+                        with open(t_path, "r", encoding="utf-8") as f:
+                            t_val = f.read().strip()
+                            if t_val:
+                                await self.context.add_cookies([{
+                                    "name": "auth-token",
+                                    "value": t_val,
+                                    "domain": ".twitch.tv",
+                                    "path": "/"
+                                }])
+                                logger.info("Pre-loaded Twitch auth-token from %s", t_path)
                                 break
-                        except Exception as _je:
-                            logger.debug("Twitch json cookie load error: %s", _je)
-
-                if not loaded_twitch:
-                    for t_path in ["twitch_token.txt", "twitch_cookie.txt", os.path.expanduser("~/.config/vortexbrowse/twitch_token.txt")]:
-                        if os.path.exists(t_path):
-                            with open(t_path, "r", encoding="utf-8") as f:
-                                t_val = f.read().strip()
-                                if t_val:
-                                    await self.context.add_cookies([{
-                                        "name": "auth-token",
-                                        "value": t_val,
-                                        "domain": ".twitch.tv",
-                                        "path": "/"
-                                    }])
-                                    logger.info("Pre-loaded Twitch auth-token from %s", t_path)
-                                    break
             except Exception as _te:
                 logger.debug("Twitch cookie load error: %s", _te)
 
@@ -2039,14 +1957,6 @@ class AmigaClientSession:
                         window.localStorage.setItem('video-quality', JSON.stringify({ default: '720p30' }));
                         window.localStorage.setItem('twilight.player.quality', '"720p30"');
                         window.localStorage.setItem('lowLatencyMode', 'false');
-                        if (location.hostname.includes('twitch.tv')) {
-                            try {
-                                const m = document.cookie.match(/(?:^|;\\s*)auth-token=([^;]+)/);
-                                if (m && !window.localStorage.getItem('auth-token')) {
-                                    window.localStorage.setItem('auth-token', decodeURIComponent(m[1]));
-                                }
-                            } catch(e) {}
-                        }
                     } catch(e) {}
 
                     const injectTwStyle = () => {
@@ -2099,106 +2009,15 @@ class AmigaClientSession:
                     document.addEventListener('DOMContentLoaded', injectUpStyle);
 
                     const syncMoxieShim = () => {
-                        const btn = document.getElementById('add_files') || document.querySelector('.attach-panel-multi input[type=button]');
+                        const btn = document.getElementById('add_files');
                         const shim = document.querySelector('.moxie-shim, .moxie-shim-html5');
                         if (btn && shim) {
-                            shim.style.top = btn.offsetTop + 'px';
-                            shim.style.left = btn.offsetLeft + 'px';
-                            shim.style.width = btn.offsetWidth + 'px';
-                            shim.style.height = btn.offsetHeight + 'px';
+                            const r = btn.getBoundingClientRect();
+                            shim.style.top = (r.top + window.scrollY) + 'px';
+                            shim.style.left = (r.left + window.scrollX) + 'px';
+                            shim.style.width = r.width + 'px';
+                            shim.style.height = r.height + 'px';
                             shim.style.zIndex = '999999';
-                        }
-                    };
-
-                    // Prevent HTML5 drag-and-drop from hijacking text selections over links/images
-                    window.addEventListener('dragstart', (e) => {
-                        e.preventDefault();
-                    }, true);
-
-                    // Ensure text selection is visibly highlighted in headless Chromium
-                    try {
-                        const selStyle = document.createElement('style');
-                        selStyle.id = '__vortex_selection_style';
-                        selStyle.textContent = '*::selection, ::selection, *::-moz-selection, ::-moz-selection { background-color: #3390ff !important; color: #ffffff !important; -webkit-text-fill-color: #ffffff !important; }';
-                        (document.head || document.documentElement).appendChild(selStyle);
-                    } catch(e) {}
-
-                    // Direct DOM-level selection controller using caretRangeFromPoint for 100% reliable freeform drag selection
-                    window.__vortex_selection = {
-                        startX: -1,
-                        startY: -1,
-                        isDragging: false,
-
-                        start: function(x, y) {
-                            this.startX = x;
-                            this.startY = y;
-                            this.isDragging = false;
-                            let el = document.elementFromPoint(x, y);
-                            if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
-                            let r = document.caretRangeFromPoint ? document.caretRangeFromPoint(x, y) : null;
-                            if (r) {
-                                let s = window.getSelection();
-                                if (s) {
-                                    s.removeAllRanges();
-                                    s.addRange(r);
-                                }
-                            }
-                        },
-
-                        update: function(x, y) {
-                            if (this.startX < 0 || this.startY < 0) return;
-                            let dist = Math.hypot(x - this.startX, y - this.startY);
-                            if (dist < 4) return;
-                            this.isDragging = true;
-
-                            let el = document.elementFromPoint(this.startX, this.startY);
-                            if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) return;
-
-                            let r1 = document.caretRangeFromPoint ? document.caretRangeFromPoint(this.startX, this.startY) : null;
-                            let r2 = document.caretRangeFromPoint ? document.caretRangeFromPoint(x, y) : null;
-                            if (!r1 || !r2) return;
-
-                            let range = document.createRange();
-                            let comp = r1.startContainer.compareDocumentPosition(r2.startContainer);
-                            if (comp === 0) {
-                                if (r1.startOffset <= r2.startOffset) {
-                                    range.setStart(r1.startContainer, r1.startOffset);
-                                    range.setEnd(r2.startContainer, r2.startOffset);
-                                } else {
-                                    range.setStart(r2.startContainer, r2.startOffset);
-                                    range.setEnd(r1.startContainer, r1.startOffset);
-                                }
-                            } else if (comp & Node.DOCUMENT_POSITION_FOLLOWING) {
-                                range.setStart(r1.startContainer, r1.startOffset);
-                                range.setEnd(r2.startContainer, r2.startOffset);
-                            } else {
-                                range.setStart(r2.startContainer, r2.startOffset);
-                                range.setEnd(r1.startContainer, r1.startOffset);
-                            }
-
-                            let s = window.getSelection();
-                            if (s) {
-                                s.removeAllRanges();
-                                s.addRange(range);
-                            }
-                        },
-
-                        finish: function(x, y) {
-                            let dragged = this.isDragging;
-                            this.startX = -1;
-                            this.startY = -1;
-                            this.isDragging = false;
-                            let s = window.getSelection() ? window.getSelection().toString() : '';
-                            if (s && s.length > 0) return { dragged: dragged, text: s };
-
-                            let el = document.activeElement;
-                            if (el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && el.type === 'text'))) {
-                                try {
-                                    let sub = el.value.substring(el.selectionStart, el.selectionEnd);
-                                    if (sub && sub.length > 0) return { dragged: dragged, text: sub };
-                                } catch (e) {}
-                            }
-                            return { dragged: dragged, text: '' };
                         }
                     };
 
@@ -2215,6 +2034,22 @@ class AmigaClientSession:
                                     syncMoxieShim();
                                 }
                             }, 80);
+                        }
+                        const addBtn = e.target && e.target.closest ? e.target.closest('#add_files, .attach-panel-multi, [data-subpanel="attach-panel"], .js-attachmentUpload, .js-attachButton') : null;
+                        if (addBtn) {
+                            let finp = document.querySelector('.moxie-shim input[type="file"], .moxie-shim-html5 input[type="file"]');
+                            if (!finp) {
+                                let allInp = Array.from(document.querySelectorAll('input[type="file"]'));
+                                for (let inp of allInp) {
+                                    if (inp.id !== 'fileupload' || allInp.length === 1) {
+                                        finp = inp;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (finp && e.target !== finp) {
+                                try { finp.click(); } catch(err) {}
+                            }
                         }
                     }, true);
                 } catch(e) {}
@@ -2268,24 +2103,18 @@ class AmigaClientSession:
             if self.audio_enabled:
                 tasks.append(asyncio.create_task(self._audio_stream_loop()))
 
-            curr_url = self.page.url if self.page else ""
-            has_existing_page = bool(curr_url and not curr_url.startswith("about:") and curr_url != self.portal_url)
-
             initial_url = self.start_url if self.start_url else self.portal_url
-            logger.info("Navigating initial viewport (%dx%d) to %s (has_existing_page=%s)", self.width, self.height, initial_url, has_existing_page)
+            logger.info("Navigating initial viewport (%dx%d) to %s", self.width, self.height, initial_url)
             async def _init_nav():
-                if not has_existing_page:
-                    try:
-                        await self.page.goto(initial_url, wait_until="domcontentloaded", timeout=12000)
-                    except Exception as nav_exc:
-                        logger.warning("Initial navigation warning (%s), falling back to portal", nav_exc)
-                        if initial_url != self.portal_url:
-                            try:
-                                await self.page.goto(self.portal_url, wait_until="domcontentloaded", timeout=8000)
-                            except Exception:
-                                pass
-                else:
-                    self._send_nav_update(self.page.url)
+                try:
+                    await self.page.goto(initial_url, wait_until="domcontentloaded", timeout=12000)
+                except Exception as nav_exc:
+                    logger.warning("Initial navigation warning (%s), falling back to portal", nav_exc)
+                    if initial_url != self.portal_url:
+                        try:
+                            await self.page.goto(self.portal_url, wait_until="domcontentloaded", timeout=8000)
+                        except Exception:
+                            pass
                 self.active_until = time.monotonic() + 3.0
                 self._trigger_full_refresh(True)
                 self._schedule_delayed_frames()
@@ -3365,22 +3194,10 @@ class AmigaClientSession:
                     btn = "right"
                 logger.info("INPUT_MOUSE_DOWN (%s) at (%d, %d)", btn, cx, cy)
 
-                now = time.monotonic()
-                if btn == "left":
-                    if (now - self._last_click_time) < 0.35 and abs(cx - self._last_click_x) <= 4 and abs(cy - self._last_click_y) <= 4:
-                        self._click_count = min(3, self._click_count + 1)
-                    else:
-                        self._click_count = 1
-                    self._last_click_time = now
-                    self._last_click_x = cx
-                    self._last_click_y = cy
-                else:
-                    self._click_count = 1
-
                 self._mouse_down_x = cx
                 self._mouse_down_y = cy
                 self._mouse_down_btn = btn
-                self._mouse_down_time = now
+                self._mouse_down_time = time.monotonic()
 
                 if btn == "right":
                     await self._send_native_context_menu(cx, cy)
@@ -3392,13 +3209,8 @@ class AmigaClientSession:
                         f"window.scrollTo(0, Math.max(0, (document.documentElement.scrollHeight - window.innerHeight) * {ratio:.4f}))"
                     )
                 else:
-                    if btn == "left":
-                        try:
-                            await self.page.evaluate("([x, y]) => window.__vortex_selection && window.__vortex_selection.start(x, y)", [cx, cy])
-                        except Exception:
-                            pass
                     await self.page.mouse.move(cx, cy)
-                    await self.page.mouse.down(button=btn, click_count=self._click_count)
+                    await self.page.mouse.down(button=btn)
                 self._trigger_full_refresh(True)
                 self._schedule_delayed_frames()
 
@@ -3415,28 +3227,18 @@ class AmigaClientSession:
                     down_y = self._mouse_down_y if self._mouse_down_y >= 0 else cy
                     dist = ((cx - down_x) ** 2 + (cy - down_y) ** 2) ** 0.5
 
-                    dragged = False
-                    sel_text = ""
+                    # If user released within 16px of mouse down, treat as intentional click
+                    if dist <= 16:
+                        await self.page.mouse.move(down_x, down_y)
+                        await self.page.mouse.up(button=btn)
+                        # Explicitly ensure click was registered on the target point
+                        await self.page.mouse.click(down_x, down_y, button=btn)
+                    else:
+                        await self.page.mouse.move(cx, cy)
+                        await self.page.mouse.up(button=btn)
+
+                    # Universal check: if click landed on an upload button or file input
                     if btn == "left":
-                        try:
-                            res = await self.page.evaluate("([x, y]) => window.__vortex_selection ? window.__vortex_selection.finish(x, y) : {dragged: false, text: ''}", [cx, cy])
-                            if res and isinstance(res, dict):
-                                dragged = bool(res.get("dragged", False))
-                                sel_text = res.get("text", "") or ""
-                        except Exception:
-                            pass
-
-                    # If user dragged, release with click_count=1 to finalize the freeform selection
-                    if dist > 4 or dragged:
-                        self._click_count = 1
-                    await self.page.mouse.move(cx, cy)
-                    await self.page.mouse.up(button=btn, click_count=self._click_count)
-
-                    self._mouse_down_btn = ""
-
-                    # Universal check: only if stationary click AND not dragged AND no upload is pending/recent
-                    now_up = time.monotonic()
-                    if btn == "left" and dist <= 10 and not dragged and not self.pending_uploads and (now_up - self.last_upload_intercept_time) >= 3.0:
                         try:
                             upload_hit = await self.page.evaluate("""([x, y]) => {
                                 let el = document.elementFromPoint(x, y);
@@ -3468,16 +3270,19 @@ class AmigaClientSession:
                                 }
 
                                 // 4. Button / anchor / upload trigger element
-                                let uploadBtn = elem.closest ? elem.closest(
-                                    '#add_files, .attach-panel-multi, .js-attachmentUpload, .js-attachButton, [data-action="upload"], ' +
-                                    'input[type="file"], .moxie-shim, .moxie-shim-html5'
+                                let btn = elem.closest ? elem.closest(
+                                    'button, a, label, [role="button"], input[type="button"], input[type="submit"], ' +
+                                    '.js-attachmentUpload, .js-attachButton, [data-action="upload"], ' +
+                                    '#add_files, .attach-panel-multi, [data-subpanel="attach-panel"], #attach-panel'
                                 ) : null;
-                                if (uploadBtn) {
+                                if (btn) {
+                                    // A) Plupload on page (phpBB, WordPress, etc.)
                                     let moxieInp = document.querySelector('.moxie-shim input[type="file"], .moxie-shim-html5 input[type="file"]');
                                     if (moxieInp) {
                                         moxieInp.click();
                                         return true;
                                     }
+                                    // B) XenForo / Discourse / generic file input
                                     let allInp = Array.from(document.querySelectorAll('input[type="file"]'));
                                     for (let inp of allInp) {
                                         if (inp.id !== 'fileupload' || allInp.length === 1) {
@@ -3493,54 +3298,26 @@ class AmigaClientSession:
                                 return false;
                             }""", [down_x, down_y])
                             if upload_hit:
-                                logger.info("Fallback upload click triggered at (%d, %d)", down_x, down_y)
-                                self.last_upload_intercept_time = time.monotonic()
+                                logger.info("Direct upload click triggered at (%d, %d)", down_x, down_y)
                         except Exception as e:
                             logger.info("Upload element check notice: %s", e)
 
                     if btn == "left":
-                        if sel_text and len(sel_text.strip()) > 0:
-                            logger.info("Selected text (%d chars): %r", len(sel_text), sel_text[:60])
-                            await self.send_clipboard_to_amiga(sel_text)
-                        else:
-                            try:
-                                sel = await self.page.evaluate("""() => {
-                                    let s = window.getSelection() ? window.getSelection().toString() : '';
-                                    if (s && s.length > 0) return s;
-                                    let el = document.activeElement;
-                                    if (el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && el.type === 'text'))) {
-                                        try {
-                                            return el.value.substring(el.selectionStart, el.selectionEnd);
-                                        } catch (e) {}
-                                    }
-                                    return '';
-                                }""")
-                                if sel and len(sel.strip()) > 0:
-                                    logger.info("Selected text (%d chars): %r", len(sel), sel[:60])
-                                    await self.send_clipboard_to_amiga(sel)
-                            except Exception:
-                                pass
+                        try:
+                            sel = await self.page.evaluate("window.getSelection() ? window.getSelection().toString() : ''")
+                            if sel and len(sel.strip()) > 0:
+                                logger.info("Selected text (%d chars): %r", len(sel), sel[:60])
+                                await self.send_clipboard_to_amiga(sel)
+                        except Exception:
+                            pass
                 self._trigger_full_refresh(True)
                 self._schedule_delayed_frames()
 
             elif event_type == INPUT_MOUSE_MOVE:
                 try:
-                    if self._mouse_down_btn == "left":
-                        # If user moves mouse with button down, update selection directly via caretRangeFromPoint
-                        dist = ((cx - self._mouse_down_x) ** 2 + (cy - self._mouse_down_y) ** 2) ** 0.5
-                        if dist > 4:
-                            self._click_count = 1
-                            try:
-                                await self.page.evaluate("([x, y]) => window.__vortex_selection && window.__vortex_selection.update(x, y)", [cx, cy])
-                            except Exception:
-                                pass
-                        await self.page.mouse.move(cx, cy)
-                        self._trigger_full_refresh(False)
-                    else:
-                        await self.page.mouse.move(cx, cy)
+                    await self.page.mouse.move(cx, cy)
                 except Exception:
                     pass
-
                 now = time.monotonic()
                 if (now - self.last_hover_time) >= 0.25:
                     if self.hover_task and not self.hover_task.done():
@@ -4717,149 +4494,8 @@ class AmigaClientSession:
     # ------------------------------------------------------------------------
     # File Upload Interceptor (Amiga ASL FileRequester -> Server -> Browser)
     # ------------------------------------------------------------------------
-    def _on_cdp_file_chooser_opened(self, params: dict) -> None:
-        """Triggered directly by Chromium CDP Page.fileChooserOpened."""
-        logger.info("DirectCDP Page.fileChooserOpened received: %r", params)
-        now = time.monotonic()
-        if self.pending_uploads:
-            logger.info("Ignoring duplicate Page.fileChooserOpened: upload already in progress (%r)", list(self.pending_uploads.keys()))
-            return
-        if (now - self.last_upload_intercept_time) < 3.0:
-            logger.info("Ignoring duplicate Page.fileChooserOpened: cooldown active (%.2fs)", now - self.last_upload_intercept_time)
-            return
-        self.last_upload_intercept_time = now
-
-        backend_node_id = params.get("backendNodeId")
-        frame_id = params.get("frameId")
-        mode = params.get("mode", "selectSingle")
-        t = asyncio.create_task(self._process_cdp_filechooser(backend_node_id, mode))
-        self.background_tasks.add(t)
-        t.add_done_callback(self.background_tasks.discard)
-
-    async def _process_cdp_filechooser(self, backend_node_id: Optional[int], mode: str) -> None:
-        upload_id = self.next_upload_id
-        self.next_upload_id += 1
-
-        logger.info("Intercepted CDP file upload chooser id=%d (backendNodeId=%s, mode=%s, page=%s)",
-                    upload_id, backend_node_id, mode, self.page.url if self.page else "")
-
-        loop = asyncio.get_running_loop()
-        resp_future = loop.create_future()
-        chunk_queue = asyncio.Queue()
-        self.pending_uploads[upload_id] = (None, resp_future, chunk_queue)
-
-        tmp_path = None
-        try:
-            # 1. Send MSG_UPLOAD_REQUEST to Amiga to open ASL FileRequester
-            accept_bytes = b"".ljust(256, b"\x00")
-            req_pkt = STRUCT_MSG_UPLOAD_REQ.pack(
-                MSG_UPLOAD_REQUEST,
-                upload_id,
-                0,  # max_size (0 = unconstrained)
-                accept_bytes,
-            )
-            if not await self.send_packet(req_pkt):
-                logger.warning("Could not send MSG_UPLOAD_REQUEST id=%d to Amiga", upload_id)
-                return
-
-            # 2. Wait up to 5 minutes for Amiga user to select a file in ASL FileRequester
-            try:
-                accepted, file_size, filename = await asyncio.wait_for(resp_future, timeout=300.0)
-            except asyncio.TimeoutError:
-                logger.warning("Upload id=%d timed out waiting for Amiga ASL selection", upload_id)
-                return
-
-            if not accepted or file_size == 0:
-                logger.info("Upload id=%d cancelled by Amiga user or empty file", upload_id)
-                return
-
-            logger.info("Upload id=%d confirmed by Amiga: '%s' (%d bytes). Receiving chunks...",
-                        upload_id, filename, file_size)
-
-            # 3. Create temporary file on server to receive uploaded chunks
-            safe_fname = re.sub(r'[^a-zA-Z0-9_.-]', '_', filename) or f"upload_{upload_id}.bin"
-            tmp_fd, tmp_path = tempfile.mkstemp(prefix=f"vb_up_{upload_id}_", suffix=f"_{safe_fname}")
-
-            received_bytes = 0
-            with os.fdopen(tmp_fd, "wb") as f:
-                while received_bytes < file_size and self.running:
-                    try:
-                        chunk_data = await asyncio.wait_for(chunk_queue.get(), timeout=30.0)
-                    except asyncio.TimeoutError:
-                        logger.warning("Upload id=%d timed out waiting for chunk from queue", upload_id)
-                        break
-                    f.write(chunk_data)
-                    received_bytes += len(chunk_data)
-
-            if received_bytes >= file_size:
-                abs_tmp_path = os.path.abspath(tmp_path)
-                logger.info("Upload id=%d fully received (%d bytes). Setting files in browser (%s)!",
-                            upload_id, received_bytes, abs_tmp_path)
-                set_ok = False
-                if self.cdp and isinstance(self.cdp, DirectCDPSession) and backend_node_id:
-                    try:
-                        await self.cdp.send("DOM.setFileInputFiles", {
-                            "files": [abs_tmp_path],
-                            "backendNodeId": backend_node_id
-                        })
-                        set_ok = True
-                        logger.info("Upload id=%d: successfully set files via DirectCDP DOM.setFileInputFiles", upload_id)
-                    except Exception as cdp_err:
-                        logger.warning("Upload id=%d: DOM.setFileInputFiles failed: %s", upload_id, cdp_err)
-
-                if not set_ok and self.page:
-                    for selector in [
-                        '.moxie-shim input[type="file"]',
-                        '.moxie-shim-html5 input[type="file"]',
-                        '#add_files_container input[type="file"]',
-                        'input[type="file"]'
-                    ]:
-                        try:
-                            el = await self.page.query_selector(selector)
-                            if el:
-                                await self.page.set_input_files(selector, [abs_tmp_path])
-                                set_ok = True
-                                logger.info("Upload id=%d: set files via fallback selector '%s'", upload_id, selector)
-                                break
-                        except Exception:
-                            pass
-
-                self._trigger_full_refresh(True)
-                self._schedule_delayed_frames()
-            else:
-                logger.warning("Upload id=%d incomplete: received %d of %d bytes",
-                               upload_id, received_bytes, file_size)
-
-        except Exception as exc:
-            logger.error("Error processing CDP file upload id=%d: %s", upload_id, exc)
-        finally:
-            self.pending_uploads.pop(upload_id, None)
-            if tmp_path:
-                try:
-                    async def _delayed_unlink(p: str):
-                        await asyncio.sleep(60.0)
-                        try:
-                            if os.path.exists(p):
-                                os.remove(p)
-                        except Exception:
-                            pass
-                    t_del = asyncio.create_task(_delayed_unlink(tmp_path))
-                    self.background_tasks.add(t_del)
-                    t_del.add_done_callback(self.background_tasks.discard)
-                except Exception:
-                    pass
-
     def _on_filechooser_event(self, file_chooser: FileChooser) -> None:
         """Triggered whenever a website clicks an HTML <input type="file">."""
-        now = time.monotonic()
-        if self.pending_uploads:
-            logger.info("Ignoring duplicate filechooser event: upload already in progress (%r)", list(self.pending_uploads.keys()))
-            return
-        if (now - self.last_upload_intercept_time) < 3.0:
-            logger.info("Ignoring duplicate filechooser event: cooldown active (%.2fs)", now - self.last_upload_intercept_time)
-            return
-        self.last_upload_intercept_time = now
-
         t = asyncio.create_task(self._process_filechooser(file_chooser))
         self.background_tasks.add(t)
         t.add_done_callback(self.background_tasks.discard)
@@ -4976,12 +4612,13 @@ def get_gpu_launch_flags(disable_gpu: bool = False) -> Tuple[List[str], bool]:
     )
 
     gpu_flags = [
+        "--enable-gpu",
         "--ignore-gpu-blocklist",
         "--enable-gpu-rasterization",
         "--enable-zero-copy",
         "--use-gl=angle",
         "--use-angle=vulkan",
-        "--enable-features=VaapiVideoDecoder,VaapiVideoEncoder,VaapiIgnoreDriverChecks,CanvasOopRasterization,DefaultANGLEVulkan,VulkanFromANGLE",
+        "--enable-features=Vulkan,VulkanFromANGLE,DefaultANGLEVulkan,CanvasOopRasterization,VaapiVideoDecoder,VaapiVideoEncoder,VaapiIgnoreDriverChecks",
     ]
     return gpu_flags, has_dri
 
@@ -5082,34 +4719,7 @@ async def run_server(args: argparse.Namespace) -> None:
         all_exts = find_all_extension_paths() if enable_exts else []
 
         profile_dir = os.path.expanduser("~/.config/vortexbrowse/chromium_profile")
-        try:
-            os.makedirs(profile_dir, exist_ok=True)
-            test_file = os.path.join(profile_dir, ".write_test")
-            with open(test_file, "w") as f:
-                f.write("ok")
-            os.unlink(test_file)
-        except Exception as e:
-            fallback_dir = os.path.join(tempfile.gettempdir(), f"vortexbrowse_chromium_profile_{os.getuid()}")
-            logger.warning("Profile directory '%s' is not writable (%s). Falling back to temporary directory '%s'", profile_dir, e, fallback_dir)
-            profile_dir = fallback_dir
-            os.makedirs(profile_dir, exist_ok=True)
-
-        # Clean up stale SingletonLock/Socket/Cookie from prior crashes or killed processes
-        for lock_file in ("SingletonLock", "SingletonCookie", "SingletonSocket"):
-            lp = os.path.join(profile_dir, lock_file)
-            if os.path.exists(lp) or os.path.islink(lp):
-                try:
-                    os.unlink(lp)
-                    logger.info("Cleaned up stale lock file: %s", lp)
-                except Exception as e:
-                    logger.warning("Could not remove lock file %s: %s", lp, e)
-
-        if os.getuid() == 0:
-            logger.warning("=" * 68)
-            logger.warning(" HINWEIS: Der VortexBrowser Server laeuft als ROOT (UID 0)!")
-            logger.warning(" Es wird dringend empfohlen, den Server als normaler Benutzer")
-            logger.warning(" (OHNE sudo) auszufuehren, um Berechtigungskonflikte zu vermeiden.")
-            logger.warning("=" * 68)
+        os.makedirs(profile_dir, exist_ok=True)
 
         gpu_flags, has_dri = get_gpu_launch_flags(disable_gpu=getattr(args, "disable_gpu", False))
         if getattr(args, "disable_gpu", False):
