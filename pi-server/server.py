@@ -2894,10 +2894,11 @@ class AmigaClientSession:
         cur_url = (self.page.url or "").lower() if self.page else ""
         is_video_site = any(k in cur_url for k in ("youtube.com/watch", "youtu.be/", "twitch.tv/", "/watch?v="))
         audio_active = (getattr(self, "last_audio_time", 0.0) > time.monotonic() - 2.0)
-        # Only emit raw H.264 NAL bitstream if explicitly requested via --codec h264 or @STREAM_MODE:h264
+        # Emit H.264 video stream when in video stream mode, on video sites or when requested
         should_h264 = (
             (self.codec_mode == "h264")
             or (self.stream_mode == "h264")
+            or (self.stream_mode == "auto" and (self.is_video_mode or self._video_element_playing or (is_video_site and audio_active)))
         )
         if should_h264:
             yuv_raw = None

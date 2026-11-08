@@ -242,6 +242,38 @@ static void run_autotest_step(VortexApp *app)
 
 int main(int argc, char **argv)
 {
+    /* Strict AltiVec hardware check:
+     * If compiled with dedicated AltiVec instructions (-maltivec / __ALTIVEC__),
+     * verify that the host CPU actually possesses an active AltiVec/VMX vector unit.
+     * Prevents illegal instruction exceptions on AmigaOne X5000, A1222+, Sam460, Sam440, G3.
+     */
+    uint32 vec_unit = VECTORTYPE_NONE;
+    if (IExec) {
+        IExec->GetCPUInfoTags(GCIT_VectorUnit, &vec_unit, TAG_DONE);
+    }
+    BOOL has_altivec = (vec_unit == VECTORTYPE_ALTIVEC || vec_unit == 2);
+    (void)has_altivec;
+#if defined(__ALTIVEC__)
+    if (!has_altivec) {
+        if (IDOS) {
+            IDOS->Printf("\n[VortexBrowser] FEHLER: Dieses Programm ('VortexBrowser-AltiVec') wurde speziell fuer\n"
+                         "CPUs mit AltiVec/VMX SIMD (z.B. AmigaOne X1000 oder PowerPC G4) kompiliert.\n"
+                         "Auf diesem System (X5000 / A1222+ / Sam460 / G3) bitte die Standard-Version 'VortexBrowser' verwenden!\n\n");
+        }
+        if (IIntuition) {
+            struct EasyStruct es = {
+                sizeof(struct EasyStruct),
+                0,
+                "VortexBrowser - CPU Inkompatibel",
+                "Diese Version ('VortexBrowser-AltiVec') benoetigt eine CPU mit AltiVec/VMX SIMD-Einheit (z.B. AmigaOne X1000 oder G4).\n\nAuf Systemen wie AmigaOne X5000, A1222+, Sam460 oder G3 starten Sie bitte die Standard-Version 'VortexBrowser'!",
+                "Abbrechen"
+            };
+            IIntuition->EasyRequestArgs(NULL, &es, NULL, NULL);
+        }
+        return 20;
+    }
+#endif
+
     memset(&g_app, 0, sizeof(VortexApp));
     g_app.server_host[0] = '\0';
     g_app.server_port    = DEFAULT_SERVER_PORT;

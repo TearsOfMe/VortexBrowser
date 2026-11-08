@@ -22,6 +22,7 @@ endif
 
 INCLUDES = -I../common \
            -I./src \
+           -I../sdk_va \
            -I$(SDK)/include/include_h \
            -I$(SDK)/include/netinclude \
            -I$(SDK)/local/common/include \
