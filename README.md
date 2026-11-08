@@ -7,10 +7,16 @@ VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwrigh
 
 ## Highlights & Features
 
-1. **Ultra-schnelles Video- & Web-Streaming (bis zu 60 FPS):**
+1. **Hardware-beschleunigtes H.264 Video-Streaming & Dekodierung (va.library + VA-API):**
+   - **Eingebettetes FFmpeg (`libavcodec`) auf AmigaOS 4:** Dekodiert H.264 Annex-B Bitstreams direkt in Hardware auf Radeon HD/RX Grafikkarten via `va.library` (`vaPutSurface`) – analog zu Maijestros MPlayer-Architektur.
+   - **Hardware-Encoding auf dem Server:** H.264 GPU-Encoding in Echtzeit via `h264_vaapi` (AMD VCN auf Ryzen PRO bzw. Intel QuickSync) bei minimaler Server-CPU-Last (< 3%).
+   - **Einstellbare Video-Qualität:**
+     - Neuer Schieberegler in den Amiga-Einstellungen (`Amiga+1`): **Video-Bitrate von 1.000 bis 10.000 kbps (10 Mbit/s)**.
+     - Server-Kommandozeilenoption: `--video-bitrate <kbps>` bzw. Umgebungsvariable `VORTEX_VIDEO_BITRATE`.
+   - **Zero-Latency:** Exaktes 1-Sekunden-Keyframe-Intervall (`-g 25`) für sofortigen Sync bei Video-Start und 0 B-Frames (`-bf 0`) für latenzfreie Echtzeitübertragung.
    - **Planar YUV420p (12-Bit) & High-Speed JPEG:** Direkte hardwarenahe Übertragung ohne RGB-Overhead.
-   - **Wählbare Framerate (15 / 25 / 30 / 50 / 60 FPS):** Vom Amiga aus flexibel einstellbar via Menü oder Einstellungen – schont schwächere CPUs oder liefert maximale Flüssigkeit bei YouTube/Twitch.
-   - **2D Dirty-Rectangles (`CODEC_LZ4_RECT`):** Bei Videos (z. B. YouTube oder Twitch) wird nur der tatsächlich veränderte Bildausschnitt des Videoplayers aktualisiert, nicht die gesamte Webseite.
+   - **Wählbare Framerate (15 / 25 / 30 / 50 / 60 FPS):** Vom Amiga aus flexibel einstellbar via Menü oder Einstellungen.
+   - **2D Dirty-Rectangles (`CODEC_LZ4_RECT`):** Für sparsamen Datentransfer bei normalem Web-Browsing.
    - **AVX2-Mikroprädiktor:** Verdoppelt die LZ4-Kompressionsrate bei vollen 8-Bit Farbtiefe (PSNR > 44 dB, verlustfreie Wahrnehmung) ohne CPU-Last auf dem Amiga.
    - **Rustwright + DirectCDP Core:** Direkte WebSocket-Screencast-Anbindung ohne Node.js-Treiber-Overhead.
 
@@ -71,7 +77,7 @@ cd cachyos-linux-server   # oder pi-server / rpi4-server
 ```
 
 ### 3. Client auf AmigaOS 4.1 starten
-1. Archiv `VortexBrowser-0.99-RC2-AmigaOS4.lha` auf dem Amiga entpacken (z. B. nach `Work:Internet/VortexBrowser`).
+1. Archiv `VortexBrowser-0.99-RC3-AmigaOS4.lha` auf dem Amiga entpacken (z. B. nach `Work:Internet/VortexBrowser`).
 2. Doppelklick auf das `VortexBrowser`-Icon.
 3. Server-IP eintragen (oder `Amiga+1` drücken) und auf **Verbinden** klicken!
 

@@ -28,9 +28,10 @@ gcc -O3 -march=native -shared -fPIC \
     -o "${SCRIPT_DIR}/rpi4-server/fast_pixconv.so" 2>/dev/null || true
 
 echo "=== [2/3] Cross-Compiling AmigaOS 4.1 PowerPC Client (Universal + AltiVec) via Docker ==="
-docker exec "${CONTAINER_ID}" bash -c "mkdir -p /tmp/vb_build/common /tmp/vb_build/amiga-client"
+docker exec "${CONTAINER_ID}" bash -c "mkdir -p /tmp/vb_build/common /tmp/vb_build/amiga-client /tmp/vb_build/sdk_va"
 docker cp "${SCRIPT_DIR}/common/." "${CONTAINER_ID}:/tmp/vb_build/common/"
 docker cp "${SCRIPT_DIR}/amiga-client/." "${CONTAINER_ID}:/tmp/vb_build/amiga-client/"
+docker cp "${SCRIPT_DIR}/sdk_va/." "${CONTAINER_ID}:/tmp/vb_build/sdk_va/"
 echo "--- Compiling Universal (Dynamic CPU Detection) and Pure AltiVec builds ---"
 docker exec "${CONTAINER_ID}" bash -c "cd /tmp/vb_build/amiga-client && make clean && make"
 

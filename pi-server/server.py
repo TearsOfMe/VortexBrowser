@@ -4198,6 +4198,18 @@ class AmigaClientSession:
             self._trigger_full_refresh(True)
             return
 
+        if cmd.upper().startswith("@VIDEO_BITRATE:"):
+            try:
+                br = int(cmd.split(":", 1)[1].strip())
+                self.video_bitrate_k = max(500, min(50000, br))
+                if self._h264_encoder:
+                    self._h264_encoder.stop()
+                    self._h264_encoder = None
+                logger.info("Client set H.264 video stream bitrate to %d kbps", self.video_bitrate_k)
+            except Exception:
+                pass
+            return
+
         if cmd.upper().startswith("@CODEC:"):
             c = cmd.split(":", 1)[1].strip().lower()
             if c in ("mjpeg", "jpeg"):
