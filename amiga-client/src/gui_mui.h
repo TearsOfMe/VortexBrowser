@@ -10,9 +10,16 @@ enum {
     GID_RELOAD,
     GID_STOP,
     GID_HOME,
+    GID_BOOKMARKS,
+    GID_DOWNLOADS,
+    GID_PASSWORDS,
+    GID_NEW_TAB,
+    GID_CLOSE_TAB,
+    GID_SECURITY_BADGE,
     GID_URL,
     GID_CLEAR_URL,
     GID_GO,
+    GID_SEARCH_ENGINE,
     GID_SEARCH,
     GID_SEARCH_GO,
     GID_ADD_FAV,
@@ -31,16 +38,27 @@ enum {
     GID_QUICK_ADD,
     GID_QUICK_REMOVE,
     GID_PREFS,
-    GID_QUICK_BASE = 50,
-    GID_QUICK_MAX  = 50 + VB_MAX_QUICKLINKS
+    GID_TAB_ADD,
+
+    GID_QUICK_BASE     = 50,
+    GID_QUICK_MAX      = 50 + VB_MAX_QUICKLINKS,
+
+    GID_TAB_BASE       = 100,
+    GID_TAB_MAX        = 100 + VB_MAX_TABS,
+    GID_TAB_CLOSE_BASE = 150,
+    GID_TAB_CLOSE_MAX  = 150 + VB_MAX_TABS
 };
 
 /* Menu IDs */
 enum {
-    MID_PROJECT = 100,
+    MID_PROJECT = 200,
+    MID_NEW_TAB,
+    MID_CLOSE_TAB,
     MID_SETTINGS,
-    MID_ABOUT,
+    MID_PASSWORDS,
+    MID_DOWNLOADS,
     MID_CLEAR_CACHE,
+    MID_ABOUT,
     MID_QUIT,
 
     MID_NAV,
@@ -67,7 +85,14 @@ enum {
     MID_SERVER_CUSTOM,
     MID_DISCONNECT,
 
-    MID_FPS_15 = 200,
+    MID_VIEW,
+    MID_BITRATE_2000,
+    MID_BITRATE_4000,
+    MID_BITRATE_6000,
+    MID_BITRATE_8000,
+    MID_BITRATE_10000,
+
+    MID_FPS_15,
     MID_FPS_25,
     MID_FPS_30,
     MID_FPS_50,
@@ -82,5 +107,10 @@ void gui_mui_flush_dirty(VortexApp *app);
 void gui_mui_update_url_bar(VortexApp *app, const char *url);
 void gui_mui_rebuild_fav_cycle(VortexApp *app);
 void gui_mui_rebuild_quicklinks(VortexApp *app);
+void gui_mui_rebuild_tabs(VortexApp *app);
+void gui_mui_tab_add(VortexApp *app, const char *title, const char *url);
+void gui_mui_tab_switch(VortexApp *app, uint16 idx);
+void gui_mui_tab_close(VortexApp *app, uint16 idx);
+void gui_mui_update_status_bar(VortexApp *app);
 
 #endif /* VORTEXBROWSE_GUI_MUI_H */

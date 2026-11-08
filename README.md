@@ -20,9 +20,16 @@ VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwrigh
    - **AVX2-Mikroprädiktor:** Verdoppelt die LZ4-Kompressionsrate bei vollen 8-Bit Farbtiefe (PSNR > 44 dB, verlustfreie Wahrnehmung) ohne CPU-Last auf dem Amiga.
    - **Rustwright + DirectCDP Core:** Direkte WebSocket-Screencast-Anbindung ohne Node.js-Treiber-Overhead.
 
-2. **Zwei native GUI-Engines zur Auswahl (ReAction & MUI):**
+2. **Zwei native GUI-Engines zur Auswahl (ReAction & MUI im Odyssey-Look):**
    - **Standard ReAction (`VortexBrowser` & `VortexBrowser-AltiVec`):** Klassisches AmigaOS 4 System-Look-and-Feel mit Tabs (`clicktab.gadget`), Font-Zoom, Screen-Cloning und GPU-Composite-Skalierung.
-   - **MUI Edition (`VortexBrowser-MUI`):** Voll anpassbare Benutzeroberfläche über Magic User Interface (MUI 4/5) mit flexibler Skalierung, Themen, Cycle-Gadgets und eigenem MUI-Viewport.
+   - **MUI Edition (`VortexBrowser-MUI` im Odyssey Web Browser Look):**
+     - Exakt nachempfundene Benutzeroberfläche des beliebten AmigaOS 4 Odyssey Web Browsers:
+       - **Navigationsleiste (`navigationgroup`):** Schnellzugriff auf `<` (Zurück), `>` (Vorwärts), `Neu`, `Stopp`, `Start`, `Lesezeichen`, `Downloads`, `Passwörter`, `+ Tab`, `- Tab` und animierter Lade-Throbber.
+       - **Adress- & Suchzeile (`urlgroup`):** Sicherheits-Indikator (`[🔒 https]` / `[🌐 http]`), URL-Eingabezeile, `[X]`, `[Los]`, interaktiver `BalanceObject`-Teiler und Suchleiste mit Suchmaschinen-Wahl (`DuckDuckGo`, `Google`, `Wikipedia`, `Aminet`, `OS4Depot`, `YouTube`).
+       - **Schnellwahlleiste (`fastlinkparentgroup`):** Lesezeichen-Buttons mit Favicons, `+Lesez.`, Server-Schnellauswahl und Verbinden-Button.
+       - **Integrierte Tableiste:** Direkt über dem Web-Viewport mit dynamischen Tab-Titeln, Hervorhebung des aktiven Tabs, Tab-Schließen-Buttons `[x]` und neuem Tab `[+]`.
+       - **Segmentierte Statusleiste (`statusgroup`):** Aufgeteilt in Sicherheits-Zone (`[🔒 Sicher]`), vertikale Trennbalken, Statusmeldung / Hover-URLs, Fortschrittsbalken und Hardware-Stream-Status (`25 FPS | 4000 kbps | VA-API HW`).
+       - **Menüstruktur:** Entspricht der bekannten Odyssey-Menüführung inklusive Video-Bitrateneinstellungen bis 10.000 kbps.
 
 3. **Multi-Tab-Browsing & Sitzungswiederherstellung:**
    - Echte Tabs über `clicktab.gadget` mit AmigaOS 4 Standard-Bedienung (`Amiga+T` für neuen Tab, `Amiga+W` zum Schließen).
