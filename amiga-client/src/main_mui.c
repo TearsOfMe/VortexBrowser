@@ -166,20 +166,6 @@ int main(int argc, char **argv)
         }
     }
 
-    for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--host") == 0 && i + 1 < argc) {
-            strncpy(g_app.server_host, argv[++i], sizeof(g_app.server_host) - 1);
-        } else if (strcmp(argv[i], "--port") == 0 && i + 1 < argc) {
-            g_app.server_port = (uint16_t)atoi(argv[++i]);
-        } else if (strcmp(argv[i], "--url") == 0 && i + 1 < argc) {
-            strncpy(g_app.current_url, argv[++i], sizeof(g_app.current_url) - 1);
-        } else if (strcmp(argv[i], "--autotest") == 0) {
-            g_app.autotest = TRUE;
-        } else if (strcmp(argv[i], "--dl-dir") == 0 && i + 1 < argc) {
-            strncpy(g_app.autotest_dl_dir, argv[++i], sizeof(g_app.autotest_dl_dir) - 1);
-        }
-    }
-
     /* Shell banner suppressed per user request */
 
     if (!open_libs()) {
@@ -190,6 +176,28 @@ int main(int argc, char **argv)
     g_app.is_mui = TRUE;
     prefs_init(&g_app);
     prefs_load(&g_app);
+    prefs_load_tooltypes(&g_app, argc, argv);
+
+    /* Command line arguments override prefs and icon tooltypes */
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--host") == 0 && i + 1 < argc) {
+            strncpy(g_app.server_host, argv[++i], sizeof(g_app.server_host) - 1);
+            g_app.server_host[sizeof(g_app.server_host) - 1] = '\0';
+            strncpy(g_app.prefs.server_host, g_app.server_host, sizeof(g_app.prefs.server_host) - 1);
+            g_app.prefs.server_host[sizeof(g_app.prefs.server_host) - 1] = '\0';
+        } else if (strcmp(argv[i], "--port") == 0 && i + 1 < argc) {
+            g_app.server_port = (uint16_t)atoi(argv[++i]);
+            g_app.prefs.server_port = g_app.server_port;
+        } else if (strcmp(argv[i], "--url") == 0 && i + 1 < argc) {
+            strncpy(g_app.current_url, argv[++i], sizeof(g_app.current_url) - 1);
+            g_app.current_url[sizeof(g_app.current_url) - 1] = '\0';
+        } else if (strcmp(argv[i], "--autotest") == 0) {
+            g_app.autotest = TRUE;
+        } else if (strcmp(argv[i], "--dl-dir") == 0 && i + 1 < argc) {
+            strncpy(g_app.autotest_dl_dir, argv[++i], sizeof(g_app.autotest_dl_dir) - 1);
+            g_app.autotest_dl_dir[sizeof(g_app.autotest_dl_dir) - 1] = '\0';
+        }
+    }
 
     renderer_init(&g_app);
     download_init(&g_app);
