@@ -5,6 +5,9 @@
 #include <proto/exec.h>
 #include <proto/dos.h>
 #include <proto/intuition.h>
+#include <proto/icon.h>
+#include <workbench/startup.h>
+#include <workbench/workbench.h>
 #include <gadgets/button.h>
 #include <gadgets/space.h>
 
@@ -398,6 +401,122 @@ BOOL prefs_load(VortexApp *app)
     }
 
     return loaded;
+}
+
+void prefs_load_tooltypes(VortexApp *app, int argc, char **argv)
+{
+    if (!app || !IExec || !IDOS) return;
+
+    struct Library *IconBase = IExec->OpenLibrary("icon.library", 50);
+    if (!IconBase) return;
+    struct IconIFace *IIcon = (struct IconIFace *)IExec->GetInterface(IconBase, "main", 1, NULL);
+    if (!IIcon) {
+        IExec->CloseLibrary(IconBase);
+        return;
+    }
+
+    struct DiskObject *dobj = NULL;
+    if (argc == 0 && argv) {
+        /* Started from Workbench: argv is struct WBStartup * */
+        struct WBStartup *wbmsg = (struct WBStartup *)argv;
+        if (wbmsg && wbmsg->sm_NumArgs > 0 && wbmsg->sm_ArgList) {
+            BPTR olddir = IDOS->SetCurrentDir(wbmsg->sm_ArgList[0].wa_Lock);
+            dobj = IIcon->GetDiskObject(wbmsg->sm_ArgList[0].wa_Name);
+            IDOS->SetCurrentDir(olddir);
+        }
+    } else if (argv && argv[0]) {
+        /* Started from Shell: find icon for argv[0] or PROGDIR: */
+        dobj = IIcon->GetDiskObject(argv[0]);
+        if (!dobj) {
+            dobj = IIcon->GetDiskObject("PROGDIR:VortexBrowser");
+        }
+        if (!dobj) {
+            dobj = IIcon->GetDiskObject("PROGDIR:VortexBrowser-MUI");
+        }
+        if (!dobj) {
+            dobj = IIcon->GetDiskObject("PROGDIR:VortexBrowser-AltiVec");
+        }
+    }
+
+    if (dobj && dobj->do_ToolTypes) {
+        CONST_STRPTR val;
+
+        val = IIcon->FindToolType((STRPTR *)dobj->do_ToolTypes, "SERVER");
+        if (!val) val = IIcon->FindToolType((STRPTR *)dobj->do_ToolTypes, "HOST");
+        if (val && val[0]) {
+            strncpy(app->prefs.server_host, val, sizeof(app->prefs.server_host) - 1);
+            app->prefs.server_host[sizeof(app->prefs.server_host) - 1] = '\0';
+            strncpy(app->server_host, val, sizeof(app->server_host) - 1);
+            app->server_host[sizeof(app->server_host) - 1] = '\0';
+        }
+
+        val = IIcon->FindToolType((STRPTR *)dobj->do_ToolTypes, "PORT");
+        if (val && val[0]) {
+            int p = atoi(val);
+            if (p > 0 && p <= 65535) {
+                app->prefs.server_port = (uint16_t)p;
+                app->server_port = (uint16_t)p;
+            }
+        }
+
+        val = IIcon->FindToolType((STRPTR *)dobj->do_ToolTypes, "URL");
+        if (!val) val = IIcon->FindToolType((STRPTR *)dobj->do_ToolTypes, "STARTURL");
+        if (val && val[0]) {
+            strncpy(app->prefs.start_url, val, sizeof(app->prefs.start_url) - 1);
+            app->prefs.start_url[sizeof(app->prefs.start_url) - 1] = '\0';
+            strncpy(app->current_url, val, sizeof(app->current_url) - 1);
+            app->current_url[sizeof(app->current_url) - 1] = '\0';
+        }
+
+        val = IIcon->FindToolType((STRPTR *)dobj->do_ToolTypes, "STREAMMODE");
+        if (!val) val = IIcon->FindToolType((STRPTR *)dobj->do_ToolTypes, "STREAM_MODE");
+        if (val && val[0]) {
+            if (strcasecmp(val, "H264") == 0 || strcasecmp(val, "VIDEO") == 0) {
+                app->prefs.video_stream_mode = STREAM_VIDEO_H264;
+            } else if (strcasecmp(val, "LZ4") == 0 || strcasecmp(val, "DIRTYRECT") == 0 || strcasecmp(val, "JPEG") == 0) {
+                app->prefs.video_stream_mode = STREAM_VIDEO_DIRTYRECT;
+            } else if (strcasecmp(val, "AUTO") == 0) {
+                app->prefs.video_stream_mode = STREAM_VIDEO_AUTO;
+            }
+        }
+
+        val = IIcon->FindToolType((STRPTR *)dobj->do_ToolTypes, "BITRATE");
+        if (val && val[0]) {
+            int br = atoi(val);
+            if (br >= 500 && br <= 20000) {
+                app->prefs.video_bitrate_k = (uint16_t)br;
+            }
+        }
+
+        val = IIcon->FindToolType((STRPTR *)dobj->do_ToolTypes, "FPS");
+        if (val && val[0]) {
+            int fps = atoi(val);
+            if (fps >= 1 && fps <= 60) {
+                app->prefs.target_fps = (uint8_t)fps;
+            }
+        }
+
+        val = IIcon->FindToolType((STRPTR *)dobj->do_ToolTypes, "DARKMODE");
+        if (!val) val = IIcon->FindToolType((STRPTR *)dobj->do_ToolTypes, "DARK_THEME");
+        if (val && val[0]) {
+            if (strcasecmp(val, "TRUE") == 0 || strcasecmp(val, "YES") == 0 || strcmp(val, "1") == 0) {
+                app->prefs.dark_theme = 1;
+            } else if (strcasecmp(val, "FALSE") == 0 || strcasecmp(val, "NO") == 0 || strcmp(val, "0") == 0) {
+                app->prefs.dark_theme = 0;
+            }
+        }
+
+        val = IIcon->FindToolType((STRPTR *)dobj->do_ToolTypes, "DOWNLOADDIR");
+        if (val && val[0]) {
+            strncpy(app->prefs.download_dir, val, sizeof(app->prefs.download_dir) - 1);
+            app->prefs.download_dir[sizeof(app->prefs.download_dir) - 1] = '\0';
+        }
+
+        IIcon->FreeDiskObject(dobj);
+    }
+
+    IExec->DropInterface((struct Interface *)IIcon);
+    IExec->CloseLibrary(IconBase);
 }
 
 void prefs_capture_window_box(VortexApp *app)

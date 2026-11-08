@@ -1778,6 +1778,11 @@ void renderer_sync_viewport_size(VortexApp *app)
         snprintf(sm_cmd, sizeof(sm_cmd), "@STREAM_MODE:%s", sm);
         net_send_url(app, sm_cmd);
 
+        char br_cmd[32];
+        uint16 br = (app->prefs.video_bitrate_k >= 500 && app->prefs.video_bitrate_k <= 10000) ? app->prefs.video_bitrate_k : 8000;
+        snprintf(br_cmd, sizeof(br_cmd), "@VIDEO_BITRATE:%u", (unsigned)br);
+        net_send_url(app, br_cmd);
+
         r->format_sent = TRUE;
     }
 
