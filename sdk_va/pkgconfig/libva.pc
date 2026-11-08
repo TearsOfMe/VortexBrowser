@@ -1,0 +1,10 @@
+prefix=/sdk_va
+exec_prefix=${prefix}
+libdir=${exec_prefix}
+includedir=${prefix}
+
+Name: libva
+Description: Userspace Video Acceleration (VA) API
+Version: 1.11.0
+Libs: -L${libdir} -lva
+Cflags: -I${includedir}

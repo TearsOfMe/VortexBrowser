@@ -1557,6 +1557,7 @@ class H264LiveStreamEncoder:
                 "-bufsize", f"{self.bitrate_k // 2}k",
                 "-g", str(self.fps),
                 "-bf", "0",
+                "-x264-params", f"keyint={self.fps}:min-keyint={self.fps}:scenecut=0:repeat-headers=1",
                 "-f", "h264", "-"
             ]
         try:
@@ -1580,6 +1581,7 @@ class H264LiveStreamEncoder:
                 "-tune", "zerolatency",
                 "-g", str(self.fps),
                 "-bf", "0",
+                "-x264-params", f"keyint={self.fps}:min-keyint={self.fps}:scenecut=0:repeat-headers=1",
                 "-b:v", f"{self.bitrate_k}k",
                 "-maxrate", f"{self.bitrate_k * 3 // 2}k",
                 "-bufsize", f"{self.bitrate_k // 2}k",

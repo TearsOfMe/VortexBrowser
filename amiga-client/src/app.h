@@ -140,6 +140,13 @@ typedef struct RendererState {
     APTR           iva;            /* struct VAIFace* interface pointer */
     APTR           va_display;     /* VADisplay handle */
     uint32_t       va_surface;     /* VASurfaceID surface handle */
+    APTR           av_codec_ctx;   /* AVCodecContext* */
+    APTR           av_parser;      /* AVCodecParserContext* */
+    APTR           av_frame;       /* AVFrame* */
+    APTR           av_packet;      /* AVPacket* */
+    APTR           av_hw_device;   /* AVBufferRef* */
+    uint32_t       decoded_va_surface; /* VASurfaceID of decoded video frame */
+    BOOL           h264_decoder_init;
     BOOL           is_h264_active; /* TRUE if currently receiving CODEC_H264 stream */
     BOOL           src_bm_is_16bit;/* TRUE if src_bm[0] is 16-bit PIXF_R5G6B5 */
     BOOL           src_bm_is_yuv;  /* TRUE if src_bm[0] is PIXF_YUV420P */

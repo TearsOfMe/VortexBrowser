@@ -68,6 +68,7 @@ static struct NewMenu s_main_menu[] = {
     { NM_ITEM,  (STRPTR)"Passwort-Manager...",                         (STRPTR)"K", 0, 0, (APTR)MID_PROJ_PASSWORDS },
     { NM_ITEM,  (STRPTR)"Auto-Login fuer Seite...",                    (STRPTR)"L", 0, 0, (APTR)MID_PROJ_AUTOLOGIN },
     { NM_ITEM,  (STRPTR)"Download-Manager...",                         (STRPTR)"D", 0, 0, (APTR)MID_PROJ_DOWNLOADS },
+    { NM_ITEM,  (STRPTR)"In VideoVortex abspielen",                    (STRPTR)"Y", 0, 0, (APTR)MID_PROJ_VIDEOVORTEX },
     { NM_ITEM,  NM_BARLABEL,                                           NULL,        0, 0, NULL },
     { NM_ITEM,  (STRPTR)"Server konfigurieren...",                     (STRPTR)"1", 0, 0, (APTR)MID_SET_SERVER_CUSTOM },
     { NM_ITEM,  (STRPTR)"Mit Server verbinden",                        (STRPTR)"2", 0, 0, (APTR)MID_PROJ_CONNECT },
@@ -1502,6 +1503,21 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
         case MID_PROJ_QUIT:
             app->running = FALSE;
             break;
+
+        case MID_PROJ_VIDEOVORTEX: {
+            if (IDOS) {
+                if (app->current_url[0] && app->current_url[0] != '@') {
+                    char sys_cmd[1024];
+                    snprintf(sys_cmd, sizeof(sys_cmd), "Run <>NIL: APPDIR:VideoVortex URL \"%s\"", app->current_url);
+                    IDOS->SystemTags(sys_cmd, TAG_DONE);
+                    app_set_status("Uebergebe Video an VideoVortex: %s", app->current_url);
+                } else {
+                    IDOS->SystemTags("Run <>NIL: APPDIR:VideoVortex", TAG_DONE);
+                    app_set_status("Starte VideoVortex...");
+                }
+            }
+            break;
+        }
 
         case MID_STREAM_VIDEO_AUTO: {
             app->prefs.video_stream_mode = STREAM_VIDEO_AUTO;
