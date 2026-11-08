@@ -25,6 +25,7 @@
 #include "net.h"
 #include "renderer.h"
 #include "favorites.h"
+#include "passwords.h"
 
 extern struct SocketIFace *ISocket;
 extern struct PopupMenuIFace *IPopupMenu;
@@ -40,6 +41,33 @@ extern struct PopupMenuIFace *IPopupMenu;
 #undef get
 #define get(obj, attr, valptr) IIntuition->GetAttr((attr), (Object *)(obj), (uint32 *)(valptr))
 
+static inline Object *MakeVBar(void)
+{
+    return (Object *)RectangleObject,
+        MUIA_Rectangle_VBar, TRUE,
+        MUIA_Weight, 0,
+    End;
+}
+
+static const char *s_search_engine_labels[] = {
+    "DuckDuckGo",
+    "Google",
+    "Wikipedia",
+    "Aminet",
+    "OS4Depot",
+    "YouTube",
+    NULL
+};
+
+static const char *s_search_engine_urls[] = {
+    "https://duckduckgo.com/?q=",
+    "https://www.google.com/search?q=",
+    "https://de.wikipedia.org/wiki/Special:Search?search=",
+    "https://aminet.net/search?query=",
+    "https://os4depot.net/index.php?function=search&search=",
+    "https://www.youtube.com/results?search_query="
+};
+
 static const char *s_server_entries[] = {
     "Standard Server (127.0.0.1:7788)",
     "Sekundaerer Server (127.0.0.1:9757)",
@@ -49,9 +77,15 @@ static const char *s_server_entries[] = {
 
 static struct NewMenu s_mui_menu[] = {
     { NM_TITLE, (char *)"Projekt", NULL, 0, 0, (APTR)MID_PROJECT },
+    { NM_ITEM,  (char *)"Neuer Tab", (char *)"T", 0, 0, (APTR)MID_NEW_TAB },
+    { NM_ITEM,  (char *)"Tab schliessen", (char *)"W", 0, 0, (APTR)MID_CLOSE_TAB },
+    { NM_ITEM,  NM_BARLABEL, NULL, 0, 0, (APTR)0 },
     { NM_ITEM,  (char *)"Einstellungen...", (char *)"E", 0, 0, (APTR)MID_SETTINGS },
+    { NM_ITEM,  (char *)"Passwort-Manager...", (char *)"P", 0, 0, (APTR)MID_PASSWORDS },
+    { NM_ITEM,  (char *)"Download-Manager...", (char *)"D", 0, 0, (APTR)MID_DOWNLOADS },
+    { NM_ITEM,  NM_BARLABEL, NULL, 0, 0, (APTR)0 },
+    { NM_ITEM,  (char *)"Cache leeren", (char *)"K", 0, 0, (APTR)MID_CLEAR_CACHE },
     { NM_ITEM,  (char *)"Ueber VortexBrowse...", (char *)"?", 0, 0, (APTR)MID_ABOUT },
-    { NM_ITEM,  (char *)"Cache / Speicher leeren", (char *)"K", 0, 0, (APTR)MID_CLEAR_CACHE },
     { NM_ITEM,  NM_BARLABEL, NULL, 0, 0, (APTR)0 },
     { NM_ITEM,  (char *)"Beenden", (char *)"Q", 0, 0, (APTR)MID_QUIT },
 
@@ -81,15 +115,43 @@ static struct NewMenu s_mui_menu[] = {
     { NM_ITEM,  NM_BARLABEL, NULL, 0, 0, (APTR)0 },
     { NM_ITEM,  (char *)"Verbindung trennen", NULL, 0, 0, (APTR)MID_DISCONNECT },
 
-    { NM_TITLE, (char *)"Ansicht", NULL, 0, 0, (APTR)0 },
-    { NM_ITEM,  (char *)"FPS: 15 FPS (Stromsparend)", NULL, 0, 0, (APTR)MID_FPS_15 },
-    { NM_ITEM,  (char *)"FPS: 25 FPS (Standard / PAL flüssig)", NULL, 0, 0, (APTR)MID_FPS_25 },
-    { NM_ITEM,  (char *)"FPS: 30 FPS (Empfohlen für YouTube)", NULL, 0, 0, (APTR)MID_FPS_30 },
-    { NM_ITEM,  (char *)"FPS: 50 FPS (PAL High-Speed)", NULL, 0, 0, (APTR)MID_FPS_50 },
-    { NM_ITEM,  (char *)"FPS: 60 FPS (Maximal / Gaming)", NULL, 0, 0, (APTR)MID_FPS_60 },
+    { NM_TITLE, (char *)"Ansicht", NULL, 0, 0, (APTR)MID_VIEW },
+    { NM_ITEM,  (char *)"Video-Qualitaet / Bitrate:", NULL, NM_ITEMDISABLED, 0, (APTR)0 },
+    { NM_ITEM,  (char *)"  Bitrate: 2000 kbps (Niedrig)", NULL, 0, 0, (APTR)MID_BITRATE_2000 },
+    { NM_ITEM,  (char *)"  Bitrate: 4000 kbps (Standard)", NULL, 0, 0, (APTR)MID_BITRATE_4000 },
+    { NM_ITEM,  (char *)"  Bitrate: 6000 kbps (Hoch)", NULL, 0, 0, (APTR)MID_BITRATE_6000 },
+    { NM_ITEM,  (char *)"  Bitrate: 8000 kbps (Sehr hoch)", NULL, 0, 0, (APTR)MID_BITRATE_8000 },
+    { NM_ITEM,  (char *)"  Bitrate: 10000 kbps (Ultra-HD)", NULL, 0, 0, (APTR)MID_BITRATE_10000 },
+    { NM_ITEM,  NM_BARLABEL, NULL, 0, 0, (APTR)0 },
+    { NM_ITEM,  (char *)"Framerate:", NULL, NM_ITEMDISABLED, 0, (APTR)0 },
+    { NM_ITEM,  (char *)"  15 FPS (Stromsparend)", NULL, 0, 0, (APTR)MID_FPS_15 },
+    { NM_ITEM,  (char *)"  25 FPS (Standard / PAL fl\374ssig)", NULL, 0, 0, (APTR)MID_FPS_25 },
+    { NM_ITEM,  (char *)"  30 FPS (Empfohlen f\374r YouTube)", NULL, 0, 0, (APTR)MID_FPS_30 },
+    { NM_ITEM,  (char *)"  50 FPS (PAL High-Speed)", NULL, 0, 0, (APTR)MID_FPS_50 },
+    { NM_ITEM,  (char *)"  60 FPS (Maximal / Gaming)", NULL, 0, 0, (APTR)MID_FPS_60 },
 
     { NM_END,   NULL, NULL, 0, 0, (APTR)0 }
 };
+
+static const char *s_throbber_frames[] = {
+    "\33c\33b[ ● ]",
+    "\33c\33b[ ◐ ]",
+    "\33c\33b[ ◓ ]",
+    "\33c\33b[ ◑ ]",
+    "\33c\33b[ ◒ ]"
+};
+#define NUM_THROBBER_FRAMES 5
+
+static void gui_mui_throbber_tick(VortexApp *app, BOOL active)
+{
+    if (!app || !app->mui_throbber) return;
+    if (active) {
+        app->mui_throbber_step = (app->mui_throbber_step + 1) % NUM_THROBBER_FRAMES;
+        set(app->mui_throbber, MUIA_Text_Contents, s_throbber_frames[app->mui_throbber_step]);
+    } else {
+        set(app->mui_throbber, MUIA_Text_Contents, "\33c[ ◈ ]");
+    }
+}
 
 /* -------------------------------------------------------------------------
  * Custom MUI Viewport Class (MUIC_Area Subclass)
@@ -361,13 +423,6 @@ static void parse_host_port(const char *input, char *out_host, size_t host_cap, 
     }
 }
 
-static void prompt_server_address_mui(VortexApp *app);
-
-void prompt_server_address(VortexApp *app)
-{
-    prompt_server_address_mui(app);
-}
-
 static void prompt_server_address_mui(VortexApp *app)
 {
     APTR str_obj, btn_ok, btn_cancel, wnd;
@@ -431,6 +486,11 @@ static void prompt_server_address_mui(VortexApp *app)
     MUI_DisposeObject(wnd);
 }
 
+void prompt_server_address(VortexApp *app)
+{
+    prompt_server_address_mui(app);
+}
+
 void gui_mui_rebuild_fav_cycle(VortexApp *app)
 {
     if (!app) return;
@@ -453,7 +513,8 @@ void gui_mui_rebuild_fav_cycle(VortexApp *app)
     } else {
         app->mui_fav_entries = calloc(count + 1, sizeof(char *));
         for (int i = 0; i < count; i++) {
-            app->mui_fav_entries[i] = strdup(app->favorites[i].title);
+            const char *label = app->favorites[i].title[0] ? app->favorites[i].title : app->favorites[i].url;
+            app->mui_fav_entries[i] = strdup(label);
         }
         app->mui_fav_entries[count] = NULL;
         app->mui_fav_entries_count = count;
@@ -461,6 +522,7 @@ void gui_mui_rebuild_fav_cycle(VortexApp *app)
 
     if (app->mui_fav_cycle) {
         set(app->mui_fav_cycle, MUIA_Cycle_Entries, app->mui_fav_entries);
+        set(app->mui_fav_cycle, MUIA_Cycle_Active, 0);
     }
 }
 
@@ -717,7 +779,365 @@ static void remove_current_quicklink_mui(VortexApp *app)
     }
 }
 
+/* -------------------------------------------------------------------------
+ * Tab Bar Management (Mirroring Odyssey Web Browser)
+ * ------------------------------------------------------------------------- */
+void gui_mui_rebuild_tabs(VortexApp *app)
+{
+    if (!app || !app->mui_tab_bar_group) return;
 
+    if (DoMethod(app->mui_tab_bar_group, MUIM_Group_InitChange)) {
+        for (int i = 0; i < VB_MAX_TABS; i++) {
+            if (app->mui_tab_item[i]) {
+                DoMethod(app->mui_tab_bar_group, OM_REMMEMBER, app->mui_tab_item[i]);
+                MUI_DisposeObject(app->mui_tab_item[i]);
+                app->mui_tab_item[i]      = NULL;
+                app->mui_tab_btn[i]       = NULL;
+                app->mui_tab_close_btn[i] = NULL;
+            }
+        }
+        if (app->mui_btn_add_tab) {
+            DoMethod(app->mui_tab_bar_group, OM_REMMEMBER, app->mui_btn_add_tab);
+            MUI_DisposeObject(app->mui_btn_add_tab);
+            app->mui_btn_add_tab = NULL;
+        }
+
+        if (app->num_tabs == 0) {
+            app->tabs[0].id = 0;
+            strncpy(app->tabs[0].title, "Startseite", sizeof(app->tabs[0].title) - 1);
+            app->tabs[0].url[0] = '\0';
+            app->num_tabs = 1;
+            app->active_tab_idx = 0;
+        }
+
+        for (int i = 0; i < app->num_tabs && i < VB_MAX_TABS; i++) {
+            BOOL is_active = (i == app->active_tab_idx);
+            char label_buf[96];
+            if (is_active) {
+                snprintf(label_buf, sizeof(label_buf), "\33c\33b[%d: %s]", i + 1, app->tabs[i].title);
+            } else {
+                snprintf(label_buf, sizeof(label_buf), "\33c %d: %s ", i + 1, app->tabs[i].title);
+            }
+
+            app->mui_tab_btn[i] = TextObject,
+                ButtonFrame,
+                MUIA_Font, MUIV_Font_Button,
+                MUIA_Text_Contents, label_buf,
+                MUIA_InputMode, MUIV_InputMode_RelVerify,
+                MUIA_Background, is_active ? MUII_SelectedBack : MUII_ButtonBack,
+                MUIA_ShortHelp, app->tabs[i].url[0] ? (STRPTR)app->tabs[i].url : (STRPTR)"Startseite",
+            End;
+
+            app->mui_tab_close_btn[i] = TextObject,
+                ButtonFrame,
+                MUIA_Text_Contents, "\33cx",
+                MUIA_InputMode, MUIV_InputMode_RelVerify,
+                MUIA_Background, MUII_ButtonBack,
+                MUIA_FixWidthTxt, " x ",
+                MUIA_ShortHelp, "Tab schliessen",
+            End;
+
+            app->mui_tab_item[i] = HGroup,
+                MUIA_Group_Horiz, TRUE,
+                Child, app->mui_tab_btn[i],
+                Child, app->mui_tab_close_btn[i],
+            End;
+
+            if (app->mui_tab_item[i]) {
+                DoMethod(app->mui_tab_bar_group, OM_ADDMEMBER, app->mui_tab_item[i]);
+                DoMethod(app->mui_tab_btn[i], MUIM_Notify, MUIA_Pressed, FALSE,
+                         app->mui_app, 2, MUIM_Application_ReturnID, GID_TAB_BASE + i);
+                DoMethod(app->mui_tab_close_btn[i], MUIM_Notify, MUIA_Pressed, FALSE,
+                         app->mui_app, 2, MUIM_Application_ReturnID, GID_TAB_CLOSE_BASE + i);
+            }
+        }
+
+        app->mui_btn_add_tab = TextObject,
+            ButtonFrame,
+            MUIA_Text_Contents, "\33c + ",
+            MUIA_InputMode, MUIV_InputMode_RelVerify,
+            MUIA_Background, MUII_ButtonBack,
+            MUIA_FixWidthTxt, " + ",
+            MUIA_ShortHelp, "Neuen Tab oeffnen",
+        End;
+        if (app->mui_btn_add_tab) {
+            DoMethod(app->mui_tab_bar_group, OM_ADDMEMBER, app->mui_btn_add_tab);
+            DoMethod(app->mui_btn_add_tab, MUIM_Notify, MUIA_Pressed, FALSE,
+                     app->mui_app, 2, MUIM_Application_ReturnID, GID_TAB_ADD);
+        }
+
+        APTR spacer = RectangleObject,
+            MUIA_Weight, 100,
+        End;
+        DoMethod(app->mui_tab_bar_group, OM_ADDMEMBER, spacer);
+
+        DoMethod(app->mui_tab_bar_group, MUIM_Group_ExitChange);
+    }
+}
+
+void gui_mui_tab_add(VortexApp *app, const char *title, const char *url)
+{
+    if (!app || app->num_tabs >= VB_MAX_TABS) {
+        app_set_status("Maximale Tab-Anzahl erreicht (%d)!", VB_MAX_TABS);
+        return;
+    }
+    int idx = app->num_tabs++;
+    app->tabs[idx].id = (uint32)idx;
+    strncpy(app->tabs[idx].title, title ? title : "Neuer Tab", sizeof(app->tabs[0].title) - 1);
+    app->tabs[idx].title[sizeof(app->tabs[0].title) - 1] = '\0';
+    strncpy(app->tabs[idx].url, url ? url : "", sizeof(app->tabs[0].url) - 1);
+    app->tabs[idx].url[sizeof(app->tabs[0].url) - 1] = '\0';
+    app->active_tab_idx = (uint16)idx;
+
+    if (app->connected) {
+        char cmd[VB_MAX_URL_LEN + 16];
+        snprintf(cmd, sizeof(cmd), "@NEWTAB:%s", app->tabs[idx].url[0] ? app->tabs[idx].url : "@HOME");
+        net_send_url(app, cmd);
+    }
+    gui_mui_update_url_bar(app, app->tabs[idx].url);
+    gui_mui_rebuild_tabs(app);
+    app_set_status("Neuer Tab geoeffnet: Tab %d", idx + 1);
+}
+
+void gui_mui_tab_switch(VortexApp *app, uint16 idx)
+{
+    if (!app || idx >= app->num_tabs) return;
+    app->active_tab_idx = idx;
+
+    if (app->connected) {
+        char cmd[32];
+        snprintf(cmd, sizeof(cmd), "@SWITCHTAB:%u", (unsigned)idx);
+        net_send_url(app, cmd);
+    }
+    gui_mui_update_url_bar(app, app->tabs[idx].url);
+    gui_mui_rebuild_tabs(app);
+    app_set_status("Tab %d: %s", (int)idx + 1, app->tabs[idx].title);
+}
+
+void gui_mui_tab_close(VortexApp *app, uint16 idx)
+{
+    if (!app || idx >= app->num_tabs) return;
+
+    if (app->num_tabs <= 1) {
+        strncpy(app->tabs[0].title, "Startseite", sizeof(app->tabs[0].title) - 1);
+        app->tabs[0].title[sizeof(app->tabs[0].title) - 1] = '\0';
+        app->tabs[0].url[0] = '\0';
+        if (app->connected) {
+            net_send_url(app, "@HOME");
+        }
+        gui_mui_update_url_bar(app, "");
+        gui_mui_rebuild_tabs(app);
+        app_set_status("Tab zurueckgesetzt auf Startseite.");
+        return;
+    }
+
+    if (app->connected) {
+        char cmd[32];
+        snprintf(cmd, sizeof(cmd), "@CLOSETAB:%u", (unsigned)idx);
+        net_send_url(app, cmd);
+    }
+
+    for (int i = idx; i < app->num_tabs - 1; i++) {
+        app->tabs[i] = app->tabs[i + 1];
+    }
+    app->num_tabs--;
+
+    if (app->active_tab_idx == idx) {
+        if (app->active_tab_idx >= app->num_tabs) {
+            app->active_tab_idx = (uint16)(app->num_tabs - 1);
+        }
+    } else if (app->active_tab_idx > idx) {
+        app->active_tab_idx--;
+    }
+
+    if (app->connected) {
+        char cmd[32];
+        snprintf(cmd, sizeof(cmd), "@SWITCHTAB:%u", (unsigned)app->active_tab_idx);
+        net_send_url(app, cmd);
+    }
+    gui_mui_update_url_bar(app, app->tabs[app->active_tab_idx].url);
+    gui_mui_rebuild_tabs(app);
+    app_set_status("Tab geschlossen. Aktiver Tab: %d", app->active_tab_idx + 1);
+}
+
+void gui_tabs_add(VortexApp *app, const char *title, const char *url)
+{
+    gui_mui_tab_add(app, title, url);
+}
+
+void gui_tabs_switch(VortexApp *app, uint16 idx)
+{
+    gui_mui_tab_switch(app, idx);
+}
+
+void gui_tabs_close(VortexApp *app, uint16 idx)
+{
+    gui_mui_tab_close(app, idx);
+}
+
+void gui_tabs_update_title(VortexApp *app, uint16 idx, const char *title)
+{
+    if (!app || idx >= app->num_tabs || !title) return;
+    strncpy(app->tabs[idx].title, title, sizeof(app->tabs[0].title) - 1);
+    app->tabs[idx].title[sizeof(app->tabs[0].title) - 1] = '\0';
+    gui_mui_rebuild_tabs(app);
+}
+
+void gui_tabs_init(VortexApp *app)
+{
+    gui_mui_rebuild_tabs(app);
+}
+
+void gui_tabs_rebuild(VortexApp *app)
+{
+    gui_mui_rebuild_tabs(app);
+}
+
+void gui_tabs_reset(VortexApp *app)
+{
+    if (!app) return;
+    if (app->num_tabs > 0 && app->active_tab_idx < app->num_tabs && app->active_tab_idx != 0) {
+        app->tabs[0] = app->tabs[app->active_tab_idx];
+    }
+    if (app->num_tabs == 0) {
+        strncpy(app->tabs[0].title, "Startseite", sizeof(app->tabs[0].title) - 1);
+        app->tabs[0].title[sizeof(app->tabs[0].title) - 1] = '\0';
+        app->tabs[0].url[0] = '\0';
+    }
+    app->tabs[0].id = 0;
+    app->num_tabs = 1;
+    app->active_tab_idx = 0;
+    gui_mui_rebuild_tabs(app);
+}
+
+void gui_mui_update_status_bar(VortexApp *app)
+{
+    if (!app) return;
+
+    if (app->mui_fps_info) {
+        char hw_info[64];
+        if (app->renderer.has_va && app->renderer.is_h264_active) {
+            snprintf(hw_info, sizeof(hw_info), "VA-API HW");
+        } else if (app->renderer.has_altivec) {
+            snprintf(hw_info, sizeof(hw_info), "AltiVec SIMD");
+        } else {
+            snprintf(hw_info, sizeof(hw_info), "Software RTG");
+        }
+
+        uint32 br = app->prefs.video_bitrate_k ? app->prefs.video_bitrate_k : 4000;
+        uint8 fps = app->prefs.target_fps ? app->prefs.target_fps : 25;
+
+        char buf[96];
+        snprintf(buf, sizeof(buf), "\33c%u FPS | %u kbps | %s", (unsigned)fps, (unsigned)br, hw_info);
+        set(app->mui_fps_info, MUIA_Text_Contents, buf);
+    }
+}
+
+void gui_mui_update_url_bar(VortexApp *app, const char *url)
+{
+    if (!app || !app->mui_url) {
+        return;
+    }
+    const char *disp = url ? url : "";
+    if (strncmp(disp, "http://127.0.0.1:", 17) == 0) {
+        disp = "";
+    }
+    set(app->mui_url, MUIA_String_Contents, (STRPTR)disp);
+
+    /* Update Security Badge and Zone Indicator */
+    if (app->mui_security_badge) {
+        if (strncmp(disp, "https://", 8) == 0) {
+            set(app->mui_security_badge, MUIA_Text_Contents, "\33c\33b[🔒 https]");
+            if (app->mui_zone_indicator) {
+                set(app->mui_zone_indicator, MUIA_Text_Contents, "\33c🔒 Sicher (TLS)");
+            }
+        } else if (strncmp(disp, "http://", 7) == 0) {
+            set(app->mui_security_badge, MUIA_Text_Contents, "\33c[🌐 http]");
+            if (app->mui_zone_indicator) {
+                set(app->mui_zone_indicator, MUIA_Text_Contents, "\33c🌐 Nicht sicher");
+            }
+        } else {
+            set(app->mui_security_badge, MUIA_Text_Contents, "\33c[⚙ portal]");
+            if (app->mui_zone_indicator) {
+                set(app->mui_zone_indicator, MUIA_Text_Contents, "\33c⚙ Amiga Intern");
+            }
+        }
+    }
+
+    if (disp[0] != '\0') {
+        snprintf(app->win_title, sizeof(app->win_title), "%s (MUI) - %s", VB_APP_TITLE, disp);
+    } else {
+        snprintf(app->win_title, sizeof(app->win_title), "%s (MUI)", VB_APP_TITLE);
+    }
+    if (app->mui_win) {
+        set(app->mui_win, MUIA_Window_Title, (STRPTR)app->win_title);
+    }
+
+    /* Update active tab's URL and title */
+    if (app->num_tabs > 0 && app->active_tab_idx < app->num_tabs) {
+        if (disp[0] != '\0') {
+            strncpy(app->tabs[app->active_tab_idx].url, disp, sizeof(app->tabs[0].url) - 1);
+            app->tabs[app->active_tab_idx].url[sizeof(app->tabs[0].url) - 1] = '\0';
+
+            if (strcmp(app->tabs[app->active_tab_idx].title, "Startseite") == 0 ||
+                strcmp(app->tabs[app->active_tab_idx].title, "Neuer Tab") == 0 ||
+                app->tabs[app->active_tab_idx].title[0] == '\0') {
+                const char *h = disp;
+                if (strncmp(h, "http://", 7) == 0) h += 7;
+                else if (strncmp(h, "https://", 8) == 0) h += 8;
+                if (strncmp(h, "www.", 4) == 0) h += 4;
+                char host[64];
+                strncpy(host, h, sizeof(host) - 1);
+                host[sizeof(host) - 1] = '\0';
+                char *sl = strchr(host, '/');
+                if (sl) *sl = '\0';
+                if (host[0] != '\0') {
+                    snprintf(app->tabs[app->active_tab_idx].title, sizeof(app->tabs[0].title), "%s", host);
+                    gui_mui_rebuild_tabs(app);
+                }
+            }
+        }
+    }
+}
+
+void gui_update_url_bar(VortexApp *app, const char *url)
+{
+    gui_mui_update_url_bar(app, url);
+}
+
+void app_set_status(const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(g_app.status_text, sizeof(g_app.status_text), fmt, args);
+    va_end(args);
+
+    if (g_app.mui_status) {
+        set(g_app.mui_status, MUIA_Text_Contents, (STRPTR)g_app.status_text);
+    }
+}
+
+void app_set_gauge(int percent)
+{
+    if (percent < 0)   percent = 0;
+    if (percent > 100) percent = 100;
+
+    if (g_app.mui_gauge) {
+        set(g_app.mui_gauge, MUIA_Gauge_Current, percent);
+    }
+
+    if (percent > 0 && percent < 100) {
+        g_app.mui_loading = TRUE;
+        gui_mui_throbber_tick(&g_app, TRUE);
+    } else {
+        g_app.mui_loading = FALSE;
+        gui_mui_throbber_tick(&g_app, FALSE);
+    }
+}
+
+/* -------------------------------------------------------------------------
+ * GUI Initialization (MUI Edition matching Odyssey Web Browser)
+ * ------------------------------------------------------------------------- */
 BOOL gui_mui_init(VortexApp *app)
 {
     if (!IMUIMaster) {
@@ -736,40 +1156,91 @@ BOOL gui_mui_init(VortexApp *app)
     gui_mui_rebuild_fav_cycle(app);
 
     APTR btn_back, btn_fwd, btn_reload, btn_stop, btn_home;
+    APTR btn_bookmarks, btn_downloads, btn_passwords, btn_new_tab, btn_close_tab;
     APTR btn_clear_url, btn_go, btn_search_go;
-    APTR btn_add_fav, btn_connect, btn_menu;
-    APTR row1, row2, status_row;
+    APTR btn_add_fav, btn_connect;
+    APTR nav_group, url_group, fastlink_group, addressbar_group, searchbar_group, status_row;
 
     snprintf(app->win_title, sizeof(app->win_title), "%s (MUI)", VB_APP_TITLE);
 
     APTR menustrip = MUI_MakeObject(MUIO_MenustripNM, s_mui_menu, 0);
 
     /* ------------------------------------------------------------------------
-     * Row 1: Navigation, URL String & Web Search Bar
+     * Row 1: Navigation Toolbar (Odyssey navigationgroup)
      * ------------------------------------------------------------------------ */
-    row1 = HGroup,
+    nav_group = HGroup,
         Child, btn_back      = SimpleButton("<"),
         Child, btn_fwd       = SimpleButton(">"),
         Child, btn_reload    = SimpleButton("Neu"),
         Child, btn_stop      = SimpleButton("Stopp"),
         Child, btn_home      = SimpleButton("Start"),
-        Child, app->mui_url  = StringObject,
+        Child, MakeVBar(),
+        Child, btn_bookmarks = SimpleButton("Lesezeichen"),
+        Child, btn_downloads = SimpleButton("Downloads"),
+        Child, btn_passwords = SimpleButton("Passw\366rter"),
+        Child, MakeVBar(),
+        Child, btn_new_tab   = SimpleButton("+ Tab"),
+        Child, btn_close_tab = SimpleButton("- Tab"),
+        Child, RectangleObject,
+            MUIA_Weight, 100,
+        End,
+        Child, app->mui_throbber = TextObject,
+            ButtonFrame,
+            MUIA_Font, MUIV_Font_Button,
+            MUIA_Text_Contents, "\33c[ ◈ ]",
+            MUIA_FixWidthTxt, " [ ◈ ] ",
+            MUIA_ShortHelp, "Ladeindikator (Throbber)",
+        End,
+    End;
+
+    /* ------------------------------------------------------------------------
+     * Row 2: Address & Search Group (Odyssey urlgroup + BalanceObject)
+     * ------------------------------------------------------------------------ */
+    addressbar_group = HGroup,
+        Child, app->mui_security_badge = TextObject,
+            ButtonFrame,
+            MUIA_Font, MUIV_Font_Button,
+            MUIA_Text_Contents, "\33c[⚙ portal]",
+            MUIA_FixWidthTxt, " [🔒 https] ",
+            MUIA_ShortHelp, "Sicherheitsstatus der Verbindung",
+        End,
+        Child, app->mui_url = StringObject,
             MUIA_String_Contents, app->current_url[0] ? app->current_url : "",
             MUIA_String_MaxLen, VB_MAX_URL_LEN - 1,
             MUIA_CycleChain, 1,
+            MUIA_ShortHelp, "Webadresse (URL) eingeben",
         End,
         Child, btn_clear_url = SimpleButton("X"),
         Child, btn_go        = SimpleButton("Los"),
+    End;
+
+    searchbar_group = HGroup,
+        Child, app->mui_search_engine_cycle = CycleObject,
+            MUIA_Cycle_Entries, s_search_engine_labels,
+            MUIA_Cycle_Active, 0,
+            MUIA_CycleChain, 1,
+            MUIA_ShortHelp, "Suchmaschine auswaehlen",
+        End,
         Child, app->mui_search = StringObject,
             MUIA_String_Contents, "",
             MUIA_String_MaxLen, 128,
             MUIA_CycleChain, 1,
+            MUIA_ShortHelp, "Suchbegriff eingeben und Enter druecken",
         End,
         Child, btn_search_go = SimpleButton("Suche"),
     End;
 
+    url_group = HGroup,
+        Child, addressbar_group,
+        Child, BalanceObject,
+            MUIA_ObjectID, MAKE_ID('V','B','B','A'),
+            MUIA_Balance_Quiet, TRUE,
+        End,
+        Child, searchbar_group,
+    End;
+
     /* ------------------------------------------------------------------------
-     * Row 2: Schnellwahl / Quicklinks, Lesezeichen Cycle & Server Chooser
+     * Row 3: Fastlinks / Quicklinks Bar (Odyssey fastlinkparentgroup)
      * ------------------------------------------------------------------------ */
     app->mui_quick_group = HGroup,
         MUIA_Group_Horiz, TRUE,
@@ -782,24 +1253,40 @@ BOOL gui_mui_init(VortexApp *app)
     app->mui_btn_rem_ql = NULL;
     app->mui_btn_prefs  = NULL;
 
-    row2 = HGroup,
+    fastlink_group = HGroup,
         Child, app->mui_quick_group,
-        Child, btn_add_fav         = SimpleButton("+Lesez."),
-        Child, app->mui_fav_cycle  = CycleObject,
+        Child, btn_add_fav          = SimpleButton("+Lesez."),
+        Child, app->mui_fav_cycle   = CycleObject,
             MUIA_Cycle_Entries, app->mui_fav_entries,
             MUIA_CycleChain, 1,
+            MUIA_ShortHelp, "Gespeicherte Lesezeichen",
         End,
-        Child, btn_menu            = SimpleButton("Menue"),
+        Child, MakeVBar(),
         Child, app->mui_server_cycle = CycleObject,
             MUIA_Cycle_Entries, s_server_entries,
             MUIA_Cycle_Active, 0,
             MUIA_CycleChain, 1,
+            MUIA_ShortHelp, "VortexBrowser-Server waehlen",
         End,
-        Child, btn_connect         = SimpleButton("Verbinden"),
+        Child, btn_connect          = SimpleButton("Verbinden"),
     End;
 
     /* ------------------------------------------------------------------------
-     * Row 3: Custom Viewport Object
+     * Row 4: Dedicated Tab Bar (Odyssey pagegroup / titlegroup)
+     * ------------------------------------------------------------------------ */
+    app->mui_tab_bar_group = HGroup,
+        MUIA_Group_Horiz, TRUE,
+    End;
+
+    for (int i = 0; i < VB_MAX_TABS; i++) {
+        app->mui_tab_item[i]      = NULL;
+        app->mui_tab_btn[i]       = NULL;
+        app->mui_tab_close_btn[i] = NULL;
+    }
+    app->mui_btn_add_tab = NULL;
+
+    /* ------------------------------------------------------------------------
+     * Row 5: Custom Viewport Object
      * ------------------------------------------------------------------------ */
     app->mui_viewport = IIntuition->NewObject(s_viewport_mcc->mcc_Class, NULL,
         MUIA_InputMode, MUIV_InputMode_RelVerify,
@@ -811,18 +1298,35 @@ BOOL gui_mui_init(VortexApp *app)
     }
 
     /* ------------------------------------------------------------------------
-     * Row 4: Status Bar & Progress Gauge
+     * Row 6: Segmented Status Bar (Odyssey statusgroup)
      * ------------------------------------------------------------------------ */
     status_row = HGroup,
+        Child, app->mui_zone_indicator = TextObject,
+            MUIA_Frame, MUIV_Frame_ReadList,
+            MUIA_Text_Contents, "\33c⚙ Amiga Intern",
+            MUIA_FixWidthTxt, " 🔒 Sicher (TLS) ",
+            MUIA_Weight, 15,
+        End,
+        Child, MakeVBar(),
         Child, app->mui_status = TextObject,
             MUIA_Text_Contents, app->status_text,
             MUIA_Frame, MUIV_Frame_ReadList,
+            MUIA_Weight, 60,
         End,
+        Child, MakeVBar(),
         Child, app->mui_gauge = GaugeObject,
             MUIA_Gauge_Horiz, TRUE,
             MUIA_Gauge_Max, 100,
             MUIA_Gauge_Current, 0,
-            MUIA_FixWidth, 180,
+            MUIA_FixWidth, 160,
+            MUIA_Weight, 15,
+        End,
+        Child, MakeVBar(),
+        Child, app->mui_fps_info = TextObject,
+            MUIA_Frame, MUIV_Frame_ReadList,
+            MUIA_Text_Contents, "\33c25 FPS | 4000 kbps | VA-API",
+            MUIA_FixWidthTxt, " 60 FPS | 10000 kbps | VA-API HW ",
+            MUIA_Weight, 20,
         End,
     End;
 
@@ -842,8 +1346,10 @@ BOOL gui_mui_init(VortexApp *app)
             MUIA_Window_Title, app->win_title,
             MUIA_Window_ID, MAKE_ID('V','B','M','U'),
             WindowContents, VGroup,
-                Child, row1,
-                Child, row2,
+                Child, nav_group,
+                Child, url_group,
+                Child, fastlink_group,
+                Child, app->mui_tab_bar_group,
                 Child, app->mui_viewport,
                 Child, status_row,
             End,
@@ -861,22 +1367,22 @@ BOOL gui_mui_init(VortexApp *app)
     DoMethod(btn_reload,    MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_RELOAD);
     DoMethod(btn_stop,      MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_STOP);
     DoMethod(btn_home,      MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_HOME);
+    DoMethod(btn_bookmarks, MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_BOOKMARKS);
+    DoMethod(btn_downloads, MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_DOWNLOADS);
+    DoMethod(btn_passwords, MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_PASSWORDS);
+    DoMethod(btn_new_tab,   MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_NEW_TAB);
+    DoMethod(btn_close_tab, MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_CLOSE_TAB);
+
+    /* Row 2 Address & Search */
     DoMethod(btn_clear_url, MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_CLEAR_URL);
     DoMethod(btn_go,        MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_GO);
     DoMethod(btn_search_go, MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_SEARCH_GO);
-
-    /* Populate Dynamic Quicklinks with Favicons */
-    gui_mui_rebuild_quicklinks(app);
-
-    DoMethod(btn_add_fav, MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_ADD_FAV);
-    DoMethod(btn_menu,    MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_MENU);
-    DoMethod(btn_connect, MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_CONNECT);
-
-    /* URL & Search Acknowledge (Enter Key) */
     DoMethod(app->mui_url,    MUIM_Notify, MUIA_String_Acknowledge, MUIV_EveryTime, app->mui_app, 2, MUIM_Application_ReturnID, GID_GO);
     DoMethod(app->mui_search, MUIM_Notify, MUIA_String_Acknowledge, MUIV_EveryTime, app->mui_app, 2, MUIM_Application_ReturnID, GID_SEARCH_GO);
 
-    /* Cycle Gadgets */
+    /* Row 3 Quicklinks & Server */
+    DoMethod(btn_add_fav,          MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_ADD_FAV);
+    DoMethod(btn_connect,          MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_CONNECT);
     DoMethod(app->mui_fav_cycle,    MUIM_Notify, MUIA_Cycle_Active, MUIV_EveryTime, app->mui_app, 2, MUIM_Application_ReturnID, GID_FAV_CHOOSER);
     DoMethod(app->mui_server_cycle, MUIM_Notify, MUIA_Cycle_Active, MUIV_EveryTime, app->mui_app, 2, MUIM_Application_ReturnID, GID_SERVER_CHOOSER);
 
@@ -886,13 +1392,19 @@ BOOL gui_mui_init(VortexApp *app)
     /* Window Close Request */
     DoMethod(app->mui_win, MUIM_Notify, MUIA_Window_CloseRequest, TRUE, app->mui_app, 2, MUIM_Application_ReturnID, MUIV_Application_ReturnID_Quit);
 
+    /* Rebuild dynamic contents */
+    gui_mui_rebuild_quicklinks(app);
+    gui_mui_rebuild_tabs(app);
+    gui_mui_update_status_bar(app);
+    gui_mui_update_url_bar(app, app->current_url);
+
     /* Open the window */
     set(app->mui_win, MUIA_Window_Open, TRUE);
 
     /* Obtain Intuition window pointer */
     get(app->mui_win, MUIA_Window_Window, &app->win);
 
-    printf("[GUI-MUI] VortexBrowse-MUI window opened successfully.\n");
+    printf("[GUI-MUI] VortexBrowse-MUI window opened successfully (Odyssey layout).\n");
     return TRUE;
 }
 
@@ -925,54 +1437,6 @@ void gui_mui_flush_dirty(VortexApp *app)
 {
     if (app && app->mui_viewport) {
         MUI_Redraw((Object *)app->mui_viewport, MADF_DRAWUPDATE);
-    }
-}
-
-void gui_mui_update_url_bar(VortexApp *app, const char *url)
-{
-    if (!app || !app->mui_url) {
-        return;
-    }
-    const char *disp = url ? url : "";
-    if (strncmp(disp, "http://127.0.0.1:", 17) == 0) {
-        disp = "";
-    }
-    set(app->mui_url, MUIA_String_Contents, (STRPTR)disp);
-
-    if (disp[0] != '\0') {
-        snprintf(app->win_title, sizeof(app->win_title), "%s (MUI) - %s", VB_APP_TITLE, disp);
-    } else {
-        snprintf(app->win_title, sizeof(app->win_title), "%s (MUI)", VB_APP_TITLE);
-    }
-    if (app->mui_win) {
-        set(app->mui_win, MUIA_Window_Title, (STRPTR)app->win_title);
-    }
-}
-
-void gui_update_url_bar(VortexApp *app, const char *url)
-{
-    gui_mui_update_url_bar(app, url);
-}
-
-void app_set_status(const char *fmt, ...)
-{
-    va_list args;
-    va_start(args, fmt);
-    vsnprintf(g_app.status_text, sizeof(g_app.status_text), fmt, args);
-    va_end(args);
-
-    if (g_app.mui_status) {
-        set(g_app.mui_status, MUIA_Text_Contents, (STRPTR)g_app.status_text);
-    }
-}
-
-void app_set_gauge(int percent)
-{
-    if (percent < 0)   percent = 0;
-    if (percent > 100) percent = 100;
-
-    if (g_app.mui_gauge) {
-        set(g_app.mui_gauge, MUIA_Gauge_Current, percent);
     }
 }
 
@@ -1026,9 +1490,71 @@ void gui_mui_handle_action(VortexApp *app, uint32 action_id)
             char *s_buf = NULL;
             get(app->mui_search, MUIA_String_Contents, &s_buf);
             if (s_buf && s_buf[0] != '\0') {
-                char search_cmd[320];
-                snprintf(search_cmd, sizeof(search_cmd), "/search?q=%s", s_buf);
-                net_send_url(app, search_cmd);
+                ULONG s_idx = 0;
+                if (app->mui_search_engine_cycle) {
+                    get(app->mui_search_engine_cycle, MUIA_Cycle_Active, &s_idx);
+                }
+                if (s_idx >= 6) s_idx = 0;
+                char full_search[384];
+                snprintf(full_search, sizeof(full_search), "%s%s", s_search_engine_urls[s_idx], s_buf);
+                gui_mui_update_url_bar(app, full_search);
+                net_send_url(app, full_search);
+                app_set_status("Suche (%s): %s", s_search_engine_labels[s_idx], s_buf);
+            }
+            break;
+        }
+
+        case GID_NEW_TAB:
+        case MID_NEW_TAB:
+        case GID_TAB_ADD:
+            gui_mui_tab_add(app, "Neuer Tab", "@HOME");
+            break;
+
+        case GID_CLOSE_TAB:
+        case MID_CLOSE_TAB:
+            gui_mui_tab_close(app, app->active_tab_idx);
+            break;
+
+        case GID_BOOKMARKS:
+        case MID_BOOKMARKS:
+            app_set_status("Lesezeichen: %d Schnellwahl-Links geladen", app->prefs.num_quick_links);
+            break;
+
+        case GID_DOWNLOADS:
+        case MID_DOWNLOADS: {
+            char dl_msg[512];
+            snprintf(dl_msg, sizeof(dl_msg),
+                     "Downloads-Ordner: %s\n"
+                     "Aktive Downloads: %d\n\n"
+                     "Moechten Sie den Download-Ordner auf der Workbench oeffnen?",
+                     app->prefs.download_dir[0] ? app->prefs.download_dir : "RAM:",
+                     app->download.active ? 1 : 0);
+            LONG r = MUI_Request(app->mui_app, app->mui_win, 0, "Download-Manager", "Ordner oeffnen|Abbrechen", dl_msg);
+            if (r == 1) {
+                char open_cmd[300];
+                snprintf(open_cmd, sizeof(open_cmd), "Open \"%s\"", app->prefs.download_dir[0] ? app->prefs.download_dir : "RAM:");
+                IDOS->SystemTags(open_cmd, TAG_DONE);
+            }
+            break;
+        }
+
+        case GID_PASSWORDS:
+        case MID_PASSWORDS: {
+            int count = app->password_store ? app->password_store->count : 0;
+            if (count <= 0) {
+                MUI_Request(app->mui_app, app->mui_win, 0, "Passwort-Manager", "OK",
+                            "Keine gespeicherten Passwoerter vorhanden.\n\n"
+                            "Passwoerter koennen ueber das Formular-Autologin oder Einstellungen gespeichert werden.");
+            } else {
+                char list_buf[1024];
+                int offset = snprintf(list_buf, sizeof(list_buf), "Gespeicherte Zugangsdaten (%d Eintraege):\n\n", count);
+                for (int i = 0; i < count && i < 10; i++) {
+                    const PasswordEntry *e = &app->password_store->entries[i];
+                    if (e && offset < (int)sizeof(list_buf) - 80) {
+                        offset += snprintf(list_buf + offset, sizeof(list_buf) - offset, "• %s  (Benutzer: %s)\n", e->domain, e->username);
+                    }
+                }
+                MUI_Request(app->mui_app, app->mui_win, 0, "Passwort-Manager", "Schliessen", list_buf);
             }
             break;
         }
@@ -1155,27 +1681,49 @@ void gui_mui_handle_action(VortexApp *app, uint32 action_id)
             app_set_status("Cache-Bereinigung angefordert.");
             break;
 
+        case MID_BITRATE_2000:
+        case MID_BITRATE_4000:
+        case MID_BITRATE_6000:
+        case MID_BITRATE_8000:
+        case MID_BITRATE_10000: {
+            uint32 br = 4000;
+            if (action_id == MID_BITRATE_2000) br = 2000;
+            else if (action_id == MID_BITRATE_4000) br = 4000;
+            else if (action_id == MID_BITRATE_6000) br = 6000;
+            else if (action_id == MID_BITRATE_8000) br = 8000;
+            else if (action_id == MID_BITRATE_10000) br = 10000;
+            app->prefs.video_bitrate_k = br;
+            if (app->connected) {
+                char brcmd[32];
+                snprintf(brcmd, sizeof(brcmd), "@VIDEO_BITRATE:%u", (unsigned)br);
+                net_send_url(app, brcmd);
+            }
+            gui_mui_update_status_bar(app);
+            app_set_status("Video-Bitrate gesetzt: %u kbps", (unsigned)br);
+            break;
+        }
+
         case MID_FPS_15:
         case MID_FPS_25:
         case MID_FPS_30:
         case MID_FPS_50:
-        case MID_FPS_60:
-            {
-                uint8_t fps_val = 25;
-                if (action_id == MID_FPS_15) fps_val = 15;
-                else if (action_id == MID_FPS_25) fps_val = 25;
-                else if (action_id == MID_FPS_30) fps_val = 30;
-                else if (action_id == MID_FPS_50) fps_val = 50;
-                else if (action_id == MID_FPS_60) fps_val = 60;
-                app->prefs.target_fps = fps_val;
-                if (app->connected) {
-                    char fcmd[32];
-                    snprintf(fcmd, sizeof(fcmd), "@FPS:%u", (unsigned)fps_val);
-                    net_send_url(app, fcmd);
-                }
-                app_set_status("Framerate gesetzt: %u FPS", (unsigned)fps_val);
+        case MID_FPS_60: {
+            uint8_t fps_val = 25;
+            if (action_id == MID_FPS_15) fps_val = 15;
+            else if (action_id == MID_FPS_25) fps_val = 25;
+            else if (action_id == MID_FPS_30) fps_val = 30;
+            else if (action_id == MID_FPS_50) fps_val = 50;
+            else if (action_id == MID_FPS_60) fps_val = 60;
+            app->prefs.target_fps = fps_val;
+            if (app->connected) {
+                char fcmd[32];
+                snprintf(fcmd, sizeof(fcmd), "@FPS:%u", (unsigned)fps_val);
+                net_send_url(app, fcmd);
             }
+            gui_mui_update_status_bar(app);
+            app_set_status("Framerate gesetzt: %u FPS", (unsigned)fps_val);
             break;
+        }
 
         case MID_ABOUT:
             MUI_Request(app->mui_app, app->mui_win, 0,
@@ -1184,7 +1732,8 @@ void gui_mui_handle_action(VortexApp *app, uint32 action_id)
                         "VortexBrowse 1.0 (MUI Edition)\n"
                         "AmigaOS 4.1 PowerPC\n\n"
                         "Moderner Remote-Browser fuer AmigaOS 4,\n"
-                        "Compositing Video-Engine & AHI Low-Latency Audio.\n\n"
+                        "Odyssey-Web-Browser Style MUI Interface,\n"
+                        "Compositing Video-Engine, AltiVec SIMD & Hardware VA-API.\n\n"
                         "(c) 2026 TearsOfMe");
             break;
 
@@ -1218,6 +1767,12 @@ void gui_mui_handle_action(VortexApp *app, uint32 action_id)
                     net_send_url(app, u);
                     app_set_status("Schnellstart: %s", app->prefs.quick_links[qidx].label);
                 }
+            } else if (action_id >= GID_TAB_BASE && action_id < GID_TAB_BASE + app->num_tabs) {
+                uint16 t_idx = (uint16)(action_id - GID_TAB_BASE);
+                gui_mui_tab_switch(app, t_idx);
+            } else if (action_id >= GID_TAB_CLOSE_BASE && action_id < GID_TAB_CLOSE_BASE + app->num_tabs) {
+                uint16 c_idx = (uint16)(action_id - GID_TAB_CLOSE_BASE);
+                gui_mui_tab_close(app, c_idx);
             }
             break;
     }
@@ -1384,9 +1939,7 @@ void gui_mui_handle_events(VortexApp *app)
                     break;
 
                 case CTX_OPEN_NEW_WIN:
-                    gui_mui_update_url_bar(app, app->ctx_menu.link_url);
-                    net_send_url(app, app->ctx_menu.link_url);
-                    app_set_status("Oeffne Link: %s", app->ctx_menu.link_url);
+                    gui_mui_tab_add(app, "Neuer Tab", app->ctx_menu.link_url);
                     break;
 
                 case CTX_DOWNLOAD_LINK: {
@@ -1470,7 +2023,7 @@ void gui_mui_handle_events(VortexApp *app)
     }
 }
 
-/* Stubs for Download Manager in MUI edition */
+/* Stubs and helpers for Download & Password Managers in MUI edition */
 void gui_download_manager_update(VortexApp *app)
 {
     (void)app;
@@ -1478,10 +2031,15 @@ void gui_download_manager_update(VortexApp *app)
 
 void gui_open_download_manager(VortexApp *app)
 {
-    (void)app;
+    if (app) gui_mui_handle_action(app, GID_DOWNLOADS);
 }
 
 void gui_close_download_manager(VortexApp *app)
 {
     (void)app;
+}
+
+void gui_open_password_manager(VortexApp *app)
+{
+    if (app) gui_mui_handle_action(app, GID_PASSWORDS);
 }

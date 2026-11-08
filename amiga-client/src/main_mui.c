@@ -239,6 +239,8 @@ int main(int argc, char **argv)
             g_app.reopen_gui_needed = FALSE;
             gui_mui_rebuild_quicklinks(&g_app);
             gui_mui_rebuild_fav_cycle(&g_app);
+            gui_mui_rebuild_tabs(&g_app);
+            gui_mui_update_status_bar(&g_app);
         }
 
         gui_mui_handle_events(&g_app);

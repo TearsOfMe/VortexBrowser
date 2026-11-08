@@ -492,12 +492,14 @@ WebGL, etc.) fluessig und ressourcenschonend auf den Amiga bringt.
 ------------------------------------------------------------------------------
 1. INHALT DIESES ARCHIVS
 ------------------------------------------------------------------------------
-- {APP_NAME}             : Ausfuehrbares Programm fuer AmigaOS 4 (newlib.library)
-- {APP_NAME}.info        : Echtes AmigaOS 4 Icon im VideoVortex-Look
+- {APP_NAME}             : Universelles Programm fuer AmigaOS 4 (automatische CPU-Erkennung)
+- {APP_NAME}-AltiVec     : Optimierte Version fuer CPUs mit AltiVec/VMX (G4, X1000)
+- {APP_NAME}-MUI         : MUI-Ausgabe im Design des Odyssey Web Browsers (MUI 4/5)
 - {APP_NAME}.guide       : Ausfuehrliches AmigaGuide-Handbuch mit allen Details
 - LIESMICH.txt          : Diese Schnellstartanleitung (Deutsch)
 - README.txt            : Schnellstartanleitung (Englisch)
 - icons/                : Symbole fuer die Schnellwahl-Leiste
+- Alternative-Icons/    : Alternative Icons im Cyber-Globe- und Orb-Design
 
 ------------------------------------------------------------------------------
 2. SCHNELLSTART IN 2 SCHRITTEN
@@ -571,12 +573,14 @@ YouTube, and Twitch with low Amiga CPU usage and native Reaction GUI.
 ------------------------------------------------------------------------------
 1. PACKAGE CONTENTS
 ------------------------------------------------------------------------------
-- {APP_NAME}             : Standard AmigaOS 4 executable (newlib.library)
-- {APP_NAME}.info        : Native AmigaOS 4 Icon in cosmic vortex look
+- {APP_NAME}             : Universal executable with dynamic CPU detection (newlib)
+- {APP_NAME}-AltiVec     : Dedicated SIMD build for PowerPC G4 and AmigaOne X1000
+- {APP_NAME}-MUI         : MUI Edition with Odyssey Web Browser look & layout (MUI 4/5)
 - {APP_NAME}.guide       : Comprehensive AmigaGuide manual
 - LIESMICH.txt          : German quickstart guide
 - README.txt            : English quickstart guide
 - icons/                : Toolbar and bookmark icon collection
+- Alternative-Icons/    : Alternative Cyber-Globe and Orb icons
 
 ------------------------------------------------------------------------------
 2. QUICK START IN 2 STEPS

@@ -209,6 +209,11 @@ typedef struct VortexApp {
     Object        *mui_search;
     Object        *mui_status;
     Object        *mui_gauge;
+    Object        *mui_security_badge;
+    Object        *mui_search_engine_cycle;
+    Object        *mui_throbber;
+    Object        *mui_zone_indicator;
+    Object        *mui_fps_info;
     Object        *mui_fav_cycle;
     Object        *mui_server_cycle;
     Object        *mui_quick_group;
@@ -216,6 +221,14 @@ typedef struct VortexApp {
     Object        *mui_btn_add_ql;
     Object        *mui_btn_rem_ql;
     Object        *mui_btn_prefs;
+    Object        *mui_tab_bar_group;
+    Object        *mui_tab_item[VB_MAX_TABS];
+    Object        *mui_tab_btn[VB_MAX_TABS];
+    Object        *mui_tab_close_btn[VB_MAX_TABS];
+    Object        *mui_btn_add_tab;
+    int            mui_search_engine_idx;
+    BOOL           mui_loading;
+    uint32         mui_throbber_step;
     char         **mui_fav_entries;
     int            mui_fav_entries_count;
     struct IBox    mui_viewport_box;
