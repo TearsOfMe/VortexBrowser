@@ -58,6 +58,8 @@ echo " Engine: ${ENGINE} | Browser: ${SAVED_BIN:-System-Default}"
 echo " C-Native TurboJPEG + AVX2 + LZ4 Pipeline Active"
 echo "============================================================================"
 
+VIDEO_BITRATE="${VORTEX_VIDEO_BITRATE:-4000}"
+
 if [ $# -eq 0 ]; then
     exec .venv/bin/python server.py \
         --host 0.0.0.0 \
@@ -66,6 +68,7 @@ if [ $# -eq 0 ]; then
         --height 1080 \
         --fps 25 \
         --format yuv420p \
+        --video-bitrate "$VIDEO_BITRATE" \
         --jpeg-quality 82 \
         --codec auto \
         --engine "$ENGINE" \
