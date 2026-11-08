@@ -63,6 +63,7 @@ und minimaler CPU-Auslastung.
       - @{"Audio-Streaming (16-Bit AHI)" link "Audio"}
       - @{"Kontextmenues & Mausbedienung" link "MouseContext"}
   * @{"Einstellungen (Preferences)" link "Preferences"}
+  * @{"Workbench ToolTypes (Icon-Infos)" link "ToolTypes"}
   * @{"Tipps zur CPU-Entlastung & Performance" link "Performance"}
   * @{"Tastatur-Kuerzel (Shortcuts)" link "Shortcuts"}
   * @{"Server-Einrichtung (Linux PC / Raspberry Pi)" link "ServerSetup"}
@@ -333,6 +334,58 @@ Das Einstellungsfenster ist uebersichtlich in fuenf Reiter unterteilt:
 
 @endnode
 
+@node "ToolTypes" "Workbench ToolTypes (Icon-Infos)"
+@{b}Workbench ToolTypes (Icon-Infos)@{ub}
+
+VortexBrowser unterstuetzt die typische Amiga-Konfiguration ueber @{b}ToolTypes@{ub} in
+den Programm-Icons (@{i}VortexBrowser.info@{ui}, @{i}VortexBrowser-AltiVec.info@{ui}, @{i}VortexBrowser-MUI.info@{ui}).
+
+@{b}So bearbeiten Sie die ToolTypes auf der Workbench:@{ub}
+1. Markieren Sie das Icon mit einem einfachen Mausklick.
+2. Waehlen Sie im Menue @{b}Icons -> Information...@{ub} (oder druecken Sie @{b}Rechte Amiga + I@{ub}).
+3. In der Liste der ToolTypes koennen Sie Einstellungen direkt anpassen.
+
+@{b}Wichtige AmigaOS-Klammerregel:@{ub}
+ToolTypes, die in Klammern stehen wie @{i}(SERVER=192.168.178.2)@{ui}, gelten auf dem Amiga
+als @{b}inaktiv / auskommentiert@{ub}.
+Um einen Wert zu aktivieren, entfernen Sie die Klammern (z. B. @{b}SERVER=192.168.178.2@{ub})
+und klicken Sie auf @{b}Speichern@{ub}!
+
+@{b}Unterstuetzte ToolTypes:@{ub}
+
+- @{b}SERVER=<IP oder Hostname>@{ub}
+  Gibt die IP-Adresse oder den Namen des Streaming-Servers an (z. B. @{i}SERVER=192.168.178.2@{ui}).
+
+- @{b}PORT=<Portnummer>@{ub}
+  Gibt den Port des Streaming-Servers an (Standard: @{i}PORT=7788@{ui}).
+
+- @{b}URL=<Adresse>@{ub}  (oder STARTURL)
+  Die Webseite, die beim Start ueber das Icon geoeffnet werden soll (z. B. @{i}URL=https://www.amiga-news.de@{ui}).
+
+- @{b}STREAMMODE=<Modus>@{ub}
+  Bestimmt das Streaming-System:
+  * @{i}AUTO@{ui}     : Intelligente Umschaltung (H.264 bei Videos via va.library, sonst sparsames 2D).
+  * @{i}H264@{ui}     : Dauerhafter H.264 Video-Stream ueber Hardware.
+  * @{i}LZ4@{ui}      : Reines 2D Dirty-Rect Streaming (fuer schwaechere Grafikkarten ohne VA-API).
+
+- @{b}BITRATE=<Zahl in kbps>@{ub}
+  Setzt die H.264 Video-Bitrate (1000 bis 10000 kbps, Standard: @{i}BITRATE=8000@{ui}).
+
+- @{b}FPS=<Zahl>@{ub}
+  Ziel-Bildwiederholrate (15, 25, 30, 50, 60 FPS, Standard: @{i}FPS=25@{ui}).
+
+- @{b}DARKMODE=<0 oder 1>@{ub}
+  Erzwingt das dunkle Erscheinungsbild (Dark Mode) beim Start (@{i}DARKMODE=1@{ui} oder @{i}DARKMODE=0@{ui}).
+
+- @{b}DOWNLOADDIR=<Pfad>@{ub}
+  Standard-Download-Verzeichnis (z. B. @{i}DOWNLOADDIR=Work:Downloads@{ui}).
+
+@{b}Stack-Groesse:@{ub}
+Das Icon enthaelt fest hinterlegt @{b}Stack: 200000@{ub} Byte (~200 KB). Dies stellt sicher,
+dass Netzwerk, FFmpeg-Dekodierung und die Benutzeroberflaeche ohne Stack-Fehler stabil laufen.
+
+@endnode
+
 @node "Performance" "Tipps zur CPU-Entlastung & Performance"
 @{b}Tipps zur CPU-Entlastung & Performance@{ub}
 
@@ -549,6 +602,25 @@ SCHRITT 2: {APP_NAME} auf dem Amiga starten
   - Die Radeon-Grafikkarte skaliert das Bild ueber Hardware-CompositeTags()!
   - Senkt die Amiga-CPU-Last um 50-70%!
 
+------------------------------------------------------------------------------
+4. WORKBENCH TOOLTYPES (ICON-EINSTELLUNGEN)
+------------------------------------------------------------------------------
+Sie koennen VortexBrowser auch direkt ueber ToolTypes im Icon konfigurieren!
+Klicken Sie dazu das Icon an und waehlen Sie Workbench-Menue "Icons -> Information..."
+(oder Tastenkombination Rechte Amiga + I):
+
+- SERVER=192.168.178.2 : IP-Adresse oder Hostname des Streaming-Servers
+- PORT=7788            : Server-Port (Standard: 7788)
+- URL=https://...      : Startseite beim Starten per Doppelklick
+- STREAMMODE=AUTO      : Streaming-Modus (AUTO, H264 oder LZ4)
+- BITRATE=8000         : H.264 Video-Bitrate in kbps (1000 bis 10000)
+- FPS=25               : Bildwiederholrate (15, 25, 30, 50, 60 FPS)
+- DARKMODE=0           : Dark-Mode beim Start erzwingen (1=Ein, 0=Aus)
+- DOWNLOADDIR=RAM:     : Standard-Download-Verzeichnis (z. B. Work:Downloads)
+
+HINWEIS: ToolTypes in Klammern wie (SERVER=...) sind inaktiv (Muster).
+Entfernen Sie die Klammern, um den Wert zu aktivieren, und klicken Sie auf Speichern!
+
 Ausfuehrliche Informationen finden Sie in "{APP_NAME}.guide"!
 Viel Spass beim modernen Surfen auf AmigaOS 4!
 ==============================================================================
@@ -614,6 +686,24 @@ STEP 2: Start {APP_NAME} on AmigaOS 4
   Amiga+U   : Toggle Dark Mode (Light/Dark Theme)
   Amiga+E   : Open Preferences
   Amiga+Q   : Quit {APP_NAME}
+
+------------------------------------------------------------------------------
+4. WORKBENCH TOOLTYPES (ICON SETTINGS)
+------------------------------------------------------------------------------
+You can also configure {APP_NAME} directly via ToolTypes inside its .info icon!
+Select the icon on Workbench and choose "Icons -> Information..." (or press RA+I):
+
+- SERVER=192.168.178.2 : Server IP address or hostname
+- PORT=7788            : Server TCP port (default: 7788)
+- URL=https://...      : Startup URL when launched from Workbench
+- STREAMMODE=AUTO      : Streaming system (AUTO, H264, or LZ4)
+- BITRATE=8000         : H.264 video stream bitrate in kbps (1000 to 10000)
+- FPS=25               : Frame rate target (15, 25, 30, 50, 60 FPS)
+- DARKMODE=0           : Enforce dark mode on startup (1=On, 0=Off)
+- DOWNLOADDIR=RAM:     : Default download folder (e.g. Work:Downloads)
+
+NOTE: ToolTypes enclosed in parentheses like (SERVER=...) are commented out.
+Remove the parentheses to activate the setting and click "Save"!
 
 For comprehensive documentation, open "{APP_NAME}.guide" in MultiView!
 Enjoy modern web browsing on AmigaOS 4!
