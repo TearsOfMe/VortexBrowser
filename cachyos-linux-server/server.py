@@ -1665,6 +1665,7 @@ class AmigaClientSession:
         codec_mode: str = "auto",
         engine: str = "chromium",
         stream_mode: str = "auto",
+        video_bitrate: int = 4000,
     ):
         self.reader = reader
         self.writer = writer
@@ -1690,6 +1691,7 @@ class AmigaClientSession:
         self._sec_start_time: float = time.monotonic()
         self.codec_mode: str = codec_mode
         self.stream_mode: str = stream_mode.lower()
+        self.video_bitrate_k: int = max(500, min(50000, video_bitrate))
         self._h264_encoder: Optional[H264LiveStreamEncoder] = None
         self._total_h264_frames: int = 0
 
@@ -1774,7 +1776,7 @@ class AmigaClientSession:
             self._h264_encoder.stop()
             self._h264_encoder = None
         if self._h264_encoder is None:
-            self._h264_encoder = H264LiveStreamEncoder(width, height, self.target_fps)
+            self._h264_encoder = H264LiveStreamEncoder(width, height, self.target_fps, self.video_bitrate_k)
         return self._h264_encoder
 
     async def _attach_direct_cdp(self, target_page: Page) -> None:
@@ -5510,6 +5512,7 @@ async def run_server(args: argparse.Namespace) -> None:
                         codec_mode=getattr(args, "codec", "auto"),
                         engine=engine,
                         stream_mode=getattr(args, "stream_mode", "auto"),
+                        video_bitrate=getattr(args, "video_bitrate", 4000),
                     )
                     active_session = session
 
@@ -5575,6 +5578,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--browser-bin", default=None, help="Explicit path to Chromium or Ungoogled-Chromium executable")
     parser.add_argument("--codec", choices=["auto", "jpeg", "lz4", "h264"], default="auto", help="Streaming codec (default: auto)")
     parser.add_argument("--stream-mode", choices=["auto", "lz4", "h264"], default="auto", help="Video streaming mode (default: auto = adaptive H.264 on video, LZ4 otherwise)")
+    parser.add_argument("--video-bitrate", type=int, default=4000, help="H.264 video stream bitrate in kbps (default: 4000 kbps)")
     parser.add_argument("--jpeg-quality", type=int, default=82, help="JPEG capture quality 20-100 (default: 82 for Full HD 1080p@25fps)")
     parser.add_argument("--enable-extensions", dest="enable_extensions", action="store_true", default=True, help="Enable browser extensions (uBlock, h264ify) [default: enabled]")
     parser.add_argument("--disable-extensions", dest="enable_extensions", action="store_false", help="Disable all browser extensions")
