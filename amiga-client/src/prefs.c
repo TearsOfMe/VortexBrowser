@@ -93,6 +93,7 @@ void prefs_init(VortexApp *app)
     app->prefs.server_port                  = DEFAULT_SERVER_PORT;
     app->prefs.target_fps                   = 25;  /* Default: 25 FPS (PAL Standard) */
     app->prefs.jpeg_quality                 = 100; /* Default: 100% */
+    app->prefs.video_stream_mode            = STREAM_VIDEO_AUTO; /* Default: Auto (H.264 bei Video via va.library) */
     app->prefs.dynamic_video_quality        = TRUE;
     app->prefs.save_server_on_exit          = TRUE;
     strncpy(app->prefs.download_dir, "RAM:", sizeof(app->prefs.download_dir) - 1);
@@ -251,6 +252,9 @@ static BOOL load_from_file(VortexApp *app, const char *path)
         } else if (strcmp(key, "jpeg_quality") == 0) {
             int q = atoi(val);
             if (q >= 20 && q <= 100) app->prefs.jpeg_quality = (uint8_t)q;
+        } else if (strcmp(key, "video_stream_mode") == 0) {
+            int m = atoi(val);
+            if (m >= 0 && m <= 2) app->prefs.video_stream_mode = (uint8_t)m;
         } else if (strcmp(key, "dynamic_video_quality") == 0) {
             app->prefs.dynamic_video_quality = (atoi(val) != 0);
         } else if (strcmp(key, "save_server_on_exit") == 0) {
@@ -490,6 +494,7 @@ static BOOL save_to_file(const VortexApp *app, const char *path)
     fprintf(fp, "server_port=%u\n", (unsigned)sp);
     fprintf(fp, "target_fps=%u\n", (unsigned)(app->prefs.target_fps ? app->prefs.target_fps : 25));
     fprintf(fp, "jpeg_quality=%u\n", (unsigned)(app->prefs.jpeg_quality ? app->prefs.jpeg_quality : 100));
+    fprintf(fp, "video_stream_mode=%u\n", (unsigned)app->prefs.video_stream_mode);
     fprintf(fp, "dynamic_video_quality=%d\n", app->prefs.dynamic_video_quality ? 1 : 0);
     fprintf(fp, "save_server_on_exit=%d\n\n", app->prefs.save_server_on_exit ? 1 : 0);
 

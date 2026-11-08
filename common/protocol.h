@@ -54,6 +54,12 @@ extern "C" {
 #define CODEC_LZ4_SLICE       2     /* Dirty scanline band: [uint16_t y_offset, uint16_t slice_h] + LZ4 block */
 #define CODEC_JPEG            3     /* Baseline Motion-JPEG */
 #define CODEC_LZ4_RECT        4     /* 2D Bounding Box sub-rect: [MsgRectHdr x,y,w,h] + LZ4 block */
+#define CODEC_H264            5     /* Full-frame H.264 Annex-B NAL Stream (va.library HW-accel) */
+
+/* Video Streaming Modes for adaptive switching */
+#define STREAM_VIDEO_AUTO      0     /* Adaptive: H.264 via va.library for video, LZ4 for browsing */
+#define STREAM_VIDEO_DIRTYRECT 1     /* Force LZ4 2D dirty-rect / slice (classic mode) */
+#define STREAM_VIDEO_H264      2     /* Force continuous H.264 stream (minimal bandwidth) */
 
 /* Input Event Types for MSG_INPUT.event_type */
 #define INPUT_CLICK           1     /* Mouse click at (x, y); key_code: 1=Left, 2=Middle, 3=Right */

@@ -243,10 +243,25 @@ BOOL net_handle_incoming(VortexApp *app)
                     const char *fmt_name = (hdr.format == FMT_YUV420P)
                         ? (r->src_bm_is_yuv ? "YUV420 HW-GPU 12bpp" : "YUV420 SW 12bpp")
                         : ((hdr.format == FMT_RGB565) ? "RGB565 16bpp" : "ARGB32");
-                    app_set_status("Verbunden (%ux%u %s LZ4) | %s",
+                    const char *codec_name = (hdr.codec == CODEC_H264) ? "H.264 VA-API" :
+                                             (hdr.codec == CODEC_JPEG) ? "MJPEG" : "LZ4";
+                    app_set_status("Verbunden (%ux%u %s %s) | %s",
                                    (unsigned)VB_BE16(hdr.width),
                                    (unsigned)VB_BE16(hdr.height),
                                    fmt_name,
+                                   codec_name,
+                                   app->current_url[0] ? app->current_url : "Portal");
+                } else if (hdr.codec == CODEC_H264 && !r->is_h264_active) {
+                    r->is_h264_active = TRUE;
+                    app_set_status("Verbunden (%ux%u H.264 VA-API Hardware) | %s",
+                                   (unsigned)VB_BE16(hdr.width),
+                                   (unsigned)VB_BE16(hdr.height),
+                                   app->current_url[0] ? app->current_url : "Portal");
+                } else if (hdr.codec != CODEC_H264 && r->is_h264_active) {
+                    r->is_h264_active = FALSE;
+                    app_set_status("Verbunden (%ux%u LZ4 2D Dirty-Rect) | %s",
+                                   (unsigned)VB_BE16(hdr.width),
+                                   (unsigned)VB_BE16(hdr.height),
                                    app->current_url[0] ? app->current_url : "Portal");
                 }
             }

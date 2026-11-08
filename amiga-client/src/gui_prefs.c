@@ -41,6 +41,7 @@ enum {
     GID_P_SERVER_STREAM_RES,
     GID_P_SERVER_FPS,
     GID_P_SERVER_JPEG_QUALITY,
+    GID_P_SERVER_STREAM_MODE,
     GID_P_SERVER_DYN_VIDEO,
     GID_P_SERVER_SAVE_EXIT,
 
@@ -103,6 +104,13 @@ static const char *const s_server_preset_labels[] = {
     "Sekundaerer Server (127.0.0.1:9757)",
     "Standard Server (127.0.0.1:7788)",
     "Benutzerdefiniert (Manuelle Adresse)",
+    NULL
+};
+
+static const char *const s_stream_mode_labels[] = {
+    "Auto (H.264 via va.library bei Video, sonst LZ4)",
+    "Nur Dirty-Rect / LZ4 (Klassisch, ohne va.library)",
+    "Nur H.264 (Dauerhafter Videostream, min. Bandbreite)",
     NULL
 };
 
@@ -476,6 +484,14 @@ void gui_prefs_open(VortexApp *app)
         GA_HintInfo,        "JPEG-Stream-Qualitaet (Standard: 100%% = maximale Bildschaerfe)",
         TAG_DONE);
 
+    Object *gad_stream_mode = IIntuition->NewObject(NULL, "chooser.gadget",
+        GA_ID,              GID_P_SERVER_STREAM_MODE,
+        GA_RelVerify,       TRUE,
+        CHOOSER_LabelArray, s_stream_mode_labels,
+        CHOOSER_Selected,   (app->prefs.video_stream_mode <= 2) ? app->prefs.video_stream_mode : 0,
+        GA_HintInfo,        "Streaming-Modus: 'Auto' schaltet bei Video automatisch auf H.264 via va.library um",
+        TAG_DONE);
+
     Object *gad_dyn_video = IIntuition->NewObject(NULL, "checkbox.gadget",
         GA_ID,            GID_P_SERVER_DYN_VIDEO,
         GA_RelVerify,     TRUE,
@@ -563,6 +579,18 @@ void gui_prefs_open(VortexApp *app)
                                                             TAG_DONE),
                                   CHILD_WeightedWidth,  28,
                                   LAYOUT_AddChild,      gad_jpeg_quality,
+                                  CHILD_WeightedWidth,  72,
+                                  TAG_DONE),
+        CHILD_WeightedHeight, 0,
+        LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
+                                  LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
+                                  LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
+                                                            GA_Text,              (Tag)"Video-Streaming:",
+                                                            GA_ReadOnly,          TRUE,
+                                                            BUTTON_Justification, BCJ_RIGHT,
+                                                            TAG_DONE),
+                                  CHILD_WeightedWidth,  28,
+                                  LAYOUT_AddChild,      gad_stream_mode,
                                   CHILD_WeightedWidth,  72,
                                   TAG_DONE),
         CHILD_WeightedHeight, 0,
@@ -1674,6 +1702,11 @@ void gui_prefs_open(VortexApp *app)
         IIntuition->GetAttr(CHECKBOX_Checked, gad_dyn_video, &dyn_v);
         app->prefs.dynamic_video_quality = (dyn_v != 0);
 
+        uint32 sm_sel = 0;
+        IIntuition->GetAttr(CHOOSER_Selected, gad_stream_mode, &sm_sel);
+        BOOL sm_changed = (app->prefs.video_stream_mode != (uint8_t)sm_sel);
+        if (sm_sel <= 2) app->prefs.video_stream_mode = (uint8_t)sm_sel;
+
         uint32 s_exit = 0;
         IIntuition->GetAttr(CHECKBOX_Checked, gad_save_exit, &s_exit);
         app->prefs.save_server_on_exit = (s_exit != 0);
@@ -1715,6 +1748,13 @@ void gui_prefs_open(VortexApp *app)
                 char qcmd[32];
                 snprintf(qcmd, sizeof(qcmd), "@JPEG_QUALITY:%u", (unsigned)app->prefs.jpeg_quality);
                 net_send_url(app, qcmd);
+            }
+            if (sm_changed && app->connected) {
+                const char *sm = (app->prefs.video_stream_mode == STREAM_VIDEO_H264) ? "h264" :
+                                 (app->prefs.video_stream_mode == STREAM_VIDEO_DIRTYRECT) ? "lz4" : "auto";
+                char smcmd[32];
+                snprintf(smcmd, sizeof(smcmd), "@STREAM_MODE:%s", sm);
+                net_send_url(app, smcmd);
             }
         }
 
