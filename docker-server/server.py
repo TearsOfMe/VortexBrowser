@@ -95,12 +95,15 @@ AUDIO_CHANNELS      = 2
 AUDIO_CHUNK_BYTES   = 8192  # ~92ms of 22050Hz 16-bit stereo PCM
 AUDIO_SINK_NAME     = "vortexbrowse_sink"
 
+_LOG_LEVEL_STR = os.environ.get("VORTEX_LOG_LEVEL", "CRITICAL").upper()
+_LOG_LEVEL = getattr(logging, _LOG_LEVEL_STR, logging.CRITICAL)
 logging.basicConfig(
-    level=logging.INFO,
+    level=_LOG_LEVEL,
     format="[%(asctime)s] [VortexServer] %(levelname)s: %(message)s",
     datefmt="%H:%M:%S",
 )
 logger = logging.getLogger("VortexServer")
+logger.setLevel(_LOG_LEVEL)
 
 AMIGA_RAWKEY_MAP = {
     0x40: "Space",
@@ -1467,7 +1470,7 @@ class AmigaClientSession:
         codec_mode: str = "auto",
         engine: str = "chromium",
         stream_mode: str = "auto",
-        video_bitrate: int = 4000,
+        video_bitrate: int = 8000,
     ):
         self.reader = reader
         self.writer = writer
@@ -4532,7 +4535,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--browser-bin", default=None, help="Explicit path to Chromium or Ungoogled-Chromium executable")
     parser.add_argument("--codec", choices=["auto", "jpeg", "lz4", "h264"], default="auto", help="Streaming codec (default: auto)")
     parser.add_argument("--stream-mode", choices=["auto", "lz4", "h264"], default="auto", help="Video streaming mode (default: auto = adaptive H.264 on video, LZ4 otherwise)")
-    parser.add_argument("--video-bitrate", type=int, default=4000, help="H.264 video stream bitrate in kbps (default: 4000 kbps)")
+    parser.add_argument("--video-bitrate", type=int, default=8000, help="H.264 video stream bitrate in kbps (default: 8000 kbps)")
+    parser.add_argument(
+        "--log-level",
+        choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"],
+        default=os.environ.get("VORTEX_LOG_LEVEL", "CRITICAL").upper(),
+        help="Logging verbosity (default: CRITICAL) [env: VORTEX_LOG_LEVEL]",
+    )
     parser.add_argument("--jpeg-quality", type=int, default=100, help="JPEG capture quality 20-100 (default: 100 for maximum clarity)")
     parser.add_argument("--enable-extensions", dest="enable_extensions", action="store_true", default=True, help="Enable browser extensions (uBlock, h264ify) [default: enabled]")
     parser.add_argument("--disable-extensions", dest="enable_extensions", action="store_false", help="Disable all browser extensions")
@@ -4548,7 +4557,12 @@ def parse_args() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
+    args = parse_args()
+    if hasattr(args, "log_level"):
+        lvl = getattr(logging, args.log_level.upper(), logging.CRITICAL)
+        logger.setLevel(lvl)
+        logging.getLogger().setLevel(lvl)
     try:
-        asyncio.run(run_server(parse_args()))
+        asyncio.run(run_server(args))
     except KeyboardInterrupt:
         logger.info("VortexBrowse Server stopped.")

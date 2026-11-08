@@ -494,7 +494,7 @@ void gui_prefs_open(VortexApp *app)
         TAG_DONE);
 
     uint32 cur_br = (app->prefs.video_bitrate_k >= 1000 && app->prefs.video_bitrate_k <= 10000) ?
-                    app->prefs.video_bitrate_k : 4000;
+                    app->prefs.video_bitrate_k : 8000;
 
     Object *gad_video_bitrate = IIntuition->NewObject(NULL, "slider.gadget",
         GA_ID,              GID_P_SERVER_VIDEO_BITRATE,
@@ -1738,7 +1738,7 @@ void gui_prefs_open(VortexApp *app)
         BOOL sm_changed = (app->prefs.video_stream_mode != (uint8_t)sm_sel);
         if (sm_sel <= 2) app->prefs.video_stream_mode = (uint8_t)sm_sel;
 
-        uint32 br_val = 4000;
+        uint32 br_val = 8000;
         IIntuition->GetAttr(SLIDER_Level, gad_video_bitrate, &br_val);
         if (br_val < 1000) br_val = 1000;
         if (br_val > 10000) br_val = 10000;

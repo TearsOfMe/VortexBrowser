@@ -180,10 +180,7 @@ int main(int argc, char **argv)
         }
     }
 
-    printf("============================================================\n");
-    printf(" VortexBrowse (MUI Edition) 1.0 (AmigaOS 4.1 PowerPC)\n");
-    printf(" Server: %s:%u\n", g_app.server_host, g_app.server_port);
-    printf("============================================================\n");
+    /* Shell banner suppressed per user request */
 
     if (!open_libs()) {
         close_libs();
@@ -217,8 +214,15 @@ int main(int argc, char **argv)
         g_app.current_url[sizeof(g_app.current_url) - 1] = '\0';
     }
 
+    /* Set initial stream mode status */
+    const char *sm_label = (g_app.prefs.video_stream_mode == STREAM_VIDEO_H264) ? "H.264" :
+                           (g_app.prefs.video_stream_mode == STREAM_VIDEO_DIRTYRECT) ? "LZ4 (2D)" : "Auto";
+    app_set_status("Bereit - Stream-System: %s | %u kbps", sm_label, (unsigned)g_app.prefs.video_bitrate_k);
+
     /* Auto-connect on startup */
     if (net_connect(&g_app, g_app.server_host, g_app.server_port)) {
+        app_set_status("Verbunden mit %s:%u - Stream: %s | %u kbps",
+                       g_app.server_host, (unsigned)g_app.server_port, sm_label, (unsigned)g_app.prefs.video_bitrate_k);
         const char *su = (g_app.current_url[0] && g_app.current_url[0] != '@') ? g_app.current_url : "@HOME";
         gui_mui_update_url_bar(&g_app, (su[0] != '@') ? su : "");
         net_send_url(&g_app, su);
@@ -286,7 +290,6 @@ int main(int argc, char **argv)
         }
 
         if (wait_sigs & SIGBREAKF_CTRL_C) {
-            printf("[Main-MUI] CTRL-C received, exiting.\n");
             g_app.running = FALSE;
         }
 
@@ -316,6 +319,5 @@ int main(int argc, char **argv)
     renderer_cleanup(&g_app);
     close_libs();
 
-    printf("[Main-MUI] VortexBrowse-MUI exited cleanly.\n");
     return 0;
 }

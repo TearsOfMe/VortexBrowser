@@ -118,9 +118,9 @@ static struct NewMenu s_mui_menu[] = {
     { NM_TITLE, (char *)"Ansicht", NULL, 0, 0, (APTR)MID_VIEW },
     { NM_ITEM,  (char *)"Video-Qualitaet / Bitrate:", NULL, NM_ITEMDISABLED, 0, (APTR)0 },
     { NM_ITEM,  (char *)"  Bitrate: 2000 kbps (Niedrig)", NULL, 0, 0, (APTR)MID_BITRATE_2000 },
-    { NM_ITEM,  (char *)"  Bitrate: 4000 kbps (Standard)", NULL, 0, 0, (APTR)MID_BITRATE_4000 },
+    { NM_ITEM,  (char *)"  Bitrate: 4000 kbps (Mittel)", NULL, 0, 0, (APTR)MID_BITRATE_4000 },
     { NM_ITEM,  (char *)"  Bitrate: 6000 kbps (Hoch)", NULL, 0, 0, (APTR)MID_BITRATE_6000 },
-    { NM_ITEM,  (char *)"  Bitrate: 8000 kbps (Sehr hoch)", NULL, 0, 0, (APTR)MID_BITRATE_8000 },
+    { NM_ITEM,  (char *)"  Bitrate: 8000 kbps (Standard / 8 Mbit)", NULL, 0, 0, (APTR)MID_BITRATE_8000 },
     { NM_ITEM,  (char *)"  Bitrate: 10000 kbps (Ultra-HD)", NULL, 0, 0, (APTR)MID_BITRATE_10000 },
     { NM_ITEM,  NM_BARLABEL, NULL, 0, 0, (APTR)0 },
     { NM_ITEM,  (char *)"Framerate:", NULL, NM_ITEMDISABLED, 0, (APTR)0 },
@@ -801,6 +801,11 @@ void gui_mui_rebuild_tabs(VortexApp *app)
             MUI_DisposeObject(app->mui_btn_add_tab);
             app->mui_btn_add_tab = NULL;
         }
+        if (app->mui_tab_spacer) {
+            DoMethod(app->mui_tab_bar_group, OM_REMMEMBER, app->mui_tab_spacer);
+            MUI_DisposeObject(app->mui_tab_spacer);
+            app->mui_tab_spacer = NULL;
+        }
 
         if (app->num_tabs == 0) {
             app->tabs[0].id = 0;
@@ -814,7 +819,7 @@ void gui_mui_rebuild_tabs(VortexApp *app)
             BOOL is_active = (i == app->active_tab_idx);
             char label_buf[96];
             if (is_active) {
-                snprintf(label_buf, sizeof(label_buf), "\33c\33b[%d: %s]", i + 1, app->tabs[i].title);
+                snprintf(label_buf, sizeof(label_buf), "\33c\33b %d: %s ", i + 1, app->tabs[i].title);
             } else {
                 snprintf(label_buf, sizeof(label_buf), "\33c %d: %s ", i + 1, app->tabs[i].title);
             }
@@ -824,21 +829,26 @@ void gui_mui_rebuild_tabs(VortexApp *app)
                 MUIA_Font, MUIV_Font_Button,
                 MUIA_Text_Contents, label_buf,
                 MUIA_InputMode, MUIV_InputMode_RelVerify,
-                MUIA_Background, is_active ? MUII_SelectedBack : MUII_ButtonBack,
+                MUIA_Background, is_active ? MUII_RegisterBack : MUII_ButtonBack,
                 MUIA_ShortHelp, app->tabs[i].url[0] ? (STRPTR)app->tabs[i].url : (STRPTR)"Startseite",
             End;
 
             app->mui_tab_close_btn[i] = TextObject,
-                ButtonFrame,
+                MUIA_Frame, MUIV_Frame_ImageButton,
                 MUIA_Text_Contents, "\33cx",
                 MUIA_InputMode, MUIV_InputMode_RelVerify,
-                MUIA_Background, MUII_ButtonBack,
+                MUIA_Background, is_active ? MUII_RegisterBack : MUII_ButtonBack,
                 MUIA_FixWidthTxt, " x ",
                 MUIA_ShortHelp, "Tab schliessen",
             End;
 
             app->mui_tab_item[i] = HGroup,
                 MUIA_Group_Horiz, TRUE,
+                MUIA_InnerBottom, 0,
+                MUIA_InnerTop, 0,
+                MUIA_InnerLeft, 0,
+                MUIA_InnerRight, 0,
+                MUIA_Group_Spacing, 0,
                 Child, app->mui_tab_btn[i],
                 Child, app->mui_tab_close_btn[i],
             End;
@@ -853,7 +863,7 @@ void gui_mui_rebuild_tabs(VortexApp *app)
         }
 
         app->mui_btn_add_tab = TextObject,
-            ButtonFrame,
+            MUIA_Frame, MUIV_Frame_ImageButton,
             MUIA_Text_Contents, "\33c + ",
             MUIA_InputMode, MUIV_InputMode_RelVerify,
             MUIA_Background, MUII_ButtonBack,
@@ -866,10 +876,12 @@ void gui_mui_rebuild_tabs(VortexApp *app)
                      app->mui_app, 2, MUIM_Application_ReturnID, GID_TAB_ADD);
         }
 
-        APTR spacer = RectangleObject,
+        app->mui_tab_spacer = RectangleObject,
             MUIA_Weight, 100,
         End;
-        DoMethod(app->mui_tab_bar_group, OM_ADDMEMBER, spacer);
+        if (app->mui_tab_spacer) {
+            DoMethod(app->mui_tab_bar_group, OM_ADDMEMBER, app->mui_tab_spacer);
+        }
 
         DoMethod(app->mui_tab_bar_group, MUIM_Group_ExitChange);
     }
@@ -1012,25 +1024,42 @@ void gui_tabs_reset(VortexApp *app)
 
 void gui_mui_update_status_bar(VortexApp *app)
 {
-    if (!app) return;
+    if (!app || !app->mui_fps_info) return;
 
-    if (app->mui_fps_info) {
-        char hw_info[64];
+    const char *sm_mode = (app->prefs.video_stream_mode == STREAM_VIDEO_H264) ? "H.264" :
+                          (app->prefs.video_stream_mode == STREAM_VIDEO_DIRTYRECT) ? "LZ4" : "Auto";
+
+    char codec_info[48];
+    if (app->renderer.last_codec == CODEC_H264) {
         if (app->renderer.has_va && app->renderer.is_h264_active) {
-            snprintf(hw_info, sizeof(hw_info), "VA-API HW");
+            snprintf(codec_info, sizeof(codec_info), "H.264 VA-API HW");
         } else if (app->renderer.has_altivec) {
-            snprintf(hw_info, sizeof(hw_info), "AltiVec SIMD");
+            snprintf(codec_info, sizeof(codec_info), "H.264 AltiVec");
         } else {
-            snprintf(hw_info, sizeof(hw_info), "Software RTG");
+            snprintf(codec_info, sizeof(codec_info), "H.264 SW");
         }
-
-        uint32 br = app->prefs.video_bitrate_k ? app->prefs.video_bitrate_k : 4000;
-        uint8 fps = app->prefs.target_fps ? app->prefs.target_fps : 25;
-
-        char buf[96];
-        snprintf(buf, sizeof(buf), "\33c%u FPS | %u kbps | %s", (unsigned)fps, (unsigned)br, hw_info);
-        set(app->mui_fps_info, MUIA_Text_Contents, buf);
+    } else if (app->renderer.last_codec == CODEC_LZ4_RECT) {
+        snprintf(codec_info, sizeof(codec_info), "LZ4 (2D Rect)");
+    } else if (app->renderer.last_codec == CODEC_LZ4) {
+        snprintf(codec_info, sizeof(codec_info), "LZ4 (Full)");
+    } else if (app->renderer.last_codec == CODEC_JPEG) {
+        snprintf(codec_info, sizeof(codec_info), "JPEG");
+    } else {
+        if (app->renderer.has_va) {
+            snprintf(codec_info, sizeof(codec_info), "Bereit (VA-API HW)");
+        } else if (app->renderer.has_altivec) {
+            snprintf(codec_info, sizeof(codec_info), "Bereit (AltiVec)");
+        } else {
+            snprintf(codec_info, sizeof(codec_info), "Bereit (SW)");
+        }
     }
+
+    uint32 br = app->prefs.video_bitrate_k ? app->prefs.video_bitrate_k : 8000;
+    uint8 fps = app->prefs.target_fps ? app->prefs.target_fps : 25;
+
+    char buf[128];
+    snprintf(buf, sizeof(buf), "\33cStream: %s [%s] | %u FPS | %u kbps", sm_mode, codec_info, (unsigned)fps, (unsigned)br);
+    set(app->mui_fps_info, MUIA_Text_Contents, buf);
 }
 
 void gui_mui_update_url_bar(VortexApp *app, const char *url)
@@ -1156,10 +1185,10 @@ BOOL gui_mui_init(VortexApp *app)
     gui_mui_rebuild_fav_cycle(app);
 
     APTR btn_back, btn_fwd, btn_reload, btn_stop, btn_home;
-    APTR btn_bookmarks, btn_downloads, btn_passwords, btn_new_tab, btn_close_tab;
+    APTR btn_downloads, btn_passwords, btn_new_tab;
     APTR btn_clear_url, btn_go, btn_search_go;
-    APTR btn_add_fav, btn_connect;
-    APTR nav_group, url_group, fastlink_group, addressbar_group, searchbar_group, status_row;
+    APTR btn_add_fav, btn_bookmarks, btn_connect;
+    APTR nav_group, url_group, fastlink_group, addressbar_group, searchbar_group, page_group, status_row;
 
     snprintf(app->win_title, sizeof(app->win_title), "%s (MUI)", VB_APP_TITLE);
 
@@ -1175,12 +1204,8 @@ BOOL gui_mui_init(VortexApp *app)
         Child, btn_stop      = SimpleButton("Stopp"),
         Child, btn_home      = SimpleButton("Start"),
         Child, MakeVBar(),
-        Child, btn_bookmarks = SimpleButton("Lesezeichen"),
         Child, btn_downloads = SimpleButton("Downloads"),
         Child, btn_passwords = SimpleButton("Passw\366rter"),
-        Child, MakeVBar(),
-        Child, btn_new_tab   = SimpleButton("+ Tab"),
-        Child, btn_close_tab = SimpleButton("- Tab"),
         Child, RectangleObject,
             MUIA_Weight, 100,
         End,
@@ -1194,9 +1219,38 @@ BOOL gui_mui_init(VortexApp *app)
     End;
 
     /* ------------------------------------------------------------------------
-     * Row 2: Address & Search Group (Odyssey urlgroup + BalanceObject)
+     * Row 2: Fastlinks / Quicklinks Bar (Odyssey fastlinkparentgroup)
+     * ------------------------------------------------------------------------ */
+    app->mui_quick_group = HGroup,
+        MUIA_Group_Horiz, TRUE,
+    End;
+
+    for (int i = 0; i < VB_MAX_QUICKLINKS; i++) {
+        app->mui_quick_btn[i] = NULL;
+    }
+    app->mui_btn_add_ql = NULL;
+    app->mui_btn_rem_ql = NULL;
+    app->mui_btn_prefs  = NULL;
+
+    fastlink_group = HGroup,
+        Child, app->mui_quick_group,
+        Child, RectangleObject,
+            MUIA_Weight, 100,
+        End,
+        Child, app->mui_server_cycle = CycleObject,
+            MUIA_Cycle_Entries, s_server_entries,
+            MUIA_Cycle_Active, 0,
+            MUIA_CycleChain, 1,
+            MUIA_ShortHelp, "VortexBrowser-Server waehlen",
+        End,
+        Child, btn_connect          = SimpleButton("Verbinden"),
+    End;
+
+    /* ------------------------------------------------------------------------
+     * Row 3: Address & Search Group (Odyssey urlgroup + BalanceObject)
      * ------------------------------------------------------------------------ */
     addressbar_group = HGroup,
+        Child, btn_new_tab   = SimpleButton("+ Tab"),
         Child, app->mui_security_badge = TextObject,
             ButtonFrame,
             MUIA_Font, MUIV_Font_Button,
@@ -1212,6 +1266,14 @@ BOOL gui_mui_init(VortexApp *app)
         End,
         Child, btn_clear_url = SimpleButton("X"),
         Child, btn_go        = SimpleButton("Los"),
+        Child, MakeVBar(),
+        Child, btn_add_fav   = SimpleButton("+Lesez."),
+        Child, btn_bookmarks = SimpleButton("Lesezeichen"),
+        Child, app->mui_fav_cycle = CycleObject,
+            MUIA_Cycle_Entries, app->mui_fav_entries,
+            MUIA_CycleChain, 1,
+            MUIA_ShortHelp, "Gespeicherte Lesezeichen",
+        End,
     End;
 
     searchbar_group = HGroup,
@@ -1240,42 +1302,15 @@ BOOL gui_mui_init(VortexApp *app)
     End;
 
     /* ------------------------------------------------------------------------
-     * Row 3: Fastlinks / Quicklinks Bar (Odyssey fastlinkparentgroup)
-     * ------------------------------------------------------------------------ */
-    app->mui_quick_group = HGroup,
-        MUIA_Group_Horiz, TRUE,
-    End;
-
-    for (int i = 0; i < VB_MAX_QUICKLINKS; i++) {
-        app->mui_quick_btn[i] = NULL;
-    }
-    app->mui_btn_add_ql = NULL;
-    app->mui_btn_rem_ql = NULL;
-    app->mui_btn_prefs  = NULL;
-
-    fastlink_group = HGroup,
-        Child, app->mui_quick_group,
-        Child, btn_add_fav          = SimpleButton("+Lesez."),
-        Child, app->mui_fav_cycle   = CycleObject,
-            MUIA_Cycle_Entries, app->mui_fav_entries,
-            MUIA_CycleChain, 1,
-            MUIA_ShortHelp, "Gespeicherte Lesezeichen",
-        End,
-        Child, MakeVBar(),
-        Child, app->mui_server_cycle = CycleObject,
-            MUIA_Cycle_Entries, s_server_entries,
-            MUIA_Cycle_Active, 0,
-            MUIA_CycleChain, 1,
-            MUIA_ShortHelp, "VortexBrowser-Server waehlen",
-        End,
-        Child, btn_connect          = SimpleButton("Verbinden"),
-    End;
-
-    /* ------------------------------------------------------------------------
      * Row 4: Dedicated Tab Bar (Odyssey pagegroup / titlegroup)
      * ------------------------------------------------------------------------ */
     app->mui_tab_bar_group = HGroup,
         MUIA_Group_Horiz, TRUE,
+        MUIA_InnerBottom, 0,
+        MUIA_InnerTop, 2,
+        MUIA_InnerLeft, 2,
+        MUIA_InnerRight, 2,
+        MUIA_Group_Spacing, 2,
     End;
 
     for (int i = 0; i < VB_MAX_TABS; i++) {
@@ -1284,6 +1319,7 @@ BOOL gui_mui_init(VortexApp *app)
         app->mui_tab_close_btn[i] = NULL;
     }
     app->mui_btn_add_tab = NULL;
+    app->mui_tab_spacer  = NULL;
 
     /* ------------------------------------------------------------------------
      * Row 5: Custom Viewport Object
@@ -1296,6 +1332,21 @@ BOOL gui_mui_init(VortexApp *app)
         printf("[GUI-MUI] ERROR: Failed to instantiate custom viewport object!\n");
         return FALSE;
     }
+
+    /* ------------------------------------------------------------------------
+     * Unified Page Group (Odyssey pagegroup containing Tabs + Viewport)
+     * ------------------------------------------------------------------------ */
+    page_group = VGroup,
+        MUIA_Background, MUII_RegisterBack,
+        MUIA_Frame, MUIV_Frame_Register,
+        MUIA_InnerBottom, 0,
+        MUIA_InnerTop, 0,
+        MUIA_InnerLeft, 0,
+        MUIA_InnerRight, 0,
+        MUIA_Group_Spacing, 0,
+        Child, app->mui_tab_bar_group,
+        Child, app->mui_viewport,
+    End;
 
     /* ------------------------------------------------------------------------
      * Row 6: Segmented Status Bar (Odyssey statusgroup)
@@ -1311,22 +1362,22 @@ BOOL gui_mui_init(VortexApp *app)
         Child, app->mui_status = TextObject,
             MUIA_Text_Contents, app->status_text,
             MUIA_Frame, MUIV_Frame_ReadList,
-            MUIA_Weight, 60,
+            MUIA_Weight, 55,
         End,
         Child, MakeVBar(),
         Child, app->mui_gauge = GaugeObject,
             MUIA_Gauge_Horiz, TRUE,
             MUIA_Gauge_Max, 100,
             MUIA_Gauge_Current, 0,
-            MUIA_FixWidth, 160,
-            MUIA_Weight, 15,
+            MUIA_FixWidth, 140,
+            MUIA_Weight, 12,
         End,
         Child, MakeVBar(),
         Child, app->mui_fps_info = TextObject,
             MUIA_Frame, MUIV_Frame_ReadList,
-            MUIA_Text_Contents, "\33c25 FPS | 4000 kbps | VA-API",
-            MUIA_FixWidthTxt, " 60 FPS | 10000 kbps | VA-API HW ",
-            MUIA_Weight, 20,
+            MUIA_Text_Contents, "\33cStream: Auto [Bereit] | 25 FPS | 8000 kbps",
+            MUIA_FixWidthTxt, " Stream: Auto [H.264 VA-API HW] | 60 FPS | 10000 kbps ",
+            MUIA_Weight, 25,
         End,
     End;
 
@@ -1347,10 +1398,9 @@ BOOL gui_mui_init(VortexApp *app)
             MUIA_Window_ID, MAKE_ID('V','B','M','U'),
             WindowContents, VGroup,
                 Child, nav_group,
-                Child, url_group,
                 Child, fastlink_group,
-                Child, app->mui_tab_bar_group,
-                Child, app->mui_viewport,
+                Child, url_group,
+                Child, page_group,
                 Child, status_row,
             End,
         End,
@@ -1367,23 +1417,22 @@ BOOL gui_mui_init(VortexApp *app)
     DoMethod(btn_reload,    MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_RELOAD);
     DoMethod(btn_stop,      MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_STOP);
     DoMethod(btn_home,      MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_HOME);
-    DoMethod(btn_bookmarks, MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_BOOKMARKS);
     DoMethod(btn_downloads, MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_DOWNLOADS);
     DoMethod(btn_passwords, MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_PASSWORDS);
     DoMethod(btn_new_tab,   MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_NEW_TAB);
-    DoMethod(btn_close_tab, MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_CLOSE_TAB);
 
-    /* Row 2 Address & Search */
+    /* Row 3 Address & Search */
     DoMethod(btn_clear_url, MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_CLEAR_URL);
     DoMethod(btn_go,        MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_GO);
     DoMethod(btn_search_go, MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_SEARCH_GO);
     DoMethod(app->mui_url,    MUIM_Notify, MUIA_String_Acknowledge, MUIV_EveryTime, app->mui_app, 2, MUIM_Application_ReturnID, GID_GO);
     DoMethod(app->mui_search, MUIM_Notify, MUIA_String_Acknowledge, MUIV_EveryTime, app->mui_app, 2, MUIM_Application_ReturnID, GID_SEARCH_GO);
+    DoMethod(btn_add_fav,   MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_ADD_FAV);
+    DoMethod(btn_bookmarks, MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_BOOKMARKS);
+    DoMethod(app->mui_fav_cycle, MUIM_Notify, MUIA_Cycle_Active, MUIV_EveryTime, app->mui_app, 2, MUIM_Application_ReturnID, GID_FAV_CHOOSER);
 
-    /* Row 3 Quicklinks & Server */
-    DoMethod(btn_add_fav,          MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_ADD_FAV);
+    /* Row 2 Quicklinks & Server */
     DoMethod(btn_connect,          MUIM_Notify, MUIA_Pressed, FALSE, app->mui_app, 2, MUIM_Application_ReturnID, GID_CONNECT);
-    DoMethod(app->mui_fav_cycle,    MUIM_Notify, MUIA_Cycle_Active, MUIV_EveryTime, app->mui_app, 2, MUIM_Application_ReturnID, GID_FAV_CHOOSER);
     DoMethod(app->mui_server_cycle, MUIM_Notify, MUIA_Cycle_Active, MUIV_EveryTime, app->mui_app, 2, MUIM_Application_ReturnID, GID_SERVER_CHOOSER);
 
     /* Menu Actions */
@@ -1404,7 +1453,6 @@ BOOL gui_mui_init(VortexApp *app)
     /* Obtain Intuition window pointer */
     get(app->mui_win, MUIA_Window_Window, &app->win);
 
-    printf("[GUI-MUI] VortexBrowse-MUI window opened successfully (Odyssey layout).\n");
     return TRUE;
 }
 
@@ -1416,6 +1464,7 @@ void gui_mui_cleanup(VortexApp *app)
         app->mui_app = NULL;
         app->mui_win = NULL;
         app->win     = NULL;
+        app->mui_tab_spacer = NULL;
     }
 
     if (s_viewport_mcc) {

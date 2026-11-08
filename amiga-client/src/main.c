@@ -296,10 +296,7 @@ int main(int argc, char **argv)
         }
     }
 
-    DBG_LOG("============================================================\n");
-    DBG_LOG(" %s\n", VB_APP_TITLE);
-    DBG_LOG(" Server: %s:%u\n", g_app.server_host, (unsigned)g_app.server_port);
-    DBG_LOG("============================================================\n");
+    /* Shell banner suppressed per user request */
 
     if (!open_libs_and_classes()) {
         close_libs_and_classes();
@@ -339,9 +336,16 @@ int main(int argc, char **argv)
     prefs_apply(&g_app);
     gui_handle_events(&g_app);
 
+    /* Set initial status bar message with active streaming system */
+    const char *sm_label = (g_app.prefs.video_stream_mode == STREAM_VIDEO_H264) ? "H.264" :
+                           (g_app.prefs.video_stream_mode == STREAM_VIDEO_DIRTYRECT) ? "LZ4 (2D)" : "Auto";
+    app_set_status("Bereit - Stream-System: %s | %u kbps", sm_label, (unsigned)g_app.prefs.video_bitrate_k);
+
     /* Connect automatically on startup if a server address is configured */
     if (g_app.server_host[0] != '\0') {
         if (net_connect(&g_app, g_app.server_host, g_app.server_port)) {
+            app_set_status("Verbunden mit %s:%u - Stream: %s | %u kbps",
+                           g_app.server_host, (unsigned)g_app.server_port, sm_label, (unsigned)g_app.prefs.video_bitrate_k);
             renderer_sync_viewport_size(&g_app);
             net_send_url(&g_app, "@REFRESH");
             net_sync_tabs(&g_app);

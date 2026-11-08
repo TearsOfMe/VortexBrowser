@@ -69,4 +69,4 @@ if [ -f "browser_bin.txt" ]; then
 fi
 
 echo "[VortexBrowse] Starte Server auf Raspberry Pi 4 (Port 7788 / 9757, YUV420P TurboJPEG, uBlock, h264ify)..."
-exec .venv/bin/python3 server.py --host 0.0.0.0 --port 7788 --fps 25 --format yuv420p --jpeg-quality 75 "${BROWSER_ARGS[@]}" "$@"
+exec .venv/bin/python3 server.py --host 0.0.0.0 --port 7788 --fps 25 --format yuv420p --video-bitrate 8000 --log-level "${VORTEX_LOG_LEVEL:-CRITICAL}" --jpeg-quality 75 "${BROWSER_ARGS[@]}" "$@"
