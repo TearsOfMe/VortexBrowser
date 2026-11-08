@@ -59,6 +59,35 @@ VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwrigh
 
 ---
 
+## Workbench Icon-ToolTypes & Konfiguration
+
+VortexBrowser unterstützt die vollständige Konfiguration über standardmäßige AmigaOS 4 **ToolTypes** in den `.info`-Dateien (`VortexBrowser.info`, `VortexBrowser-AltiVec.info`, `VortexBrowser-MUI.info`).
+
+Um die ToolTypes zu bearbeiten:
+1. Klicken Sie das Programm-Icon auf der Workbench an.
+2. Wählen Sie im Workbench-Menü **Icons $\rightarrow$ Information...** (oder Tastenkombination **`Rechte Amiga + I`**).
+3. Aktivieren Sie die gewünschten ToolTypes durch Entfernen der runden Klammern `(...)` und tragen Sie Ihre Werte ein.
+
+### Unterstützte ToolTypes:
+
+| ToolType | Standard | Beschreibung |
+| :--- | :--- | :--- |
+| `SERVER=<IP/Host>` | `(SERVER=192.168.178.2)` | IP-Adresse oder Rechnername des Rendering-Servers (z. B. `SERVER=192.168.178.2`). |
+| `PORT=<Port>` | `(PORT=7788)` | TCP-Port des Rendering-Servers (Standard: `7788`). |
+| `URL=<URL>` | `(URL=https://www.amiga-news.de)` | Startseite beim Starten über das Icon (`STARTURL` wird ebenfalls erkannt). |
+| `STREAMMODE=<Modus>` | `(STREAMMODE=AUTO)` | Streaming-System: `AUTO` (H.264 bei Video, sonst 2D), `H264` (dauerhaftes Video) oder `LZ4` / `DIRTYRECT` (reines 2D Dirty-Rect). |
+| `BITRATE=<kbps>` | `(BITRATE=8000)` | Video-Bitrate für H.264 in kbps (Wertebereich: `1000` bis `10000`). |
+| `FPS=<Zahl>` | `(FPS=25)` | Ziel-Bildwiederholrate (z. B. `15`, `25`, `30`, `50`, `60`). |
+| `DARKMODE=<0\|1>` | `(DARKMODE=0)` | Dunkles Erscheinungsbild beim Start erzwingen (`1` für Dark Mode, `0` für Hell). |
+| `DOWNLOADDIR=<Pfad>` | `(DOWNLOADDIR=RAM:)` | Standard-Download-Verzeichnis (z. B. `DOWNLOADDIR=Work:Downloads`). |
+
+> [!NOTE]
+> **AmigaOS-Klammerkonvention:**
+> Einträge in runden Klammern wie `(SERVER=...)` gelten in AmigaOS als **inaktiv / Vorlage**. Um einen ToolType scharfzuschalten, entfernen Sie die Klammern (z. B. `SERVER=192.168.178.2`) und klicken Sie auf **Speichern**.
+> Der im Icon hinterlegte **Stack** beträgt **200000** Byte (~200 KB) und stellt einen stabilen Betrieb von Netzwerk, FFmpeg/VA-API und MUI/ReAction sicher.
+
+---
+
 ## Verzeichnisstruktur des Gesamtpakets
 
 - `amiga-client/`: Quelltext und Assets des AmigaOS 4 Clients
