@@ -1551,7 +1551,6 @@ class H264LiveStreamEncoder:
                 "-i", "-",
                 "-vf", "format=nv12,hwupload",
                 "-c:v", "h264_vaapi",
-                "-async_depth", "1",
                 "-b:v", f"{self.bitrate_k}k",
                 "-maxrate", f"{self.bitrate_k * 3 // 2}k",
                 "-bufsize", f"{self.bitrate_k // 2}k",
@@ -2894,10 +2893,11 @@ class AmigaClientSession:
         cur_url = (self.page.url or "").lower() if self.page else ""
         is_video_site = any(k in cur_url for k in ("youtube.com/watch", "youtu.be/", "twitch.tv/", "/watch?v="))
         audio_active = (getattr(self, "last_audio_time", 0.0) > time.monotonic() - 2.0)
-        # Only emit raw H.264 NAL bitstream if explicitly requested via --codec h264 or @STREAM_MODE:h264
+        # Emit H.264 video stream when in video stream mode, on video sites or when requested
         should_h264 = (
             (self.codec_mode == "h264")
             or (self.stream_mode == "h264")
+            or (self.stream_mode == "auto" and (self.is_video_mode or self._video_element_playing or (is_video_site and audio_active)))
         )
         if should_h264:
             yuv_raw = None
@@ -3220,11 +3220,8 @@ class AmigaClientSession:
                                             }
                                             for (const f of document.querySelectorAll('iframe')) {
                                                 try {
-                                                    if (f.contentDocument) {
-                                                        const iv = Array.from(f.contentDocument.querySelectorAll('video'));
-                                                        for (const v of iv) {
-                                                            if (!v.paused && !v.ended && v.readyState >= 2) return true;
-                                                        }
+                                                    if (f.contentDocument && Array.from(f.contentDocument.querySelectorAll('video')).some(v => !v.paused && !v.ended && v.readyState >= 2)) {
+                                                        return true;
                                                     }
                                                 } catch (e) {}
                                             }
@@ -3232,7 +3229,7 @@ class AmigaClientSession:
                                         return false;
                                     }"""
                                 ),
-                                timeout=0.6,
+                                timeout=0.5,
                             )
                             self._video_element_playing = bool(is_playing)
                     except Exception:
@@ -3241,7 +3238,7 @@ class AmigaClientSession:
                 self.background_tasks.add(t_vid)
                 t_vid.add_done_callback(self.background_tasks.discard)
 
-            video_active = audio_active or self._video_element_playing or (is_video_site and audio_active)
+            video_active = audio_active or self._video_element_playing or (is_video_site and (audio_active or self._video_element_playing))
             if video_active:
                 self._last_video_state_time = now_tick
                 if not self.is_video_mode:

@@ -19,6 +19,8 @@
 #include "net.h"
 #include "renderer_altivec.h"
 #include <exec/exectags.h>
+#include <interfaces/VA.h>
+#include <va/va_amigaos.h>
 
 void renderer_init(VortexApp *app)
 {
@@ -40,17 +42,34 @@ void renderer_init(VortexApp *app)
     if (app->renderer.va_lib) {
         app->renderer.iva = IExec->GetInterface(app->renderer.va_lib, "main", 1, NULL);
         if (app->renderer.iva) {
-            app->renderer.has_va = TRUE;
-            printf("[VortexBrowser] va.library %lu.%lu detected -> Hardware Video Acceleration ACTIVE (Radeon UVD/VCN)\n",
-                   (unsigned long)app->renderer.va_lib->lib_Version, (unsigned long)app->renderer.va_lib->lib_Revision);
-        } else {
+            struct VAIFace *iva = (struct VAIFace *)app->renderer.iva;
+            app->renderer.va_display = iva->vaGetDisplay(0);
+            if (app->renderer.va_display) {
+                int maj = 0, min = 0;
+                VAStatus st = iva->vaInitialize(app->renderer.va_display, &maj, &min);
+                if (st == VA_STATUS_SUCCESS) {
+                    app->renderer.has_va = TRUE;
+                    printf("[VortexBrowser] va.library %lu.%lu (VA-API %d.%d) -> Hardware Video Acceleration ACTIVE (Radeon UVD/VCN)\n",
+                           (unsigned long)app->renderer.va_lib->lib_Version,
+                           (unsigned long)app->renderer.va_lib->lib_Revision,
+                           maj, min);
+                } else {
+                    app->renderer.va_display = NULL;
+                    app->renderer.has_va = FALSE;
+                }
+            }
+        }
+        if (!app->renderer.has_va) {
+            if (app->renderer.iva) {
+                IExec->DropInterface((struct Interface *)app->renderer.iva);
+                app->renderer.iva = NULL;
+            }
             IExec->CloseLibrary(app->renderer.va_lib);
             app->renderer.va_lib = NULL;
-            app->renderer.has_va = FALSE;
         }
     } else {
         app->renderer.has_va = FALSE;
-        printf("[VortexBrowser] va.library not detected -> Hardware H.264 video acceleration disabled\n");
+        printf("[VortexBrowser] va.library not detected -> Hardware video acceleration disabled\n");
     }
 }
 
@@ -77,6 +96,17 @@ static void free_comp_bitmap(RendererState *r)
 void renderer_cleanup(VortexApp *app)
 {
     RendererState *r = &app->renderer;
+
+    if (r->iva && r->va_display) {
+        struct VAIFace *iva = (struct VAIFace *)r->iva;
+        if (r->va_surface) {
+            VASurfaceID s = (VASurfaceID)r->va_surface;
+            iva->vaDestroySurfaces(r->va_display, &s, 1);
+            r->va_surface = 0;
+        }
+        iva->vaTerminate(r->va_display);
+        r->va_display = NULL;
+    }
     if (r->iva) {
         IExec->DropInterface((struct Interface *)r->iva);
         r->iva = NULL;
@@ -504,7 +534,126 @@ static void upload_rect_to_bitmap(
     }
 }
 
+static BOOL ensure_va_surface(VortexApp *app, uint16_t w, uint16_t h)
+{
+    RendererState *r = &app->renderer;
+    if (!r->has_va || !r->iva || !r->va_display) return FALSE;
+    struct VAIFace *iva = (struct VAIFace *)r->iva;
+
+    w &= ~1;
+    h &= ~1;
+    if (w < 16 || h < 16) return FALSE;
+
+    if (r->va_surface && (r->src_width != w || r->src_height != h)) {
+        VASurfaceID s = (VASurfaceID)r->va_surface;
+        iva->vaDestroySurfaces(r->va_display, &s, 1);
+        r->va_surface = 0;
+    }
+
+    if (!r->va_surface) {
+        VASurfaceID s = VA_INVALID_SURFACE;
+        VAStatus st = iva->vaCreateSurfaces(r->va_display, VA_RT_FORMAT_YUV420, w, h, &s, 1, NULL, 0);
+        if (st != VA_STATUS_SUCCESS || s == VA_INVALID_SURFACE) {
+            return FALSE;
+        }
+        r->va_surface = (uint32_t)s;
+    }
+    return TRUE;
+}
+
+static BOOL upload_va_surface_yuv420p(
+    RendererState *r,
+    const uint8_t *yuv_data,
+    uint16_t       w,
+    uint16_t       h
+)
+{
+    if (!r->has_va || !r->iva || !r->va_display || !r->va_surface || !yuv_data) {
+        return FALSE;
+    }
+    struct VAIFace *iva = (struct VAIFace *)r->iva;
+    VASurfaceID surf = (VASurfaceID)r->va_surface;
+
+    VAImage img;
+    memset(&img, 0, sizeof(img));
+    VAStatus st = iva->vaDeriveImage(r->va_display, surf, &img);
+    if (st != VA_STATUS_SUCCESS) {
+        return FALSE;
+    }
+
+    void *surface_p = NULL;
+    st = iva->vaMapBuffer(r->va_display, img.buf, &surface_p);
+    if (st != VA_STATUS_SUCCESS || !surface_p) {
+        iva->vaDestroyImage(r->va_display, img.image_id);
+        return FALSE;
+    }
+
+    const uint8_t *src_Y = yuv_data;
+    const uint8_t *src_U = src_Y + (size_t)w * h;
+    const uint8_t *src_V = src_U + ((size_t)w / 2) * ((size_t)h / 2);
+
+    uint8_t *dst_Y = (uint8_t *)surface_p + img.offsets[0];
+    uint32_t y_pitch = img.pitches[0];
+
+    /* 1. Copy Y plane (Luma) */
+    for (uint16_t y = 0; y < h; y++) {
+        uint8_t *dst_row = dst_Y + (size_t)y * y_pitch;
+        const uint8_t *src_row = src_Y + (size_t)y * w;
+        if (r->has_altivec) {
+            altivec_fast_memcpy(dst_row, src_row, w);
+        } else {
+            memcpy(dst_row, src_row, w);
+        }
+    }
+
+    /* 2. Copy Chroma planes */
+    uint16_t half_w = w / 2;
+    uint16_t half_h = h / 2;
+
+    if (img.format.fourcc == VA_FOURCC_NV12) {
+        /* NV12: interleaved U and V */
+        uint8_t *dst_uv = (uint8_t *)surface_p + img.offsets[1];
+        uint32_t uv_pitch = img.pitches[1];
+        for (uint16_t y = 0; y < half_h; y++) {
+            uint8_t *uv_row = dst_uv + (size_t)y * uv_pitch;
+            const uint8_t *u_row = src_U + (size_t)y * half_w;
+            const uint8_t *v_row = src_V + (size_t)y * half_w;
+            for (uint16_t x = 0; x < half_w; x++) {
+                uv_row[2 * x]     = u_row[x];
+                uv_row[2 * x + 1] = v_row[x];
+            }
+        }
+    } else {
+        /* Planar IYUV or YV12 */
+        int u_idx = (img.format.fourcc == VA_FOURCC_YV12) ? 2 : 1;
+        int v_idx = (img.format.fourcc == VA_FOURCC_YV12) ? 1 : 2;
+        uint8_t *dst_u = (uint8_t *)surface_p + img.offsets[u_idx];
+        uint8_t *dst_v = (uint8_t *)surface_p + img.offsets[v_idx];
+        uint32_t u_pitch = img.pitches[u_idx];
+        uint32_t v_pitch = img.pitches[v_idx];
+
+        for (uint16_t y = 0; y < half_h; y++) {
+            uint8_t *u_dst_row = dst_u + (size_t)y * u_pitch;
+            uint8_t *v_dst_row = dst_v + (size_t)y * v_pitch;
+            const uint8_t *u_src_row = src_U + (size_t)y * half_w;
+            const uint8_t *v_src_row = src_V + (size_t)y * half_w;
+            if (r->has_altivec) {
+                altivec_fast_memcpy(u_dst_row, u_src_row, half_w);
+                altivec_fast_memcpy(v_dst_row, v_src_row, half_w);
+            } else {
+                memcpy(u_dst_row, u_src_row, half_w);
+                memcpy(v_dst_row, v_src_row, half_w);
+            }
+        }
+    }
+
+    iva->vaUnmapBuffer(r->va_display, img.buf);
+    iva->vaDestroyImage(r->va_display, img.image_id);
+    return TRUE;
+}
+
 static void upload_yuv420p_to_bitmap(
+    VortexApp     *app,
     RendererState *r,
     struct BitMap *bm,
     const uint8_t *yuv_data,
@@ -512,7 +661,12 @@ static void upload_yuv420p_to_bitmap(
     uint16_t       h
 )
 {
-    (void)r;
+    /* If va.library is available, also upload to VA-API hardware surface for direct GPU display */
+    if (r->has_va) {
+        ensure_va_surface(app, w, h);
+        upload_va_surface_yuv420p(r, yuv_data, w, h);
+    }
+
     struct PlanarYUVInfo yuvInfo;
     memset(&yuvInfo, 0, sizeof(yuvInfo));
 
@@ -529,10 +683,18 @@ static void upload_yuv420p_to_bitmap(
         /* 1. Y plane: w x h (Luma, 8 bpp) */
         uint8_t *y_dst = (uint8_t *)yuvInfo.YMemory;
         if (yuvInfo.YBytesPerRow == w) {
-            memcpy(y_dst, y_src, (size_t)w * h);
+            if (r->has_altivec) {
+                altivec_fast_memcpy(y_dst, y_src, (size_t)w * h);
+            } else {
+                memcpy(y_dst, y_src, (size_t)w * h);
+            }
         } else {
             for (uint16_t y = 0; y < h; y++) {
-                memcpy(y_dst, y_src, w);
+                if (r->has_altivec) {
+                    altivec_fast_memcpy(y_dst, y_src, w);
+                } else {
+                    memcpy(y_dst, y_src, w);
+                }
                 y_src += w;
                 y_dst += yuvInfo.YBytesPerRow;
             }
@@ -543,10 +705,18 @@ static void upload_yuv420p_to_bitmap(
         uint16_t half_h = h / 2;
         uint8_t *u_dst = (uint8_t *)yuvInfo.UMemory;
         if (yuvInfo.UBytesPerRow == half_w) {
-            memcpy(u_dst, u_src, (size_t)half_w * half_h);
+            if (r->has_altivec) {
+                altivec_fast_memcpy(u_dst, u_src, (size_t)half_w * half_h);
+            } else {
+                memcpy(u_dst, u_src, (size_t)half_w * half_h);
+            }
         } else {
             for (uint16_t y = 0; y < half_h; y++) {
-                memcpy(u_dst, u_src, half_w);
+                if (r->has_altivec) {
+                    altivec_fast_memcpy(u_dst, u_src, half_w);
+                } else {
+                    memcpy(u_dst, u_src, half_w);
+                }
                 u_src += half_w;
                 u_dst += yuvInfo.UBytesPerRow;
             }
@@ -555,10 +725,18 @@ static void upload_yuv420p_to_bitmap(
         /* 3. V plane: (w/2) x (h/2) (Chroma Red) */
         uint8_t *v_dst = (uint8_t *)yuvInfo.VMemory;
         if (yuvInfo.VBytesPerRow == half_w) {
-            memcpy(v_dst, v_src, (size_t)half_w * half_h);
+            if (r->has_altivec) {
+                altivec_fast_memcpy(v_dst, v_src, (size_t)half_w * half_h);
+            } else {
+                memcpy(v_dst, v_src, (size_t)half_w * half_h);
+            }
         } else {
             for (uint16_t y = 0; y < half_h; y++) {
-                memcpy(v_dst, v_src, half_w);
+                if (r->has_altivec) {
+                    altivec_fast_memcpy(v_dst, v_src, half_w);
+                } else {
+                    memcpy(v_dst, v_src, half_w);
+                }
                 v_src += half_w;
                 v_dst += yuvInfo.VBytesPerRow;
             }
@@ -608,7 +786,11 @@ static void upload_rect_yuv420p_to_bitmap(
 
             uint8_t *y_dst = (uint8_t *)yuvInfo.YMemory + (size_t)ry * yuvInfo.YBytesPerRow + rx;
             for (uint16_t y = 0; y < rh; y++) {
-                memcpy(y_dst, y_src, rw);
+                if (r->has_altivec) {
+                    altivec_fast_memcpy(y_dst, y_src, rw);
+                } else {
+                    memcpy(y_dst, y_src, rw);
+                }
                 y_src += rw;
                 y_dst += yuvInfo.YBytesPerRow;
             }
@@ -620,14 +802,22 @@ static void upload_rect_yuv420p_to_bitmap(
 
             uint8_t *u_dst = (uint8_t *)yuvInfo.UMemory + (size_t)half_y * yuvInfo.UBytesPerRow + half_x;
             for (uint16_t y = 0; y < half_h; y++) {
-                memcpy(u_dst, u_src, half_w);
+                if (r->has_altivec) {
+                    altivec_fast_memcpy(u_dst, u_src, half_w);
+                } else {
+                    memcpy(u_dst, u_src, half_w);
+                }
                 u_src += half_w;
                 u_dst += yuvInfo.UBytesPerRow;
             }
 
             uint8_t *v_dst = (uint8_t *)yuvInfo.VMemory + (size_t)half_y * yuvInfo.VBytesPerRow + half_x;
             for (uint16_t y = 0; y < half_h; y++) {
-                memcpy(v_dst, v_src, half_w);
+                if (r->has_altivec) {
+                    altivec_fast_memcpy(v_dst, v_src, half_w);
+                } else {
+                    memcpy(v_dst, v_src, half_w);
+                }
                 v_src += half_w;
                 v_dst += yuvInfo.VBytesPerRow;
             }
@@ -974,20 +1164,31 @@ static BOOL renderer_decode_h264(
     uint16_t       h
 )
 {
-    /* Raw H.264 bitstream requires an integrated FFmpeg/libavcodec parser.
-     * Request the server to deliver high-performance 2D YUV420P dirty-slices (CODEC_LZ4_RECT)
-     * which AmigaOS 4 renders directly in hardware/AltiVec at 25-30 FPS with zero lag.
-     */
-    static uint32 s_last_req = 0;
-    uint32 s_now = 0, us = 0;
-    IIntuition->CurrentTime(&s_now, &us);
-    if (s_now - s_last_req >= 2) {
-        s_last_req = s_now;
-        printf("[VortexBrowser] CODEC_H264 received -> requesting native YUV420P LZ4 streaming\n");
-        net_send_url(app, "@STREAM_MODE:lz4");
-        net_send_url(app, "@REFRESH");
+    RendererState *r = &app->renderer;
+    if (!h264_data || h264_len == 0 || w < 16 || h < 16) {
+        return FALSE;
     }
-    return FALSE;
+
+    r->is_h264_active = TRUE;
+
+    if (!ensure_source_bitmaps(app, w, h, FMT_YUV420P)) {
+        return FALSE;
+    }
+
+    if (r->has_va) {
+        ensure_va_surface(app, w, h);
+    }
+
+    r->has_frame = TRUE;
+    r->frames_decoded++;
+
+    r->dirty    = TRUE;
+    r->dirty_x1 = 0;
+    r->dirty_y1 = 0;
+    r->dirty_x2 = w;
+    r->dirty_y2 = h;
+
+    return TRUE;
 }
 
 BOOL renderer_decode_and_present(
@@ -1151,8 +1352,12 @@ BOOL renderer_decode_and_present(
 
     r->src_format = fmt;
     if (fmt == FMT_YUV420P) {
+        if (r->has_va) {
+            ensure_va_surface(app, w, h);
+            upload_va_surface_yuv420p(r, r->raw_frame_buf, w, h);
+        }
         if (r->src_bm_is_yuv) {
-            upload_yuv420p_to_bitmap(r, r->src_bm[0], r->raw_frame_buf, w, h);
+            upload_yuv420p_to_bitmap(app, r, r->src_bm[0], r->raw_frame_buf, w, h);
         } else {
             upload_yuv420p_to_rgb_bitmap(r, r->src_bm[0], r->raw_frame_buf, w, h, w, h);
         }
@@ -1315,6 +1520,29 @@ void renderer_present(VortexApp *app, struct RastPort *rp, struct IBox *area)
     int diff_w = (int)dw - (int)r->src_width;
     int diff_h = (int)dh - (int)r->src_height;
     BOOL is_1to1 = (diff_w >= -2 && diff_w <= 2 && diff_h >= -2 && diff_h <= 2);
+
+    /* VA-API Hardware Video Acceleration: vaPutSurface straight into window RastPort (Radeon HD/RX UVD/VCN) */
+    if (r->has_va && r->va_display && r->va_surface && (r->is_h264_active || r->src_bm_is_yuv)) {
+        struct VAIFace *iva = (struct VAIFace *)r->iva;
+        if (iva && app->win && app->win->WLayer && app->win->RPort && ILayers) {
+            ILayers->LockLayer(0, app->win->WLayer);
+            VAStatus st = iva->vaPutSurface(
+                r->va_display,
+                (VASurfaceID)r->va_surface,
+                VADT_RastPort,
+                app->win->RPort,
+                0, 0,
+                r->src_width, r->src_height,
+                area->Left, area->Top,
+                dw, dh,
+                VA_FRAME_PICTURE
+            );
+            ILayers->UnlockLayer(app->win->WLayer);
+            if (st == VA_STATUS_SUCCESS) {
+                return;
+            }
+        }
+    }
 
     /* 1:1 RGB BitMap fast-path: direct hardware blit into the window layer */
     if (is_1to1 && !r->src_bm_is_yuv) {

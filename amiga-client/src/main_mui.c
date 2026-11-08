@@ -117,6 +117,27 @@ static void close_libs(void)
 
 int main(int argc, char **argv)
 {
+    /* Strict AltiVec hardware check:
+     * If compiled with dedicated AltiVec instructions (-maltivec / __ALTIVEC__),
+     * verify that the host CPU actually possesses an active AltiVec/VMX vector unit.
+     */
+    uint32 vec_unit = VECTORTYPE_NONE;
+    if (IExec) {
+        IExec->GetCPUInfoTags(GCIT_VectorUnit, &vec_unit, TAG_DONE);
+    }
+    BOOL has_altivec = (vec_unit == VECTORTYPE_ALTIVEC || vec_unit == 2);
+    (void)has_altivec;
+#if defined(__ALTIVEC__)
+    if (!has_altivec) {
+        if (IDOS) {
+            IDOS->Printf("\n[VortexBrowser-MUI] FEHLER: Dieses Programm ('VortexBrowser-AltiVec') wurde speziell fuer\n"
+                         "CPUs mit AltiVec/VMX SIMD (z.B. AmigaOne X1000 oder PowerPC G4) kompiliert.\n"
+                         "Auf diesem System (X5000 / A1222+ / Sam460 / G3) bitte die Standard-Version 'VortexBrowser' verwenden!\n\n");
+        }
+        return 20;
+    }
+#endif
+
     memset(&g_app, 0, sizeof(VortexApp));
     strncpy(g_app.server_host, "127.0.0.1", sizeof(g_app.server_host) - 1);
     g_app.server_port = 7788;

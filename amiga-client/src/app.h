@@ -134,10 +134,12 @@ typedef struct RendererState {
     uint32_t       conv_argb_cap;  /* Capacity in bytes of conv_argb_buf */
 
     BOOL           has_altivec;    /* TRUE if CPU has active hardware AltiVec/VMX unit */
-    BOOL           has_va;         /* TRUE if va.library v53+ is available for hardware H.264 decoding */
+    BOOL           has_va;         /* TRUE if va.library is available for hardware decoding */
     BOOL           va_checked;     /* TRUE once va.library availability was probed */
     struct Library*va_lib;         /* va.library base pointer */
     APTR           iva;            /* struct VAIFace* interface pointer */
+    APTR           va_display;     /* VADisplay handle */
+    uint32_t       va_surface;     /* VASurfaceID surface handle */
     BOOL           is_h264_active; /* TRUE if currently receiving CODEC_H264 stream */
     BOOL           src_bm_is_16bit;/* TRUE if src_bm[0] is 16-bit PIXF_R5G6B5 */
     BOOL           src_bm_is_yuv;  /* TRUE if src_bm[0] is PIXF_YUV420P */
