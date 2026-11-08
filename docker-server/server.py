@@ -4000,11 +4000,13 @@ def get_gpu_launch_flags(disable_gpu: bool = False) -> Tuple[List[str], bool]:
     )
 
     gpu_flags = [
+        "--enable-gpu",
         "--ignore-gpu-blocklist",
         "--enable-gpu-rasterization",
+        "--enable-zero-copy",
         "--use-gl=angle",
         "--use-angle=vulkan",
-        "--enable-features=VaapiVideoDecoder,VaapiVideoEncoder",
+        "--enable-features=Vulkan,VulkanFromANGLE,DefaultANGLEVulkan,CanvasOopRasterization,VaapiVideoDecoder,VaapiVideoEncoder,VaapiIgnoreDriverChecks",
     ]
     return gpu_flags, has_dri
 
