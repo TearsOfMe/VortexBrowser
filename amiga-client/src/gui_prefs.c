@@ -42,6 +42,7 @@ enum {
     GID_P_SERVER_FPS,
     GID_P_SERVER_JPEG_QUALITY,
     GID_P_SERVER_STREAM_MODE,
+    GID_P_SERVER_VIDEO_BITRATE,
     GID_P_SERVER_DYN_VIDEO,
     GID_P_SERVER_SAVE_EXIT,
 
@@ -492,6 +493,24 @@ void gui_prefs_open(VortexApp *app)
         GA_HintInfo,        "Streaming-Modus: 'Auto' schaltet bei Video automatisch auf H.264 via va.library um",
         TAG_DONE);
 
+    uint32 cur_br = (app->prefs.video_bitrate_k >= 1000 && app->prefs.video_bitrate_k <= 10000) ?
+                    app->prefs.video_bitrate_k : 4000;
+
+    Object *gad_video_bitrate = IIntuition->NewObject(NULL, "slider.gadget",
+        GA_ID,              GID_P_SERVER_VIDEO_BITRATE,
+        GA_RelVerify,       TRUE,
+        SLIDER_Min,         1000,
+        SLIDER_Max,         10000,
+        SLIDER_Level,       cur_br,
+        SLIDER_Orientation, SLIDER_HORIZONTAL,
+        SLIDER_Ticks,       10,
+        SLIDER_ShortTicks,  TRUE,
+        SLIDER_LevelFormat, (Tag)"%ld kbps",
+        SLIDER_LevelPlace,  PLACETEXT_RIGHT,
+        SLIDER_LevelDomain, (Tag)"10000 kbps",
+        GA_HintInfo,        "H.264 Video-Stream-Bitrate (1000 bis 10000 kbps / 10 Mbit/s, Standard: 4000)",
+        TAG_DONE);
+
     Object *gad_dyn_video = IIntuition->NewObject(NULL, "checkbox.gadget",
         GA_ID,            GID_P_SERVER_DYN_VIDEO,
         GA_RelVerify,     TRUE,
@@ -591,6 +610,18 @@ void gui_prefs_open(VortexApp *app)
                                                             TAG_DONE),
                                   CHILD_WeightedWidth,  28,
                                   LAYOUT_AddChild,      gad_stream_mode,
+                                  CHILD_WeightedWidth,  72,
+                                  TAG_DONE),
+        CHILD_WeightedHeight, 0,
+        LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
+                                  LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
+                                  LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
+                                                            GA_Text,              (Tag)"Video-Bitrate:",
+                                                            GA_ReadOnly,          TRUE,
+                                                            BUTTON_Justification, BCJ_RIGHT,
+                                                            TAG_DONE),
+                                  CHILD_WeightedWidth,  28,
+                                  LAYOUT_AddChild,      gad_video_bitrate,
                                   CHILD_WeightedWidth,  72,
                                   TAG_DONE),
         CHILD_WeightedHeight, 0,
@@ -1707,6 +1738,13 @@ void gui_prefs_open(VortexApp *app)
         BOOL sm_changed = (app->prefs.video_stream_mode != (uint8_t)sm_sel);
         if (sm_sel <= 2) app->prefs.video_stream_mode = (uint8_t)sm_sel;
 
+        uint32 br_val = 4000;
+        IIntuition->GetAttr(SLIDER_Level, gad_video_bitrate, &br_val);
+        if (br_val < 1000) br_val = 1000;
+        if (br_val > 10000) br_val = 10000;
+        BOOL br_changed = (app->prefs.video_bitrate_k != (uint16_t)br_val);
+        app->prefs.video_bitrate_k = (uint16_t)br_val;
+
         uint32 s_exit = 0;
         IIntuition->GetAttr(CHECKBOX_Checked, gad_save_exit, &s_exit);
         app->prefs.save_server_on_exit = (s_exit != 0);
@@ -1755,6 +1793,11 @@ void gui_prefs_open(VortexApp *app)
                 char smcmd[32];
                 snprintf(smcmd, sizeof(smcmd), "@STREAM_MODE:%s", sm);
                 net_send_url(app, smcmd);
+            }
+            if (br_changed && app->connected) {
+                char brcmd[32];
+                snprintf(brcmd, sizeof(brcmd), "@VIDEO_BITRATE:%u", (unsigned)app->prefs.video_bitrate_k);
+                net_send_url(app, brcmd);
             }
         }
 

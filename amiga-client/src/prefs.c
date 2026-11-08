@@ -94,6 +94,7 @@ void prefs_init(VortexApp *app)
     app->prefs.target_fps                   = 25;  /* Default: 25 FPS (PAL Standard) */
     app->prefs.jpeg_quality                 = 100; /* Default: 100% */
     app->prefs.video_stream_mode            = STREAM_VIDEO_AUTO; /* Default: Auto (H.264 bei Video via va.library) */
+    app->prefs.video_bitrate_k              = 4000; /* Default: 4000 kbps (4 Mbit/s) */
     app->prefs.dynamic_video_quality        = TRUE;
     app->prefs.save_server_on_exit          = TRUE;
     strncpy(app->prefs.download_dir, "RAM:", sizeof(app->prefs.download_dir) - 1);
@@ -255,6 +256,9 @@ static BOOL load_from_file(VortexApp *app, const char *path)
         } else if (strcmp(key, "video_stream_mode") == 0) {
             int m = atoi(val);
             if (m >= 0 && m <= 2) app->prefs.video_stream_mode = (uint8_t)m;
+        } else if (strcmp(key, "video_bitrate") == 0 || strcmp(key, "video_bitrate_k") == 0) {
+            int br = atoi(val);
+            if (br >= 500 && br <= 20000) app->prefs.video_bitrate_k = (uint16_t)br;
         } else if (strcmp(key, "dynamic_video_quality") == 0) {
             app->prefs.dynamic_video_quality = (atoi(val) != 0);
         } else if (strcmp(key, "save_server_on_exit") == 0) {
@@ -495,6 +499,7 @@ static BOOL save_to_file(const VortexApp *app, const char *path)
     fprintf(fp, "target_fps=%u\n", (unsigned)(app->prefs.target_fps ? app->prefs.target_fps : 25));
     fprintf(fp, "jpeg_quality=%u\n", (unsigned)(app->prefs.jpeg_quality ? app->prefs.jpeg_quality : 100));
     fprintf(fp, "video_stream_mode=%u\n", (unsigned)app->prefs.video_stream_mode);
+    fprintf(fp, "video_bitrate=%u\n", (unsigned)(app->prefs.video_bitrate_k ? app->prefs.video_bitrate_k : 4000));
     fprintf(fp, "dynamic_video_quality=%d\n", app->prefs.dynamic_video_quality ? 1 : 0);
     fprintf(fp, "save_server_on_exit=%d\n\n", app->prefs.save_server_on_exit ? 1 : 0);
 
@@ -705,6 +710,21 @@ void prefs_apply(VortexApp *app)
             snprintf(fcmd, sizeof(fcmd), "@FPS:%u", (unsigned)app->prefs.target_fps);
             net_send_url(app, fcmd);
         }
+
+        /* Video Stream Mode */
+        if (app->prefs.video_stream_mode == STREAM_VIDEO_H264) {
+            net_send_url(app, "@STREAM_MODE:h264");
+        } else if (app->prefs.video_stream_mode == STREAM_VIDEO_DIRTYRECT) {
+            net_send_url(app, "@STREAM_MODE:lz4");
+        } else {
+            net_send_url(app, "@STREAM_MODE:auto");
+        }
+
+        /* Video Bitrate */
+        uint16_t br = (app->prefs.video_bitrate_k >= 500 && app->prefs.video_bitrate_k <= 10000) ? app->prefs.video_bitrate_k : 4000;
+        char brcmd[32];
+        snprintf(brcmd, sizeof(brcmd), "@VIDEO_BITRATE:%u", (unsigned)br);
+        net_send_url(app, brcmd);
     }
 }
 
