@@ -1170,7 +1170,7 @@ void app_set_gauge(int percent)
 BOOL gui_mui_init(VortexApp *app)
 {
     if (!IMUIMaster) {
-        printf("[GUI-MUI] ERROR: IMUIMaster interface is NULL!\n");
+        DBG_LOG("[GUI-MUI] ERROR: IMUIMaster interface is NULL!\n");
         return FALSE;
     }
 
@@ -1178,7 +1178,7 @@ BOOL gui_mui_init(VortexApp *app)
         NULL, MUIC_Area, NULL, sizeof(struct ViewportData), (APTR)Viewport_Dispatcher);
 
     if (!s_viewport_mcc) {
-        printf("[GUI-MUI] ERROR: Failed to create custom MUI viewport class!\n");
+        DBG_LOG("[GUI-MUI] ERROR: Failed to create custom MUI viewport class!\n");
         return FALSE;
     }
 
@@ -1329,7 +1329,7 @@ BOOL gui_mui_init(VortexApp *app)
         TAG_DONE);
 
     if (!app->mui_viewport) {
-        printf("[GUI-MUI] ERROR: Failed to instantiate custom viewport object!\n");
+        DBG_LOG("[GUI-MUI] ERROR: Failed to instantiate custom viewport object!\n");
         return FALSE;
     }
 
@@ -1407,7 +1407,7 @@ BOOL gui_mui_init(VortexApp *app)
     End;
 
     if (!app->mui_app) {
-        printf("[GUI-MUI] ERROR: Failed to create ApplicationObject!\n");
+        DBG_LOG("[GUI-MUI] ERROR: Failed to create ApplicationObject!\n");
         return FALSE;
     }
 

@@ -48,23 +48,23 @@ static BOOL open_libs(void)
 {
     SocketBase = IExec->OpenLibrary("bsdsocket.library", 4);
     if (!SocketBase) {
-        printf("[Main-MUI] ERROR: Could not open bsdsocket.library v4!\n");
+        DBG_LOG("[Main-MUI] ERROR: Could not open bsdsocket.library v4!\n");
         return FALSE;
     }
     ISocket = (struct SocketIFace *)IExec->GetInterface(SocketBase, "main", 1, NULL);
     if (!ISocket) {
-        printf("[Main-MUI] ERROR: Could not obtain ISocket interface!\n");
+        DBG_LOG("[Main-MUI] ERROR: Could not obtain ISocket interface!\n");
         return FALSE;
     }
 
     MUIMasterBase = IExec->OpenLibrary("muimaster.library", 19);
     if (!MUIMasterBase) {
-        printf("[Main-MUI] ERROR: Could not open muimaster.library v19!\n");
+        DBG_LOG("[Main-MUI] ERROR: Could not open muimaster.library v19!\n");
         return FALSE;
     }
     IMUIMaster = (struct MUIMasterIFace *)IExec->GetInterface(MUIMasterBase, "main", 1, NULL);
     if (!IMUIMaster) {
-        printf("[Main-MUI] ERROR: Could not obtain IMUIMaster interface!\n");
+        DBG_LOG("[Main-MUI] ERROR: Could not obtain IMUIMaster interface!\n");
         return FALSE;
     }
 
@@ -117,6 +117,14 @@ static void close_libs(void)
 
 int main(int argc, char **argv)
 {
+    /* If launched from Workbench (argc == 0), silence stdio to prevent
+     * AmigaOS / newlib from auto-opening a console window ("CON:")
+     */
+    if (argc == 0) {
+        freopen("NIL:", "w", stdout);
+        freopen("NIL:", "w", stderr);
+        freopen("NIL:", "r", stdin);
+    }
     /* Strict AltiVec hardware check:
      * If compiled with dedicated AltiVec instructions (-maltivec / __ALTIVEC__),
      * verify that the host CPU actually possesses an active AltiVec/VMX vector unit.

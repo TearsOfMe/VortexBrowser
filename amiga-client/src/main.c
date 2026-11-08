@@ -242,6 +242,14 @@ static void run_autotest_step(VortexApp *app)
 
 int main(int argc, char **argv)
 {
+    /* If launched from Workbench (argc == 0), silence stdio to prevent
+     * AmigaOS / newlib from auto-opening a console window ("CON:")
+     */
+    if (argc == 0) {
+        freopen("NIL:", "w", stdout);
+        freopen("NIL:", "w", stderr);
+        freopen("NIL:", "r", stdin);
+    }
     /* Strict AltiVec hardware check:
      * If compiled with dedicated AltiVec instructions (-maltivec / __ALTIVEC__),
      * verify that the host CPU actually possesses an active AltiVec/VMX vector unit.
