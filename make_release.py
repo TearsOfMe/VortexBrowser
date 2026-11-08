@@ -9,14 +9,13 @@ import zipfile
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DIST_DIR = os.path.join(SCRIPT_DIR, "dist")
 
-VER_STR = "0.99-RC3"
+VER_STR = "0.99-RC1"
 APP_NAME = "VortexBrowser"
-RELEASE_DATE = "06.11.2026"
+RELEASE_DATE = "29.10.2026"
 
 STAGING_DIR = os.path.join(DIST_DIR, "staging")
 AMIGA_DRAWER = os.path.join(STAGING_DIR, "VortexBrowser")
 SERVER_LINUX_DRAWER = os.path.join(STAGING_DIR, "Server-Linux")
-SERVER_CACHYOS_DRAWER = os.path.join(STAGING_DIR, "Server-CachyOS-Linux")
 SERVER_RPI4_DRAWER = os.path.join(STAGING_DIR, "Server-RaspberryPi4")
 
 print(f"=== [1/6] Preparing Staging Directories for {APP_NAME} {VER_STR} ===")
@@ -25,7 +24,6 @@ if os.path.exists(DIST_DIR):
 os.makedirs(AMIGA_DRAWER, exist_ok=True)
 os.makedirs(os.path.join(AMIGA_DRAWER, "icons"), exist_ok=True)
 os.makedirs(SERVER_LINUX_DRAWER, exist_ok=True)
-os.makedirs(SERVER_CACHYOS_DRAWER, exist_ok=True)
 os.makedirs(SERVER_RPI4_DRAWER, exist_ok=True)
 
 # -------------------------------------------------------------
@@ -34,15 +32,15 @@ os.makedirs(SERVER_RPI4_DRAWER, exist_ok=True)
 GUIDE_CONTENT = """@database "VortexBrowser.guide"
 @author "TearsOfMe"
 @(c) "2026 VortexBrowser Project"
-@$VER: VortexBrowser.guide 0.99 RC3 (06.11.2026)
+@$VER: VortexBrowser.guide 0.99 RC1 (29.10.2026)
 
-@node "Main" "VortexBrowser 0.99 RC3 - Benutzerhandbuch"
+@node "Main" "VortexBrowser 0.99 RC1 - Benutzerhandbuch"
 @{b}========================================================================@{ub}
-           @{b}VORTEXBROWSER 0.99 RC3 FUER AMIGAOS 4.1@{ub}
+           @{b}VORTEXBROWSER 0.99 RC1 FUER AMIGAOS 4.1@{ub}
       Moderner Web-Browser mit Remote-Rendering & Streaming
 @{b}========================================================================@{ub}
 
-Willkommen zu @{b}VortexBrowser 0.99 RC3@{ub}!
+Willkommen zu @{b}VortexBrowser 0.99 RC1@{ub}!
 
 VortexBrowser ermoeglicht modernes Surfen im World Wide Web auf Ihrem AmigaOS 4.1
 System mit voller Unterstuetzung fuer moderne Web-Standards (HTML5, CSS3,
@@ -63,7 +61,6 @@ und minimaler CPU-Auslastung.
       - @{"Audio-Streaming (16-Bit AHI)" link "Audio"}
       - @{"Kontextmenues & Mausbedienung" link "MouseContext"}
   * @{"Einstellungen (Preferences)" link "Preferences"}
-  * @{"Workbench ToolTypes (Icon-Infos)" link "ToolTypes"}
   * @{"Tipps zur CPU-Entlastung & Performance" link "Performance"}
   * @{"Tastatur-Kuerzel (Shortcuts)" link "Shortcuts"}
   * @{"Server-Einrichtung (Linux PC / Raspberry Pi)" link "ServerSetup"}
@@ -134,7 +131,7 @@ authentischen Look & Feel von AmigaOS 4!
    Das Skript richtet automatisch die virtuelle Umgebung ein, installiert alle
    Abhaengigkeiten und Chromium und kompiliert bei Bedarf die SIMD-Beschleunigung.
 4. Notieren Sie sich die am Ende des Skripts angezeigte @{b}Server-IP-Adresse@{ub}
-   (z. B. 127.0.0.1 oder Ihre lokale Server-IP).
+   (z. B. 192.168.178.50).
 5. Starten Sie den Server mit:
    @{b}./run_server.sh@{ub}  (bzw. @{b}./run_rpi4.sh@{ub})
 
@@ -326,63 +323,11 @@ Das Einstellungsfenster ist uebersichtlich in fuenf Reiter unterteilt:
    - Option: Vor jedem Download Zielverzeichnis abfragen
 
 5. @{b}Streaming Server:@{ub}
-   - @{b}Server IP / Host & Port:@{ub} Manuelle Eingabe des Streaming-Servers (z. B. 127.0.0.1:7788 oder Server-IP)
+   - @{b}Server IP / Host & Port:@{ub} Manuelle Eingabe des Streaming-Servers (z. B. 192.168.178.50:7788)
    - @{b}Stream-Aufloesung:@{ub} Nativ (1:1), 720p HD, 540p qHD (siehe Performance!)
    - @{b}JPEG-Qualitaet:@{ub} Slider von 20% bis 100%
    - @{b}Video-Optimierung:@{ub} Dynamische Bildrate bei Videowiedergabe
    - @{b}Aktuellen Server beim Beenden automatisch speichern@{ub}
-
-@endnode
-
-@node "ToolTypes" "Workbench ToolTypes (Icon-Infos)"
-@{b}Workbench ToolTypes (Icon-Infos)@{ub}
-
-VortexBrowser unterstuetzt die typische Amiga-Konfiguration ueber @{b}ToolTypes@{ub} in
-den Programm-Icons (@{i}VortexBrowser.info@{ui}, @{i}VortexBrowser-AltiVec.info@{ui}, @{i}VortexBrowser-MUI.info@{ui}).
-
-@{b}So bearbeiten Sie die ToolTypes auf der Workbench:@{ub}
-1. Markieren Sie das Icon mit einem einfachen Mausklick.
-2. Waehlen Sie im Menue @{b}Icons -> Information...@{ub} (oder druecken Sie @{b}Rechte Amiga + I@{ub}).
-3. In der Liste der ToolTypes koennen Sie Einstellungen direkt anpassen.
-
-@{b}Wichtige AmigaOS-Klammerregel:@{ub}
-ToolTypes, die in Klammern stehen wie @{i}(SERVER=192.168.178.2)@{ui}, gelten auf dem Amiga
-als @{b}inaktiv / auskommentiert@{ub}.
-Um einen Wert zu aktivieren, entfernen Sie die Klammern (z. B. @{b}SERVER=192.168.178.2@{ub})
-und klicken Sie auf @{b}Speichern@{ub}!
-
-@{b}Unterstuetzte ToolTypes:@{ub}
-
-- @{b}SERVER=<IP oder Hostname>@{ub}
-  Gibt die IP-Adresse oder den Namen des Streaming-Servers an (z. B. @{i}SERVER=192.168.178.2@{ui}).
-
-- @{b}PORT=<Portnummer>@{ub}
-  Gibt den Port des Streaming-Servers an (Standard: @{i}PORT=7788@{ui}).
-
-- @{b}URL=<Adresse>@{ub}  (oder STARTURL)
-  Die Webseite, die beim Start ueber das Icon geoeffnet werden soll (z. B. @{i}URL=https://www.amiga-news.de@{ui}).
-
-- @{b}STREAMMODE=<Modus>@{ub}
-  Bestimmt das Streaming-System:
-  * @{i}AUTO@{ui}     : Intelligente Umschaltung (H.264 bei Videos via va.library, sonst sparsames 2D).
-  * @{i}H264@{ui}     : Dauerhafter H.264 Video-Stream ueber Hardware.
-  * @{i}LZ4@{ui}      : Reines 2D Dirty-Rect Streaming (fuer schwaechere Grafikkarten ohne VA-API).
-
-- @{b}BITRATE=<Zahl in kbps>@{ub}
-  Setzt die H.264 Video-Bitrate (1000 bis 10000 kbps, Standard: @{i}BITRATE=8000@{ui}).
-
-- @{b}FPS=<Zahl>@{ub}
-  Ziel-Bildwiederholrate (15, 25, 30, 50, 60 FPS, Standard: @{i}FPS=25@{ui}).
-
-- @{b}DARKMODE=<0 oder 1>@{ub}
-  Erzwingt das dunkle Erscheinungsbild (Dark Mode) beim Start (@{i}DARKMODE=1@{ui} oder @{i}DARKMODE=0@{ui}).
-
-- @{b}DOWNLOADDIR=<Pfad>@{ub}
-  Standard-Download-Verzeichnis (z. B. @{i}DOWNLOADDIR=Work:Downloads@{ui}).
-
-@{b}Stack-Groesse:@{ub}
-Das Icon enthaelt fest hinterlegt @{b}Stack: 200000@{ub} Byte (~200 KB). Dies stellt sicher,
-dass Netzwerk, FFmpeg-Dekodierung und die Benutzeroberflaeche ohne Stack-Fehler stabil laufen.
 
 @endnode
 
@@ -498,7 +443,7 @@ was die CPU-Auslastung auf 20-30% senkt!
 @node "EnglishDoc" "English Documentation Summary"
 @{b}English Documentation Summary@{ub}
 
-@{b}VortexBrowser 0.99 RC3@{ub} is a remote web rendering browser client for AmigaOS 4.1.
+@{b}VortexBrowser 0.99 RC1@{ub} is a remote web rendering browser client for AmigaOS 4.1.
 It renders modern web pages (HTML5, CSS3, ES2024 JavaScript, WebGL, YouTube, etc.)
 on a companion Linux PC or Raspberry Pi 4/5 server, streaming ultra-smooth visuals
 and 16-bit 48kHz audio directly to AmigaOS with native Reaction GUI controls.
@@ -533,7 +478,7 @@ with open(os.path.join(AMIGA_DRAWER, f"{APP_NAME}.guide"), "w", encoding="iso-88
 # German Quickstart Readme: LIESMICH.txt
 # -------------------------------------------------------------
 LIESMICH_CONTENT = f"""==============================================================================
-                    {APP_NAME.upper()} 0.99 RC3 FUER AMIGAOS 4.1
+                    {APP_NAME.upper()} 0.99 RC1 FUER AMIGAOS 4.1
                  Schnellstartanleitung & Kurzanleitung
 ==============================================================================
 
@@ -545,14 +490,12 @@ WebGL, etc.) fluessig und ressourcenschonend auf den Amiga bringt.
 ------------------------------------------------------------------------------
 1. INHALT DIESES ARCHIVS
 ------------------------------------------------------------------------------
-- {APP_NAME}             : Universelles Programm fuer AmigaOS 4 (automatische CPU-Erkennung)
-- {APP_NAME}-AltiVec     : Optimierte Version fuer CPUs mit AltiVec/VMX (G4, X1000)
-- {APP_NAME}-MUI         : MUI-Ausgabe im Design des Odyssey Web Browsers (MUI 4/5)
+- {APP_NAME}             : Ausfuehrbares Programm fuer AmigaOS 4 (newlib.library)
+- {APP_NAME}.info        : Echtes AmigaOS 4 Icon im VideoVortex-Look
 - {APP_NAME}.guide       : Ausfuehrliches AmigaGuide-Handbuch mit allen Details
 - LIESMICH.txt          : Diese Schnellstartanleitung (Deutsch)
 - README.txt            : Schnellstartanleitung (Englisch)
 - icons/                : Symbole fuer die Schnellwahl-Leiste
-- Alternative-Icons/    : Alternative Icons im Cyber-Globe- und Orb-Design
 
 ------------------------------------------------------------------------------
 2. SCHNELLSTART IN 2 SCHRITTEN
@@ -564,7 +507,7 @@ SCHRITT 1: Server starten (auf Linux-PC oder Raspberry Pi 4/5)
       ./install_server.sh
 3. Starten Sie anschliessend den Server mit:
       ./run_server.sh
-4. Merken Sie sich die angezeigte IP-Adresse (z. B. 127.0.0.1 oder lokale LAN-IP).
+4. Merken Sie sich die angezeigte IP-Adresse (z. B. 192.168.178.50).
 
 SCHRITT 2: {APP_NAME} auf dem Amiga starten
 1. Starten Sie "{APP_NAME}" per Doppelklick.
@@ -602,25 +545,6 @@ SCHRITT 2: {APP_NAME} auf dem Amiga starten
   - Die Radeon-Grafikkarte skaliert das Bild ueber Hardware-CompositeTags()!
   - Senkt die Amiga-CPU-Last um 50-70%!
 
-------------------------------------------------------------------------------
-4. WORKBENCH TOOLTYPES (ICON-EINSTELLUNGEN)
-------------------------------------------------------------------------------
-Sie koennen VortexBrowser auch direkt ueber ToolTypes im Icon konfigurieren!
-Klicken Sie dazu das Icon an und waehlen Sie Workbench-Menue "Icons -> Information..."
-(oder Tastenkombination Rechte Amiga + I):
-
-- SERVER=192.168.178.2 : IP-Adresse oder Hostname des Streaming-Servers
-- PORT=7788            : Server-Port (Standard: 7788)
-- URL=https://...      : Startseite beim Starten per Doppelklick
-- STREAMMODE=AUTO      : Streaming-Modus (AUTO, H264 oder LZ4)
-- BITRATE=8000         : H.264 Video-Bitrate in kbps (1000 bis 10000)
-- FPS=25               : Bildwiederholrate (15, 25, 30, 50, 60 FPS)
-- DARKMODE=0           : Dark-Mode beim Start erzwingen (1=Ein, 0=Aus)
-- DOWNLOADDIR=RAM:     : Standard-Download-Verzeichnis (z. B. Work:Downloads)
-
-HINWEIS: ToolTypes in Klammern wie (SERVER=...) sind inaktiv (Muster).
-Entfernen Sie die Klammern, um den Wert zu aktivieren, und klicken Sie auf Speichern!
-
 Ausfuehrliche Informationen finden Sie in "{APP_NAME}.guide"!
 Viel Spass beim modernen Surfen auf AmigaOS 4!
 ==============================================================================
@@ -633,7 +557,7 @@ with open(os.path.join(AMIGA_DRAWER, "LIESMICH.txt"), "w", encoding="iso-8859-1"
 # English Quickstart Readme: README.txt
 # -------------------------------------------------------------
 README_CONTENT = f"""==============================================================================
-                    {APP_NAME.upper()} 0.99 RC3 FOR AMIGAOS 4.1
+                    {APP_NAME.upper()} 0.99 RC1 FOR AMIGAOS 4.1
                  Quick Start Guide & Feature Overview
 ==============================================================================
 
@@ -645,14 +569,12 @@ YouTube, and Twitch with low Amiga CPU usage and native Reaction GUI.
 ------------------------------------------------------------------------------
 1. PACKAGE CONTENTS
 ------------------------------------------------------------------------------
-- {APP_NAME}             : Universal executable with dynamic CPU detection (newlib)
-- {APP_NAME}-AltiVec     : Dedicated SIMD build for PowerPC G4 and AmigaOne X1000
-- {APP_NAME}-MUI         : MUI Edition with Odyssey Web Browser look & layout (MUI 4/5)
+- {APP_NAME}             : Standard AmigaOS 4 executable (newlib.library)
+- {APP_NAME}.info        : Native AmigaOS 4 Icon in cosmic vortex look
 - {APP_NAME}.guide       : Comprehensive AmigaGuide manual
 - LIESMICH.txt          : German quickstart guide
 - README.txt            : English quickstart guide
 - icons/                : Toolbar and bookmark icon collection
-- Alternative-Icons/    : Alternative Cyber-Globe and Orb icons
 
 ------------------------------------------------------------------------------
 2. QUICK START IN 2 STEPS
@@ -664,7 +586,7 @@ STEP 1: Start Server (Linux PC or Raspberry Pi 4/5)
       ./install_server.sh
 3. Start the server with:
       ./run_server.sh
-4. Note your server's local IP address (e.g. 127.0.0.1 or your LAN IP).
+4. Note your server's local LAN IP address (e.g. 192.168.178.50).
 
 STEP 2: Start {APP_NAME} on AmigaOS 4
 1. Launch "{APP_NAME}".
@@ -687,24 +609,6 @@ STEP 2: Start {APP_NAME} on AmigaOS 4
   Amiga+E   : Open Preferences
   Amiga+Q   : Quit {APP_NAME}
 
-------------------------------------------------------------------------------
-4. WORKBENCH TOOLTYPES (ICON SETTINGS)
-------------------------------------------------------------------------------
-You can also configure {APP_NAME} directly via ToolTypes inside its .info icon!
-Select the icon on Workbench and choose "Icons -> Information..." (or press RA+I):
-
-- SERVER=192.168.178.2 : Server IP address or hostname
-- PORT=7788            : Server TCP port (default: 7788)
-- URL=https://...      : Startup URL when launched from Workbench
-- STREAMMODE=AUTO      : Streaming system (AUTO, H264, or LZ4)
-- BITRATE=8000         : H.264 video stream bitrate in kbps (1000 to 10000)
-- FPS=25               : Frame rate target (15, 25, 30, 50, 60 FPS)
-- DARKMODE=0           : Enforce dark mode on startup (1=On, 0=Off)
-- DOWNLOADDIR=RAM:     : Default download folder (e.g. Work:Downloads)
-
-NOTE: ToolTypes enclosed in parentheses like (SERVER=...) are commented out.
-Remove the parentheses to activate the setting and click "Save"!
-
 For comprehensive documentation, open "{APP_NAME}.guide" in MultiView!
 Enjoy modern web browsing on AmigaOS 4!
 ==============================================================================
@@ -720,30 +624,15 @@ print("=== [2/6] Copying AmigaOS 4 Client Binaries and Icons ===")
 shutil.copy2("amiga-client/VortexBrowser.stripped", os.path.join(AMIGA_DRAWER, APP_NAME))
 shutil.copy2("amiga-client/VortexBrowser.info", os.path.join(AMIGA_DRAWER, f"{APP_NAME}.info"))
 
-if os.path.exists("amiga-client/VortexBrowser-AltiVec.stripped"):
-    shutil.copy2("amiga-client/VortexBrowser-AltiVec.stripped", os.path.join(AMIGA_DRAWER, "VortexBrowser-AltiVec"))
-    if os.path.exists("amiga-client/VortexBrowser-AltiVec.info"):
-        shutil.copy2("amiga-client/VortexBrowser-AltiVec.info", os.path.join(AMIGA_DRAWER, "VortexBrowser-AltiVec.info"))
-    else:
-        shutil.copy2("amiga-client/VortexBrowser.info", os.path.join(AMIGA_DRAWER, "VortexBrowser-AltiVec.info"))
-
-if os.path.exists("amiga-client/VortexBrowser-MUI.stripped"):
-    shutil.copy2("amiga-client/VortexBrowser-MUI.stripped", os.path.join(AMIGA_DRAWER, "VortexBrowser-MUI"))
-    if os.path.exists("amiga-client/VortexBrowser-MUI.info"):
-        shutil.copy2("amiga-client/VortexBrowser-MUI.info", os.path.join(AMIGA_DRAWER, "VortexBrowser-MUI.info"))
-    else:
-        shutil.copy2("amiga-client/VortexBrowser.info", os.path.join(AMIGA_DRAWER, "VortexBrowser-MUI.info"))
-
 # Copy Icons to icons/
 for icon in os.listdir("amiga-client/icons"):
     if icon.endswith(".png"):
         shutil.copy2(os.path.join("amiga-client/icons", icon), os.path.join(AMIGA_DRAWER, "icons", icon))
 
 # Copy Info Files from Kyvos OS4 ISO / repository if available
-KYVOS_DIR = os.environ.get("KYVOS_DIR", os.path.expanduser("~/kyvos-2.2.0-linux64"))
-KYVOS_DOCS_INFO = os.path.join(KYVOS_DIR, "amigaos4/Download/VideoVortex/Data/MPlayer/Docs.info")
-KYVOS_README_INFO = os.path.join(KYVOS_DIR, "amigaos4/Download/VideoVortex/Data/MPlayer/Docs/README.info")
-KYVOS_GUIDE_INFO = os.path.join(KYVOS_DIR, "ISO/AmigaOS 4.1 Final Edition Update 2/Content/Workbench/Documentation/Commodities/ContextMenus.guide.info")
+KYVOS_DOCS_INFO = "/home/tears/kyvos-2.2.0-linux64/amigaos4/Download/VideoVortex/Data/MPlayer/Docs.info"
+KYVOS_README_INFO = "/home/tears/kyvos-2.2.0-linux64/amigaos4/Download/VideoVortex/Data/MPlayer/Docs/README.info"
+KYVOS_GUIDE_INFO = "/home/tears/kyvos-2.2.0-linux64/ISO/AmigaOS 4.1 Final Edition Update 2/Content/Workbench/Documentation/Commodities/ContextMenus.guide.info"
 
 if os.path.exists(KYVOS_DOCS_INFO):
     shutil.copy2(KYVOS_DOCS_INFO, os.path.join(AMIGA_DRAWER, "icons.info"))
@@ -752,36 +641,6 @@ if os.path.exists(KYVOS_README_INFO):
     shutil.copy2(KYVOS_README_INFO, os.path.join(AMIGA_DRAWER, "README.txt.info"))
 if os.path.exists(KYVOS_GUIDE_INFO):
     shutil.copy2(KYVOS_GUIDE_INFO, os.path.join(AMIGA_DRAWER, f"{APP_NAME}.guide.info"))
-
-# Copy Alternative Circular Icons (3D Titanium Glossy Orb) into Alternative-Icons/ drawer
-ALT_ICONS_SRC = "amiga-client/alt-icons"
-if os.path.isdir(ALT_ICONS_SRC):
-    ALT_ICONS_DST = os.path.join(AMIGA_DRAWER, "Alternative-Icons")
-    os.makedirs(ALT_ICONS_DST, exist_ok=True)
-    for fname in ("VortexBrowser.info", "VortexBrowser-AltiVec.info", "VortexBrowser-MUI.info", "VortexBrowser_drawer.info"):
-        src_info = os.path.join(ALT_ICONS_SRC, fname)
-        if os.path.exists(src_info):
-            shutil.copy2(src_info, os.path.join(ALT_ICONS_DST, fname))
-    alt_drawer_src = os.path.join(ALT_ICONS_SRC, "VortexBrowser_drawer.info")
-    if os.path.exists(alt_drawer_src):
-        shutil.copy2(alt_drawer_src, os.path.join(AMIGA_DRAWER, "Alternative-Icons.info"))
-    elif os.path.exists(KYVOS_DOCS_INFO):
-        shutil.copy2(KYVOS_DOCS_INFO, os.path.join(AMIGA_DRAWER, "Alternative-Icons.info"))
-    alt_readme_txt = (
-        "Alternative kreisrunde Icons (Variante: 3D Titanium Glossy Orb, 64x64 ARGB)\n"
-        "===========================================================================\n\n"
-        "Zum Wechseln einfach die gewuenschten .info-Dateien aus diesem Ordner in das\n"
-        "Hauptverzeichnis 'VortexBrowser/' kopieren (oder im Workbench-Fenster\n"
-        "'Piktogramm -> Informationen...' per Drag & Drop austauschen).\n\n"
-        "- VortexBrowser.info          : Standard ReAction Edition\n"
-        "- VortexBrowser-AltiVec.info  : PowerPC AltiVec Edition (mit AltiVec-Badge)\n"
-        "- VortexBrowser-MUI.info      : MUI 4/5 Edition (mit MUI-Badge)\n"
-        "- VortexBrowser_drawer.info   : Ordner-Icon (als VortexBrowser.info eine Ebene hoeher)\n"
-    )
-    with open(os.path.join(ALT_ICONS_DST, "LIESMICH.txt"), "w", encoding="iso-8859-1") as f:
-        f.write(alt_readme_txt)
-    if os.path.exists(KYVOS_README_INFO):
-        shutil.copy2(KYVOS_README_INFO, os.path.join(ALT_ICONS_DST, "LIESMICH.txt.info"))
 
 # Drawer Icon for VortexBrowser drawer
 if os.path.exists("amiga-client/VortexBrowser_drawer.info"):
@@ -917,31 +776,8 @@ os.chmod(os.path.join(SERVER_LINUX_DRAWER, "run_server.sh"), 0o755)
 with open(os.path.join(SERVER_LINUX_DRAWER, "install_server.sh"), "w") as f:
     f.write(SERVER_INSTALL_SH)
 os.chmod(os.path.join(SERVER_LINUX_DRAWER, "install_server.sh"), 0o755)
-shutil.copy2("cachyos-linux-server/sync_twitch_login.py", os.path.join(SERVER_LINUX_DRAWER, "sync_twitch_login.py"))
-if os.path.exists("sync_twitch_login.sh"):
-    shutil.copy2("sync_twitch_login.sh", os.path.join(SERVER_LINUX_DRAWER, "sync_twitch_login.sh"))
-    os.chmod(os.path.join(SERVER_LINUX_DRAWER, "sync_twitch_login.sh"), 0o755)
-
-# Populate Server-CachyOS-Linux Drawer
-shutil.copy2("cachyos-linux-server/server.py", os.path.join(SERVER_CACHYOS_DRAWER, "server.py"))
-shutil.copy2("cachyos-linux-server/fast_pixconv.c", os.path.join(SERVER_CACHYOS_DRAWER, "fast_pixconv.c"))
-if os.path.exists("cachyos-linux-server/fast_pixconv.so"):
-    shutil.copy2("cachyos-linux-server/fast_pixconv.so", os.path.join(SERVER_CACHYOS_DRAWER, "fast_pixconv.so"))
-shutil.copy2("cachyos-linux-server/darkreader.js", os.path.join(SERVER_CACHYOS_DRAWER, "darkreader.js"))
-shutil.copy2("cachyos-linux-server/requirements.txt", os.path.join(SERVER_CACHYOS_DRAWER, "requirements.txt"))
-shutil.copy2("cachyos-linux-server/sync_twitch_login.py", os.path.join(SERVER_CACHYOS_DRAWER, "sync_twitch_login.py"))
-if os.path.exists("sync_twitch_login.sh"):
-    shutil.copy2("sync_twitch_login.sh", os.path.join(SERVER_CACHYOS_DRAWER, "sync_twitch_login.sh"))
-    os.chmod(os.path.join(SERVER_CACHYOS_DRAWER, "sync_twitch_login.sh"), 0o755)
-if os.path.exists("cachyos-linux-server/extensions"):
-    shutil.copytree("cachyos-linux-server/extensions", os.path.join(SERVER_CACHYOS_DRAWER, "extensions"), dirs_exist_ok=True)
-shutil.copy2("cachyos-linux-server/install_server.sh", os.path.join(SERVER_CACHYOS_DRAWER, "install_server.sh"))
-os.chmod(os.path.join(SERVER_CACHYOS_DRAWER, "install_server.sh"), 0o755)
-shutil.copy2("cachyos-linux-server/run_server.sh", os.path.join(SERVER_CACHYOS_DRAWER, "run_server.sh"))
-os.chmod(os.path.join(SERVER_CACHYOS_DRAWER, "run_server.sh"), 0o755)
-shutil.copy2("cachyos-linux-server/vortexbrowser.service", os.path.join(SERVER_CACHYOS_DRAWER, "vortexbrowser.service"))
-if os.path.exists("cachyos-linux-server/README_CACHYOS.md"):
-    shutil.copy2("cachyos-linux-server/README_CACHYOS.md", os.path.join(SERVER_CACHYOS_DRAWER, "README_CACHYOS.txt"))
+with open(os.path.join(SERVER_LINUX_DRAWER, "vortexbrowser.service"), "w") as f:
+    f.write(SYSTEMD_SERVICE)
 
 # Populate Server-RaspberryPi4 Drawer
 shutil.copy2("rpi4-server/server.py", os.path.join(SERVER_RPI4_DRAWER, "server.py"))
@@ -969,35 +805,30 @@ os.chmod(os.path.join(SERVER_RPI4_DRAWER, "run_server.sh"), 0o755)
 
 if os.path.exists("rpi4-server/README_RPI4.md"):
     shutil.copy2("rpi4-server/README_RPI4.md", os.path.join(SERVER_RPI4_DRAWER, "README_RPI4.txt"))
-shutil.copy2("rpi4-server/sync_twitch_login.py", os.path.join(SERVER_RPI4_DRAWER, "sync_twitch_login.py"))
-if os.path.exists("sync_twitch_login.sh"):
-    shutil.copy2("sync_twitch_login.sh", os.path.join(SERVER_RPI4_DRAWER, "sync_twitch_login.sh"))
-    os.chmod(os.path.join(SERVER_RPI4_DRAWER, "sync_twitch_login.sh"), 0o755)
+with open(os.path.join(SERVER_RPI4_DRAWER, "vortexbrowser.service"), "w") as f:
+    f.write(SYSTEMD_SERVICE)
 
 # -------------------------------------------------------------
 # Overall German and English Readmes for Complete Archive
 # -------------------------------------------------------------
 OVERALL_DE_TXT = f"""==============================================================================
-            {APP_NAME.upper()} 0.99 RC3 - GESAMTPAKET FUER AMIGAOS 4 & SERVER
+            {APP_NAME.upper()} 0.99 RC1 - GESAMTPAKET FUER AMIGAOS 4 & SERVER
 ==============================================================================
 
-Dieses Komplettpaket enthaelt alles fuer den Betrieb von {APP_NAME} 0.99 RC3
+Dieses Komplettpaket enthaelt alles fuer den Betrieb von {APP_NAME} 0.99 RC1
 auf AmigaOS 4.1 sowie dem Rendering-Server auf Linux oder Raspberry Pi 4/5.
 
 VERZEICHNISSTRUKTUR:
 --------------------
 - {APP_NAME}/          : Der vollstaendige AmigaOS 4 Client-Ordner
-  * {APP_NAME}         : Ausfuehrbares Programm (ReAction Standard)
-  * {APP_NAME}-AltiVec : Ausfuehrbares Programm (PowerPC G4 AltiVec SIMD)
-  * {APP_NAME}-MUI     : Ausfuehrbares Programm (MUI 4/5 Oberflaeche)
+  * {APP_NAME}         : Ausfuehrbares Programm (Newlib-Version)
   * {APP_NAME}.info    : Echtes AmigaOS 4 Icon im VideoVortex-Look
   * {APP_NAME}.guide   : Ausfuehrliches AmigaGuide-Handbuch
   * LIESMICH.txt       : Deutsche Kurzanleitung
   * README.txt         : Englische Kurzanleitung
   * icons/             : Symbolleisten-Icons
 - {APP_NAME}.info      : Workbench-Ordner-Icon fuer den Client-Ordner
-- Server-Linux/        : Der Rendering-Server fuer Standard-Linux-PCs (x86_64)
-- Server-CachyOS-Linux/: High-Performance Server fuer CachyOS/Arch (Full HD 1080p, AVX2, AMD/Intel GPU)
+- Server-Linux/        : Der Rendering-Server fuer Linux PC (x86_64)
 - Server-RaspberryPi4/ : Der Rendering-Server optimiert fuer Raspberry Pi 4/5 (ARM64)
 
 SCHNELLSTART:
@@ -1043,18 +874,6 @@ with zipfile.ZipFile(LINUX_ZIP, "w", zipfile.ZIP_DEFLATED) as zf:
             rel_path = os.path.join("Server-Linux", os.path.relpath(full_path, SERVER_LINUX_DRAWER))
             zf.write(full_path, rel_path)
 print(f"[+] Created Linux Server Zip: {LINUX_ZIP} ({os.path.getsize(LINUX_ZIP)} bytes)")
-
-# -------------------------------------------------------------
-# Create 2b: CachyOS-Linux Server Zip Archive
-# -------------------------------------------------------------
-CACHYOS_ZIP = os.path.join(DIST_DIR, f"{APP_NAME}-{VER_STR}-CachyOS-Linux.zip")
-with zipfile.ZipFile(CACHYOS_ZIP, "w", zipfile.ZIP_DEFLATED) as zf:
-    for root, dirs, files in os.walk(SERVER_CACHYOS_DRAWER):
-        for file in files:
-            full_path = os.path.join(root, file)
-            rel_path = os.path.join("Server-CachyOS-Linux", os.path.relpath(full_path, SERVER_CACHYOS_DRAWER))
-            zf.write(full_path, rel_path)
-print(f"[+] Created CachyOS-Linux Server Zip: {CACHYOS_ZIP} ({os.path.getsize(CACHYOS_ZIP)} bytes)")
 
 # -------------------------------------------------------------
 # Create 3: Raspberry Pi 4 Server Zip Archive
