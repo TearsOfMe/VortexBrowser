@@ -31,7 +31,7 @@ INCLUDES = -I../common \
 CFLAGS         = $(OPTIMIZE) -Wall -Wno-deprecated-declarations $(INCLUDES)
 CFLAGS_ALTIVEC = $(OPTIMIZE_ALTIVEC) -Wall -Wno-deprecated-declarations $(INCLUDES)
 
-LDFLAGS = -L$(SDK)/local/newlib/lib -llz4 -ljpeg -lauto
+LDFLAGS = -L../sdk_va -L$(SDK)/local/newlib/lib -lavcodec -lavutil -lva -llz4 -ljpeg -lauto
 
 SRCS_COMMON = src/net.c src/renderer.c src/favorites.c src/download.c src/audio.c src/prefs.c src/clipboard.c src/passwords.c
 SRCS_ALL    = src/main.c src/gui.c src/gui_prefs.c src/gui_passwords.c src/gui_download.c $(SRCS_COMMON)

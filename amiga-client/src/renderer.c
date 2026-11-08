@@ -21,6 +21,9 @@
 #include <exec/exectags.h>
 #include <interfaces/VA.h>
 #include <va/va_amigaos.h>
+#include <libavcodec/avcodec.h>
+#include <libavutil/hwcontext.h>
+#include <libavutil/hwcontext_vaapi.h>
 
 void renderer_init(VortexApp *app)
 {
@@ -93,9 +96,110 @@ static void free_comp_bitmap(RendererState *r)
     r->comp_height = 0;
 }
 
+static enum AVPixelFormat get_vaapi_format(AVCodecContext *ctx, const enum AVPixelFormat *pix_fmts)
+{
+    while (*pix_fmts != AV_PIX_FMT_NONE) {
+        if (*pix_fmts == AV_PIX_FMT_VAAPI) {
+            return AV_PIX_FMT_VAAPI;
+        }
+        pix_fmts++;
+    }
+    return AV_PIX_FMT_NONE;
+}
+
+static BOOL init_h264_decoder(VortexApp *app)
+{
+    RendererState *r = &app->renderer;
+    if (r->h264_decoder_init && r->av_codec_ctx) {
+        return TRUE;
+    }
+
+    const AVCodec *codec = avcodec_find_decoder_by_name("h264");
+    if (!codec) {
+        printf("[VortexBrowser] FFmpeg H.264 decoder not found in libavcodec!\n");
+        return FALSE;
+    }
+
+    AVCodecContext *avctx = avcodec_alloc_context3(codec);
+    if (!avctx) {
+        printf("[VortexBrowser] Failed to allocate FFmpeg AVCodecContext\n");
+        return FALSE;
+    }
+
+    /* Configure VA-API hardware acceleration if va.library is available */
+    if (r->has_va && r->va_display) {
+        AVBufferRef *hw_device_ctx = av_hwdevice_ctx_alloc(AV_HWDEVICE_TYPE_VAAPI);
+        if (hw_device_ctx) {
+            AVHWDeviceContext *device_ctx = (AVHWDeviceContext *)hw_device_ctx->data;
+            AVVAAPIDeviceContext *vaapi_device = (AVVAAPIDeviceContext *)device_ctx->hwctx;
+            vaapi_device->display = (VADisplay)r->va_display;
+            if (av_hwdevice_ctx_init(hw_device_ctx) >= 0) {
+                avctx->hw_device_ctx = av_buffer_ref(hw_device_ctx);
+                avctx->get_format = get_vaapi_format;
+                r->av_hw_device = (APTR)hw_device_ctx;
+                printf("[VortexBrowser] FFmpeg H.264 VA-API Hardware Acceleration ACTIVE (Radeon UVD/VCN)\n");
+            } else {
+                av_buffer_unref(&hw_device_ctx);
+                printf("[VortexBrowser] av_hwdevice_ctx_init failed -> falling back to software H.264\n");
+            }
+        }
+    }
+
+    /* Real-time zero-delay streaming flags */
+    avctx->flags |= AV_CODEC_FLAG_LOW_DELAY;
+    avctx->flags2 |= AV_CODEC_FLAG2_FAST;
+
+    if (avcodec_open2(avctx, codec, NULL) < 0) {
+        printf("[VortexBrowser] avcodec_open2 failed for H.264\n");
+        avcodec_free_context(&avctx);
+        return FALSE;
+    }
+
+    r->av_parser = (APTR)av_parser_init(codec->id);
+    r->av_codec_ctx = (APTR)avctx;
+    r->av_frame = (APTR)av_frame_alloc();
+    r->av_packet = (APTR)av_packet_alloc();
+    r->h264_decoder_init = TRUE;
+    return TRUE;
+}
+
+static void cleanup_h264_decoder(VortexApp *app)
+{
+    RendererState *r = &app->renderer;
+    if (r->av_parser) {
+        AVCodecParserContext *parser = (AVCodecParserContext *)r->av_parser;
+        av_parser_close(parser);
+        r->av_parser = NULL;
+    }
+    if (r->av_codec_ctx) {
+        AVCodecContext *avctx = (AVCodecContext *)r->av_codec_ctx;
+        avcodec_free_context(&avctx);
+        r->av_codec_ctx = NULL;
+    }
+    if (r->av_frame) {
+        AVFrame *frame = (AVFrame *)r->av_frame;
+        av_frame_free(&frame);
+        r->av_frame = NULL;
+    }
+    if (r->av_packet) {
+        AVPacket *pkt = (AVPacket *)r->av_packet;
+        av_packet_free(&pkt);
+        r->av_packet = NULL;
+    }
+    if (r->av_hw_device) {
+        AVBufferRef *hw = (AVBufferRef *)r->av_hw_device;
+        av_buffer_unref(&hw);
+        r->av_hw_device = NULL;
+    }
+    r->h264_decoder_init = FALSE;
+    r->decoded_va_surface = 0;
+}
+
 void renderer_cleanup(VortexApp *app)
 {
     RendererState *r = &app->renderer;
+
+    cleanup_h264_decoder(app);
 
     if (r->iva && r->va_display) {
         struct VAIFace *iva = (struct VAIFace *)r->iva;
@@ -534,126 +638,7 @@ static void upload_rect_to_bitmap(
     }
 }
 
-static BOOL ensure_va_surface(VortexApp *app, uint16_t w, uint16_t h)
-{
-    RendererState *r = &app->renderer;
-    if (!r->has_va || !r->iva || !r->va_display) return FALSE;
-    struct VAIFace *iva = (struct VAIFace *)r->iva;
-
-    w &= ~1;
-    h &= ~1;
-    if (w < 16 || h < 16) return FALSE;
-
-    if (r->va_surface && (r->src_width != w || r->src_height != h)) {
-        VASurfaceID s = (VASurfaceID)r->va_surface;
-        iva->vaDestroySurfaces(r->va_display, &s, 1);
-        r->va_surface = 0;
-    }
-
-    if (!r->va_surface) {
-        VASurfaceID s = VA_INVALID_SURFACE;
-        VAStatus st = iva->vaCreateSurfaces(r->va_display, VA_RT_FORMAT_YUV420, w, h, &s, 1, NULL, 0);
-        if (st != VA_STATUS_SUCCESS || s == VA_INVALID_SURFACE) {
-            return FALSE;
-        }
-        r->va_surface = (uint32_t)s;
-    }
-    return TRUE;
-}
-
-static BOOL upload_va_surface_yuv420p(
-    RendererState *r,
-    const uint8_t *yuv_data,
-    uint16_t       w,
-    uint16_t       h
-)
-{
-    if (!r->has_va || !r->iva || !r->va_display || !r->va_surface || !yuv_data) {
-        return FALSE;
-    }
-    struct VAIFace *iva = (struct VAIFace *)r->iva;
-    VASurfaceID surf = (VASurfaceID)r->va_surface;
-
-    VAImage img;
-    memset(&img, 0, sizeof(img));
-    VAStatus st = iva->vaDeriveImage(r->va_display, surf, &img);
-    if (st != VA_STATUS_SUCCESS) {
-        return FALSE;
-    }
-
-    void *surface_p = NULL;
-    st = iva->vaMapBuffer(r->va_display, img.buf, &surface_p);
-    if (st != VA_STATUS_SUCCESS || !surface_p) {
-        iva->vaDestroyImage(r->va_display, img.image_id);
-        return FALSE;
-    }
-
-    const uint8_t *src_Y = yuv_data;
-    const uint8_t *src_U = src_Y + (size_t)w * h;
-    const uint8_t *src_V = src_U + ((size_t)w / 2) * ((size_t)h / 2);
-
-    uint8_t *dst_Y = (uint8_t *)surface_p + img.offsets[0];
-    uint32_t y_pitch = img.pitches[0];
-
-    /* 1. Copy Y plane (Luma) */
-    for (uint16_t y = 0; y < h; y++) {
-        uint8_t *dst_row = dst_Y + (size_t)y * y_pitch;
-        const uint8_t *src_row = src_Y + (size_t)y * w;
-        if (r->has_altivec) {
-            altivec_fast_memcpy(dst_row, src_row, w);
-        } else {
-            memcpy(dst_row, src_row, w);
-        }
-    }
-
-    /* 2. Copy Chroma planes */
-    uint16_t half_w = w / 2;
-    uint16_t half_h = h / 2;
-
-    if (img.format.fourcc == VA_FOURCC_NV12) {
-        /* NV12: interleaved U and V */
-        uint8_t *dst_uv = (uint8_t *)surface_p + img.offsets[1];
-        uint32_t uv_pitch = img.pitches[1];
-        for (uint16_t y = 0; y < half_h; y++) {
-            uint8_t *uv_row = dst_uv + (size_t)y * uv_pitch;
-            const uint8_t *u_row = src_U + (size_t)y * half_w;
-            const uint8_t *v_row = src_V + (size_t)y * half_w;
-            for (uint16_t x = 0; x < half_w; x++) {
-                uv_row[2 * x]     = u_row[x];
-                uv_row[2 * x + 1] = v_row[x];
-            }
-        }
-    } else {
-        /* Planar IYUV or YV12 */
-        int u_idx = (img.format.fourcc == VA_FOURCC_YV12) ? 2 : 1;
-        int v_idx = (img.format.fourcc == VA_FOURCC_YV12) ? 1 : 2;
-        uint8_t *dst_u = (uint8_t *)surface_p + img.offsets[u_idx];
-        uint8_t *dst_v = (uint8_t *)surface_p + img.offsets[v_idx];
-        uint32_t u_pitch = img.pitches[u_idx];
-        uint32_t v_pitch = img.pitches[v_idx];
-
-        for (uint16_t y = 0; y < half_h; y++) {
-            uint8_t *u_dst_row = dst_u + (size_t)y * u_pitch;
-            uint8_t *v_dst_row = dst_v + (size_t)y * v_pitch;
-            const uint8_t *u_src_row = src_U + (size_t)y * half_w;
-            const uint8_t *v_src_row = src_V + (size_t)y * half_w;
-            if (r->has_altivec) {
-                altivec_fast_memcpy(u_dst_row, u_src_row, half_w);
-                altivec_fast_memcpy(v_dst_row, v_src_row, half_w);
-            } else {
-                memcpy(u_dst_row, u_src_row, half_w);
-                memcpy(v_dst_row, v_src_row, half_w);
-            }
-        }
-    }
-
-    iva->vaUnmapBuffer(r->va_display, img.buf);
-    iva->vaDestroyImage(r->va_display, img.image_id);
-    return TRUE;
-}
-
 static void upload_yuv420p_to_bitmap(
-    VortexApp     *app,
     RendererState *r,
     struct BitMap *bm,
     const uint8_t *yuv_data,
@@ -661,12 +646,7 @@ static void upload_yuv420p_to_bitmap(
     uint16_t       h
 )
 {
-    /* If va.library is available, also upload to VA-API hardware surface for direct GPU display */
-    if (r->has_va) {
-        ensure_va_surface(app, w, h);
-        upload_va_surface_yuv420p(r, yuv_data, w, h);
-    }
-
+    (void)r;
     struct PlanarYUVInfo yuvInfo;
     memset(&yuvInfo, 0, sizeof(yuvInfo));
 
@@ -683,18 +663,10 @@ static void upload_yuv420p_to_bitmap(
         /* 1. Y plane: w x h (Luma, 8 bpp) */
         uint8_t *y_dst = (uint8_t *)yuvInfo.YMemory;
         if (yuvInfo.YBytesPerRow == w) {
-            if (r->has_altivec) {
-                altivec_fast_memcpy(y_dst, y_src, (size_t)w * h);
-            } else {
-                memcpy(y_dst, y_src, (size_t)w * h);
-            }
+            memcpy(y_dst, y_src, (size_t)w * h);
         } else {
             for (uint16_t y = 0; y < h; y++) {
-                if (r->has_altivec) {
-                    altivec_fast_memcpy(y_dst, y_src, w);
-                } else {
-                    memcpy(y_dst, y_src, w);
-                }
+                memcpy(y_dst, y_src, w);
                 y_src += w;
                 y_dst += yuvInfo.YBytesPerRow;
             }
@@ -705,18 +677,10 @@ static void upload_yuv420p_to_bitmap(
         uint16_t half_h = h / 2;
         uint8_t *u_dst = (uint8_t *)yuvInfo.UMemory;
         if (yuvInfo.UBytesPerRow == half_w) {
-            if (r->has_altivec) {
-                altivec_fast_memcpy(u_dst, u_src, (size_t)half_w * half_h);
-            } else {
-                memcpy(u_dst, u_src, (size_t)half_w * half_h);
-            }
+            memcpy(u_dst, u_src, (size_t)half_w * half_h);
         } else {
             for (uint16_t y = 0; y < half_h; y++) {
-                if (r->has_altivec) {
-                    altivec_fast_memcpy(u_dst, u_src, half_w);
-                } else {
-                    memcpy(u_dst, u_src, half_w);
-                }
+                memcpy(u_dst, u_src, half_w);
                 u_src += half_w;
                 u_dst += yuvInfo.UBytesPerRow;
             }
@@ -725,18 +689,10 @@ static void upload_yuv420p_to_bitmap(
         /* 3. V plane: (w/2) x (h/2) (Chroma Red) */
         uint8_t *v_dst = (uint8_t *)yuvInfo.VMemory;
         if (yuvInfo.VBytesPerRow == half_w) {
-            if (r->has_altivec) {
-                altivec_fast_memcpy(v_dst, v_src, (size_t)half_w * half_h);
-            } else {
-                memcpy(v_dst, v_src, (size_t)half_w * half_h);
-            }
+            memcpy(v_dst, v_src, (size_t)half_w * half_h);
         } else {
             for (uint16_t y = 0; y < half_h; y++) {
-                if (r->has_altivec) {
-                    altivec_fast_memcpy(v_dst, v_src, half_w);
-                } else {
-                    memcpy(v_dst, v_src, half_w);
-                }
+                memcpy(v_dst, v_src, half_w);
                 v_src += half_w;
                 v_dst += yuvInfo.VBytesPerRow;
             }
@@ -786,11 +742,7 @@ static void upload_rect_yuv420p_to_bitmap(
 
             uint8_t *y_dst = (uint8_t *)yuvInfo.YMemory + (size_t)ry * yuvInfo.YBytesPerRow + rx;
             for (uint16_t y = 0; y < rh; y++) {
-                if (r->has_altivec) {
-                    altivec_fast_memcpy(y_dst, y_src, rw);
-                } else {
-                    memcpy(y_dst, y_src, rw);
-                }
+                memcpy(y_dst, y_src, rw);
                 y_src += rw;
                 y_dst += yuvInfo.YBytesPerRow;
             }
@@ -802,22 +754,14 @@ static void upload_rect_yuv420p_to_bitmap(
 
             uint8_t *u_dst = (uint8_t *)yuvInfo.UMemory + (size_t)half_y * yuvInfo.UBytesPerRow + half_x;
             for (uint16_t y = 0; y < half_h; y++) {
-                if (r->has_altivec) {
-                    altivec_fast_memcpy(u_dst, u_src, half_w);
-                } else {
-                    memcpy(u_dst, u_src, half_w);
-                }
+                memcpy(u_dst, u_src, half_w);
                 u_src += half_w;
                 u_dst += yuvInfo.UBytesPerRow;
             }
 
             uint8_t *v_dst = (uint8_t *)yuvInfo.VMemory + (size_t)half_y * yuvInfo.VBytesPerRow + half_x;
             for (uint16_t y = 0; y < half_h; y++) {
-                if (r->has_altivec) {
-                    altivec_fast_memcpy(v_dst, v_src, half_w);
-                } else {
-                    memcpy(v_dst, v_src, half_w);
-                }
+                memcpy(v_dst, v_src, half_w);
                 v_src += half_w;
                 v_dst += yuvInfo.VBytesPerRow;
             }
@@ -1169,14 +1113,116 @@ static BOOL renderer_decode_h264(
         return FALSE;
     }
 
-    r->is_h264_active = TRUE;
-
-    if (!ensure_source_bitmaps(app, w, h, FMT_YUV420P)) {
+    if (!init_h264_decoder(app)) {
         return FALSE;
     }
 
-    if (r->has_va) {
-        ensure_va_surface(app, w, h);
+    AVCodecContext       *avctx  = (AVCodecContext *)r->av_codec_ctx;
+    AVCodecParserContext *parser = (AVCodecParserContext *)r->av_parser;
+    AVFrame              *frame  = (AVFrame *)r->av_frame;
+    AVPacket             *pkt    = (AVPacket *)r->av_packet;
+
+    const uint8_t *cur_ptr = h264_data;
+    int cur_len = (int)h264_len;
+    BOOL got_frame = FALSE;
+
+    while (cur_len > 0) {
+        int parsed_bytes = av_parser_parse2(
+            parser, avctx,
+            &pkt->data, &pkt->size,
+            cur_ptr, cur_len,
+            AV_NOPTS_VALUE, AV_NOPTS_VALUE, 0
+        );
+        if (parsed_bytes < 0) {
+            break;
+        }
+        cur_ptr += parsed_bytes;
+        cur_len -= parsed_bytes;
+
+        if (pkt->size > 0) {
+            int ret = avcodec_send_packet(avctx, pkt);
+            if (ret < 0 && ret != AVERROR(EAGAIN)) {
+                continue;
+            }
+
+            while (avcodec_receive_frame(avctx, frame) == 0) {
+                got_frame = TRUE;
+                uint16_t fw = (uint16_t)frame->width;
+                uint16_t fh = (uint16_t)frame->height;
+                if (fw >= 16 && fh >= 16) {
+                    w = fw;
+                    h = fh;
+                }
+
+                if (frame->format == AV_PIX_FMT_VAAPI) {
+                    /* Zero-Copy Hardware Surface!
+                     * In FFmpeg VA-API hwaccel, frame->data[3] is the VASurfaceID!
+                     */
+                    r->decoded_va_surface = (uint32_t)(uintptr_t)frame->data[3];
+                    r->is_h264_active = TRUE;
+                    r->src_width = w;
+                    r->src_height = h;
+                } else {
+                    /* Software planar YUV420P fallback */
+                    r->decoded_va_surface = 0;
+                    r->is_h264_active = FALSE;
+                    if (!ensure_source_bitmaps(app, w, h, FMT_YUV420P)) {
+                        continue;
+                    }
+                    size_t y_size = (size_t)w * h;
+                    size_t uv_w = w / 2;
+                    size_t uv_h = h / 2;
+                    size_t frame_bytes = (size_t)w * h * 3 / 2;
+
+                    uint32_t needed_cap = frame_bytes + 65536U;
+                    if (r->raw_frame_cap < needed_cap) {
+                        uint32_t alloc_cap = needed_cap;
+                        uint32_t min_fullhd = 1920U * 1080U * 2U;
+                        if (alloc_cap < min_fullhd) alloc_cap = min_fullhd;
+                        uint8_t *new_buf = (uint8_t *)realloc(r->raw_frame_buf, alloc_cap);
+                        if (new_buf) {
+                            r->raw_frame_buf = new_buf;
+                            r->raw_frame_cap = alloc_cap;
+                        }
+                    }
+
+                    if (r->raw_frame_buf && r->raw_frame_cap >= frame_bytes) {
+                        uint8_t *dst_y = r->raw_frame_buf;
+                        uint8_t *dst_u = dst_y + y_size;
+                        uint8_t *dst_v = dst_u + (uv_w * uv_h);
+
+                        for (int y = 0; y < h; y++) {
+                            const uint8_t *s = frame->data[0] + (size_t)y * frame->linesize[0];
+                            uint8_t *d = dst_y + (size_t)y * w;
+                            if (r->has_altivec) altivec_fast_memcpy(d, s, w);
+                            else memcpy(d, s, w);
+                        }
+                        for (int y = 0; y < uv_h; y++) {
+                            const uint8_t *s = frame->data[1] + (size_t)y * frame->linesize[1];
+                            uint8_t *d = dst_u + (size_t)y * uv_w;
+                            if (r->has_altivec) altivec_fast_memcpy(d, s, uv_w);
+                            else memcpy(d, s, uv_w);
+                        }
+                        for (int y = 0; y < uv_h; y++) {
+                            const uint8_t *s = frame->data[2] + (size_t)y * frame->linesize[2];
+                            uint8_t *d = dst_v + (size_t)y * uv_w;
+                            if (r->has_altivec) altivec_fast_memcpy(d, s, uv_w);
+                            else memcpy(d, s, uv_w);
+                        }
+
+                        if (r->src_bm_is_yuv) {
+                            upload_yuv420p_to_bitmap(r, r->src_bm[0], r->raw_frame_buf, w, h);
+                        } else {
+                            upload_yuv420p_to_rgb_bitmap(r, r->src_bm[0], r->raw_frame_buf, w, h, w, h);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (!got_frame) {
+        return TRUE;
     }
 
     r->has_frame = TRUE;
@@ -1352,12 +1398,8 @@ BOOL renderer_decode_and_present(
 
     r->src_format = fmt;
     if (fmt == FMT_YUV420P) {
-        if (r->has_va) {
-            ensure_va_surface(app, w, h);
-            upload_va_surface_yuv420p(r, r->raw_frame_buf, w, h);
-        }
         if (r->src_bm_is_yuv) {
-            upload_yuv420p_to_bitmap(app, r, r->src_bm[0], r->raw_frame_buf, w, h);
+            upload_yuv420p_to_bitmap(r, r->src_bm[0], r->raw_frame_buf, w, h);
         } else {
             upload_yuv420p_to_rgb_bitmap(r, r->src_bm[0], r->raw_frame_buf, w, h, w, h);
         }
@@ -1435,8 +1477,8 @@ void renderer_flush_dirty(VortexApp *app)
     BOOL is_1to1 = (diff_w >= -2 && diff_w <= 2 && diff_h >= -2 && diff_h <= 2);
 
     /* For YUV420P (always full frames), or on initial startup frames (frames_decoded <= 2),
-     * or when scaling is involved, always do a full present so the web page is completely displayed on screen */
-    if (r->src_format == FMT_YUV420P || r->frames_decoded <= 2 || !is_1to1 || r->src_bm_is_yuv) {
+     * or when scaling or VA-API / H.264 is involved, always do a full present so the video/page is completely displayed */
+    if (r->decoded_va_surface || r->is_h264_active || r->src_format == FMT_YUV420P || r->frames_decoded <= 2 || !is_1to1 || r->src_bm_is_yuv) {
         renderer_present(app, app->win->RPort, area);
         r->dirty = FALSE;
         return;
@@ -1510,25 +1552,14 @@ void renderer_present(VortexApp *app, struct RastPort *rp, struct IBox *area)
     uint16_t dw = (uint16_t)(area->Width & ~1);
     uint16_t dh = (uint16_t)(area->Height & ~1);
 
-    if (!r->has_frame || !r->src_bm[0] || dw < 16 || dh < 16 || r->src_width < 16 || r->src_height < 16) {
-        return;
-    }
-
-    struct BitMap *front_bm = r->src_bm[0];
-    uint16_t copy_w = (dw < r->src_width)  ? dw : r->src_width;
-    uint16_t copy_h = (dh < r->src_height) ? dh : r->src_height;
-    int diff_w = (int)dw - (int)r->src_width;
-    int diff_h = (int)dh - (int)r->src_height;
-    BOOL is_1to1 = (diff_w >= -2 && diff_w <= 2 && diff_h >= -2 && diff_h <= 2);
-
     /* VA-API Hardware Video Acceleration: vaPutSurface straight into window RastPort (Radeon HD/RX UVD/VCN) */
-    if (r->has_va && r->va_display && r->va_surface && (r->is_h264_active || r->src_bm_is_yuv)) {
+    if (r->has_va && r->va_display && r->decoded_va_surface && r->is_h264_active) {
         struct VAIFace *iva = (struct VAIFace *)r->iva;
         if (iva && app->win && app->win->WLayer && app->win->RPort && ILayers) {
             ILayers->LockLayer(0, app->win->WLayer);
             VAStatus st = iva->vaPutSurface(
                 r->va_display,
-                (VASurfaceID)r->va_surface,
+                (VASurfaceID)r->decoded_va_surface,
                 VADT_RastPort,
                 app->win->RPort,
                 0, 0,
@@ -1543,6 +1574,17 @@ void renderer_present(VortexApp *app, struct RastPort *rp, struct IBox *area)
             }
         }
     }
+
+    if (!r->has_frame || !r->src_bm[0] || dw < 16 || dh < 16 || r->src_width < 16 || r->src_height < 16) {
+        return;
+    }
+
+    struct BitMap *front_bm = r->src_bm[0];
+    uint16_t copy_w = (dw < r->src_width)  ? dw : r->src_width;
+    uint16_t copy_h = (dh < r->src_height) ? dh : r->src_height;
+    int diff_w = (int)dw - (int)r->src_width;
+    int diff_h = (int)dh - (int)r->src_height;
+    BOOL is_1to1 = (diff_w >= -2 && diff_w <= 2 && diff_h >= -2 && diff_h <= 2);
 
     /* 1:1 RGB BitMap fast-path: direct hardware blit into the window layer */
     if (is_1to1 && !r->src_bm_is_yuv) {
