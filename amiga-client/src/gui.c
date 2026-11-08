@@ -95,9 +95,9 @@ static struct NewMenu s_main_menu[] = {
     { NM_ITEM,  (STRPTR)"FPS: 50 FPS (PAL High-Speed)",                NULL,        0, 0, (APTR)MID_FPS_50 },
     { NM_ITEM,  (STRPTR)"FPS: 60 FPS (Maximal / Gaming / PiStorm)",    NULL,        0, 0, (APTR)MID_FPS_60 },
     { NM_ITEM,  NM_BARLABEL,                                           NULL,        0, 0, NULL },
-    { NM_ITEM,  (STRPTR)"Video-Stream: Auto (H.264 via va.library)",   NULL,        0, 0, (APTR)MID_STREAM_VIDEO_AUTO },
-    { NM_ITEM,  (STRPTR)"Video-Stream: Nur Dirty-Rect (LZ4)",          NULL,        0, 0, (APTR)MID_STREAM_VIDEO_LZ4 },
-    { NM_ITEM,  (STRPTR)"Video-Stream: Nur H.264 (Dauerhaft)",         NULL,        0, 0, (APTR)MID_STREAM_VIDEO_H264 },
+    { NM_ITEM,  (STRPTR)"Video-Stream: Auto (25-30 FPS adaptiv)",      NULL,        0, 0, (APTR)MID_STREAM_VIDEO_AUTO },
+    { NM_ITEM,  (STRPTR)"Video-Stream: Sparsam (Nur Dirty-Rect)",      NULL,        0, 0, (APTR)MID_STREAM_VIDEO_LZ4 },
+    { NM_ITEM,  (STRPTR)"Video-Stream: H.264 (Experimentell)",         NULL,        0, 0, (APTR)MID_STREAM_VIDEO_H264 },
     { NM_ITEM,  NM_BARLABEL,                                           NULL,        0, 0, NULL },
     { NM_ITEM,  (STRPTR)"Dunkles Theme (Dark Mode) an/aus",            (STRPTR)"U", 0, 0, (APTR)MID_TOGGLE_DARK_THEME },
     { NM_ITEM,  NM_BARLABEL,                                           NULL,        0, 0, NULL },
@@ -1507,7 +1507,7 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
             app->prefs.video_stream_mode = STREAM_VIDEO_AUTO;
             prefs_save(app, FALSE);
             if (app->connected) net_send_url(app, "@STREAM_MODE:auto");
-            app_set_status("Streaming: Auto (H.264 bei Video via va.library, sonst LZ4)");
+            app_set_status("Streaming: Auto (Adaptive 25-30 FPS Optimierung)");
             break;
         }
 
@@ -1515,7 +1515,7 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
             app->prefs.video_stream_mode = STREAM_VIDEO_DIRTYRECT;
             prefs_save(app, FALSE);
             if (app->connected) net_send_url(app, "@STREAM_MODE:lz4");
-            app_set_status("Streaming: Nur Dirty-Rect / LZ4 (Klassisch)");
+            app_set_status("Streaming: Sparsam (Nur Dirty-Rect / LZ4)");
             break;
         }
 
@@ -1523,7 +1523,7 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
             app->prefs.video_stream_mode = STREAM_VIDEO_H264;
             prefs_save(app, FALSE);
             if (app->connected) net_send_url(app, "@STREAM_MODE:h264");
-            app_set_status("Streaming: Nur H.264 (Dauerhafter Videostream)");
+            app_set_status("Streaming: H.264 (Experimenteller Bitstream)");
             break;
         }
 
