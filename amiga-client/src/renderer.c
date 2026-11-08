@@ -36,12 +36,13 @@ void renderer_init(VortexApp *app)
 
     /* Probe va.library (Enhancer Software) for Radeon HD/RX hardware video acceleration */
     app->renderer.va_checked = TRUE;
-    app->renderer.va_lib = IExec->OpenLibrary("va.library", 53L);
+    app->renderer.va_lib = IExec->OpenLibrary("va.library", 0L);
     if (app->renderer.va_lib) {
         app->renderer.iva = IExec->GetInterface(app->renderer.va_lib, "main", 1, NULL);
         if (app->renderer.iva) {
             app->renderer.has_va = TRUE;
-            printf("[VortexBrowser] va.library v53+ detected -> Hardware Video Acceleration ACTIVE (Radeon UVD/VCN)\n");
+            printf("[VortexBrowser] va.library %lu.%lu detected -> Hardware Video Acceleration ACTIVE (Radeon UVD/VCN)\n",
+                   (unsigned long)app->renderer.va_lib->lib_Version, (unsigned long)app->renderer.va_lib->lib_Revision);
         } else {
             IExec->CloseLibrary(app->renderer.va_lib);
             app->renderer.va_lib = NULL;

@@ -22,6 +22,7 @@ import logging
 import os
 import platform
 import re
+import select
 import socket
 import subprocess
 import struct
@@ -1505,6 +1506,7 @@ class H264LiveStreamEncoder:
                 "-i", "-",
                 "-vf", "format=nv12,hwupload",
                 "-c:v", "h264_vaapi",
+                "-async_depth", "1",
                 "-b:v", f"{self.bitrate_k}k",
                 "-maxrate", f"{self.bitrate_k * 3 // 2}k",
                 "-bufsize", f"{self.bitrate_k // 2}k",
@@ -1566,17 +1568,18 @@ class H264LiveStreamEncoder:
             self._start_encoder()
             return None
 
+        # Wait up to 40ms for ffmpeg to output the encoded NAL frame
+        r, _, _ = select.select([self._fd], [], [], 0.04)
         chunks = []
-        for _ in range(20):
-            try:
-                chunk = os.read(self._fd, 65536)
-                if not chunk:
+        if r:
+            for _ in range(30):
+                try:
+                    chunk = os.read(self._fd, 65536)
+                    if not chunk:
+                        break
+                    chunks.append(chunk)
+                except (BlockingIOError, OSError):
                     break
-                chunks.append(chunk)
-            except BlockingIOError:
-                break
-            except OSError:
-                break
         return b"".join(chunks) if chunks else None
 
     def stop(self) -> None:
@@ -2717,10 +2720,13 @@ class AmigaClientSession:
             await self.send_packet(hdr + png_bytes)
             return
 
+        cur_url = (self.page.url or "").lower() if self.page else ""
+        is_video_site = any(k in cur_url for k in ("youtube.com/watch", "youtu.be/", "twitch.tv/", "/watch?v="))
+        audio_active = (getattr(self, "last_audio_time", 0.0) > time.monotonic() - 2.0)
         should_h264 = (
             (self.codec_mode == "h264")
             or (self.stream_mode == "h264")
-            or (self.stream_mode == "auto" and (self.is_video_mode or self._video_element_playing))
+            or (self.stream_mode == "auto" and (self.is_video_mode or self._video_element_playing or (is_video_site and audio_active)))
         )
         if should_h264:
             yuv_raw = None
@@ -3018,8 +3024,12 @@ class AmigaClientSession:
             # 1. Real audio streaming active (e.g. YouTube, Twitch)
             audio_active = (getattr(self, "last_audio_time", 0.0) > now_tick - 2.0)
 
-            # 2. Query HTML5 <video> element playback state asynchronously every 0.8 seconds
-            if self.page and (now_tick - self._last_video_eval_time) >= 0.8:
+            # 2. Page URL check (YouTube watch page, Twitch, video platforms)
+            cur_url = (self.page.url or "").lower() if self.page else ""
+            is_video_site = any(k in cur_url for k in ("youtube.com/watch", "youtu.be/", "twitch.tv/", "/watch?v="))
+
+            # 3. Query HTML5 <video> element playback state asynchronously every 0.6 seconds
+            if self.page and (now_tick - self._last_video_eval_time) >= 0.6:
                 self._last_video_eval_time = now_tick
                 async def _eval_video():
                     try:
@@ -3027,20 +3037,31 @@ class AmigaClientSession:
                             is_playing = await asyncio.wait_for(
                                 self.page.evaluate(
                                     """() => {
-                                        if (Array.from(document.querySelectorAll('video')).some(v => !v.paused && !v.ended && v.readyState >= 2)) {
-                                            return true;
-                                        }
-                                        for (const f of document.querySelectorAll('iframe')) {
-                                            try {
-                                                if (f.contentDocument && Array.from(f.contentDocument.querySelectorAll('video')).some(v => !v.paused && !v.ended && v.readyState >= 2)) {
-                                                    return true;
-                                                }
-                                            } catch (e) {}
-                                        }
+                                        try {
+                                            const vids = Array.from(document.querySelectorAll('video'));
+                                            for (const v of vids) {
+                                                if (!v.paused && !v.ended && v.readyState >= 2) return true;
+                                            }
+                                            const yt = document.getElementById('movie_player');
+                                            if (yt && typeof yt.getPlayerState === 'function') {
+                                                const st = yt.getPlayerState();
+                                                if (st === 1 || st === 3) return true;
+                                            }
+                                            for (const f of document.querySelectorAll('iframe')) {
+                                                try {
+                                                    if (f.contentDocument) {
+                                                        const iv = Array.from(f.contentDocument.querySelectorAll('video'));
+                                                        for (const v of iv) {
+                                                            if (!v.paused && !v.ended && v.readyState >= 2) return true;
+                                                        }
+                                                    }
+                                                } catch (e) {}
+                                            }
+                                        } catch (e) {}
                                         return false;
                                     }"""
                                 ),
-                                timeout=0.08,
+                                timeout=0.6,
                             )
                             self._video_element_playing = bool(is_playing)
                     except Exception:
@@ -3049,15 +3070,19 @@ class AmigaClientSession:
                 self.background_tasks.add(t_vid)
                 t_vid.add_done_callback(self.background_tasks.discard)
 
-            if audio_active or self._video_element_playing:
+            video_active = audio_active or self._video_element_playing or (is_video_site and audio_active)
+            if video_active:
                 self._last_video_state_time = now_tick
                 if not self.is_video_mode:
                     self.is_video_mode = True
+                    logger.info("Video playback detected (audio=%s, elem=%s, site=%s) -> Entering Video Stream mode",
+                                audio_active, self._video_element_playing, is_video_site)
                     await self._set_screencast_quality(self.video_jpeg_quality)
             elif self.is_video_mode:
                 # Video ended/paused; wait 3.0s of static/quiet before restoring crisp high quality (e.g. q80)
                 if (now_tick - self._last_video_state_time) >= 3.0:
                     self.is_video_mode = False
+                    logger.info("Video playback ended/idle -> Restoring standard browsing mode")
                     await self._set_screencast_quality(self.base_jpeg_quality)
 
             t0 = time.monotonic()
