@@ -126,12 +126,15 @@ AUDIO_CHANNELS      = 2
 AUDIO_CHUNK_BYTES   = 8192  # ~92ms of 22050Hz 16-bit stereo PCM
 AUDIO_SINK_NAME     = "vortexbrowse_sink"
 
+_LOG_LEVEL_STR = os.environ.get("VORTEX_LOG_LEVEL", "CRITICAL").upper()
+_LOG_LEVEL = getattr(logging, _LOG_LEVEL_STR, logging.CRITICAL)
 logging.basicConfig(
-    level=logging.INFO,
+    level=_LOG_LEVEL,
     format="[%(asctime)s] [VortexServer] %(levelname)s: %(message)s",
     datefmt="%H:%M:%S",
 )
 logger = logging.getLogger("VortexServer")
+logger.setLevel(_LOG_LEVEL)
 
 AMIGA_RAWKEY_MAP = {
     0x40: "Space",
@@ -1559,29 +1562,35 @@ class H264LiveStreamEncoder:
     def encode_frame(self, yuv_bytes: bytes) -> Optional[bytes]:
         if not self.proc or not self.proc.stdin or self._fd is None:
             return None
-        if self.proc.poll() is not None:
-            self._start_encoder()
-            if not self.proc or not self.proc.stdin or self._fd is None:
-                return None
         try:
+            if self.proc.poll() is not None:
+                self._start_encoder()
+                if not self.proc or not self.proc.stdin or self._fd is None:
+                    return None
             self.proc.stdin.write(yuv_bytes)
             self.proc.stdin.flush()
-        except (BrokenPipeError, OSError):
+        except (BrokenPipeError, OSError, ValueError, Exception):
             self._start_encoder()
             return None
 
+        if self._fd is None or not isinstance(self._fd, int) or self._fd < 0:
+            return None
+
         # Wait up to 40ms for ffmpeg to output the encoded NAL frame
-        r, _, _ = select.select([self._fd], [], [], 0.04)
         chunks = []
-        if r:
-            for _ in range(30):
-                try:
-                    chunk = os.read(self._fd, 65536)
-                    if not chunk:
+        try:
+            r, _, _ = select.select([self._fd], [], [], 0.04)
+            if r:
+                for _ in range(30):
+                    try:
+                        chunk = os.read(self._fd, 65536)
+                        if not chunk:
+                            break
+                        chunks.append(chunk)
+                    except (BlockingIOError, OSError):
                         break
-                    chunks.append(chunk)
-                except (BlockingIOError, OSError):
-                    break
+        except Exception:
+            return None
         return b"".join(chunks) if chunks else None
 
     def stop(self) -> None:
@@ -1597,7 +1606,7 @@ class H264LiveStreamEncoder:
                 except Exception:
                     pass
             self.proc = None
-            self._fd = None
+        self._fd = None
 
 
 # ============================================================================
@@ -1622,7 +1631,7 @@ class AmigaClientSession:
         codec_mode: str = "auto",
         engine: str = "chromium",
         stream_mode: str = "auto",
-        video_bitrate: int = 4000,
+        video_bitrate: int = 8000,
     ):
         self.reader = reader
         self.writer = writer
@@ -5204,7 +5213,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--browser-bin", default=None, help="Explicit path to Chromium or Ungoogled-Chromium executable")
     parser.add_argument("--codec", choices=["auto", "jpeg", "lz4", "h264"], default="auto", help="Streaming codec (default: auto)")
     parser.add_argument("--stream-mode", choices=["auto", "lz4", "h264"], default="auto", help="Video streaming mode (default: auto = adaptive H.264 on video, LZ4 otherwise)")
-    parser.add_argument("--video-bitrate", type=int, default=4000, help="H.264 video stream bitrate in kbps (default: 4000 kbps)")
+    parser.add_argument("--video-bitrate", type=int, default=8000, help="H.264 video stream bitrate in kbps (default: 8000 kbps)")
+    parser.add_argument(
+        "--log-level",
+        choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"],
+        default=os.environ.get("VORTEX_LOG_LEVEL", "CRITICAL").upper(),
+        help="Logging verbosity (default: CRITICAL) [env: VORTEX_LOG_LEVEL]",
+    )
     parser.add_argument("--jpeg-quality", type=int, default=82, help="JPEG capture quality 20-100 (default: 82 for Full HD 1080p@25fps)")
     parser.add_argument("--enable-extensions", dest="enable_extensions", action="store_true", default=True, help="Enable browser extensions (uBlock, h264ify) [default: enabled]")
     parser.add_argument("--disable-extensions", dest="enable_extensions", action="store_false", help="Disable all browser extensions")
@@ -5220,7 +5235,12 @@ def parse_args() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
+    args = parse_args()
+    if hasattr(args, "log_level"):
+        lvl = getattr(logging, args.log_level.upper(), logging.CRITICAL)
+        logger.setLevel(lvl)
+        logging.getLogger().setLevel(lvl)
     try:
-        asyncio.run(run_server(parse_args()))
+        asyncio.run(run_server(args))
     except KeyboardInterrupt:
         logger.info("VortexBrowse Server stopped.")

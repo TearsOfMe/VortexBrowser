@@ -94,7 +94,7 @@ void prefs_init(VortexApp *app)
     app->prefs.target_fps                   = 25;  /* Default: 25 FPS (PAL Standard) */
     app->prefs.jpeg_quality                 = 100; /* Default: 100% */
     app->prefs.video_stream_mode            = STREAM_VIDEO_AUTO; /* Default: Auto (H.264 bei Video via va.library) */
-    app->prefs.video_bitrate_k              = 4000; /* Default: 4000 kbps (4 Mbit/s) */
+    app->prefs.video_bitrate_k              = 8000; /* Default: 8000 kbps (8 Mbit/s) */
     app->prefs.dynamic_video_quality        = TRUE;
     app->prefs.save_server_on_exit          = TRUE;
     strncpy(app->prefs.download_dir, "RAM:", sizeof(app->prefs.download_dir) - 1);
@@ -499,7 +499,7 @@ static BOOL save_to_file(const VortexApp *app, const char *path)
     fprintf(fp, "target_fps=%u\n", (unsigned)(app->prefs.target_fps ? app->prefs.target_fps : 25));
     fprintf(fp, "jpeg_quality=%u\n", (unsigned)(app->prefs.jpeg_quality ? app->prefs.jpeg_quality : 100));
     fprintf(fp, "video_stream_mode=%u\n", (unsigned)app->prefs.video_stream_mode);
-    fprintf(fp, "video_bitrate=%u\n", (unsigned)(app->prefs.video_bitrate_k ? app->prefs.video_bitrate_k : 4000));
+    fprintf(fp, "video_bitrate=%u\n", (unsigned)(app->prefs.video_bitrate_k ? app->prefs.video_bitrate_k : 8000));
     fprintf(fp, "dynamic_video_quality=%d\n", app->prefs.dynamic_video_quality ? 1 : 0);
     fprintf(fp, "save_server_on_exit=%d\n\n", app->prefs.save_server_on_exit ? 1 : 0);
 
@@ -721,7 +721,7 @@ void prefs_apply(VortexApp *app)
         }
 
         /* Video Bitrate */
-        uint16_t br = (app->prefs.video_bitrate_k >= 500 && app->prefs.video_bitrate_k <= 10000) ? app->prefs.video_bitrate_k : 4000;
+        uint16_t br = (app->prefs.video_bitrate_k >= 500 && app->prefs.video_bitrate_k <= 10000) ? app->prefs.video_bitrate_k : 8000;
         char brcmd[32];
         snprintf(brcmd, sizeof(brcmd), "@VIDEO_BITRATE:%u", (unsigned)br);
         net_send_url(app, brcmd);

@@ -93,25 +93,25 @@ if [ -n "$AMIGA_FTP_AUTH" ] && [ -n "$AMIGA_FTP_HOST" ]; then
     FTP_BASE_DIR="${AMIGA_FTP_DIR:-/Work2/VortexBrowser}"
     FTP_URL="ftp://${FTP_HOST}${FTP_BASE_DIR}"
 
-    if curl -s --connect-timeout 2 --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd "ftp://${FTP_HOST}/Work2/" >/dev/null 2>&1; then
+    if curl -s --connect-timeout 2 --max-time 5 --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd "ftp://${FTP_HOST}/Work2/" >/dev/null 2>&1; then
         echo "=== Auto-Uploading to Amiga FTP (${FTP_URL}) ==="
-        curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser.stripped" "${FTP_URL}/VortexBrowser" >/dev/null 2>&1 || true
-        curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.stripped" "${FTP_URL}/VortexBrowser-AltiVec" >/dev/null 2>&1 || true
-        curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI.stripped" "${FTP_URL}/VortexBrowser-MUI" >/dev/null 2>&1 || true
-        [ -f "${SCRIPT_DIR}/amiga-client/VortexBrowser.info" ] && curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser.info" "${FTP_URL}/VortexBrowser.info" >/dev/null 2>&1 || true
-        [ -f "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI.info" ] && curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI.info" "${FTP_URL}/VortexBrowser-MUI.info" >/dev/null 2>&1 || true
-        [ -f "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.info" ] && curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.info" "${FTP_URL}/VortexBrowser-AltiVec.info" >/dev/null 2>&1 || true
-        [ -f "${SCRIPT_DIR}/amiga-client/VortexBrowser_drawer.info" ] && curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser_drawer.info" "${FTP_URL}.info" >/dev/null 2>&1 || true
+        curl -s --max-time 15 --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser.stripped" "${FTP_URL}/VortexBrowser" >/dev/null 2>&1 || true
+        curl -s --max-time 15 --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.stripped" "${FTP_URL}/VortexBrowser-AltiVec" >/dev/null 2>&1 || true
+        curl -s --max-time 15 --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI.stripped" "${FTP_URL}/VortexBrowser-MUI" >/dev/null 2>&1 || true
+        [ -f "${SCRIPT_DIR}/amiga-client/VortexBrowser.info" ] && curl -s --max-time 10 --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser.info" "${FTP_URL}/VortexBrowser.info" >/dev/null 2>&1 || true
+        [ -f "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI.info" ] && curl -s --max-time 10 --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser-MUI.info" "${FTP_URL}/VortexBrowser-MUI.info" >/dev/null 2>&1 || true
+        [ -f "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.info" ] && curl -s --max-time 10 --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.info" "${FTP_URL}/VortexBrowser-AltiVec.info" >/dev/null 2>&1 || true
+        [ -f "${SCRIPT_DIR}/amiga-client/VortexBrowser_drawer.info" ] && curl -s --max-time 10 --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexBrowser_drawer.info" "${FTP_URL}.info" >/dev/null 2>&1 || true
         if [ -d "${SCRIPT_DIR}/amiga-client/alt-icons" ]; then
-            [ -f "${SCRIPT_DIR}/amiga-client/alt-icons/VortexBrowser_drawer.info" ] && curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/alt-icons/VortexBrowser_drawer.info" "${FTP_URL}/Alternative-Icons.info" >/dev/null 2>&1 || true
+            [ -f "${SCRIPT_DIR}/amiga-client/alt-icons/VortexBrowser_drawer.info" ] && curl -s --max-time 10 --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/alt-icons/VortexBrowser_drawer.info" "${FTP_URL}/Alternative-Icons.info" >/dev/null 2>&1 || true
             for af in "${SCRIPT_DIR}/amiga-client/alt-icons/"*.info; do
-                [ -f "$af" ] && curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd --ftp-create-dirs -T "$af" "${FTP_URL}/Alternative-Icons/$(basename "$af")" >/dev/null 2>&1 || true
+                [ -f "$af" ] && curl -s --max-time 10 --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd --ftp-create-dirs -T "$af" "${FTP_URL}/Alternative-Icons/$(basename "$af")" >/dev/null 2>&1 || true
             done
         fi
         LHA_FILE=$(ls -t "${SCRIPT_DIR}/dist/VortexBrowser-"*"-AmigaOS4.lha" 2>/dev/null | head -n1 || true)
         if [ -n "$LHA_FILE" ]; then
             LHA_NAME=$(basename "$LHA_FILE")
-            curl -s --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${LHA_FILE}" "${FTP_URL}/${LHA_NAME}" >/dev/null 2>&1 || true
+            curl -s --max-time 30 --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${LHA_FILE}" "${FTP_URL}/${LHA_NAME}" >/dev/null 2>&1 || true
         fi
         echo "[+] Amiga FTP updated successfully!"
     fi

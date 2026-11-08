@@ -24,12 +24,13 @@ VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwrigh
    - **Standard ReAction (`VortexBrowser` & `VortexBrowser-AltiVec`):** Klassisches AmigaOS 4 System-Look-and-Feel mit Tabs (`clicktab.gadget`), Font-Zoom, Screen-Cloning und GPU-Composite-Skalierung.
    - **MUI Edition (`VortexBrowser-MUI` im Odyssey Web Browser Look):**
      - Exakt nachempfundene Benutzeroberfläche des beliebten AmigaOS 4 Odyssey Web Browsers:
-       - **Navigationsleiste (`navigationgroup`):** Schnellzugriff auf `<` (Zurück), `>` (Vorwärts), `Neu`, `Stopp`, `Start`, `Lesezeichen`, `Downloads`, `Passwörter`, `+ Tab`, `- Tab` und animierter Lade-Throbber.
-       - **Adress- & Suchzeile (`urlgroup`):** Sicherheits-Indikator (`[🔒 https]` / `[🌐 http]`), URL-Eingabezeile, `[X]`, `[Los]`, interaktiver `BalanceObject`-Teiler und Suchleiste mit Suchmaschinen-Wahl (`DuckDuckGo`, `Google`, `Wikipedia`, `Aminet`, `OS4Depot`, `YouTube`).
-       - **Schnellwahlleiste (`fastlinkparentgroup`):** Lesezeichen-Buttons mit Favicons, `+Lesez.`, Server-Schnellauswahl und Verbinden-Button.
-       - **Integrierte Tableiste:** Direkt über dem Web-Viewport mit dynamischen Tab-Titeln, Hervorhebung des aktiven Tabs, Tab-Schließen-Buttons `[x]` und neuem Tab `[+]`.
-       - **Segmentierte Statusleiste (`statusgroup`):** Aufgeteilt in Sicherheits-Zone (`[🔒 Sicher]`), vertikale Trennbalken, Statusmeldung / Hover-URLs, Fortschrittsbalken und Hardware-Stream-Status (`25 FPS | 4000 kbps | VA-API HW`).
-       - **Menüstruktur:** Entspricht der bekannten Odyssey-Menüführung inklusive Video-Bitrateneinstellungen bis 10.000 kbps.
+       - **Navigationsleiste (`navigationgroup`):** Schnellzugriff auf `<` (Zurück), `>` (Vorwärts), `Neu`, `Stopp`, `Start`, `Downloads`, `Passwörter`, flexibler Abstandhalter und animierter Lade-Throbber.
+       - **Schnellwahlleiste (`fastlinkparentgroup`):** Lesezeichen-Buttons mit Favicons, flexibler Abstandhalter, Server-Schnellauswahl und Verbinden-Button.
+       - **Adress- & Suchzeile (`urlgroup`):** `+ Tab` Button, Sicherheits-Indikator (`[🔒 https]` / `[🌐 http]`), URL-Eingabezeile, `[X]`, `[Los]`, Trenner, `+Lesez.`, Lesezeichen-Dropdown, interaktiver `BalanceObject`-Teiler und Suchleiste mit Suchmaschinen-Wahl (`DuckDuckGo`, `Google`, `Wikipedia`, `Aminet`, `OS4Depot`, `YouTube`).
+       - **Integrierte Tableiste & Web-Viewport (`pagegroup`):** Nahtlos im nativen Register-Rahmen (`MUIV_Frame_Register` mit `MUII_RegisterBack`) gebündelt – mit dynamischen Tab-Titeln, optisch verschmolzenem aktivem Tab, Tab-Schließen-Buttons `[x]`, neuem Tab `[+]` und direkt angeschlossenem Web-Viewport.
+       - **Segmentierte Statusleiste (`statusgroup`):** Aufgeteilt in Sicherheits-Zone (`[🔒 Sicher]`), vertikale Trennbalken, Statusmeldung / Hover-URLs, Fortschrittsbalken und Hardware-Stream-Status (`Stream: Auto [H.264 VA-API HW] | 25 FPS | 8000 kbps`).
+       - **Menüstruktur:** Entspricht der bekannten Odyssey-Menüführung inklusive Video-Bitrateneinstellungen (Standard: 8000 kbps, bis 10.000 kbps).
+       - **Lautloser Start:** Keine Shell-/Konsolen-Ausgaben beim Programmstart; das aktive Streaming-System wird übersichtlich direkt in der Statusleiste angezeigt.
 
 3. **Multi-Tab-Browsing & Sitzungswiederherstellung:**
    - Echte Tabs über `clicktab.gadget` mit AmigaOS 4 Standard-Bedienung (`Amiga+T` für neuen Tab, `Amiga+W` zum Schließen).

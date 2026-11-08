@@ -148,6 +148,7 @@ typedef struct RendererState {
     uint32_t       decoded_va_surface; /* VASurfaceID of decoded video frame */
     BOOL           h264_decoder_init;
     BOOL           is_h264_active; /* TRUE if currently receiving CODEC_H264 stream */
+    uint8_t        last_codec;     /* Last received CODEC_ type (CODEC_LZ4, CODEC_LZ4_RECT, CODEC_H264, etc.) */
     BOOL           src_bm_is_16bit;/* TRUE if src_bm[0] is 16-bit PIXF_R5G6B5 */
     BOOL           src_bm_is_yuv;  /* TRUE if src_bm[0] is PIXF_YUV420P */
     BOOL           yuv_hw_disabled;/* TRUE if RTG driver does not support hardware YUV420P CompositeTags */
@@ -226,6 +227,7 @@ typedef struct VortexApp {
     Object        *mui_tab_btn[VB_MAX_TABS];
     Object        *mui_tab_close_btn[VB_MAX_TABS];
     Object        *mui_btn_add_tab;
+    Object        *mui_tab_spacer;
     int            mui_search_engine_idx;
     BOOL           mui_loading;
     uint32         mui_throbber_step;

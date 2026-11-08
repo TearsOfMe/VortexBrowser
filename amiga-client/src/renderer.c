@@ -1251,12 +1251,15 @@ BOOL renderer_decode_and_present(
     uint8_t  codec = hdr->codec;
     uint32_t bpp   = (fmt == FMT_RGB565) ? 2U : (fmt == FMT_YUV420P) ? 1U : 4U;
 
+    r->last_codec = codec;
+    if (codec == CODEC_H264) {
+        r->is_h264_active = TRUE;
+        return renderer_decode_h264(app, lz4_data, lz4_len, w, h);
+    }
+    r->is_h264_active = FALSE;
+
     if (codec == CODEC_JPEG) {
         return renderer_decode_jpeg(app, lz4_data, lz4_len, w, h);
-    }
-
-    if (codec == CODEC_H264) {
-        return renderer_decode_h264(app, lz4_data, lz4_len, w, h);
     }
 
     /* CODEC_LZ4_RECT (4): 2D Dirty Bounding Box [MsgRectHdr: x, y, w, h] + LZ4 */
