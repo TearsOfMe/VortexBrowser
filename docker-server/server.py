@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-VortexBrowse - CachyOS / Linux Browser Streaming Server for AmigaOS 4.1 PowerPC
-- Streams LZ4-compressed Big-Endian frames & dirty scanline bands (RGB565 / ARGB32)
+VortexBrowse - CachyOS HP EliteDesk 805 G6 (AMD Ryzen PRO / Radeon Vega) Edition
+- Specially tuned for Full HD (1920x1080) @ 25 FPS streaming to AmigaOS 4.1 PowerPC
+- Uses C-native AVX2 + OpenMP + libturbojpeg + liblz4 pipeline (encode_jpeg_to_frame_packet)
+- Streams 12-bpp Planar YUV420P with 2D Dirty-Rect (CODEC_LZ4_RECT) & full-frame LZ4
 - Captures real browser audio via PipeWire/PulseAudio virtual sink (full Chromium + ozone-headless)
   and streams 22050Hz S16BE Stereo PCM to AmigaOS 4 AHI (ahi.device)
-- Provides an interactive Right-Click Context Menu on links/images/pages (Open Link, ASL Download, Back, etc.)
-- Maintains an explicit redirect-proof navigation history stack for reliable Back/Forward navigation
 """
 
 import argparse
@@ -33,9 +33,34 @@ import urllib.request
 from typing import Dict, List, Optional, Tuple, Union
 from urllib.parse import parse_qs, quote_plus, unquote, urlencode, urlparse
 
+import json
 import lz4.block
 from PIL import Image
-from playwright.async_api import async_playwright, Browser, BrowserContext, Page, Download, CDPSession, Frame
+
+try:
+    import websockets
+    _HAS_WEBSOCKETS = True
+except ImportError:
+    websockets = None  # type: ignore
+    _HAS_WEBSOCKETS = False
+
+try:
+    from rustwright.async_api import (
+        async_playwright as _rustwright_async,
+        Browser,
+        BrowserContext,
+        Page,
+        Download,
+        CDPSession,
+        Frame,
+    )
+    _HAS_RUSTWRIGHT = True
+except ImportError:
+    _rustwright_async = None
+    _HAS_RUSTWRIGHT = False
+    from playwright.async_api import Browser, BrowserContext, Page, Download, CDPSession, Frame
+
+from playwright.async_api import async_playwright as _playwright_async
 
 # ============================================================================
 # Protocol Constants (matching common/protocol.h with #pragma pack(push, 2))
@@ -51,6 +76,10 @@ MSG_NAV_UPDATE        = 0x08
 MSG_CONTEXT_MENU      = 0x09
 MSG_PAGE_PROGRESS     = 0x0A
 MSG_CLIPBOARD         = 0x0B
+MSG_UPLOAD_REQUEST    = 0x0C
+MSG_UPLOAD_RESPONSE   = 0x0D
+MSG_UPLOAD_CHUNK      = 0x0E
+MSG_PASSWORD_SAVE     = 0x0F
 
 FMT_ARGB32 = 1
 FMT_RGB565 = 2
@@ -88,6 +117,10 @@ STRUCT_MSG_AUDIO        = struct.Struct(">BHBBII")
 STRUCT_MSG_NAV_UPDATE   = struct.Struct(">B512s")
 STRUCT_MSG_CTX_MENU     = struct.Struct(">B512s128s512s")
 STRUCT_MSG_PROGRESS     = struct.Struct(">BBx64s")
+STRUCT_MSG_UPLOAD_REQ   = struct.Struct(">BII256s")
+STRUCT_MSG_UPLOAD_RESP  = struct.Struct(">IIBB256s")
+STRUCT_MSG_UPLOAD_CHUNK = struct.Struct(">BII")
+STRUCT_MSG_PASSWORD_SAVE = struct.Struct(">B256s128s128s")
 
 DOWNLOAD_CHUNK_SIZE = 64 * 1024
 AUDIO_SAMPLE_RATE   = 22050
@@ -135,87 +168,56 @@ AMIGA_RAWKEY_MAP = {
 
 
 # ============================================================================
-# Dynamic CPU Governor Management (Performance Mode on Activity)
+# Dynamic Power Profile Management via powerprofilesctl (Performance on Activity)
 # ============================================================================
 class CPUGovernorManager:
-    """Manages CPU scaling governor on Linux/Raspberry Pi.
-    Sets all CPU cores to 'performance' when an Amiga client connects (or when streaming is active),
-    and restores the previous governor (e.g. 'schedutil' or 'ondemand') when clients disconnect or on shutdown.
+    """Manages CPU power scaling profile via 'powerprofilesctl' (NOT cpufreq).
+    Switches the system power profile to 'performance' when an Amiga client connects,
+    and restores the previous profile (e.g. 'balanced' or 'power-saver') when clients
+    disconnect or on shutdown.
     """
     def __init__(self, enabled: bool = True):
         self.enabled = enabled
-        self.prev_governors: Dict[str, str] = {}
+        self.prev_profile: Optional[str] = None
         self.active_count = 0
         self.is_performance = False
         self._lock = asyncio.Lock()
-        self._use_sudo = False
 
         if self.enabled:
-            paths = self._get_cpu_governor_paths()
-            if not paths:
+            cur = self.read_current_profile()
+            if not cur:
                 self.enabled = False
-            else:
-                test_path = paths[0]
-                can_write = False
-                try:
-                    cur = open(test_path, "r").read().strip()
-                    with open(test_path, "w") as f:
-                        f.write(f"{cur}\n")
-                    can_write = True
-                except Exception:
-                    pass
-
-                if not can_write:
-                    # Test non-interactive sudo (-n) once. Never prompt interactively!
-                    try:
-                        res = subprocess.run(["sudo", "-n", "true"], capture_output=True, timeout=1.0)
-                        if res.returncode == 0:
-                            self._use_sudo = True
-                            can_write = True
-                    except Exception:
-                        pass
-
-                if not can_write:
-                    self.enabled = False
-                    logger.debug("[CPU Power] CPU governor management disabled (no direct write or passwordless sudo permissions).")
+                logger.debug("[CPU Power] powerprofilesctl not available or inactive.")
 
     @staticmethod
-    def _get_cpu_governor_paths() -> List[str]:
-        return sorted(glob.glob("/sys/devices/system/cpu/cpu[0-9]*/cpufreq/scaling_governor"))
+    def read_current_profile() -> Optional[str]:
+        try:
+            res = subprocess.run(
+                ["powerprofilesctl", "get"],
+                capture_output=True,
+                text=True,
+                timeout=2.0,
+            )
+            if res.returncode == 0 and res.stdout.strip():
+                return res.stdout.strip()
+        except Exception:
+            pass
+        return None
 
-    def read_current_governors(self) -> Dict[str, str]:
-        govs = {}
-        for path in self._get_cpu_governor_paths():
-            try:
-                with open(path, "r") as f:
-                    govs[path] = f.read().strip()
-            except Exception:
-                pass
-        return govs
-
-    def set_governor(self, gov_name: str) -> bool:
+    def set_profile(self, profile_name: str) -> bool:
         if not self.enabled:
             return False
-        paths = self._get_cpu_governor_paths()
-        if not paths:
+        try:
+            res = subprocess.run(
+                ["powerprofilesctl", "set", profile_name],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=2.0,
+            )
+            return res.returncode == 0
+        except Exception:
             return False
-        success = False
-        if self._use_sudo:
-            cmd = " && ".join(f"echo {gov_name} > {p}" for p in paths)
-            try:
-                res = subprocess.run(["sudo", "-n", "sh", "-c", cmd], check=False, capture_output=True, timeout=2.0)
-                success = (res.returncode == 0)
-            except Exception:
-                pass
-        else:
-            for path in paths:
-                try:
-                    with open(path, "w") as f:
-                        f.write(f"{gov_name}\n")
-                    success = True
-                except Exception:
-                    pass
-        return success
 
     async def client_connected(self) -> None:
         if not self.enabled:
@@ -223,14 +225,14 @@ class CPUGovernorManager:
         async with self._lock:
             self.active_count += 1
             if self.active_count == 1 and not self.is_performance:
-                cur = self.read_current_governors()
-                if cur and not self.prev_governors:
-                    self.prev_governors = cur
-                if self.set_governor("performance"):
+                cur = self.read_current_profile()
+                if cur and not self.prev_profile:
+                    self.prev_profile = cur
+                if self.set_profile("performance"):
                     self.is_performance = True
-                    logger.info("[CPU Power] Amiga client active -> CPU Governor switched to PERFORMANCE (maximum render speed)")
+                    logger.info("[CPU Power] Amiga client active -> powerprofilesctl switched to 'performance' (was '%s')", self.prev_profile or "default")
                 else:
-                    logger.debug("[CPU Power] Could not set CPU governor to performance")
+                    logger.debug("[CPU Power] Could not set powerprofilesctl to performance")
 
     async def client_disconnected(self) -> None:
         if not self.enabled:
@@ -238,27 +240,24 @@ class CPUGovernorManager:
         async with self._lock:
             self.active_count = max(0, self.active_count - 1)
             if self.active_count == 0 and self.is_performance:
+                restored_to = self.prev_profile or "balanced"
                 self.restore()
-                restored_to = list(self.prev_governors.values())[0] if self.prev_governors else "default"
-                logger.info("[CPU Power] No active clients -> CPU Governor restored to '%s'", restored_to)
+                logger.info("[CPU Power] No active clients -> powerprofilesctl restored to '%s'", restored_to)
 
     def restore(self) -> None:
-        if self.is_performance and self.prev_governors:
-            if self._use_sudo:
-                cmds = [f"echo {gov} > {path}" for path, gov in self.prev_governors.items()]
-                cmd = " && ".join(cmds)
-                try:
-                    subprocess.run(["sudo", "-n", "sh", "-c", cmd], check=False, capture_output=True, timeout=2.0)
-                except Exception:
-                    pass
-            else:
-                for path, gov in self.prev_governors.items():
-                    try:
-                        with open(path, "w") as f:
-                            f.write(f"{gov}\n")
-                    except Exception:
-                        pass
+        if self.is_performance:
+            target = self.prev_profile if (self.prev_profile and self.prev_profile != "performance") else "balanced"
+            try:
+                subprocess.run(
+                    ["powerprofilesctl", "set", target],
+                    check=False,
+                    capture_output=True,
+                    timeout=2.0,
+                )
+            except Exception:
+                pass
             self.is_performance = False
+            self.prev_profile = None
 
 
 cpu_gov_global: Optional[CPUGovernorManager] = None
@@ -351,33 +350,66 @@ def unmute_all_browser_sink_inputs() -> None:
         pass
 
 
+def is_snap_binary(path: str) -> bool:
+    """Returns True if the given browser binary is an Ubuntu Snap wrapper."""
+    if not path or not os.path.exists(path):
+        return False
+    if "/snap/" in path or path.startswith("/snap/"):
+        return True
+    try:
+        real = os.path.realpath(path)
+        if "/snap/" in real or real.startswith("/snap/"):
+            return True
+        if os.path.isfile(path) and not os.path.islink(path):
+            with open(path, "rb") as f:
+                header = f.read(512)
+                if b"/snap" in header or b"snap run" in header:
+                    return True
+    except Exception:
+        pass
+    return False
+
+
 def find_full_chromium_executable(custom_bin: Optional[str] = None) -> Optional[str]:
     """
     Finds the full Chromium / Ungoogled-Chromium binary on Linux (x86_64, aarch64, Raspberry Pi 4).
-    Uses full Chromium instead of chrome-headless-shell so that PipeWire / PulseAudio
-    audio output is fully functional.
+    Prefers native (non-snap) binaries and Playwright's native Chromium over Ubuntu Snap wrappers
+    to avoid AppArmor confinement and permission issues.
     """
     if custom_bin and os.path.isfile(custom_bin) and os.access(custom_bin, os.X_OK):
         return custom_bin
 
-    priority_patterns = [
+    # Check for configured browser from installer in browser_bin.txt
+    cfg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "browser_bin.txt")
+    if os.path.exists(cfg_path):
+        try:
+            with open(cfg_path, "r", encoding="utf-8") as f:
+                saved = f.readline().strip()
+            if saved and os.path.isfile(saved) and os.access(saved, os.X_OK):
+                return saved
+        except Exception:
+            pass
+
+    # Tier 1: Real native installed browsers (.deb / native packages)
+    native_patterns = [
         os.path.expanduser("~/.local/opt/ungoogled-chromium/usr/lib/chromium/chromium"),
         os.path.expanduser("~/.local/bin/ungoogled-chromium"),
         "/usr/bin/ungoogled-chromium",
         "/usr/lib/ungoogled-chromium/ungoogled-chromium",
+        "/usr/bin/google-chrome-stable",
+        "/usr/bin/google-chrome",
         "/usr/bin/brave-browser",
         "/usr/bin/brave",
         "/usr/bin/chromium-browser",
         "/usr/bin/chromium",
         "/usr/lib/chromium-browser/chromium-browser",
         "/usr/lib/chromium/chromium",
-        "/snap/bin/chromium",
     ]
-    for p in priority_patterns:
-        if os.path.isfile(p) and os.access(p, os.X_OK):
+    for p in native_patterns:
+        if os.path.isfile(p) and os.access(p, os.X_OK) and not is_snap_binary(p):
             return p
 
-    # Fallback to playwright cache (newest version first)
+    # Tier 2: Playwright native Chromium (clean, standalone, no snap confinement, has audio!)
     pw_patterns = [
         os.path.expanduser("~/.cache/ms-playwright/chromium-*/chrome-linux64/chrome"),
         os.path.expanduser("~/.cache/ms-playwright/chromium-*/chrome-linux/chrome"),
@@ -389,6 +421,18 @@ def find_full_chromium_executable(custom_bin: Optional[str] = None) -> Optional[
     for c in candidates:
         if os.path.isfile(c) and os.access(c, os.X_OK):
             return c
+
+    # Tier 3: Ubuntu Snap Chromium as last fallback (may have confinement issues)
+    snap_patterns = [
+        "/usr/bin/chromium-browser",
+        "/usr/bin/chromium",
+        "/snap/bin/chromium",
+    ]
+    for p in snap_patterns:
+        if os.path.isfile(p) and os.access(p, os.X_OK):
+            logger.warning("Using Ubuntu Snap Chromium (%s) as fallback. Snap may enforce strict AppArmor restrictions.", p)
+            return p
+
     return None
 
 
@@ -446,7 +490,7 @@ PORTAL_HTML = """<!DOCTYPE html>
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<title>VortexBrowse - AmigaOS 4.1 Edition</title>
+<title>VortexBrowser - Startseite &amp; Schnellwahl</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -516,7 +560,7 @@ PORTAL_HTML = """<!DOCTYPE html>
     border-color: #2563eb;
     box-shadow: 0 0 0 2px rgba(37,99,235,0.25);
   }
-  .btn-search, .btn-vortex {
+  .btn-search, .btn-action {
     padding: 8px 16px;
     border-radius: 4px;
     border: 1px solid #64748b;
@@ -529,11 +573,11 @@ PORTAL_HTML = """<!DOCTYPE html>
     display: inline-block;
     box-shadow: 0 1px 2px rgba(0,0,0,0.12);
   }
-  .btn-search:hover, .btn-vortex:hover {
+  .btn-search:hover, .btn-action:hover {
     background: linear-gradient(180deg, #ffffff 0%, #e2e8f0 100%);
     border-color: #475569;
   }
-  .btn-search:active, .btn-vortex:active {
+  .btn-search:active, .btn-action:active {
     background: #cbd5e1;
     box-shadow: inset 0 1px 3px rgba(0,0,0,0.25);
   }
@@ -645,12 +689,12 @@ PORTAL_HTML = """<!DOCTYPE html>
     .search-bar input:focus {
       border-color: #3b82f6;
     }
-    .btn-search, .btn-vortex {
+    .btn-search, .btn-action {
       background: linear-gradient(180deg, #3f3f46 0%, #27272a 100%);
       border-color: #52525b;
       color: #f4f4f5;
     }
-    .btn-search:hover, .btn-vortex:hover {
+    .btn-search:hover, .btn-action:hover {
       background: linear-gradient(180deg, #52525b 0%, #3f3f46 100%);
     }
     .card {
@@ -706,7 +750,7 @@ function playAmigaSynth() {
 <body>
   <div class="header">
     <div class="title-box">
-      <h1>VortexBrowse - AmigaOS 4.1 Edition</h1>
+      <h1>VortexBrowser &bull; Startseite &amp; Schnellwahl</h1>
       <p>Schnellwahl &bull; Turbo LZ4-Streaming &bull; AHI Stereo-Audio &bull; AmigaOS 4 Kontextmen&uuml; &bull; ASL Download</p>
     </div>
     <div class="badge">AmigaOS 4.1 PPC</div>
@@ -738,7 +782,7 @@ function playAmigaSynth() {
           <p>Aktuelle Nachrichten rund um AmigaOS 4, PowerPC Hardware und Community-Projekte.</p>
         </div>
         <div class="card-action">
-          <a class="btn-vortex" href="https://www.amiga-news.de">&Ouml;ffnen</a>
+          <a class="btn-action" href="https://www.amiga-news.de">&Ouml;ffnen</a>
         </div>
       </div>
     </div>
@@ -751,21 +795,7 @@ function playAmigaSynth() {
           <p>Das zentrale Archiv f&uuml;r native AmigaOS 4 Software, Bibliotheken und Spiele.</p>
         </div>
         <div class="card-action">
-          <a class="btn-vortex" href="https://os4depot.net">&Ouml;ffnen</a>
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-top card-top-red"></div>
-      <div class="card-body">
-        <div>
-          <h3>YouTube</h3>
-          <p>Videos &amp; Musik mit direkter 22050Hz AHI-Stereo-Ton&uuml;bertragung auf die Workbench.</p>
-        </div>
-        <div class="card-action">
-          <a class="btn-vortex" href="https://www.youtube.com">&Ouml;ffnen</a>
-          <a class="btn-vortex" href="https://m.youtube.com" style="margin-left: 6px; background: linear-gradient(180deg, #d32f2f, #9a0007);">Lite / Mobil</a>
+          <a class="btn-action" href="https://os4depot.net">&Ouml;ffnen</a>
         </div>
       </div>
     </div>
@@ -778,7 +808,7 @@ function playAmigaSynth() {
           <p>Das internationale AmigaOS 4 Forum f&uuml;r Anwender, Entwickler und Erfahrungsaustausch.</p>
         </div>
         <div class="card-action">
-          <a class="btn-vortex" href="https://www.amigans.net">&Ouml;ffnen</a>
+          <a class="btn-action" href="https://www.amigans.net">&Ouml;ffnen</a>
         </div>
       </div>
     </div>
@@ -791,7 +821,47 @@ function playAmigaSynth() {
           <p>Das weltgr&ouml;&szlig;te Amiga-Softwarearchiv f&uuml;r Classic, PPC und AmigaOS 4.</p>
         </div>
         <div class="card-action">
-          <a class="btn-vortex" href="https://aminet.net">&Ouml;ffnen</a>
+          <a class="btn-action" href="https://aminet.net">&Ouml;ffnen</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-top" style="background: linear-gradient(135deg, #0ea5e9, #0284c7);"></div>
+      <div class="card-body">
+        <div>
+          <h3>A1k.org Amiga Forum</h3>
+          <p>Das gro&szlig;e deutschsprachige Forum rund um klassische Amigas und AmigaOS.</p>
+        </div>
+        <div class="card-action">
+          <a class="btn-action" href="https://www.a1k.org">&Ouml;ffnen</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-top" style="background: linear-gradient(135deg, #64748b, #334155);"></div>
+      <div class="card-body">
+        <div>
+          <h3>Wikipedia (DE)</h3>
+          <p>Die freie Enzyklop&auml;die mit Millionen Artikeln auf Deutsch.</p>
+        </div>
+        <div class="card-action">
+          <a class="btn-action" href="https://de.wikipedia.org">&Ouml;ffnen</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-top card-top-red"></div>
+      <div class="card-body">
+        <div>
+          <h3>YouTube</h3>
+          <p>Videos &amp; Musik mit direkter 22050Hz AHI-Stereo-Ton&uuml;bertragung auf die Workbench.</p>
+        </div>
+        <div class="card-action">
+          <a class="btn-action" href="https://www.youtube.com">&Ouml;ffnen</a>
+          <a class="btn-action" href="https://m.youtube.com" style="margin-left: 6px; background: linear-gradient(180deg, #d32f2f, #9a0007); color: #fff;">Lite / Mobil</a>
         </div>
       </div>
     </div>
@@ -804,8 +874,8 @@ function playAmigaSynth() {
           <p>Live-Streaming mit Turbo-H.264 &amp; 30 FPS Optimierung. Ton direkt via AHI Stereo.</p>
         </div>
         <div class="card-action">
-          <a class="btn-vortex" href="https://www.twitch.tv">&Ouml;ffnen</a>
-          <a class="btn-vortex" href="https://m.twitch.tv" style="margin-left: 6px; background: linear-gradient(180deg, #9146ff, #5c16c5);">Lite / Mobil</a>
+          <a class="btn-action" href="https://www.twitch.tv">&Ouml;ffnen</a>
+          <a class="btn-action" href="https://m.twitch.tv" style="margin-left: 6px; background: linear-gradient(180deg, #9146ff, #5c16c5); color: #fff;">Lite / Mobil</a>
         </div>
       </div>
     </div>
@@ -818,7 +888,7 @@ function playAmigaSynth() {
           <p>Testet AHI 16-Bit Stereo-Ausgabe &uuml;ber PipeWire und direkte Dirty-Slice Bildaktualisierung.</p>
         </div>
         <div class="card-action" style="flex-direction: column; align-items: flex-end;">
-          <button class="btn-vortex" id="btn-test" onclick="window._clicks=(window._clicks||0)+1; playAmigaSynth(); document.getElementById('click-status').textContent='Ton + Klick OK! ('+window._clicks+'x)';">Ton &amp; Klick-Test</button>
+          <button class="btn-action" id="btn-test" onclick="window._clicks=(window._clicks||0)+1; playAmigaSynth(); document.getElementById('click-status').textContent='Ton + Klick OK! ('+window._clicks+'x)';">Ton &amp; Klick-Test</button>
           <div id="click-status">Bereit f&uuml;r AHI-Sound.</div>
         </div>
       </div>
@@ -901,7 +971,7 @@ def _fetch_search_results_sync(query: str) -> str:
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<title>VortexBrowse Suche: {q_esc}</title>
+<title>VortexBrowser Suche: {q_esc}</title>
 <style>
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
   body {{
@@ -1113,6 +1183,84 @@ class LocalPortalHTTPServer:
 # Native SIMD Pixel Converter & Dirty-Slice Detector (x86_64 & ARM64/RPi4)
 # ============================================================================
 _FAST_PIXCONV = None
+_HAS_NATIVE_PACKET_ENCODER = False
+
+def _bind_fast_pixconv_symbols(_lib) -> bool:
+    global _HAS_NATIVE_PACKET_ENCODER
+    _lib.rgb24_to_be_argb32.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_size_t]
+    _lib.rgb24_to_be_argb32.restype = None
+    _lib.rgb24_to_be_rgb565.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_size_t]
+    _lib.rgb24_to_be_rgb565.restype = None
+    _lib.rgb24_to_yuv420p.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int, ctypes.c_int]
+    _lib.rgb24_to_yuv420p.restype = None
+    _lib.find_and_update_dirty_slice.argtypes = [
+        ctypes.c_char_p,
+        ctypes.c_char_p,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_int),
+    ]
+    _lib.find_and_update_dirty_slice.restype = ctypes.c_int
+    _lib.find_and_update_dirty_rect.argtypes = [
+        ctypes.c_char_p,
+        ctypes.c_char_p,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_int),
+        ctypes.POINTER(ctypes.c_int),
+    ]
+    _lib.find_and_update_dirty_rect.restype = ctypes.c_int
+    _lib.pack_sub_rect.argtypes = [
+        ctypes.c_char_p,
+        ctypes.c_char_p,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+    ]
+    _lib.pack_sub_rect.restype = None
+    if hasattr(_lib, "pack_sub_rect_yuv420p"):
+        _lib.pack_sub_rect_yuv420p.argtypes = [
+            ctypes.c_char_p,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+        ]
+        _lib.pack_sub_rect_yuv420p.restype = None
+    _lib.pcm_s16be_is_silent.argtypes = [ctypes.c_char_p, ctypes.c_size_t, ctypes.c_int]
+    _lib.pcm_s16be_is_silent.restype = ctypes.c_int
+    if hasattr(_lib, "encode_jpeg_to_frame_packet"):
+        _lib.encode_jpeg_to_frame_packet.argtypes = [
+            ctypes.c_char_p,
+            ctypes.c_size_t,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_char_p,
+            ctypes.c_char_p,
+            ctypes.c_int,
+        ]
+        _lib.encode_jpeg_to_frame_packet.restype = ctypes.c_int
+        _HAS_NATIVE_PACKET_ENCODER = True
+        return True
+    _HAS_NATIVE_PACKET_ENCODER = False
+    return False
+
 try:
     _base_dir = os.path.dirname(os.path.abspath(__file__))
     _is_arm = platform.machine().lower().startswith(("aarch64", "arm"))
@@ -1123,122 +1271,50 @@ try:
         if os.path.exists(_candidate_path):
             try:
                 _lib = ctypes.CDLL(_candidate_path)
-                _lib.rgb24_to_be_argb32.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_size_t]
-                _lib.rgb24_to_be_argb32.restype = None
-                _lib.rgb24_to_be_rgb565.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_size_t]
-                _lib.rgb24_to_be_rgb565.restype = None
-                _lib.rgb24_to_yuv420p.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int, ctypes.c_int]
-                _lib.rgb24_to_yuv420p.restype = None
-                _lib.find_and_update_dirty_slice.argtypes = [
-                    ctypes.c_char_p,
-                    ctypes.c_char_p,
-                    ctypes.c_int,
-                    ctypes.c_int,
-                    ctypes.c_int,
-                    ctypes.POINTER(ctypes.c_int),
-                    ctypes.POINTER(ctypes.c_int),
-                ]
-                _lib.find_and_update_dirty_slice.restype = ctypes.c_int
-                _lib.find_and_update_dirty_rect.argtypes = [
-                    ctypes.c_char_p,
-                    ctypes.c_char_p,
-                    ctypes.c_int,
-                    ctypes.c_int,
-                    ctypes.c_int,
-                    ctypes.POINTER(ctypes.c_int),
-                    ctypes.POINTER(ctypes.c_int),
-                    ctypes.POINTER(ctypes.c_int),
-                    ctypes.POINTER(ctypes.c_int),
-                ]
-                _lib.find_and_update_dirty_rect.restype = ctypes.c_int
-                _lib.pack_sub_rect.argtypes = [
-                    ctypes.c_char_p,
-                    ctypes.c_char_p,
-                    ctypes.c_int,
-                    ctypes.c_int,
-                    ctypes.c_int,
-                    ctypes.c_int,
-                    ctypes.c_int,
-                    ctypes.c_int,
-                ]
-                _lib.pack_sub_rect.restype = None
-                _lib.pcm_s16be_is_silent.argtypes = [ctypes.c_char_p, ctypes.c_size_t, ctypes.c_int]
-                _lib.pcm_s16be_is_silent.restype = ctypes.c_int
+                _bind_fast_pixconv_symbols(_lib)
                 _FAST_PIXCONV = _lib
                 _loaded_path = _candidate_path
                 break
             except Exception as _cdll_err:
                 logger.debug("Could not load candidate %s: %s", _candidate_path, _cdll_err)
 
-    # If not found or incompatible architecture, attempt on-the-fly compilation if gcc is available
-    if _FAST_PIXCONV is None:
+    # If not found or missing C-native TurboJPEG+LZ4 packet encoder, attempt auto-compilation
+    if _FAST_PIXCONV is None or not _HAS_NATIVE_PACKET_ENCODER:
         _c_src = os.path.join(_base_dir, "fast_pixconv.c")
         if os.path.exists(_c_src):
             _target_so_name = "fast_pixconv_aarch64.so" if _is_arm else "fast_pixconv.so"
             _target_so_path = os.path.join(_base_dir, _target_so_name)
             try:
-                logger.info("Attempting auto-compilation of native SIMD helper (%s)...", _target_so_name)
+                logger.info("Attempting auto-compilation of native SIMD + TurboJPEG + LZ4 helper (%s)...", _target_so_name)
                 if _is_arm:
-                    _compile_cmd = [
-                        "gcc", "-O3", "-march=armv8-a+crc", "-mtune=cortex-a72",
-                        "-shared", "-fPIC", "-o", _target_so_path, _c_src
+                    _compile_cmds = [
+                        ["gcc", "-O3", "-march=armv8-a+crc", "-mtune=cortex-a72", "-fopenmp", "-DHAVE_TURBOJPEG_LZ4", "-shared", "-fPIC", "-o", _target_so_path, _c_src, "-lturbojpeg", "-llz4"],
+                        ["gcc", "-O3", "-march=armv8-a+crc", "-mtune=cortex-a72", "-shared", "-fPIC", "-o", _target_so_path, _c_src],
                     ]
                 else:
-                    _compile_cmd = [
-                        "gcc", "-O3", "-march=native",
-                        "-shared", "-fPIC", "-o", _target_so_path, _c_src
+                    _compile_cmds = [
+                        ["gcc", "-O3", "-march=native", "-mavx2", "-mfma", "-fopenmp", "-DHAVE_TURBOJPEG_LZ4", "-shared", "-fPIC", "-o", _target_so_path, _c_src, "-lturbojpeg", "-llz4"],
+                        ["gcc", "-O3", "-march=native", "-fopenmp", "-DHAVE_TURBOJPEG_LZ4", "-shared", "-fPIC", "-o", _target_so_path, _c_src, "-lturbojpeg", "-llz4"],
+                        ["gcc", "-O3", "-march=native", "-shared", "-fPIC", "-o", _target_so_path, _c_src],
                     ]
-                _ret = subprocess.run(_compile_cmd, capture_output=True, timeout=10)
-                if _ret.returncode == 0 and os.path.exists(_target_so_path):
-                    _lib = ctypes.CDLL(_target_so_path)
-                    _lib.rgb24_to_be_argb32.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_size_t]
-                    _lib.rgb24_to_be_argb32.restype = None
-                    _lib.rgb24_to_be_rgb565.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_size_t]
-                    _lib.rgb24_to_be_rgb565.restype = None
-                    _lib.rgb24_to_yuv420p.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int, ctypes.c_int]
-                    _lib.rgb24_to_yuv420p.restype = None
-                    _lib.find_and_update_dirty_slice.argtypes = [
-                        ctypes.c_char_p,
-                        ctypes.c_char_p,
-                        ctypes.c_int,
-                        ctypes.c_int,
-                        ctypes.c_int,
-                        ctypes.POINTER(ctypes.c_int),
-                        ctypes.POINTER(ctypes.c_int),
-                    ]
-                    _lib.find_and_update_dirty_slice.restype = ctypes.c_int
-                    _lib.find_and_update_dirty_rect.argtypes = [
-                        ctypes.c_char_p,
-                        ctypes.c_char_p,
-                        ctypes.c_int,
-                        ctypes.c_int,
-                        ctypes.c_int,
-                        ctypes.POINTER(ctypes.c_int),
-                        ctypes.POINTER(ctypes.c_int),
-                        ctypes.POINTER(ctypes.c_int),
-                        ctypes.POINTER(ctypes.c_int),
-                    ]
-                    _lib.find_and_update_dirty_rect.restype = ctypes.c_int
-                    _lib.pack_sub_rect.argtypes = [
-                        ctypes.c_char_p,
-                        ctypes.c_char_p,
-                        ctypes.c_int,
-                        ctypes.c_int,
-                        ctypes.c_int,
-                        ctypes.c_int,
-                        ctypes.c_int,
-                        ctypes.c_int,
-                    ]
-                    _lib.pack_sub_rect.restype = None
-                    _lib.pcm_s16be_is_silent.argtypes = [ctypes.c_char_p, ctypes.c_size_t, ctypes.c_int]
-                    _lib.pcm_s16be_is_silent.restype = ctypes.c_int
-                    _FAST_PIXCONV = _lib
-                    _loaded_path = _target_so_path
+                for _cmd in _compile_cmds:
+                    _ret = subprocess.run(_cmd, capture_output=True, timeout=15)
+                    if _ret.returncode == 0 and os.path.exists(_target_so_path):
+                        _lib = ctypes.CDLL(_target_so_path)
+                        _bind_fast_pixconv_symbols(_lib)
+                        _FAST_PIXCONV = _lib
+                        _loaded_path = _target_so_path
+                        break
             except Exception as _comp_err:
                 logger.debug("Auto-compilation failed: %s", _comp_err)
 
     if _FAST_PIXCONV is not None:
-        logger.info("Loaded native SIMD pixel & audio helper: %s (arch=%s)", os.path.basename(_loaded_path), platform.machine())
+        logger.info(
+            "Loaded native SIMD pixel & audio helper: %s (arch=%s, C-TurboJPEG+LZ4=%s)",
+            os.path.basename(_loaded_path),
+            platform.machine(),
+            "YES" if _HAS_NATIVE_PACKET_ENCODER else "NO",
+        )
     else:
         logger.warning("No native fast_pixconv found, falling back to pure Python/Pillow")
 except Exception as _exc:
@@ -1323,6 +1399,132 @@ def image_to_big_endian_pixels(
 
 
 # ============================================================================
+# DirectCDP Session (Direct WebSocket to Chromium DevTools Protocol)
+# ============================================================================
+class DirectCDPSession:
+    """Direct async WebSocket client for Chromium DevTools Protocol (DirectCDP).
+    Bypasses Playwright / Driver IPC completely for zero-overhead Page.screencastFrame
+    push streaming, Page.captureScreenshot, and low-latency CDP commands.
+    """
+
+    def __init__(self, ws_url: str, fallback_cdp: Optional[CDPSession] = None):
+        self.ws_url = ws_url
+        self.fallback_cdp = fallback_cdp
+        self.ws = None
+        self._msg_id = 0
+        self._pending: Dict[int, asyncio.Future] = {}
+        self._listeners: Dict[str, List] = {}
+        self._reader_task: Optional[asyncio.Task] = None
+        self.connected = False
+
+    async def connect(self) -> bool:
+        if not _HAS_WEBSOCKETS or not self.ws_url:
+            return False
+        try:
+            self.ws = await asyncio.wait_for(
+                websockets.connect(
+                    self.ws_url,
+                    max_size=32 * 1024 * 1024,
+                    ping_interval=None,
+                    compression=None,
+                ),
+                timeout=2.0,
+            )
+            self.connected = True
+            self._reader_task = asyncio.create_task(self._read_loop())
+            logger.info("DirectCDP WebSocket connected: %s", self.ws_url)
+            return True
+        except Exception as exc:
+            logger.debug("DirectCDP connect fallback (%s): %s", self.ws_url, exc)
+            self.connected = False
+            return False
+
+    async def _read_loop(self) -> None:
+        try:
+            async for raw_msg in self.ws:
+                try:
+                    data = json.loads(raw_msg)
+                except Exception:
+                    continue
+                msg_id = data.get("id")
+                if msg_id is not None:
+                    fut = self._pending.pop(msg_id, None)
+                    if fut and not fut.done():
+                        if "error" in data:
+                            fut.set_exception(RuntimeError(str(data["error"])))
+                        else:
+                            fut.set_result(data.get("result", {}))
+                else:
+                    method = data.get("method")
+                    if method and method in self._listeners:
+                        params = data.get("params", {})
+                        for cb in list(self._listeners.get(method, [])):
+                            try:
+                                cb(params)
+                            except Exception:
+                                pass
+        except Exception:
+            pass
+        finally:
+            self.connected = False
+            for fut in self._pending.values():
+                if not fut.done():
+                    fut.set_exception(RuntimeError("DirectCDP WebSocket closed"))
+            self._pending.clear()
+
+    def on(self, event: str, callback) -> None:
+        self._listeners.setdefault(event, []).append(callback)
+        if not self.connected and self.fallback_cdp:
+            try:
+                self.fallback_cdp.on(event, callback)
+            except Exception:
+                pass
+
+    def remove_listener(self, event: str, callback) -> None:
+        if event in self._listeners:
+            try:
+                self._listeners[event].remove(callback)
+            except ValueError:
+                pass
+        if self.fallback_cdp:
+            try:
+                self.fallback_cdp.remove_listener(event, callback)
+            except Exception:
+                pass
+
+    async def send(self, method: str, params: Optional[ dict ] = None) -> dict:
+        if self.connected and self.ws is not None:
+            self._msg_id += 1
+            mid = self._msg_id
+            loop = asyncio.get_running_loop()
+            fut = loop.create_future()
+            self._pending[mid] = fut
+            payload = json.dumps({"id": mid, "method": method, "params": params or {}})
+            try:
+                await self.ws.send(payload)
+                return await fut
+            except Exception:
+                self._pending.pop(mid, None)
+                if self.fallback_cdp is not None:
+                    return await self.fallback_cdp.send(method, params or {})
+                raise
+        if self.fallback_cdp is not None:
+            return await self.fallback_cdp.send(method, params or {})
+        raise RuntimeError("DirectCDP not connected and no fallback CDP session")
+
+    async def close(self) -> None:
+        self.connected = False
+        if self._reader_task and not self._reader_task.done():
+            self._reader_task.cancel()
+        if self.ws is not None:
+            try:
+                await self.ws.close()
+            except Exception:
+                pass
+            self.ws = None
+
+
+# ============================================================================
 # H.264 Live Stream Hardware/Software Encoder Pipe (va.library / VA-API)
 # ============================================================================
 class H264LiveStreamEncoder:
@@ -1330,7 +1532,7 @@ class H264LiveStreamEncoder:
     Supports hardware VA-API on Linux (AMD/Intel VCN/VA-API) or ultrafast libx264 zerolatency.
     Feeds YUV420P frames and yields Annex-B NAL packets.
     """
-    def __init__(self, width: int, height: int, fps: int = 25, bitrate_k: int = 4000):
+    def __init__(self, width: int, height: int, fps: int = 25, bitrate_k: int = 8000):
         self.width = width
         self.height = height
         self.fps = max(1, min(60, fps))
@@ -1354,13 +1556,11 @@ class H264LiveStreamEncoder:
                 "-i", "-",
                 "-vf", "format=nv12,hwupload",
                 "-c:v", "h264_vaapi",
-                "-async_depth", "1",
                 "-b:v", f"{self.bitrate_k}k",
                 "-maxrate", f"{self.bitrate_k * 3 // 2}k",
                 "-bufsize", f"{self.bitrate_k // 2}k",
                 "-g", str(self.fps),
                 "-bf", "0",
-                "-x264-params", f"keyint={self.fps}:min-keyint={self.fps}:scenecut=0:repeat-headers=1",
                 "-f", "h264", "-"
             ]
         try:
@@ -1470,7 +1670,7 @@ class AmigaClientSession:
         codec_mode: str = "auto",
         engine: str = "chromium",
         stream_mode: str = "auto",
-        video_bitrate: int = 8000,
+        video_bitrate: int = 4000,
     ):
         self.reader = reader
         self.writer = writer
@@ -1485,7 +1685,7 @@ class AmigaClientSession:
         self.portal_url = portal_url
         self.audio_enabled = audio_enabled
         self.base_jpeg_quality: int = max(20, min(100, jpeg_quality))
-        self.video_jpeg_quality: int = min(self.base_jpeg_quality, 60)
+        self.video_jpeg_quality: int = min(self.base_jpeg_quality, 75)
         self.current_screencast_quality: int = self.base_jpeg_quality
         self.jpeg_quality: int = self.base_jpeg_quality
         self.is_video_mode: bool = False
@@ -1512,16 +1712,15 @@ class AmigaClientSession:
 
         self.context: Optional[BrowserContext] = None
         self.page: Optional[Page] = None
-        self.cdp: Optional[CDPSession] = None
+        self.cdp: Optional[Union[CDPSession, DirectCDPSession]] = None
         self.tabs: List[Page] = []
         self.active_tab_idx: int = 0
+        self.cdp_port: int = 9222
 
         self.soft_scroll: bool = True
         self.last_hover_url: Optional[str] = None
         self.last_hover_time: float = 0.0
         self.hover_task: Optional[asyncio.Task] = None
-        self._pending_mouse_coord: Optional[Tuple[int, int]] = None
-        self._mouse_move_task: Optional[asyncio.Task] = None
 
         # Explicit Navigation History Stack (immune to HTTP/JS redirect loops)
         self.nav_history: List[str] = []
@@ -1531,6 +1730,8 @@ class AmigaClientSession:
 
         self.next_download_id: int = 1
         self.pending_downloads: Dict[int, asyncio.Future] = {}
+        self.next_upload_id: int = 1
+        self.pending_uploads: Dict[int, Tuple[FileChooser, asyncio.Future]] = {}
         self.background_tasks: set = set()
 
         self.web_zoom_pct: int = 100
@@ -1538,12 +1739,13 @@ class AmigaClientSession:
         self.web_font_family: str = "sans-serif"
         self.web_charset: str = "utf-8"
         self.dark_mode: int = 0  # 0 = Light, 1 = Dark, 2 = Auto
+        self.allow_yuv_rect: bool = False
 
         try:
             sock = self.writer.get_extra_info("socket")
             if sock is not None:
                 sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-                sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 512 * 1024)
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1024 * 1024)
         except Exception:
             pass
 
@@ -1551,12 +1753,25 @@ class AmigaClientSession:
         self.screencast_queue: Optional[asyncio.Queue] = None
         self.screencast_active: bool = False
         self._screencast_handler = None
+        self.last_screencast_frame_time: float = 0.0
+
+        # Mouse click tracking for gesture stabilization & upload trigger
+        self._mouse_down_x: int = -1
+        self._mouse_down_y: int = -1
+        self._mouse_down_btn: str = ""
+        self._mouse_down_time: float = 0.0
+        self._last_click_time: float = 0.0
+        self._last_click_x: int = -1
+        self._last_click_y: int = -1
+        self._click_count: int = 1
+        self.last_upload_intercept_time: float = 0.0
 
         # Pre-allocated pixel conversion buffers (reused across frames to avoid alloc churn)
         self._argb_buf: Optional[ctypes.Array] = None
         self._rgb565_buf: Optional[ctypes.Array] = None
         self._yuv_buf: Optional[ctypes.Array] = None
         self._rect_buf: Optional[ctypes.Array] = None
+        self._pkt_buf: Optional[ctypes.Array] = None
 
     def _get_h264_encoder(self, width: int, height: int) -> Optional[H264LiveStreamEncoder]:
         if (
@@ -1568,6 +1783,64 @@ class AmigaClientSession:
         if self._h264_encoder is None:
             self._h264_encoder = H264LiveStreamEncoder(width, height, self.target_fps, self.video_bitrate_k)
         return self._h264_encoder
+
+    async def _attach_direct_cdp(self, target_page: Page) -> None:
+        """Creates a DirectCDP WebSocket connection directly to Chromium's DevTools port,
+        bypassing any driver pipe overhead, with seamless fallback to Rustwright/Playwright CDPSession.
+        """
+        if self.cdp is not None and isinstance(self.cdp, DirectCDPSession):
+            try:
+                await self.cdp.close()
+            except Exception:
+                pass
+        self.cdp = None
+        if not self.context or self.engine != "chromium":
+            return
+
+        base_cdp = None
+        target_id = None
+        try:
+            base_cdp = await self.context.new_cdp_session(target_page)
+            t_info = await asyncio.wait_for(base_cdp.send("Target.getTargetInfo"), timeout=1.5)
+            target_id = (t_info.get("targetInfo") or {}).get("targetId")
+        except Exception as exc:
+            logger.debug("Base CDP session creation warning: %s", exc)
+
+        if _HAS_WEBSOCKETS and self.cdp_port > 0:
+            ws_url = None
+            if target_id:
+                ws_url = f"ws://127.0.0.1:{self.cdp_port}/devtools/page/{target_id}"
+            else:
+                try:
+                    def _fetch_targets():
+                        with urllib.request.urlopen(f"http://127.0.0.1:{self.cdp_port}/json", timeout=1.0) as r:
+                            return json.loads(r.read().decode("utf-8", errors="replace"))
+                    targets = await asyncio.to_thread(_fetch_targets)
+                    for t in targets:
+                        if t.get("type") == "page" and t.get("webSocketDebuggerUrl"):
+                            ws_url = t["webSocketDebuggerUrl"]
+                            break
+                except Exception:
+                    pass
+
+            if ws_url:
+                direct = DirectCDPSession(ws_url, fallback_cdp=base_cdp)
+                if await direct.connect():
+                    self.cdp = direct
+                    if getattr(self, "_init_turbo_js", None):
+                        try:
+                            await self.cdp.send("Page.enable")
+                            await self.cdp.send("Page.setInterceptFileChooserDialog", {"enabled": True})
+                            await self.cdp.send("DOM.enable")
+                            await self.cdp.send("Page.addScriptToEvaluateOnNewDocument", {"source": self._init_turbo_js})
+                            await self.cdp.send("Runtime.evaluate", {"expression": self._init_turbo_js})
+                        except Exception:
+                            pass
+                    # Listen for Page.fileChooserOpened on DirectCDP
+                    self.cdp.on("Page.fileChooserOpened", self._on_cdp_file_chooser_opened)
+                    return
+
+        self.cdp = base_cdp
 
     async def send_packet(self, data: bytes) -> bool:
         if not self.running:
@@ -1600,7 +1873,33 @@ class AmigaClientSession:
         self.background_tasks.add(t)
         t.add_done_callback(self.background_tasks.discard)
 
+    def _send_password_save(self, url: str, username: str, password: str) -> None:
+        if not self.running or not url or not username or not password:
+            return
+        url_bytes = url.encode("utf-8", errors="replace")[:255].ljust(256, b"\x00")
+        user_bytes = username.encode("utf-8", errors="replace")[:127].ljust(128, b"\x00")
+        pass_bytes = password.encode("utf-8", errors="replace")[:127].ljust(128, b"\x00")
+        pkt = STRUCT_MSG_PASSWORD_SAVE.pack(MSG_PASSWORD_SAVE, url_bytes, user_bytes, pass_bytes)
+        t = asyncio.create_task(self.send_packet(pkt))
+        self.background_tasks.add(t)
+        t.add_done_callback(self.background_tasks.discard)
+
+    async def _on_password_submitted(self, source, domain: str, username: str, password: str) -> None:
+        if not domain or not username or not password:
+            return
+        if "127.0.0.1" in domain or "localhost" in domain:
+            return
+        now = time.monotonic()
+        key = (domain, username, password)
+        if getattr(self, "_last_pw_save_key", None) == key and now - getattr(self, "_last_pw_save_time", 0.0) < 5.0:
+            return
+        self._last_pw_save_key = key
+        self._last_pw_save_time = now
+        logger.info("Captured submitted login credentials: domain=%s user=%s", domain, username)
+        self._send_password_save(domain, username, password)
+
     def _setup_page_listeners(self, page: Page) -> None:
+        page.on("filechooser", self._on_filechooser_event)
         page.on("download", self._on_download_event)
         page.on("framenavigated", self._on_main_frame_navigated)
         page.on("load", self._on_page_loaded)
@@ -1754,158 +2053,425 @@ class AmigaClientSession:
             except Exception:
                 pass
 
-            # Pre-load Twitch auth-token if configured (bypasses Kasada login bot block entirely)
+            # Pre-load Twitch auth / full session cookies if configured (bypasses bot blocks entirely)
             try:
-                for t_path in ["twitch_token.txt", "twitch_cookie.txt", os.path.expanduser("~/.config/vortexbrowse/twitch_token.txt")]:
-                    if os.path.exists(t_path):
-                        with open(t_path, "r", encoding="utf-8") as f:
-                            t_val = f.read().strip()
-                            if t_val:
-                                await self.context.add_cookies([{
-                                    "name": "auth-token",
-                                    "value": t_val,
-                                    "domain": ".twitch.tv",
-                                    "path": "/"
-                                }])
-                                logger.info("Pre-loaded Twitch auth-token from %s", t_path)
+                loaded_twitch = False
+                for j_path in ["twitch_cookies.json", os.path.expanduser("~/.config/vortexbrowse/twitch_cookies.json"), "/tmp/twitch_cookies.json"]:
+                    if os.path.exists(j_path):
+                        try:
+                            with open(j_path, "r", encoding="utf-8") as f:
+                                raw_cookies = json.load(f)
+                            clean_list = []
+                            for c in raw_cookies:
+                                ck = {
+                                    "name": c["name"],
+                                    "value": c["value"],
+                                    "domain": c["domain"],
+                                    "path": c.get("path", "/"),
+                                    "secure": c.get("secure", True),
+                                    "httpOnly": c.get("httpOnly", False)
+                                }
+                                if "sameSite" in c and c["sameSite"] in ("Strict", "Lax", "None"):
+                                    ck["sameSite"] = c["sameSite"]
+                                clean_list.append(ck)
+                            if clean_list:
+                                await self.context.add_cookies(clean_list)
+                                logger.info("Pre-loaded %d Twitch session cookies from %s", len(clean_list), j_path)
+                                loaded_twitch = True
                                 break
+                        except Exception as _je:
+                            logger.debug("Twitch json cookie load error: %s", _je)
+
+                if not loaded_twitch:
+                    for t_path in ["twitch_token.txt", "twitch_cookie.txt", os.path.expanduser("~/.config/vortexbrowse/twitch_token.txt")]:
+                        if os.path.exists(t_path):
+                            with open(t_path, "r", encoding="utf-8") as f:
+                                t_val = f.read().strip()
+                                if t_val:
+                                    await self.context.add_cookies([{
+                                        "name": "auth-token",
+                                        "value": t_val,
+                                        "domain": ".twitch.tv",
+                                        "path": "/"
+                                    }])
+                                    logger.info("Pre-loaded Twitch auth-token from %s", t_path)
+                                    break
             except Exception as _te:
                 logger.debug("Twitch cookie load error: %s", _te)
 
-            # Anti-Bot & Anti-Detection Stealth Script (removes automation flags without breaking window.open)
-            try:
-                await self.context.add_init_script(
-                    """() => {
-                        try {
-                            delete Object.getPrototypeOf(navigator).webdriver;
-                        } catch (e) {
-                            try {
-                                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-                            } catch (e2) {}
-                        }
-                        if (!window.chrome) {
-                            window.chrome = {
-                                runtime: {},
-                                loadTimes: function() {},
-                                csi: function() {},
-                                app: { isInstalled: false }
-                            };
-                        }
-                        if (!navigator.plugins || navigator.plugins.length === 0) {
-                            const fakePlugins = [
-                                { name: 'PDF Viewer', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
-                                { name: 'Chrome PDF Viewer', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
-                                { name: 'Chromium PDF Viewer', filename: 'internal-pdf-viewer', description: 'Portable Document Format' }
-                            ];
-                            Object.defineProperty(navigator, 'plugins', { get: () => fakePlugins });
-                        }
-                        try {
-                            Object.defineProperty(navigator, 'languages', { get: () => ['de-DE', 'de', 'en-US', 'en'] });
-                        } catch (e) {}
+            # Anti-Bot & Anti-Detection Stealth + YouTube/Twitch Dirty-Rect Turbo Script
+            self._init_turbo_js = """(() => {
+                if (window.__vortexTurboInjected) return;
+                window.__vortexTurboInjected = true;
+                try {
+                    delete Object.getPrototypeOf(navigator).webdriver;
+                } catch (e) {
+                    try {
+                        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                    } catch (e2) {}
+                }
+                if (!window.chrome) {
+                    window.chrome = {
+                        runtime: {},
+                        loadTimes: function() {},
+                        csi: function() {},
+                        app: { isInstalled: false }
+                    };
+                }
+                if (!navigator.plugins || navigator.plugins.length === 0) {
+                    const fakePlugins = [
+                        { name: 'PDF Viewer', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
+                        { name: 'Chrome PDF Viewer', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
+                        { name: 'Chromium PDF Viewer', filename: 'internal-pdf-viewer', description: 'Portable Document Format' }
+                    ];
+                    Object.defineProperty(navigator, 'plugins', { get: () => fakePlugins });
+                }
+                try {
+                    Object.defineProperty(navigator, 'languages', { get: () => ['de-DE', 'de', 'en-US', 'en'] });
+                } catch (e) {}
 
-                        document.addEventListener('click', function(e) {
-                            const a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
-                            if (a && a.target && a.target !== '_self') {
-                                a.target = '_self';
+                document.addEventListener('click', function(e) {
+                    const a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+                    if (a && a.target && a.target !== '_self') {
+                        a.target = '_self';
+                    }
+                }, true);
+
+                // Media & YouTube Performance Turbo (H.264 only, block 60fps & VP9/AV1, disable Ambient Mode)
+                try {
+                    const origCanPlayType = HTMLMediaElement.prototype.canPlayType;
+                    HTMLMediaElement.prototype.canPlayType = function(type) {
+                        if (!type) return '';
+                        const lower = String(type).toLowerCase();
+                        if (lower.includes('vp9') || lower.includes('vp09') || lower.includes('av01') || lower.includes('av1') || lower.includes('webm')) {
+                            return '';
+                        }
+                        return origCanPlayType.call(this, type);
+                    };
+
+                    if (window.MediaSource && window.MediaSource.isTypeSupported) {
+                        const origIsTypeSupported = window.MediaSource.isTypeSupported.bind(window.MediaSource);
+                        window.MediaSource.isTypeSupported = function(type) {
+                            if (!type) return false;
+                            const lower = String(type).toLowerCase();
+                            if (lower.includes('vp9') || lower.includes('vp09') || lower.includes('vp8') ||
+                                lower.includes('av01') || lower.includes('av1') || lower.includes('webm') ||
+                                lower.includes('framerate=60') || lower.includes('fps=60') || lower.includes('framerate=50')) {
+                                return false;
                             }
-                        }, true);
+                            return origIsTypeSupported(type);
+                        };
+                    }
 
-                        // Media & YouTube Performance Turbo (H.264 only, block 60fps & VP9/AV1, disable Ambient Mode)
-                        try {
-                            const origCanPlayType = HTMLMediaElement.prototype.canPlayType;
-                            HTMLMediaElement.prototype.canPlayType = function(type) {
-                                if (!type) return '';
-                                const lower = String(type).toLowerCase();
-                                if (lower.includes('vp9') || lower.includes('vp09') || lower.includes('av01') || lower.includes('av1') || lower.includes('webm')) {
-                                    return '';
+                    const injectYtStyle = () => {
+                        if (document.getElementById('__vortex_yt_style')) return;
+                        const ytStyle = document.createElement('style');
+                        ytStyle.id = '__vortex_yt_style';
+                        ytStyle.textContent = `
+                            #cinematics, #cinematics-container, #background.ytd-cinematics, ytd-cinematics,
+                            canvas.ytd-cinematics, .ytp-ambient-lighting, #movie_player .html5-ambient-video,
+                            ytd-video-preview, #preview, .ytd-video-preview,
+                            tp-yt-paper-spinner-lite, .ytp-spinner {
+                                display: none !important;
+                                visibility: hidden !important;
+                                opacity: 0 !important;
+                                pointer-events: none !important;
+                            }
+                        `;
+                        (document.head || document.documentElement).appendChild(ytStyle);
+                    };
+                    if (document.head || document.documentElement) {
+                        injectYtStyle();
+                    }
+                    document.addEventListener('DOMContentLoaded', injectYtStyle);
+
+                    try {
+                        window.localStorage.setItem('yt-player-quality', JSON.stringify({
+                            data: '{"quality":720,"previousQuality":720}',
+                            creation: Date.now()
+                        }));
+                        window.localStorage.setItem('yt-player-ambient-mode-enabled', JSON.stringify({
+                            data: 'false',
+                            creation: Date.now()
+                        }));
+                    } catch(e) {}
+
+                    setInterval(() => {
+                        injectYtStyle();
+                        const flexy = document.querySelector('ytd-watch-flexy[cinematics-enabled]');
+                        if (flexy) flexy.removeAttribute('cinematics-enabled');
+                        const cin = document.getElementById('cinematics');
+                        if (cin && cin.innerHTML) cin.innerHTML = '';
+                        const player = document.getElementById('movie_player');
+                        if (player && typeof player.setPlaybackQualityRange === 'function') {
+                            try {
+                                player.setPlaybackQualityRange('hd720', 'hd720');
+                            } catch(e) {}
+                        }
+                    }, 1500);
+                } catch(e) {}
+
+                // Twitch Performance Turbo (Pre-set 720p30 / freeze animated emotes / hide bloat)
+                try {
+                    try {
+                        window.localStorage.setItem('video-quality', JSON.stringify({ default: '720p30' }));
+                        window.localStorage.setItem('twilight.player.quality', '"720p30"');
+                        window.localStorage.setItem('lowLatencyMode', 'false');
+                        if (location.hostname.includes('twitch.tv')) {
+                            try {
+                                const m = document.cookie.match(/(?:^|;\\s*)auth-token=([^;]+)/);
+                                if (m && !window.localStorage.getItem('auth-token')) {
+                                    window.localStorage.setItem('auth-token', decodeURIComponent(m[1]));
                                 }
-                                return origCanPlayType.call(this, type);
-                            };
+                            } catch(e) {}
+                        }
+                    } catch(e) {}
 
-                            if (window.MediaSource && window.MediaSource.isTypeSupported) {
-                                const origIsTypeSupported = window.MediaSource.isTypeSupported.bind(window.MediaSource);
-                                window.MediaSource.isTypeSupported = function(type) {
-                                    if (!type) return false;
-                                    const lower = String(type).toLowerCase();
-                                    if (lower.includes('vp9') || lower.includes('vp09') || lower.includes('vp8') || 
-                                        lower.includes('av01') || lower.includes('av1') || lower.includes('webm') ||
-                                        lower.includes('framerate=60') || lower.includes('fps=60') || lower.includes('framerate=50')) {
-                                        return false;
+                    const injectTwStyle = () => {
+                        if (document.getElementById('__vortex_tw_style')) return;
+                        const twStyle = document.createElement('style');
+                        twStyle.id = '__vortex_tw_style';
+                        twStyle.textContent = `
+                            .chat-image, .chat-line__message--emote {
+                                animation-play-state: paused !important;
+                            }
+                            .community-points-summary,
+                            .channel-points-reward-line,
+                            .bits-card,
+                            .tw-carousel,
+                            .carousel-player,
+                            .front-page-carousel,
+                            [data-a-target="player-overlay-mature-accept"],
+                            [data-a-target="user-channel-status-notice"] {
+                                display: none !important;
+                                visibility: hidden !important;
+                            }
+                        `;
+                        (document.head || document.documentElement).appendChild(twStyle);
+                    };
+                    if (document.head || document.documentElement) {
+                        injectTwStyle();
+                    }
+                    document.addEventListener('DOMContentLoaded', injectTwStyle);
+                } catch(e) {}
+
+                // Forum/phpBB File Attachment Helper:
+                // Auto-scroll "Dateien hinzufügen" button into center view when "Dateianhänge" tab is clicked,
+                // style button prominently, and ensure click always triggers file chooser.
+                // Universal Forum File Attachment Helper (phpBB Plupload, XenForo, standard inputs)
+                try {
+                    const upStyle = document.createElement('style');
+                    upStyle.id = '__vb_upload_style';
+                    upStyle.textContent = `
+                        #add_files, .attach-panel-multi input[type=button], .js-attachmentUpload {
+                            cursor: pointer !important;
+                            pointer-events: auto !important;
+                        }
+                    `;
+                    const injectUpStyle = () => {
+                        if (document.head || document.documentElement) {
+                            (document.head || document.documentElement).appendChild(upStyle);
+                        }
+                    };
+                    injectUpStyle();
+                    document.addEventListener('DOMContentLoaded', injectUpStyle);
+
+                    const syncMoxieShim = () => {
+                        const btn = document.getElementById('add_files') || document.querySelector('.attach-panel-multi input[type=button]');
+                        const shim = document.querySelector('.moxie-shim, .moxie-shim-html5');
+                        if (btn && shim) {
+                            shim.style.top = btn.offsetTop + 'px';
+                            shim.style.left = btn.offsetLeft + 'px';
+                            shim.style.width = btn.offsetWidth + 'px';
+                            shim.style.height = btn.offsetHeight + 'px';
+                            shim.style.zIndex = '999999';
+                        }
+                    };
+
+                    // Prevent HTML5 drag-and-drop from hijacking text selections over links/images
+                    window.addEventListener('dragstart', (e) => {
+                        e.preventDefault();
+                    }, true);
+
+                    // Ensure text selection is visibly highlighted in headless Chromium
+                    try {
+                        const selStyle = document.createElement('style');
+                        selStyle.id = '__vortex_selection_style';
+                        selStyle.textContent = '*::selection, ::selection, *::-moz-selection, ::-moz-selection { background-color: #3390ff !important; color: #ffffff !important; -webkit-text-fill-color: #ffffff !important; }';
+                        (document.head || document.documentElement).appendChild(selStyle);
+                    } catch(e) {}
+
+                    // Direct DOM-level selection controller using caretRangeFromPoint for 100% reliable freeform drag selection
+                    window.__vortex_selection = {
+                        startX: -1,
+                        startY: -1,
+                        isDragging: false,
+
+                        start: function(x, y) {
+                            this.startX = x;
+                            this.startY = y;
+                            this.isDragging = false;
+                            let el = document.elementFromPoint(x, y);
+                            if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+                            let r = document.caretRangeFromPoint ? document.caretRangeFromPoint(x, y) : null;
+                            if (r) {
+                                let s = window.getSelection();
+                                if (s) {
+                                    s.removeAllRanges();
+                                    s.addRange(r);
+                                }
+                            }
+                        },
+
+                        update: function(x, y) {
+                            if (this.startX < 0 || this.startY < 0) return;
+                            let dist = Math.hypot(x - this.startX, y - this.startY);
+                            if (dist < 4) return;
+                            this.isDragging = true;
+
+                            let el = document.elementFromPoint(this.startX, this.startY);
+                            if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) return;
+
+                            let r1 = document.caretRangeFromPoint ? document.caretRangeFromPoint(this.startX, this.startY) : null;
+                            let r2 = document.caretRangeFromPoint ? document.caretRangeFromPoint(x, y) : null;
+                            if (!r1 || !r2) return;
+
+                            let range = document.createRange();
+                            let comp = r1.startContainer.compareDocumentPosition(r2.startContainer);
+                            if (comp === 0) {
+                                if (r1.startOffset <= r2.startOffset) {
+                                    range.setStart(r1.startContainer, r1.startOffset);
+                                    range.setEnd(r2.startContainer, r2.startOffset);
+                                } else {
+                                    range.setStart(r2.startContainer, r2.startOffset);
+                                    range.setEnd(r1.startContainer, r1.startOffset);
+                                }
+                            } else if (comp & Node.DOCUMENT_POSITION_FOLLOWING) {
+                                range.setStart(r1.startContainer, r1.startOffset);
+                                range.setEnd(r2.startContainer, r2.startOffset);
+                            } else {
+                                range.setStart(r2.startContainer, r2.startOffset);
+                                range.setEnd(r1.startContainer, r1.startOffset);
+                            }
+
+                            let s = window.getSelection();
+                            if (s) {
+                                s.removeAllRanges();
+                                s.addRange(range);
+                            }
+                        },
+
+                        finish: function(x, y) {
+                            let dragged = this.isDragging;
+                            this.startX = -1;
+                            this.startY = -1;
+                            this.isDragging = false;
+                            let s = window.getSelection() ? window.getSelection().toString() : '';
+                            if (s && s.length > 0) return { dragged: dragged, text: s };
+
+                            let el = document.activeElement;
+                            if (el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && el.type === 'text'))) {
+                                try {
+                                    let sub = el.value.substring(el.selectionStart, el.selectionEnd);
+                                    if (sub && sub.length > 0) return { dragged: dragged, text: sub };
+                                } catch (e) {}
+                            }
+                            return { dragged: dragged, text: '' };
+                        }
+                    };
+
+                    document.addEventListener('click', (e) => {
+                        const tab = e.target && e.target.closest ? e.target.closest('#attach-panel-tab, [data-subpanel="attach-panel"], a[href*="attach"]') : null;
+                        if (tab) {
+                            setTimeout(() => {
+                                const btn = document.getElementById('add_files') || document.querySelector('#attach-panel input[type=button]');
+                                if (btn) {
+                                    btn.scrollIntoView({ behavior: 'auto', block: 'center' });
+                                    if (window.phpbb && window.phpbb.plupload && window.phpbb.plupload.uploader) {
+                                        try { window.phpbb.plupload.uploader.refresh(); } catch(err) {}
                                     }
-                                    return origIsTypeSupported(type);
-                                };
+                                    syncMoxieShim();
+                                }
+                            }, 80);
+                        }
+                    }, true);
+                } catch(e) {}
+
+                // --- Automatic Login & Password Submission Interceptor ---
+                function _vortexExtractCredentials(formOrElem) {
+                    try {
+                        if (!window.__vortex_save_password) return;
+                        const root = formOrElem ? (formOrElem.closest ? (formOrElem.closest('form') || formOrElem) : formOrElem) : document;
+                        let pwInputs = Array.from(root.querySelectorAll ? root.querySelectorAll('input[type="password"]') : []);
+                        if (pwInputs.length === 0 && formOrElem && formOrElem.form) {
+                            pwInputs = Array.from(formOrElem.form.querySelectorAll('input[type="password"]'));
+                        }
+                        if (pwInputs.length === 0) {
+                            pwInputs = Array.from(document.querySelectorAll('input[type="password"]'));
+                        }
+                        let pwInput = pwInputs.find(p => p.value && p.value.length > 0);
+                        if (!pwInput) return;
+                        const pass = pwInput.value;
+                        if (!pass) return;
+
+                        let form = pwInput.closest('form') || root;
+                        let userInputs = Array.from(form.querySelectorAll(
+                            'input[autocomplete="username"], input[autocomplete="email"], input[type="email"], ' +
+                            'input[name*="user" i], input[name*="login" i], input[name*="email" i], input[name*="account" i], ' +
+                            'input[id*="user" i], input[id*="login" i], input[id*="email" i], input[id*="account" i], ' +
+                            'input[type="text"]'
+                        ));
+                        let userVal = '';
+                        for (const u of userInputs) {
+                            if (u !== pwInput && u.value && u.value.trim().length > 0) {
+                                userVal = u.value.trim();
+                                break;
                             }
-
-                            const ytStyle = document.createElement('style');
-                            ytStyle.textContent = `
-                                #cinematics, #background.ytd-cinematics, ytd-cinematics,
-                                .ytp-ambient-lighting, #movie_player .html5-ambient-video,
-                                ytd-video-preview, #preview, .ytd-video-preview {
-                                    display: none !important;
-                                    visibility: hidden !important;
-                                    opacity: 0 !important;
+                        }
+                        if (!userVal) {
+                            const allText = Array.from(document.querySelectorAll('input[type="text"], input[type="email"], input:not([type])'));
+                            for (const u of allText) {
+                                if (u !== pwInput && u.value && u.value.trim().length > 0) {
+                                    userVal = u.value.trim();
+                                    break;
                                 }
-                            `;
-                            if (document.head) {
-                                document.head.appendChild(ytStyle);
-                            } else {
-                                document.addEventListener('DOMContentLoaded', () => {
-                                    if (document.head) document.head.appendChild(ytStyle);
-                                });
                             }
+                        }
+                        if (!userVal) return;
 
-                            try {
-                                window.localStorage.setItem('yt-player-quality', JSON.stringify({
-                                    data: '{"quality":720,"previousQuality":720}',
-                                    creation: Date.now()
-                                }));
-                            } catch(e) {}
+                        let domain = window.location.hostname || '';
+                        if (!domain && window.location.href) {
+                            try { domain = new URL(window.location.href).hostname; } catch(e) {}
+                        }
+                        if (domain) {
+                            window.__vortex_save_password(domain, userVal, pass);
+                        }
+                    } catch(err) {}
+                }
 
-                            setInterval(() => {
-                                const player = document.getElementById('movie_player');
-                                if (player && typeof player.setPlaybackQualityRange === 'function') {
-                                    try {
-                                        player.setPlaybackQualityRange('medium', 'hd720');
-                                    } catch(e) {}
-                                }
-                            }, 2000);
-                        } catch(e) {}
+                document.addEventListener('submit', function(e) {
+                    _vortexExtractCredentials(e.target);
+                }, true);
 
-                        // Twitch Performance Turbo (Pre-set 720p30 / freeze animated emotes / hide bloat)
-                        try {
-                            try {
-                                window.localStorage.setItem('video-quality', JSON.stringify({ default: '720p30' }));
-                                window.localStorage.setItem('twilight.player.quality', '"720p30"');
-                                window.localStorage.setItem('lowLatencyMode', 'false');
-                            } catch(e) {}
+                document.addEventListener('click', function(e) {
+                    const btn = e.target && e.target.closest ? e.target.closest('button, input[type="submit"], input[type="button"], a[role="button"]') : null;
+                    if (btn) {
+                        _vortexExtractCredentials(btn);
+                    }
+                }, true);
 
-                            const twStyle = document.createElement('style');
-                            twStyle.textContent = `
-                                .chat-image, .chat-line__message--emote {
-                                    animation-play-state: paused !important;
-                                }
-                                .community-points-summary,
-                                .channel-points-reward-line,
-                                .bits-card,
-                                .tw-carousel,
-                                .carousel-player,
-                                .front-page-carousel,
-                                [data-a-target="player-overlay-mature-accept"],
-                                [data-a-target="user-channel-status-notice"] {
-                                    display: none !important;
-                                    visibility: hidden !important;
-                                }
-                            `;
-                            if (document.head) {
-                                document.head.appendChild(twStyle);
-                            } else {
-                                document.addEventListener('DOMContentLoaded', () => {
-                                    if (document.head) document.head.appendChild(twStyle);
-                                });
-                            }
-                        } catch(e) {}
-                    }"""
-                )
+                document.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        _vortexExtractCredentials(e.target);
+                    }
+                }, true);
+            })()"""
+            try:
+                await self.context.expose_binding("__vortex_save_password", self._on_password_submitted)
+            except Exception as _pe:
+                logger.debug("expose_binding warning: %s", _pe)
+            try:
+                await self.context.add_init_script(self._init_turbo_js)
             except Exception:
                 pass
 
@@ -1926,11 +2492,7 @@ class AmigaClientSession:
             self.active_tab_idx = 0
             self.context.on("page", self._on_popup_page)
             if self.engine == "chromium":
-                try:
-                    self.cdp = await self.context.new_cdp_session(self.page)
-                except Exception as cdp_exc:
-                    logger.debug("CDP session fallback: %s", cdp_exc)
-                    self.cdp = None
+                await self._attach_direct_cdp(self.page)
             else:
                 self.cdp = None
 
@@ -1957,18 +2519,24 @@ class AmigaClientSession:
             if self.audio_enabled:
                 tasks.append(asyncio.create_task(self._audio_stream_loop()))
 
+            curr_url = self.page.url if self.page else ""
+            has_existing_page = bool(curr_url and not curr_url.startswith("about:") and curr_url != self.portal_url)
+
             initial_url = self.start_url if self.start_url else self.portal_url
-            logger.info("Navigating initial viewport (%dx%d) to %s", self.width, self.height, initial_url)
+            logger.info("Navigating initial viewport (%dx%d) to %s (has_existing_page=%s)", self.width, self.height, initial_url, has_existing_page)
             async def _init_nav():
-                try:
-                    await self.page.goto(initial_url, wait_until="domcontentloaded", timeout=12000)
-                except Exception as nav_exc:
-                    logger.warning("Initial navigation warning (%s), falling back to portal", nav_exc)
-                    if initial_url != self.portal_url:
-                        try:
-                            await self.page.goto(self.portal_url, wait_until="domcontentloaded", timeout=8000)
-                        except Exception:
-                            pass
+                if not has_existing_page:
+                    try:
+                        await self.page.goto(initial_url, wait_until="domcontentloaded", timeout=12000)
+                    except Exception as nav_exc:
+                        logger.warning("Initial navigation warning (%s), falling back to portal", nav_exc)
+                        if initial_url != self.portal_url:
+                            try:
+                                await self.page.goto(self.portal_url, wait_until="domcontentloaded", timeout=8000)
+                            except Exception:
+                                pass
+                else:
+                    self._send_nav_update(self.page.url)
                 self.active_until = time.monotonic() + 3.0
                 self._trigger_full_refresh(True)
                 self._schedule_delayed_frames()
@@ -1992,6 +2560,11 @@ class AmigaClientSession:
                 self._h264_encoder.stop()
                 self._h264_encoder = None
             await self._stop_screencast()
+            if self.cdp is not None and isinstance(self.cdp, DirectCDPSession):
+                try:
+                    await self.cdp.close()
+                except Exception:
+                    pass
             if self.context:
                 try:
                     self.context.remove_listener("page", self._on_popup_page)
@@ -1999,6 +2572,7 @@ class AmigaClientSession:
                     pass
             for tab in list(self.tabs):
                 try:
+                    tab.remove_listener("filechooser", self._on_filechooser_event)
                     tab.remove_listener("download", self._on_download_event)
                     tab.remove_listener("framenavigated", self._on_main_frame_navigated)
                     tab.remove_listener("load", self._on_page_loaded)
@@ -2051,7 +2625,6 @@ class AmigaClientSession:
             self.last_frame_hash = None
         self.active_until = time.monotonic() + 3.0
         self.force_frame_event.set()
-        self._safe_dispatch_resize()
 
     async def _start_screencast(self) -> bool:
         """Start CDP Page.screencast — push-based frame delivery.
@@ -2070,6 +2643,7 @@ class AmigaClientSession:
             self.screencast_active = True
 
             def _screencast_handler(params: dict) -> None:
+                self.last_screencast_frame_time = time.monotonic()
                 session_id = params.get("sessionId")
                 if session_id is not None and self.cdp is not None:
                     try:
@@ -2104,7 +2678,12 @@ class AmigaClientSession:
                 ),
                 timeout=2.0,
             )
-            logger.info("CDP Page.screencast started (push-based frame streaming, JPEG q%d)", self.jpeg_quality)
+            self.last_screencast_frame_time = time.monotonic()
+            logger.info(
+                "CDP Page.screencast started via %s (push-based frame streaming, JPEG q%d)",
+                "DirectCDP WebSocket" if isinstance(self.cdp, DirectCDPSession) and self.cdp.connected else "Rustwright/CDP",
+                self.jpeg_quality,
+            )
             return True
         except Exception as exc:
             logger.debug("Could not start CDP screencast: %s", exc)
@@ -2315,9 +2894,9 @@ class AmigaClientSession:
                 elif not self.screencast_active:
                     try:
                         if self.context and self.page and self.engine == "chromium":
-                            self.cdp = await asyncio.wait_for(
-                                self.context.new_cdp_session(self.page),
-                                timeout=1.5,
+                            await asyncio.wait_for(
+                                self._attach_direct_cdp(self.page),
+                                timeout=2.0,
                             )
                     except Exception:
                         self.cdp = None
@@ -2356,25 +2935,28 @@ class AmigaClientSession:
                     b64_data = params.get("data")
                     if b64_data:
                         jpeg_bytes = base64.b64decode(b64_data)
-                        await self._encode_and_send_png(jpeg_bytes, force)
+                        await self._encode_and_send_png(jpeg_bytes, self.force_full_frame)
                         return
                 except Exception as exc:
                     logger.debug("Screencast frame decode error: %s", exc)
 
-            # If screencast is active and queue was empty, only capture fallback screenshot if:
+            # If screencast is active and queue was empty, capture fallback screenshot if:
             # - No initial frame has EVER been sent yet (self.last_frame_hash is None), OR
-            # - A frame is explicitly forced (initial connection, resize, @REFRESH), OR
-            # - We are within an active interaction window (time.monotonic() < self.active_until).
-            # If completely idle on a static page, return to save CPU!
+            # - An explicit full refresh was requested (self.force_full_frame), OR
+            # - Video/audio/active interaction is ongoing and CDP screencast hasn't pushed a frame for > 65ms.
             now = time.monotonic()
-            is_active = (now < self.active_until)
-            needs_frame = force or self.force_full_frame or (self.last_frame_hash is None) or is_active
+            is_dynamic = (
+                self.is_video_mode
+                or self._video_element_playing
+                or (getattr(self, "last_audio_time", 0.0) > now - 2.0)
+                or (now < self.active_until)
+            )
+            screencast_stalled = is_dynamic and ((now - self.last_screencast_frame_time) >= 0.065)
+            needs_frame = self.force_full_frame or (self.last_frame_hash is None) or screencast_stalled
             if not needs_frame:
                 return
 
-        self._safe_dispatch_resize()
-
-        # Fallback to direct fast CDP screenshot (when screencast queue is empty or screencast not active)
+        # Fallback to direct fast CDP screenshot (when screencast is not active or frame is forced)
         try:
             jpeg_bytes = await self._capture_jpeg_fast()
             if not jpeg_bytes:
@@ -2383,7 +2965,7 @@ class AmigaClientSession:
             logger.debug("Screenshot skipped during navigation: %s", exc)
             return
 
-        await self._encode_and_send_png(jpeg_bytes, force)
+        await self._encode_and_send_png(jpeg_bytes, self.force_full_frame)
 
     async def _encode_and_send_png(self, png_bytes: bytes, force: bool = False) -> None:
         """Decode PNG/JPEG, run dirty-region detection, LZ4 compress, and send to Amiga."""
@@ -2417,6 +2999,7 @@ class AmigaClientSession:
         cur_url = (self.page.url or "").lower() if self.page else ""
         is_video_site = any(k in cur_url for k in ("youtube.com/watch", "youtu.be/", "twitch.tv/", "/watch?v="))
         audio_active = (getattr(self, "last_audio_time", 0.0) > time.monotonic() - 2.0)
+        # Emit H.264 video stream when in video stream mode, on video sites or when requested
         should_h264 = (
             (self.codec_mode == "h264")
             or (self.stream_mode == "h264")
@@ -2473,6 +3056,7 @@ class AmigaClientSession:
             bpp = 4
             frame_bytes_len = w * h * 4
 
+        max_pkt_len = frame_bytes_len + (frame_bytes_len // 255) + 4096
         if self.prev_raw_buf is None or len(self.prev_raw_buf) != frame_bytes_len or self.prev_dims != (w, h):
             self.prev_raw_buf = ctypes.create_string_buffer(frame_bytes_len)
             self.prev_dims = (w, h)
@@ -2480,7 +3064,10 @@ class AmigaClientSession:
             self._argb_buf = ctypes.create_string_buffer(num_px * 4)
             self._rgb565_buf = ctypes.create_string_buffer(num_px * 2)
             self._yuv_buf = ctypes.create_string_buffer((num_px * 3) // 2)
+            self._pkt_buf = ctypes.create_string_buffer(max_pkt_len)
             force_full = True
+        elif self._pkt_buf is None or len(self._pkt_buf) < max_pkt_len:
+            self._pkt_buf = ctypes.create_string_buffer(max_pkt_len)
 
         t_decode = time.monotonic()
         loop = asyncio.get_running_loop()
@@ -2497,6 +3084,9 @@ class AmigaClientSession:
             self._argb_buf,
             self._rgb565_buf,
             self._yuv_buf,
+            self._pkt_buf,
+            self.allow_yuv_rect,
+            self.is_video_mode or self._video_element_playing,
         )
         t_encode = time.monotonic()
         if header_and_payload:
@@ -2538,8 +3128,35 @@ class AmigaClientSession:
         argb_buf: Optional[ctypes.Array] = None,
         rgb565_buf: Optional[ctypes.Array] = None,
         yuv_buf: Optional[ctypes.Array] = None,
+        pkt_buf: Optional[ctypes.Array] = None,
+        allow_yuv_rect: bool = False,
+        is_video_mode: bool = False,
     ) -> Optional[bytes]:
         try:
+            # 1. Ultra-Fast C-Native Pipeline (libturbojpeg SIMD + AVX2 dirty-rect + liblz4 in a single C call)
+            if _FAST_PIXCONV is not None and _HAS_NATIVE_PACKET_ENCODER and pkt_buf is not None:
+                work_buf = yuv_buf if pixel_format == FMT_YUV420P else (rgb565_buf if pixel_format == FMT_RGB565 else argb_buf)
+                if work_buf is not None:
+                    lz4_accel = (3 | 0x100) if is_video_mode else 3
+                    pkt_len = _FAST_PIXCONV.encode_jpeg_to_frame_packet(
+                        jpeg_bytes,
+                        len(jpeg_bytes),
+                        width,
+                        height,
+                        pixel_format,
+                        1 if force_full else 0,
+                        1 if allow_yuv_rect else 0,
+                        lz4_accel,
+                        prev_buf,
+                        work_buf,
+                        pkt_buf,
+                        len(pkt_buf),
+                    )
+                    if pkt_len == 0:
+                        return None
+                    if pkt_len > 0:
+                        return ctypes.string_at(pkt_buf, pkt_len)
+
             raw_bytes: Optional[bytes] = None
             if _TURBO_JPEG is not None:
                 try:
@@ -2584,9 +3201,8 @@ class AmigaClientSession:
                     img, width, height, pixel_format, argb_buf, rgb565_buf, yuv_buf
                 )
 
-            if pixel_format == FMT_YUV420P:
+            if pixel_format == FMT_YUV420P and not allow_yuv_rect:
                 # 12 bpp Planar YUV420: Stream Y, U, V planes compressed with LZ4
-                # Dirty-rect optimization is supported for YUV420P too (bpp==1 in fast_pixconv.c)
                 if not force_full and prev_buf is not None and len(prev_buf) == len(raw_bytes):
                     if prev_buf.raw == raw_bytes:
                         return None
@@ -2628,8 +3244,12 @@ class AmigaClientSession:
 
                 # 2D Bounding Box optimization: If changed area is < 85% of total viewport, send CODEC_LZ4_RECT!
                 if 0 < rw_val <= width and 0 < rh_val <= height and (rw_val * rh_val < int(width * height * 0.85)):
-                    pack_buf = ctypes.create_string_buffer(rw_val * rh_val * bpp)
-                    _FAST_PIXCONV.pack_sub_rect(raw_bytes, pack_buf, width, bpp, rx_val, ry_val, rw_val, rh_val)
+                    if pixel_format == FMT_YUV420P and hasattr(_FAST_PIXCONV, "pack_sub_rect_yuv420p"):
+                        pack_buf = ctypes.create_string_buffer((rw_val * rh_val * 3) // 2)
+                        _FAST_PIXCONV.pack_sub_rect_yuv420p(raw_bytes, pack_buf, width, height, rx_val, ry_val, rw_val, rh_val)
+                    else:
+                        pack_buf = ctypes.create_string_buffer(rw_val * rh_val * bpp)
+                        _FAST_PIXCONV.pack_sub_rect(raw_bytes, pack_buf, width, bpp, rx_val, ry_val, rw_val, rh_val)
                     comp_rect = lz4.block.compress(pack_buf.raw, store_size=False)
                     rect_payload = STRUCT_RECT_HDR.pack(rx_val, ry_val, rw_val, rh_val) + comp_rect
                     hdr = STRUCT_MSG_FRAME.pack(
@@ -2756,7 +3376,9 @@ class AmigaClientSession:
             else:
                 now_loop = time.monotonic()
                 if (
-                    getattr(self, "last_audio_time", 0.0) > now_loop - 1.0
+                    getattr(self, "last_audio_time", 0.0) > now_loop - 1.5
+                    or self.is_video_mode
+                    or self._video_element_playing
                     or now_loop < self.active_until
                 ):
                     idle_ticks = 0
@@ -2962,6 +3584,33 @@ class AmigaClientSession:
                 if fut and not fut.done():
                     fut.set_result(bool(accepted == 1))
 
+            elif msg_type == MSG_UPLOAD_RESPONSE:
+                try:
+                    body = await self.reader.readexactly(STRUCT_MSG_UPLOAD_RESP.size)
+                except asyncio.IncompleteReadError:
+                    break
+                upload_id, file_size, accepted, pad, raw_fname = STRUCT_MSG_UPLOAD_RESP.unpack(body)
+                fname = raw_fname.split(b"\x00", 1)[0].decode("utf-8", errors="replace")
+                logger.info("Received MSG_UPLOAD_RESPONSE: id=%d, size=%d, accepted=%d, fname='%s'",
+                            upload_id, file_size, accepted, fname)
+                entry = self.pending_uploads.get(upload_id)
+                if entry:
+                    fc, fut, chunk_queue = entry
+                    if not fut.done():
+                        fut.set_result((bool(accepted == 1), file_size, fname))
+
+            elif msg_type == MSG_UPLOAD_CHUNK:
+                try:
+                    chunk_hdr = await self.reader.readexactly(struct.calcsize(">II"))
+                    u_id, chunk_len = struct.unpack(">II", chunk_hdr)
+                    chunk_data = await self.reader.readexactly(chunk_len)
+                except asyncio.IncompleteReadError:
+                    break
+                entry = self.pending_uploads.get(u_id)
+                if entry:
+                    _, _, chunk_queue = entry
+                    await chunk_queue.put(chunk_data)
+
             elif msg_type == MSG_CLIPBOARD:
                 try:
                     clip_hdr = await self.reader.readexactly(struct.calcsize(">I"))
@@ -3005,14 +3654,6 @@ class AmigaClientSession:
         cy = max(0, min(self.height - 1, int(y)))
 
         try:
-            if self._pending_mouse_coord is not None and event_type in (INPUT_CLICK, INPUT_MOUSE_DOWN, INPUT_MOUSE_UP):
-                target_m = self._pending_mouse_coord
-                self._pending_mouse_coord = None
-                try:
-                    await self.page.mouse.move(target_m[0], target_m[1])
-                except Exception:
-                    pass
-
             if event_type == INPUT_CLICK:
                 btn = "left"
                 if key_code == 2:
@@ -3044,6 +3685,23 @@ class AmigaClientSession:
                     btn = "right"
                 logger.info("INPUT_MOUSE_DOWN (%s) at (%d, %d)", btn, cx, cy)
 
+                now = time.monotonic()
+                if btn == "left":
+                    if (now - self._last_click_time) < 0.35 and abs(cx - self._last_click_x) <= 4 and abs(cy - self._last_click_y) <= 4:
+                        self._click_count = min(3, self._click_count + 1)
+                    else:
+                        self._click_count = 1
+                    self._last_click_time = now
+                    self._last_click_x = cx
+                    self._last_click_y = cy
+                else:
+                    self._click_count = 1
+
+                self._mouse_down_x = cx
+                self._mouse_down_y = cy
+                self._mouse_down_btn = btn
+                self._mouse_down_time = now
+
                 if btn == "right":
                     await self._send_native_context_menu(cx, cy)
                     return
@@ -3054,8 +3712,13 @@ class AmigaClientSession:
                         f"window.scrollTo(0, Math.max(0, (document.documentElement.scrollHeight - window.innerHeight) * {ratio:.4f}))"
                     )
                 else:
+                    if btn == "left":
+                        try:
+                            await self.page.evaluate("([x, y]) => window.__vortex_selection && window.__vortex_selection.start(x, y)", [cx, cy])
+                        except Exception:
+                            pass
                     await self.page.mouse.move(cx, cy)
-                    await self.page.mouse.down(button=btn)
+                    await self.page.mouse.down(button=btn, click_count=self._click_count)
                 self._trigger_full_refresh(True)
                 self._schedule_delayed_frames()
 
@@ -3068,32 +3731,135 @@ class AmigaClientSession:
                 logger.info("INPUT_MOUSE_UP (%s) at (%d, %d)", btn, cx, cy)
 
                 if btn != "right":
-                    await self.page.mouse.move(cx, cy)
-                    await self.page.mouse.up(button=btn)
+                    down_x = self._mouse_down_x if self._mouse_down_x >= 0 else cx
+                    down_y = self._mouse_down_y if self._mouse_down_y >= 0 else cy
+                    dist = ((cx - down_x) ** 2 + (cy - down_y) ** 2) ** 0.5
+
+                    dragged = False
+                    sel_text = ""
                     if btn == "left":
                         try:
-                            sel = await self.page.evaluate("window.getSelection() ? window.getSelection().toString() : ''")
-                            if sel and len(sel.strip()) > 0:
-                                logger.info("Selected text (%d chars): %r", len(sel), sel[:60])
-                                await self.send_clipboard_to_amiga(sel)
+                            res = await self.page.evaluate("([x, y]) => window.__vortex_selection ? window.__vortex_selection.finish(x, y) : {dragged: false, text: ''}", [cx, cy])
+                            if res and isinstance(res, dict):
+                                dragged = bool(res.get("dragged", False))
+                                sel_text = res.get("text", "") or ""
                         except Exception:
                             pass
+
+                    # If user dragged, release with click_count=1 to finalize the freeform selection
+                    if dist > 4 or dragged:
+                        self._click_count = 1
+                    await self.page.mouse.move(cx, cy)
+                    await self.page.mouse.up(button=btn, click_count=self._click_count)
+
+                    self._mouse_down_btn = ""
+
+                    # Universal check: only if stationary click AND not dragged AND no upload is pending/recent
+                    now_up = time.monotonic()
+                    if btn == "left" and dist <= 10 and not dragged and not self.pending_uploads and (now_up - self.last_upload_intercept_time) >= 3.0:
+                        try:
+                            upload_hit = await self.page.evaluate("""([x, y]) => {
+                                let el = document.elementFromPoint(x, y);
+                                if (!el) return false;
+                                let elem = el.nodeType === 1 ? el : el.parentElement;
+                                if (!elem) return false;
+
+                                // 1. Direct file input
+                                if (elem.tagName === 'INPUT' && elem.type === 'file') {
+                                    elem.click();
+                                    return true;
+                                }
+
+                                // 2. Contains file input
+                                let finp = elem.querySelector ? elem.querySelector('input[type="file"]') : null;
+                                if (finp) {
+                                    finp.click();
+                                    return true;
+                                }
+
+                                // 3. Label pointing to file input
+                                let lbl = elem.closest ? elem.closest('label') : null;
+                                if (lbl && lbl.htmlFor) {
+                                    let inp = document.getElementById(lbl.htmlFor);
+                                    if (inp && inp.type === 'file') {
+                                        inp.click();
+                                        return true;
+                                    }
+                                }
+
+                                // 4. Button / anchor / upload trigger element
+                                let uploadBtn = elem.closest ? elem.closest(
+                                    '#add_files, .attach-panel-multi, .js-attachmentUpload, .js-attachButton, [data-action="upload"], ' +
+                                    'input[type="file"], .moxie-shim, .moxie-shim-html5'
+                                ) : null;
+                                if (uploadBtn) {
+                                    let moxieInp = document.querySelector('.moxie-shim input[type="file"], .moxie-shim-html5 input[type="file"]');
+                                    if (moxieInp) {
+                                        moxieInp.click();
+                                        return true;
+                                    }
+                                    let allInp = Array.from(document.querySelectorAll('input[type="file"]'));
+                                    for (let inp of allInp) {
+                                        if (inp.id !== 'fileupload' || allInp.length === 1) {
+                                            inp.click();
+                                            return true;
+                                        }
+                                    }
+                                    if (allInp.length > 0) {
+                                        allInp[0].click();
+                                        return true;
+                                    }
+                                }
+                                return false;
+                            }""", [down_x, down_y])
+                            if upload_hit:
+                                logger.info("Fallback upload click triggered at (%d, %d)", down_x, down_y)
+                                self.last_upload_intercept_time = time.monotonic()
+                        except Exception as e:
+                            logger.info("Upload element check notice: %s", e)
+
+                    if btn == "left":
+                        if sel_text and len(sel_text.strip()) > 0:
+                            logger.info("Selected text (%d chars): %r", len(sel_text), sel_text[:60])
+                            await self.send_clipboard_to_amiga(sel_text)
+                        else:
+                            try:
+                                sel = await self.page.evaluate("""() => {
+                                    let s = window.getSelection() ? window.getSelection().toString() : '';
+                                    if (s && s.length > 0) return s;
+                                    let el = document.activeElement;
+                                    if (el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && el.type === 'text'))) {
+                                        try {
+                                            return el.value.substring(el.selectionStart, el.selectionEnd);
+                                        } catch (e) {}
+                                    }
+                                    return '';
+                                }""")
+                                if sel and len(sel.strip()) > 0:
+                                    logger.info("Selected text (%d chars): %r", len(sel), sel[:60])
+                                    await self.send_clipboard_to_amiga(sel)
+                            except Exception:
+                                pass
                 self._trigger_full_refresh(True)
                 self._schedule_delayed_frames()
 
             elif event_type == INPUT_MOUSE_MOVE:
-                self._pending_mouse_coord = (cx, cy)
-                if self._mouse_move_task is None or self._mouse_move_task.done():
-                    async def _dispatch_mouse_moves():
-                        while self._pending_mouse_coord is not None and self.running and self.page:
-                            target = self._pending_mouse_coord
-                            self._pending_mouse_coord = None
+                try:
+                    if self._mouse_down_btn == "left":
+                        # If user moves mouse with button down, update selection directly via caretRangeFromPoint
+                        dist = ((cx - self._mouse_down_x) ** 2 + (cy - self._mouse_down_y) ** 2) ** 0.5
+                        if dist > 4:
+                            self._click_count = 1
                             try:
-                                await self.page.mouse.move(target[0], target[1])
+                                await self.page.evaluate("([x, y]) => window.__vortex_selection && window.__vortex_selection.update(x, y)", [cx, cy])
                             except Exception:
                                 pass
-                            await asyncio.sleep(0.002)
-                    self._mouse_move_task = asyncio.create_task(_dispatch_mouse_moves())
+                        await self.page.mouse.move(cx, cy)
+                        self._trigger_full_refresh(False)
+                    else:
+                        await self.page.mouse.move(cx, cy)
+                except Exception:
+                    pass
 
                 now = time.monotonic()
                 if (now - self.last_hover_time) >= 0.25:
@@ -3333,13 +4099,71 @@ class AmigaClientSession:
         except Exception as exc:
             logger.debug("emulate_media color_scheme error: %s", exc)
 
+        page_url = ""
+        try:
+            page_url = target_page.url or ""
+        except Exception:
+            pass
+
+        is_twitch = "twitch.tv" in page_url.lower()
+
         if self.cdp is not None and self.engine == "chromium":
             try:
-                await self.cdp.send("Emulation.setAutoDarkModeOverride", {"enabled": is_dark})
+                # Do NOT force Chromium Emulation.setAutoDarkModeOverride on Twitch or YouTube
+                # because AutoDarkMode forcefully inverts video surfaces into solid white/blank boxes!
+                auto_dark = is_dark and not is_twitch
+                await self.cdp.send("Emulation.setAutoDarkModeOverride", {"enabled": auto_dark})
             except Exception as exc:
                 logger.debug("Emulation.setAutoDarkModeOverride error: %s", exc)
 
-        if DARKREADER_JS:
+        if is_twitch:
+            # Native Twitch Dark Theme toggle (preserves video element, flawless dark UI)
+            try:
+                if is_dark:
+                    tw_dark_js = """
+                    (() => {
+                        try {
+                            if (typeof DarkReader !== 'undefined') DarkReader.disable();
+                            let f = document.getElementById('__vb_dark_flash');
+                            if (f) f.remove();
+                            document.documentElement.classList.remove('tw-root--theme-light');
+                            document.documentElement.classList.add('tw-root--theme-dark');
+                            try { localStorage.setItem('twilight.theme', '1'); } catch(e) {}
+                            let s = document.getElementById('__vb_tw_dark_fix');
+                            if (!s && document.head) {
+                                s = document.createElement('style');
+                                s.id = '__vb_tw_dark_fix';
+                                document.head.appendChild(s);
+                            }
+                            if (s) {
+                                s.textContent = `
+                                    .video-player, .video-player__container, .video-player__default-player, video {
+                                        background-color: #000000 !important;
+                                        filter: none !important;
+                                    }
+                                `;
+                            }
+                        } catch(e) {}
+                    })();
+                    """
+                    await target_page.evaluate(tw_dark_js)
+                else:
+                    tw_light_js = """
+                    (() => {
+                        try {
+                            document.documentElement.classList.remove('tw-root--theme-dark');
+                            document.documentElement.classList.add('tw-root--theme-light');
+                            try { localStorage.setItem('twilight.theme', '0'); } catch(e) {}
+                            let s = document.getElementById('__vb_tw_dark_fix');
+                            if (s) s.remove();
+                        } catch(e) {}
+                    })();
+                    """
+                    await target_page.evaluate(tw_light_js)
+            except Exception as exc:
+                logger.debug("Twitch native theme evaluate error: %s", exc)
+
+        elif DARKREADER_JS:
             try:
                 if is_dark:
                     js = (
@@ -3403,17 +4227,6 @@ class AmigaClientSession:
                             }
                         },
                     )
-                    await self.cdp.send(
-                        "Page.setFontFamilies",
-                        {
-                            "fontFamilies": {
-                                "standard": css_font,
-                                "sansSerif": "sans-serif",
-                                "serif": "serif",
-                                "fixed": "monospace",
-                            }
-                        },
-                    )
                 except Exception:
                     pass
 
@@ -3459,6 +4272,11 @@ class AmigaClientSession:
             return
         cmd = raw_cmd.strip()
         if not cmd:
+            return
+
+        if cmd.upper() == "@CAP:YUV_RECT":
+            self.allow_yuv_rect = True
+            logger.info("Client enabled 2D YUV420P dirty-rect streaming (CODEC_LZ4_RECT)")
             return
 
         if cmd.upper().startswith("@STREAM_MODE:"):
@@ -3535,23 +4353,14 @@ class AmigaClientSession:
         if cmd.upper().startswith("@JPEG_QUALITY:"):
             try:
                 q = int(cmd.split(":", 1)[1].strip())
+                if self.width * self.height >= 1500000 and q > 85:
+                    logger.info("1080p Full HD mode active: clamping requested JPEG quality %d -> 85 for optimal 25 FPS bandwidth", q)
+                    q = 85
                 self.base_jpeg_quality = max(20, min(100, q))
-                self.video_jpeg_quality = min(self.base_jpeg_quality, 60)
+                self.video_jpeg_quality = min(self.base_jpeg_quality, 75)
                 target_q = self.video_jpeg_quality if self.is_video_mode else self.base_jpeg_quality
                 await self._set_screencast_quality(target_q)
                 logger.info("Set JPEG/MJPEG base quality to %d (current=%d)", self.base_jpeg_quality, self.jpeg_quality)
-            except Exception:
-                pass
-            return
-
-        if cmd.upper().startswith("@VIDEO_TURBO:"):
-            try:
-                enabled = int(cmd.split(":", 1)[1].strip()) != 0
-                self.video_turbo_enabled = enabled
-                logger.info("Client requested Video-Turbo (720p scaling) = %s", self.video_turbo_enabled)
-                if self.screencast_active:
-                    target_q = self.video_jpeg_quality if self.is_video_mode else self.base_jpeg_quality
-                    await self._set_screencast_quality(target_q)
             except Exception:
                 pass
             return
@@ -3573,14 +4382,17 @@ class AmigaClientSession:
         if cmd.upper().startswith("@RESIZE:"):
             try:
                 dims = cmd.split(":", 1)[1].lower().split("x")
-                new_w = max(320, min(1920, int(dims[0]) & ~15))
+                new_w = max(320, min(1920, int(dims[0]) & ~1))
                 new_h = max(200, min(1080, int(dims[1]) & ~1))
                 if (new_w, new_h) != (self.width, self.height):
                     logger.info("Syncing browser viewport 1:1 to Amiga window: %dx%d", new_w, new_h)
                     self.width = new_w
                     self.height = new_h
-                    self.current_screencast_w = new_w
-                    self.current_screencast_h = new_h
+                    if new_w * new_h >= 1500000 and self.base_jpeg_quality > 85:
+                        self.base_jpeg_quality = 85
+                        if not self.is_video_mode:
+                            self.jpeg_quality = 85
+                            self.current_screencast_quality = 85
                     self._trigger_full_refresh(True)
                     await self.page.set_viewport_size({"width": new_w, "height": new_h})
                     if self.engine == "chromium":
@@ -3689,19 +4501,18 @@ class AmigaClientSession:
             if self.context:
                 try:
                     self._creating_tab = True
+                    await self._stop_screencast()
                     new_page = await self.context.new_page()
                     self.tabs.append(new_page)
                     self.active_tab_idx = len(self.tabs) - 1
                     self.page = new_page
                     self._setup_page_listeners(new_page)
+                    await self.page.set_viewport_size({"width": self.width, "height": self.height})
                     if self.engine == "chromium":
-                        try:
-                            self.cdp = await self.context.new_cdp_session(new_page)
-                        except Exception:
-                            self.cdp = None
+                        await self._attach_direct_cdp(new_page)
+                        await self._start_screencast()
                     else:
                         self.cdp = None
-                    await self.page.set_viewport_size({"width": self.width, "height": self.height})
                     await self._apply_dark_mode(new_page)
                     self._send_progress(20, f"Lade {target}...")
                     await self.page.goto(target, wait_until="commit", timeout=15000)
@@ -3718,18 +4529,22 @@ class AmigaClientSession:
             try:
                 tidx = int(cmd.split(":", 1)[1].strip())
                 if 0 <= tidx < len(self.tabs):
+                    await self._stop_screencast()
                     self.active_tab_idx = tidx
                     self.page = self.tabs[tidx]
+                    try:
+                        await self.page.set_viewport_size({"width": self.width, "height": self.height})
+                    except Exception:
+                        pass
                     if self.context and self.engine == "chromium":
-                        try:
-                            self.cdp = await self.context.new_cdp_session(self.page)
-                        except Exception:
-                            self.cdp = None
+                        await self._attach_direct_cdp(self.page)
+                        await self._start_screencast()
                     else:
                         self.cdp = None
                     await self._apply_dark_mode(self.page)
                     self._send_nav_update(self.page.url or "")
                     self._trigger_full_refresh(True)
+                    self._schedule_delayed_frames()
             except Exception as exc:
                 logger.warning("Switch tab error: %s", exc)
             return
@@ -3738,6 +4553,7 @@ class AmigaClientSession:
             try:
                 tidx = int(cmd.split(":", 1)[1].strip())
                 if 0 <= tidx < len(self.tabs) and len(self.tabs) > 1:
+                    await self._stop_screencast()
                     p_to_close = self.tabs.pop(tidx)
                     try:
                         await p_to_close.close()
@@ -3746,16 +4562,19 @@ class AmigaClientSession:
                     if self.active_tab_idx >= len(self.tabs):
                         self.active_tab_idx = len(self.tabs) - 1
                     self.page = self.tabs[self.active_tab_idx]
+                    try:
+                        await self.page.set_viewport_size({"width": self.width, "height": self.height})
+                    except Exception:
+                        pass
                     if self.context and self.engine == "chromium":
-                        try:
-                            self.cdp = await self.context.new_cdp_session(self.page)
-                        except Exception:
-                            self.cdp = None
+                        await self._attach_direct_cdp(self.page)
+                        await self._start_screencast()
                     else:
                         self.cdp = None
                     await self._apply_dark_mode(self.page)
                     self._send_nav_update(self.page.url or "")
                     self._trigger_full_refresh(True)
+                    self._schedule_delayed_frames()
             except Exception as exc:
                 logger.warning("Close tab error: %s", exc)
             return
@@ -3780,6 +4599,19 @@ class AmigaClientSession:
                     logger.warning("Error applying twitch token: %s", exc)
             return
 
+        if cmd.upper().startswith("@AUTOLOGIN_FILL:"):
+            payload = cmd.split(":", 1)[1]
+            user = ""
+            pwd = ""
+            if "\t" in payload:
+                user, pwd = payload.split("\t", 1)
+            elif " " in payload:
+                user, pwd = payload.split(" ", 1)
+            else:
+                user = payload
+            await self._perform_auto_login(user, pwd, submit=False)
+            return
+
         if cmd.upper().startswith("@AUTOLOGIN:"):
             payload = cmd.split(":", 1)[1]
             user = ""
@@ -3790,7 +4622,7 @@ class AmigaClientSession:
                 user, pwd = payload.split(" ", 1)
             else:
                 user = payload
-            await self._perform_auto_login(user, pwd)
+            await self._perform_auto_login(user, pwd, submit=True)
             return
 
         logger.info("INPUT_GOTO_URL: %s (history idx=%d/%d)", cmd, self.nav_idx, len(self.nav_history))
@@ -3870,14 +4702,17 @@ class AmigaClientSession:
         self.background_tasks.add(t)
         t.add_done_callback(self.background_tasks.discard)
 
-    async def _perform_auto_login(self, username: str, password: str) -> None:
+    async def _perform_auto_login(self, username: str, password: str, submit: bool = True) -> None:
         if not self.page:
             return
-        logger.info("Executing Auto-Login for user: %r", username)
-        self._send_progress(50, f"Auto-Login fuer '{username}'...")
+        logger.info("Executing Auto-Login for user: %r (submit=%s)", username, submit)
+        if submit:
+            self._send_progress(50, f"Auto-Login fuer '{username}'...")
+        else:
+            self._send_progress(50, f"Zugangsdaten einfuellen...")
 
         js_script = """
-        ([user, pass]) => {
+        ([user, pass, shouldSubmit]) => {
             function isVisible(el) {
                 if (!el) return false;
                 const style = window.getComputedStyle(el);
@@ -3968,16 +4803,18 @@ class AmigaClientSession:
             }
 
             let submitted = false;
-            if (submitBtn) {
-                try {
-                    submitBtn.click();
-                    submitted = true;
-                } catch (e) {}
-            } else if (form && (userFilled || passFilled)) {
-                try {
-                    form.submit();
-                    submitted = true;
-                } catch (e) {}
+            if (shouldSubmit) {
+                if (submitBtn) {
+                    try {
+                        submitBtn.click();
+                        submitted = true;
+                    } catch (e) {}
+                } else if (form && (userFilled || passFilled)) {
+                    try {
+                        form.submit();
+                        submitted = true;
+                    } catch (e) {}
+                }
             }
 
             return {
@@ -3995,20 +4832,24 @@ class AmigaClientSession:
             res = None
             for frame in frames:
                 try:
-                    res = await frame.evaluate(js_script, [username, password])
+                    res = await frame.evaluate(js_script, [username, password, submit])
                     if res and (res.get("userFilled") or res.get("passFilled")):
                         break
                 except Exception:
                     continue
 
             logger.info("Auto-Login execution result: %s", res)
-            if res and not res.get("submitted") and (res.get("userFilled") or res.get("passFilled")):
+            if submit and res and not res.get("submitted") and (res.get("userFilled") or res.get("passFilled")):
                 await self.page.keyboard.press("Enter")
 
             if res and (res.get("userFilled") or res.get("passFilled")):
-                self._send_progress(100, f"Auto-Login ausgefuehrt ({username})")
+                if submit:
+                    self._send_progress(100, f"Auto-Login ausgefuehrt ({username})")
+                else:
+                    self._send_progress(100, f"Zugangsdaten eingefuellt ({username})")
             else:
-                self._send_progress(100, "Keine Login-Felder gefunden")
+                if submit:
+                    self._send_progress(100, "Keine Login-Felder gefunden")
         except Exception as exc:
             logger.warning("Auto-Login error: %s", exc)
             self._send_progress(100, "Auto-Login fehlgeschlagen")
@@ -4247,6 +5088,250 @@ class AmigaClientSession:
             except Exception:
                 pass
 
+    # ------------------------------------------------------------------------
+    # File Upload Interceptor (Amiga ASL FileRequester -> Server -> Browser)
+    # ------------------------------------------------------------------------
+    def _on_cdp_file_chooser_opened(self, params: dict) -> None:
+        """Triggered directly by Chromium CDP Page.fileChooserOpened."""
+        logger.info("DirectCDP Page.fileChooserOpened received: %r", params)
+        now = time.monotonic()
+        if self.pending_uploads:
+            logger.info("Ignoring duplicate Page.fileChooserOpened: upload already in progress (%r)", list(self.pending_uploads.keys()))
+            return
+        if (now - self.last_upload_intercept_time) < 3.0:
+            logger.info("Ignoring duplicate Page.fileChooserOpened: cooldown active (%.2fs)", now - self.last_upload_intercept_time)
+            return
+        self.last_upload_intercept_time = now
+
+        backend_node_id = params.get("backendNodeId")
+        frame_id = params.get("frameId")
+        mode = params.get("mode", "selectSingle")
+        t = asyncio.create_task(self._process_cdp_filechooser(backend_node_id, mode))
+        self.background_tasks.add(t)
+        t.add_done_callback(self.background_tasks.discard)
+
+    async def _process_cdp_filechooser(self, backend_node_id: Optional[int], mode: str) -> None:
+        upload_id = self.next_upload_id
+        self.next_upload_id += 1
+
+        logger.info("Intercepted CDP file upload chooser id=%d (backendNodeId=%s, mode=%s, page=%s)",
+                    upload_id, backend_node_id, mode, self.page.url if self.page else "")
+
+        loop = asyncio.get_running_loop()
+        resp_future = loop.create_future()
+        chunk_queue = asyncio.Queue()
+        self.pending_uploads[upload_id] = (None, resp_future, chunk_queue)
+
+        tmp_path = None
+        try:
+            # 1. Send MSG_UPLOAD_REQUEST to Amiga to open ASL FileRequester
+            accept_bytes = b"".ljust(256, b"\x00")
+            req_pkt = STRUCT_MSG_UPLOAD_REQ.pack(
+                MSG_UPLOAD_REQUEST,
+                upload_id,
+                0,  # max_size (0 = unconstrained)
+                accept_bytes,
+            )
+            if not await self.send_packet(req_pkt):
+                logger.warning("Could not send MSG_UPLOAD_REQUEST id=%d to Amiga", upload_id)
+                return
+
+            # 2. Wait up to 5 minutes for Amiga user to select a file in ASL FileRequester
+            try:
+                accepted, file_size, filename = await asyncio.wait_for(resp_future, timeout=300.0)
+            except asyncio.TimeoutError:
+                logger.warning("Upload id=%d timed out waiting for Amiga ASL selection", upload_id)
+                return
+
+            if not accepted or file_size == 0:
+                logger.info("Upload id=%d cancelled by Amiga user or empty file", upload_id)
+                return
+
+            logger.info("Upload id=%d confirmed by Amiga: '%s' (%d bytes). Receiving chunks...",
+                        upload_id, filename, file_size)
+
+            # 3. Create temporary file on server to receive uploaded chunks
+            safe_fname = re.sub(r'[^a-zA-Z0-9_.-]', '_', filename) or f"upload_{upload_id}.bin"
+            tmp_fd, tmp_path = tempfile.mkstemp(prefix=f"vb_up_{upload_id}_", suffix=f"_{safe_fname}")
+
+            received_bytes = 0
+            with os.fdopen(tmp_fd, "wb") as f:
+                while received_bytes < file_size and self.running:
+                    try:
+                        chunk_data = await asyncio.wait_for(chunk_queue.get(), timeout=30.0)
+                    except asyncio.TimeoutError:
+                        logger.warning("Upload id=%d timed out waiting for chunk from queue", upload_id)
+                        break
+                    f.write(chunk_data)
+                    received_bytes += len(chunk_data)
+
+            if received_bytes >= file_size:
+                abs_tmp_path = os.path.abspath(tmp_path)
+                logger.info("Upload id=%d fully received (%d bytes). Setting files in browser (%s)!",
+                            upload_id, received_bytes, abs_tmp_path)
+                set_ok = False
+                if self.cdp and isinstance(self.cdp, DirectCDPSession) and backend_node_id:
+                    try:
+                        await self.cdp.send("DOM.setFileInputFiles", {
+                            "files": [abs_tmp_path],
+                            "backendNodeId": backend_node_id
+                        })
+                        set_ok = True
+                        logger.info("Upload id=%d: successfully set files via DirectCDP DOM.setFileInputFiles", upload_id)
+                    except Exception as cdp_err:
+                        logger.warning("Upload id=%d: DOM.setFileInputFiles failed: %s", upload_id, cdp_err)
+
+                if not set_ok and self.page:
+                    for selector in [
+                        '.moxie-shim input[type="file"]',
+                        '.moxie-shim-html5 input[type="file"]',
+                        '#add_files_container input[type="file"]',
+                        'input[type="file"]'
+                    ]:
+                        try:
+                            el = await self.page.query_selector(selector)
+                            if el:
+                                await self.page.set_input_files(selector, [abs_tmp_path])
+                                set_ok = True
+                                logger.info("Upload id=%d: set files via fallback selector '%s'", upload_id, selector)
+                                break
+                        except Exception:
+                            pass
+
+                self._trigger_full_refresh(True)
+                self._schedule_delayed_frames()
+            else:
+                logger.warning("Upload id=%d incomplete: received %d of %d bytes",
+                               upload_id, received_bytes, file_size)
+
+        except Exception as exc:
+            logger.error("Error processing CDP file upload id=%d: %s", upload_id, exc)
+        finally:
+            self.pending_uploads.pop(upload_id, None)
+            if tmp_path:
+                try:
+                    async def _delayed_unlink(p: str):
+                        await asyncio.sleep(60.0)
+                        try:
+                            if os.path.exists(p):
+                                os.remove(p)
+                        except Exception:
+                            pass
+                    t_del = asyncio.create_task(_delayed_unlink(tmp_path))
+                    self.background_tasks.add(t_del)
+                    t_del.add_done_callback(self.background_tasks.discard)
+                except Exception:
+                    pass
+
+    def _on_filechooser_event(self, file_chooser: FileChooser) -> None:
+        """Triggered whenever a website clicks an HTML <input type="file">."""
+        now = time.monotonic()
+        if self.pending_uploads:
+            logger.info("Ignoring duplicate filechooser event: upload already in progress (%r)", list(self.pending_uploads.keys()))
+            return
+        if (now - self.last_upload_intercept_time) < 3.0:
+            logger.info("Ignoring duplicate filechooser event: cooldown active (%.2fs)", now - self.last_upload_intercept_time)
+            return
+        self.last_upload_intercept_time = now
+
+        t = asyncio.create_task(self._process_filechooser(file_chooser))
+        self.background_tasks.add(t)
+        t.add_done_callback(self.background_tasks.discard)
+
+    async def _process_filechooser(self, file_chooser: FileChooser) -> None:
+        upload_id = self.next_upload_id
+        self.next_upload_id += 1
+
+        element = file_chooser.element
+        accept_types = ""
+        try:
+            if element:
+                accept_types = (await element.get_attribute("accept")) or ""
+        except Exception:
+            pass
+
+        logger.info("Intercepted file upload chooser id=%d (page=%s, accept='%s')",
+                    upload_id, self.page.url if self.page else "", accept_types)
+
+        loop = asyncio.get_running_loop()
+        resp_future = loop.create_future()
+        chunk_queue = asyncio.Queue()
+        self.pending_uploads[upload_id] = (file_chooser, resp_future, chunk_queue)
+
+        tmp_path = None
+        try:
+            # 1. Send MSG_UPLOAD_REQUEST to Amiga to open ASL FileRequester
+            accept_bytes = accept_types.encode("utf-8", errors="replace")[:255].ljust(256, b"\x00")
+            req_pkt = STRUCT_MSG_UPLOAD_REQ.pack(
+                MSG_UPLOAD_REQUEST,
+                upload_id,
+                0,  # max_size (0 = unconstrained)
+                accept_bytes,
+            )
+            if not await self.send_packet(req_pkt):
+                logger.warning("Could not send MSG_UPLOAD_REQUEST id=%d to Amiga", upload_id)
+                return
+
+            # 2. Wait up to 5 minutes for Amiga user to select a file in ASL FileRequester
+            try:
+                accepted, file_size, filename = await asyncio.wait_for(resp_future, timeout=300.0)
+            except asyncio.TimeoutError:
+                logger.warning("Upload id=%d timed out waiting for Amiga ASL selection", upload_id)
+                return
+
+            if not accepted or file_size == 0:
+                logger.info("Upload id=%d cancelled by Amiga user or empty file", upload_id)
+                return
+
+            logger.info("Upload id=%d confirmed by Amiga: '%s' (%d bytes). Receiving chunks...",
+                        upload_id, filename, file_size)
+
+            # 3. Create temporary file on server to receive uploaded chunks
+            safe_fname = re.sub(r'[^a-zA-Z0-9_.-]', '_', filename) or f"upload_{upload_id}.bin"
+            tmp_fd, tmp_path = tempfile.mkstemp(prefix=f"vb_up_{upload_id}_", suffix=f"_{safe_fname}")
+
+            received_bytes = 0
+
+            with os.fdopen(tmp_fd, "wb") as f:
+                while received_bytes < file_size and self.running:
+                    try:
+                        chunk_data = await asyncio.wait_for(chunk_queue.get(), timeout=30.0)
+                    except asyncio.TimeoutError:
+                        logger.warning("Upload id=%d timed out waiting for chunk from queue", upload_id)
+                        break
+                    f.write(chunk_data)
+                    received_bytes += len(chunk_data)
+
+            if received_bytes >= file_size:
+                logger.info("Upload id=%d fully received (%d bytes). Setting files in browser!",
+                            upload_id, received_bytes)
+                await file_chooser.set_files(tmp_path)
+                self._trigger_full_refresh(True)
+                self._schedule_delayed_frames()
+            else:
+                logger.warning("Upload id=%d incomplete: received %d of %d bytes",
+                               upload_id, received_bytes, file_size)
+
+        except Exception as exc:
+            logger.error("Error processing file upload id=%d: %s", upload_id, exc)
+        finally:
+            self.pending_uploads.pop(upload_id, None)
+            if tmp_path:
+                try:
+                    # Allow browser time to finish form submission before deleting temp file
+                    async def _delayed_unlink(p: str):
+                        await asyncio.sleep(60.0)
+                        try:
+                            if os.path.exists(p):
+                                os.remove(p)
+                        except Exception:
+                            pass
+                    t_del = asyncio.create_task(_delayed_unlink(tmp_path))
+                    self.background_tasks.add(t_del)
+                    t_del.add_done_callback(self.background_tasks.discard)
+                except Exception:
+                    pass
+
 
 # ============================================================================
 # GPU Acceleration Helper
@@ -4269,17 +5354,78 @@ def get_gpu_launch_flags(disable_gpu: bool = False) -> Tuple[List[str], bool]:
         "--ignore-gpu-blocklist",
         "--enable-gpu-rasterization",
         "--enable-zero-copy",
-        "--use-gl=angle",
-        "--use-angle=vulkan",
-        "--enable-features=Vulkan,VulkanFromANGLE,DefaultANGLEVulkan,CanvasOopRasterization,VaapiVideoDecoder,VaapiVideoEncoder,VaapiIgnoreDriverChecks",
+        "--enable-features=CanvasOopRasterization,VaapiVideoDecoder,VaapiVideoEncoder,VaapiIgnoreDriverChecks",
     ]
     return gpu_flags, has_dri
+
+
+def _cleanup_existing_server_and_locks(port: int, profile_dir: str) -> None:
+    """Stops any older server.py instance or orphaned Chromium holding the TCP port or profile lock."""
+    my_pid = os.getpid()
+    try:
+        out = subprocess.check_output(["pgrep", "-f", "server.py"], text=True, timeout=2)
+        other_pids = [int(p) for p in out.split() if p.strip().isdigit() and int(p) != my_pid]
+        if other_pids:
+            logger.info("Stopping previous VortexBrowser server instance(s) %s...", other_pids)
+            for pid in other_pids:
+                try:
+                    os.kill(pid, 15)
+                except Exception:
+                    pass
+            time.sleep(0.6)
+            for pid in other_pids:
+                try:
+                    os.kill(pid, 9)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    # Also terminate any orphaned Chromium processes still holding the profile directory
+    try:
+        out = subprocess.check_output(["pgrep", "-f", profile_dir], text=True, timeout=2)
+        chrome_pids = [int(p) for p in out.split() if p.strip().isdigit() and int(p) != my_pid]
+        if chrome_pids:
+            logger.info("Cleaning up orphaned Chromium process(es) %s for profile %s...", chrome_pids, profile_dir)
+            for pid in chrome_pids:
+                try:
+                    os.kill(pid, 15)
+                except Exception:
+                    pass
+            time.sleep(0.4)
+            for pid in chrome_pids:
+                try:
+                    os.kill(pid, 9)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    # Clean stale Chromium SingletonLock
+    for lock_name in ("SingletonLock", "SingletonCookie", "SingletonSocket"):
+        lp = os.path.join(profile_dir, lock_name)
+        if os.path.lexists(lp):
+            try:
+                os.remove(lp)
+            except Exception:
+                pass
 
 
 # ============================================================================
 # Main Server Entrypoint
 # ============================================================================
 async def run_server(args: argparse.Namespace) -> None:
+    if hasattr(args, "log_level") and args.log_level:
+        lvl = getattr(logging, str(args.log_level).upper(), logging.CRITICAL)
+        logger.setLevel(lvl)
+        logging.getLogger().setLevel(lvl)
+    engine = getattr(args, "engine", "chromium").lower()
+    profile_dir = os.path.expanduser(
+        "~/.config/vortexbrowse/firefox_profile" if engine == "firefox" else "~/.config/vortexbrowse/chromium_profile"
+    )
+    os.makedirs(profile_dir, exist_ok=True)
+    _cleanup_existing_server_and_locks(args.port, profile_dir)
+
     audio_ready = ensure_audio_sink()
     portal = LocalPortalHTTPServer(host="127.0.0.1", port=args.portal_port)
     portal_url = await portal.start()
@@ -4313,7 +5459,34 @@ async def run_server(args: argparse.Namespace) -> None:
         all_exts = find_all_extension_paths() if enable_exts else []
 
         profile_dir = os.path.expanduser("~/.config/vortexbrowse/chromium_profile")
-        os.makedirs(profile_dir, exist_ok=True)
+        try:
+            os.makedirs(profile_dir, exist_ok=True)
+            test_file = os.path.join(profile_dir, ".write_test")
+            with open(test_file, "w") as f:
+                f.write("ok")
+            os.unlink(test_file)
+        except Exception as e:
+            fallback_dir = os.path.join(tempfile.gettempdir(), f"vortexbrowse_chromium_profile_{os.getuid()}")
+            logger.warning("Profile directory '%s' is not writable (%s). Falling back to temporary directory '%s'", profile_dir, e, fallback_dir)
+            profile_dir = fallback_dir
+            os.makedirs(profile_dir, exist_ok=True)
+
+        # Clean up stale SingletonLock/Socket/Cookie from prior crashes or killed processes
+        for lock_file in ("SingletonLock", "SingletonCookie", "SingletonSocket"):
+            lp = os.path.join(profile_dir, lock_file)
+            if os.path.exists(lp) or os.path.islink(lp):
+                try:
+                    os.unlink(lp)
+                    logger.info("Cleaned up stale lock file: %s", lp)
+                except Exception as e:
+                    logger.warning("Could not remove lock file %s: %s", lp, e)
+
+        if os.getuid() == 0:
+            logger.warning("=" * 68)
+            logger.warning(" HINWEIS: Der VortexBrowser Server laeuft als ROOT (UID 0)!")
+            logger.warning(" Es wird dringend empfohlen, den Server als normaler Benutzer")
+            logger.warning(" (OHNE sudo) auszufuehren, um Berechtigungskonflikte zu vermeiden.")
+            logger.warning("=" * 68)
 
         gpu_flags, has_dri = get_gpu_launch_flags(disable_gpu=getattr(args, "disable_gpu", False))
         if getattr(args, "disable_gpu", False):
@@ -4325,6 +5498,8 @@ async def run_server(args: argparse.Namespace) -> None:
 
         launch_args = [
             "--ozone-platform=headless",
+            "--remote-debugging-port=9222",
+            "--remote-allow-origins=*",
             "--no-sandbox",
             "--disable-dev-shm-usage",
             "--font-render-hinting=medium",
@@ -4347,7 +5522,14 @@ async def run_server(args: argparse.Namespace) -> None:
             logger.info("Browser extensions (uBlock Origin, h264ify): DISABLED as requested")
             launch_args.append("--disable-extensions")
 
-    async with async_playwright() as pw:
+    use_rustwright = (_HAS_RUSTWRIGHT and _rustwright_async is not None and engine == "chromium")
+    pw_factory = _rustwright_async if use_rustwright else _playwright_async
+    if use_rustwright:
+        logger.info("Browser Automation Core: Rustwright (native Rust PyO3 + DirectCDP, zero Node.js driver overhead)")
+    else:
+        logger.info("Browser Automation Core: Playwright (%s)", engine)
+
+    async with pw_factory() as pw:
         if engine == "firefox":
             logger.info("Launching Playwright Firefox persistent context at %s...", profile_dir)
             firefox_user_agent = (
@@ -4394,6 +5576,8 @@ async def run_server(args: argparse.Namespace) -> None:
         else:
             logger.info("Launching Headless Chromium fallback persistent context at %s...", profile_dir)
             fallback_args = [
+                "--remote-debugging-port=9222",
+                "--remote-allow-origins=*",
                 "--no-sandbox",
                 "--disable-dev-shm-usage",
                 "--font-render-hinting=medium",
@@ -4469,7 +5653,7 @@ async def run_server(args: argparse.Namespace) -> None:
                         codec_mode=getattr(args, "codec", "auto"),
                         engine=engine,
                         stream_mode=getattr(args, "stream_mode", "auto"),
-                        video_bitrate=getattr(args, "video_bitrate", 4000),
+                        video_bitrate=getattr(args, "video_bitrate", 8000),
                     )
                     active_session = session
 
@@ -4523,12 +5707,12 @@ async def run_server(args: argparse.Namespace) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="VortexBrowse CachyOS Streaming Server for AmigaOS 4.1")
+    parser = argparse.ArgumentParser(description="VortexBrowse CachyOS HP EliteDesk 805 G6 (AMD Ryzen PRO) 1080p@25fps Server")
     parser.add_argument("--host", default="0.0.0.0", help="Bind address (default: 0.0.0.0)")
     parser.add_argument("--port", type=int, default=7788, help="TCP port (default: 7788, plus 9757 for LAN)")
     parser.add_argument("--portal-port", type=int, default=8089, help="Local start portal HTTP port")
-    parser.add_argument("--width", type=int, default=1024, help="Initial browser width (default: 1024)")
-    parser.add_argument("--height", type=int, default=768, help="Initial browser height (default: 768)")
+    parser.add_argument("--width", type=int, default=1920, help="Initial browser width (default: 1920 Full HD)")
+    parser.add_argument("--height", type=int, default=1080, help="Initial browser height (default: 1080 Full HD)")
     parser.add_argument("--format", choices=["argb32", "rgb565", "yuv420p", "yuv"], default="yuv420p", help="Wire pixel format (default: yuv420p — GPU-native YUV, lowest bandwidth)")
     parser.add_argument("--fps", type=int, default=25, help="Max target FPS (default: 25)")
     parser.add_argument("--url", default="", help="Optional initial URL (default: built-in Amiga portal)")
@@ -4536,13 +5720,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--codec", choices=["auto", "jpeg", "lz4", "h264"], default="auto", help="Streaming codec (default: auto)")
     parser.add_argument("--stream-mode", choices=["auto", "lz4", "h264"], default="auto", help="Video streaming mode (default: auto = adaptive H.264 on video, LZ4 otherwise)")
     parser.add_argument("--video-bitrate", type=int, default=8000, help="H.264 video stream bitrate in kbps (default: 8000 kbps)")
-    parser.add_argument(
-        "--log-level",
-        choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"],
-        default=os.environ.get("VORTEX_LOG_LEVEL", "CRITICAL").upper(),
-        help="Logging verbosity (default: CRITICAL) [env: VORTEX_LOG_LEVEL]",
-    )
-    parser.add_argument("--jpeg-quality", type=int, default=100, help="JPEG capture quality 20-100 (default: 100 for maximum clarity)")
+    parser.add_argument("--log-level", default=os.environ.get("VORTEX_LOG_LEVEL", "CRITICAL"), help="Log level (default: CRITICAL)")
+    parser.add_argument("--jpeg-quality", type=int, default=82, help="JPEG capture quality 20-100 (default: 82 for Full HD 1080p@25fps)")
     parser.add_argument("--enable-extensions", dest="enable_extensions", action="store_true", default=True, help="Enable browser extensions (uBlock, h264ify) [default: enabled]")
     parser.add_argument("--disable-extensions", dest="enable_extensions", action="store_false", help="Disable all browser extensions")
     parser.add_argument("--disable-gpu", action="store_true", help="Disable GPU hardware acceleration (forces CPU software rasterization)")
@@ -4557,12 +5736,7 @@ def parse_args() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
-    args = parse_args()
-    if hasattr(args, "log_level"):
-        lvl = getattr(logging, args.log_level.upper(), logging.CRITICAL)
-        logger.setLevel(lvl)
-        logging.getLogger().setLevel(lvl)
     try:
-        asyncio.run(run_server(args))
+        asyncio.run(run_server(parse_args()))
     except KeyboardInterrupt:
         logger.info("VortexBrowse Server stopped.")

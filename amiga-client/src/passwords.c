@@ -689,3 +689,35 @@ const PasswordEntry *passwords_find_by_domain(VortexApp *app, const char *domain
     }
     return NULL;
 }
+
+BOOL passwords_add_or_update(VortexApp *app, const char *domain, const char *user, const char *pass, const char *notes)
+{
+    if (!app || !app->password_store || !app->password_store->unlocked) return FALSE;
+    if (!domain || domain[0] == '\0' || !user || user[0] == '\0' || !pass || pass[0] == '\0') return FALSE;
+
+    /* Extract clean host */
+    char clean_host[VB_PW_MAX_DOMAIN];
+    const char *p = domain;
+    if (strncmp(p, "http://", 7) == 0) p += 7;
+    else if (strncmp(p, "https://", 8) == 0) p += 8;
+    if (strncmp(p, "www.", 4) == 0) p += 4;
+    strncpy(clean_host, p, sizeof(clean_host) - 1);
+    clean_host[sizeof(clean_host) - 1] = '\0';
+    char *slash = strchr(clean_host, '/');
+    if (slash) *slash = '\0';
+    char *colon = strchr(clean_host, ':');
+    if (colon) *colon = '\0';
+
+    /* Check if an entry for this clean_host and username already exists */
+    for (int i = 0; i < app->password_store->count; i++) {
+        const char *ed = app->password_store->entries[i].domain;
+        const char *eu = app->password_store->entries[i].username;
+        if (ed && eu && strcasecmp(ed, clean_host) == 0 && strcasecmp(eu, user) == 0) {
+            /* Update existing entry */
+            return passwords_update(app, i, clean_host, user, pass, notes);
+        }
+    }
+
+    /* Otherwise, add new entry using the clean_host */
+    return passwords_add(app, clean_host, user, pass, notes);
+}

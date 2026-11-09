@@ -27,6 +27,7 @@
 #include "download.h"
 #include "audio.h"
 #include "clipboard.h"
+#include "passwords.h"
 
 static const char *used_verstag __attribute__((used)) = "\0$VER: VortexBrowser 0.99 RC3 (06.11.2026)";
 static const char *used_stack   __attribute__((used)) = "\0$STACK:524288";
@@ -337,6 +338,7 @@ int main(int argc, char **argv)
     favorites_init(&g_app);
     audio_init(&g_app);
     clipboard_init();
+    passwords_init(&g_app);
 
     if (!gui_init(&g_app)) {
         gui_cleanup(&g_app);
@@ -490,6 +492,7 @@ int main(int argc, char **argv)
     audio_cleanup(&g_app);
     clipboard_cleanup();
     download_cleanup(&g_app);
+    passwords_cleanup(&g_app);
     gui_cleanup(&g_app);
     renderer_cleanup(&g_app);
     close_libs_and_classes();

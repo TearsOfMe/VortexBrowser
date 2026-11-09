@@ -79,6 +79,7 @@ MSG_CLIPBOARD         = 0x0B
 MSG_UPLOAD_REQUEST    = 0x0C
 MSG_UPLOAD_RESPONSE   = 0x0D
 MSG_UPLOAD_CHUNK      = 0x0E
+MSG_PASSWORD_SAVE     = 0x0F
 
 FMT_ARGB32 = 1
 FMT_RGB565 = 2
@@ -119,6 +120,7 @@ STRUCT_MSG_PROGRESS     = struct.Struct(">BBx64s")
 STRUCT_MSG_UPLOAD_REQ   = struct.Struct(">BII256s")
 STRUCT_MSG_UPLOAD_RESP  = struct.Struct(">IIBB256s")
 STRUCT_MSG_UPLOAD_CHUNK = struct.Struct(">BII")
+STRUCT_MSG_PASSWORD_SAVE = struct.Struct(">B256s128s128s")
 
 DOWNLOAD_CHUNK_SIZE = 64 * 1024
 AUDIO_SAMPLE_RATE   = 22050
@@ -1871,6 +1873,31 @@ class AmigaClientSession:
         self.background_tasks.add(t)
         t.add_done_callback(self.background_tasks.discard)
 
+    def _send_password_save(self, url: str, username: str, password: str) -> None:
+        if not self.running or not url or not username or not password:
+            return
+        url_bytes = url.encode("utf-8", errors="replace")[:255].ljust(256, b"\x00")
+        user_bytes = username.encode("utf-8", errors="replace")[:127].ljust(128, b"\x00")
+        pass_bytes = password.encode("utf-8", errors="replace")[:127].ljust(128, b"\x00")
+        pkt = STRUCT_MSG_PASSWORD_SAVE.pack(MSG_PASSWORD_SAVE, url_bytes, user_bytes, pass_bytes)
+        t = asyncio.create_task(self.send_packet(pkt))
+        self.background_tasks.add(t)
+        t.add_done_callback(self.background_tasks.discard)
+
+    async def _on_password_submitted(self, source, domain: str, username: str, password: str) -> None:
+        if not domain or not username or not password:
+            return
+        if "127.0.0.1" in domain or "localhost" in domain:
+            return
+        now = time.monotonic()
+        key = (domain, username, password)
+        if getattr(self, "_last_pw_save_key", None) == key and now - getattr(self, "_last_pw_save_time", 0.0) < 5.0:
+            return
+        self._last_pw_save_key = key
+        self._last_pw_save_time = now
+        logger.info("Captured submitted login credentials: domain=%s user=%s", domain, username)
+        self._send_password_save(domain, username, password)
+
     def _setup_page_listeners(self, page: Page) -> None:
         page.on("filechooser", self._on_filechooser_event)
         page.on("download", self._on_download_event)
@@ -2369,7 +2396,80 @@ class AmigaClientSession:
                         }
                     }, true);
                 } catch(e) {}
+
+                // --- Automatic Login & Password Submission Interceptor ---
+                function _vortexExtractCredentials(formOrElem) {
+                    try {
+                        if (!window.__vortex_save_password) return;
+                        const root = formOrElem ? (formOrElem.closest ? (formOrElem.closest('form') || formOrElem) : formOrElem) : document;
+                        let pwInputs = Array.from(root.querySelectorAll ? root.querySelectorAll('input[type="password"]') : []);
+                        if (pwInputs.length === 0 && formOrElem && formOrElem.form) {
+                            pwInputs = Array.from(formOrElem.form.querySelectorAll('input[type="password"]'));
+                        }
+                        if (pwInputs.length === 0) {
+                            pwInputs = Array.from(document.querySelectorAll('input[type="password"]'));
+                        }
+                        let pwInput = pwInputs.find(p => p.value && p.value.length > 0);
+                        if (!pwInput) return;
+                        const pass = pwInput.value;
+                        if (!pass) return;
+
+                        let form = pwInput.closest('form') || root;
+                        let userInputs = Array.from(form.querySelectorAll(
+                            'input[autocomplete="username"], input[autocomplete="email"], input[type="email"], ' +
+                            'input[name*="user" i], input[name*="login" i], input[name*="email" i], input[name*="account" i], ' +
+                            'input[id*="user" i], input[id*="login" i], input[id*="email" i], input[id*="account" i], ' +
+                            'input[type="text"]'
+                        ));
+                        let userVal = '';
+                        for (const u of userInputs) {
+                            if (u !== pwInput && u.value && u.value.trim().length > 0) {
+                                userVal = u.value.trim();
+                                break;
+                            }
+                        }
+                        if (!userVal) {
+                            const allText = Array.from(document.querySelectorAll('input[type="text"], input[type="email"], input:not([type])'));
+                            for (const u of allText) {
+                                if (u !== pwInput && u.value && u.value.trim().length > 0) {
+                                    userVal = u.value.trim();
+                                    break;
+                                }
+                            }
+                        }
+                        if (!userVal) return;
+
+                        let domain = window.location.hostname || '';
+                        if (!domain && window.location.href) {
+                            try { domain = new URL(window.location.href).hostname; } catch(e) {}
+                        }
+                        if (domain) {
+                            window.__vortex_save_password(domain, userVal, pass);
+                        }
+                    } catch(err) {}
+                }
+
+                document.addEventListener('submit', function(e) {
+                    _vortexExtractCredentials(e.target);
+                }, true);
+
+                document.addEventListener('click', function(e) {
+                    const btn = e.target && e.target.closest ? e.target.closest('button, input[type="submit"], input[type="button"], a[role="button"]') : null;
+                    if (btn) {
+                        _vortexExtractCredentials(btn);
+                    }
+                }, true);
+
+                document.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        _vortexExtractCredentials(e.target);
+                    }
+                }, true);
             })()"""
+            try:
+                await self.context.expose_binding("__vortex_save_password", self._on_password_submitted)
+            except Exception as _pe:
+                logger.debug("expose_binding warning: %s", _pe)
             try:
                 await self.context.add_init_script(self._init_turbo_js)
             except Exception:
@@ -4499,6 +4599,19 @@ class AmigaClientSession:
                     logger.warning("Error applying twitch token: %s", exc)
             return
 
+        if cmd.upper().startswith("@AUTOLOGIN_FILL:"):
+            payload = cmd.split(":", 1)[1]
+            user = ""
+            pwd = ""
+            if "\t" in payload:
+                user, pwd = payload.split("\t", 1)
+            elif " " in payload:
+                user, pwd = payload.split(" ", 1)
+            else:
+                user = payload
+            await self._perform_auto_login(user, pwd, submit=False)
+            return
+
         if cmd.upper().startswith("@AUTOLOGIN:"):
             payload = cmd.split(":", 1)[1]
             user = ""
@@ -4509,7 +4622,7 @@ class AmigaClientSession:
                 user, pwd = payload.split(" ", 1)
             else:
                 user = payload
-            await self._perform_auto_login(user, pwd)
+            await self._perform_auto_login(user, pwd, submit=True)
             return
 
         logger.info("INPUT_GOTO_URL: %s (history idx=%d/%d)", cmd, self.nav_idx, len(self.nav_history))
@@ -4589,14 +4702,17 @@ class AmigaClientSession:
         self.background_tasks.add(t)
         t.add_done_callback(self.background_tasks.discard)
 
-    async def _perform_auto_login(self, username: str, password: str) -> None:
+    async def _perform_auto_login(self, username: str, password: str, submit: bool = True) -> None:
         if not self.page:
             return
-        logger.info("Executing Auto-Login for user: %r", username)
-        self._send_progress(50, f"Auto-Login fuer '{username}'...")
+        logger.info("Executing Auto-Login for user: %r (submit=%s)", username, submit)
+        if submit:
+            self._send_progress(50, f"Auto-Login fuer '{username}'...")
+        else:
+            self._send_progress(50, f"Zugangsdaten einfuellen...")
 
         js_script = """
-        ([user, pass]) => {
+        ([user, pass, shouldSubmit]) => {
             function isVisible(el) {
                 if (!el) return false;
                 const style = window.getComputedStyle(el);
@@ -4687,16 +4803,18 @@ class AmigaClientSession:
             }
 
             let submitted = false;
-            if (submitBtn) {
-                try {
-                    submitBtn.click();
-                    submitted = true;
-                } catch (e) {}
-            } else if (form && (userFilled || passFilled)) {
-                try {
-                    form.submit();
-                    submitted = true;
-                } catch (e) {}
+            if (shouldSubmit) {
+                if (submitBtn) {
+                    try {
+                        submitBtn.click();
+                        submitted = true;
+                    } catch (e) {}
+                } else if (form && (userFilled || passFilled)) {
+                    try {
+                        form.submit();
+                        submitted = true;
+                    } catch (e) {}
+                }
             }
 
             return {
@@ -4714,20 +4832,24 @@ class AmigaClientSession:
             res = None
             for frame in frames:
                 try:
-                    res = await frame.evaluate(js_script, [username, password])
+                    res = await frame.evaluate(js_script, [username, password, submit])
                     if res and (res.get("userFilled") or res.get("passFilled")):
                         break
                 except Exception:
                     continue
 
             logger.info("Auto-Login execution result: %s", res)
-            if res and not res.get("submitted") and (res.get("userFilled") or res.get("passFilled")):
+            if submit and res and not res.get("submitted") and (res.get("userFilled") or res.get("passFilled")):
                 await self.page.keyboard.press("Enter")
 
             if res and (res.get("userFilled") or res.get("passFilled")):
-                self._send_progress(100, f"Auto-Login ausgefuehrt ({username})")
+                if submit:
+                    self._send_progress(100, f"Auto-Login ausgefuehrt ({username})")
+                else:
+                    self._send_progress(100, f"Zugangsdaten eingefuellt ({username})")
             else:
-                self._send_progress(100, "Keine Login-Felder gefunden")
+                if submit:
+                    self._send_progress(100, "Keine Login-Felder gefunden")
         except Exception as exc:
             logger.warning("Auto-Login error: %s", exc)
             self._send_progress(100, "Auto-Login fehlgeschlagen")
