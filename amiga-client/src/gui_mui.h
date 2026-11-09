@@ -61,6 +61,11 @@ enum {
     MID_ABOUT,
     MID_QUIT,
 
+    MID_EDIT,
+    MID_EDIT_CUT,
+    MID_EDIT_COPY,
+    MID_EDIT_PASTE,
+
     MID_NAV,
     MID_BACK,
     MID_FORWARD,

@@ -22,6 +22,7 @@
 #include "net.h"
 #include "renderer.h"
 #include "favorites.h"
+#include "clipboard.h"
 #include "download.h"
 #include "audio.h"
 
@@ -211,6 +212,7 @@ int main(int argc, char **argv)
     download_init(&g_app);
     favorites_init(&g_app);
     audio_init(&g_app);
+    clipboard_init();
 
     if (!gui_mui_init(&g_app)) {
         audio_cleanup(&g_app);
@@ -330,6 +332,7 @@ int main(int argc, char **argv)
 
     net_disconnect(&g_app);
     audio_cleanup(&g_app);
+    clipboard_cleanup();
     download_cleanup(&g_app);
     gui_mui_cleanup(&g_app);
     renderer_cleanup(&g_app);

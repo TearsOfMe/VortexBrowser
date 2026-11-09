@@ -26,6 +26,7 @@
 #include "renderer.h"
 #include "favorites.h"
 #include "passwords.h"
+#include "clipboard.h"
 
 extern struct SocketIFace *ISocket;
 extern struct PopupMenuIFace *IPopupMenu;
@@ -89,9 +90,14 @@ static struct NewMenu s_mui_menu[] = {
     { NM_ITEM,  NM_BARLABEL, NULL, 0, 0, (APTR)0 },
     { NM_ITEM,  (char *)"Beenden", (char *)"Q", 0, 0, (APTR)MID_QUIT },
 
+    { NM_TITLE, (char *)"Bearbeiten", NULL, 0, 0, (APTR)MID_EDIT },
+    { NM_ITEM,  (char *)"Ausschneiden", (char *)"x", 0, 0, (APTR)MID_EDIT_CUT },
+    { NM_ITEM,  (char *)"Kopieren",     (char *)"c", 0, 0, (APTR)MID_EDIT_COPY },
+    { NM_ITEM,  (char *)"Einfuegen",    (char *)"v", 0, 0, (APTR)MID_EDIT_PASTE },
+
     { NM_TITLE, (char *)"Navigation", NULL, 0, 0, (APTR)MID_NAV },
     { NM_ITEM,  (char *)"Zurueck", (char *)"Z", 0, 0, (APTR)MID_BACK },
-    { NM_ITEM,  (char *)"Vorwaerts", (char *)"V", 0, 0, (APTR)MID_FORWARD },
+    { NM_ITEM,  (char *)"Vorwaerts", (char *)"F", 0, 0, (APTR)MID_FORWARD },
     { NM_ITEM,  (char *)"Seite neu laden", (char *)"R", 0, 0, (APTR)MID_RELOAD },
     { NM_ITEM,  (char *)"Ladevorgang stoppen", (char *)"S", 0, 0, (APTR)MID_STOP },
     { NM_ITEM,  (char *)"Startseite", (char *)"H", 0, 0, (APTR)MID_HOME },
@@ -1492,6 +1498,23 @@ void gui_mui_flush_dirty(VortexApp *app)
 void gui_mui_handle_action(VortexApp *app, uint32 action_id)
 {
     switch (action_id) {
+        case MID_EDIT_CUT:
+            net_send_key(app, INPUT_KEY_DOWN, 24, "Cut");
+            break;
+
+        case MID_EDIT_COPY:
+            net_send_key(app, INPUT_KEY_DOWN, 3, "Copy");
+            break;
+
+        case MID_EDIT_PASTE: {
+            char *clip_str = clipboard_read_text();
+            if (clip_str) {
+                net_send_clipboard(app, clip_str);
+                free(clip_str);
+            }
+            break;
+        }
+
         case GID_BACK:
         case MID_BACK:
             net_send_url(app, "@BACK");
