@@ -91,8 +91,9 @@ Um die ToolTypes zu bearbeiten:
 ## Verzeichnisstruktur des Gesamtpakets
 
 - `amiga-client/`: Quelltext und Assets des AmigaOS 4 Clients
+- `intel-server/`: Optimiert für Intel Atom x5-Z8350, Celeron & Core (VA-API Hardwarebeschleunigung, EGL, SSE4 SIMD, 2-Thread-Atom-Rastering)
 - `cachyos-linux-server/`: High-End Rendering-Server für CachyOS / Arch / Fedora (Ryzen PRO, AVX2, powerprofilesctl)
-- `Linux server/`: Standard-Linux-Server (x86_64 / ARM64)
+- `pi-server/`: Standard-Linux-Server (x86_64 / ARM64)
 - `rpi4-server/`: Optimierter Server für Raspberry Pi 4 / 5
 - `make_release.py`: Erstellt automatisch alle fertigen Release-Archive (`.lha`, `.zip`)
 

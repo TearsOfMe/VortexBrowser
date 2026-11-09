@@ -17,6 +17,7 @@ STAGING_DIR = os.path.join(DIST_DIR, "staging")
 AMIGA_DRAWER = os.path.join(STAGING_DIR, "VortexBrowser")
 SERVER_LINUX_DRAWER = os.path.join(STAGING_DIR, "Server-Linux")
 SERVER_CACHYOS_DRAWER = os.path.join(STAGING_DIR, "Server-CachyOS-Linux")
+SERVER_INTEL_DRAWER = os.path.join(STAGING_DIR, "Server-Intel")
 SERVER_RPI4_DRAWER = os.path.join(STAGING_DIR, "Server-RaspberryPi4")
 
 print(f"=== [1/6] Preparing Staging Directories for {APP_NAME} {VER_STR} ===")
@@ -26,6 +27,7 @@ os.makedirs(AMIGA_DRAWER, exist_ok=True)
 os.makedirs(os.path.join(AMIGA_DRAWER, "icons"), exist_ok=True)
 os.makedirs(SERVER_LINUX_DRAWER, exist_ok=True)
 os.makedirs(SERVER_CACHYOS_DRAWER, exist_ok=True)
+os.makedirs(SERVER_INTEL_DRAWER, exist_ok=True)
 os.makedirs(SERVER_RPI4_DRAWER, exist_ok=True)
 
 # -------------------------------------------------------------
@@ -445,26 +447,34 @@ dank bi-linearer Filterung gestochen scharf und fluessig bleibt!
 
 @endnode
 
-@node "ServerSetup" "Server-Einrichtung (Linux PC / Raspberry Pi)"
-@{b}Server-Einrichtung (Linux PC / Raspberry Pi)@{ub}
+@node "ServerSetup" "Server-Einrichtung (Linux PC / Raspberry Pi / Intel)"
+@{b}Server-Einrichtung (Linux PC / Raspberry Pi / Intel)@{ub}
 
 Der Server kann auf jedem gaengigen Linux-System betrieben werden (z. B. Raspberry Pi 4,
 Raspberry Pi 5, Intel/AMD PC mit Debian, Ubuntu, Linux Mint, CachyOS, Arch, etc.).
 
-@{b}Automatische Installation mit install_server.sh:@{ub}
-1. Oeffnen Sie ein Terminal im Server-Verzeichnis.
+@{b}Verfuegbare Server-Profile:@{ub}
+- @{b}Server-Linux/@{ub}: Standard-Server fuer x86_64 PCs (Debian, Ubuntu, Fedora)
+- @{b}Server-Intel/@{ub}: Optimiert fuer Intel Atom (x5-Z8350), Celeron, Pentium und Core Mini-PCs
+  (integrierte Intel VA-API Hardwarebeschleunigung, EGL, SSE4 SIMD und 2-Thread-Atom-Rastering)
+- @{b}Server-CachyOS-Linux/@{ub}: High-Performance AVX2/Vulkan Server fuer modernere PCs & APUs
+- @{b}Server-RaspberryPi4/@{ub}: Optimiert fuer Raspberry Pi 4 / 5 (ARM64)
+
+@{b}Automatische Installation mit install_server.sh / install_intel.sh:@{ub}
+1. Oeffnen Sie ein Terminal im jeweiligen Server-Verzeichnis.
 2. Fuehren Sie das Skript aus:
-   @{b}./install_server.sh@{ub} (oder @{b}./install_rpi4.sh@{ub})
+   @{b}./install_server.sh@{ub} (bzw. @{b}./install_intel.sh@{ub} oder @{b}./install_rpi4.sh@{ub})
 3. Das Skript fuehrt vollautomatisch folgende Schritte durch:
    - Ueberprueft Python 3 (benoetigt Python 3.10 oder neuer).
    - Erstellt eine isolierte virtuelle Umgebung (@{b}.venv@{ub}).
+   - Installiert erforderliche Grafiktreiber (z. B. Intel VA-API i965 / iHD).
    - Installiert die benoetigten Pakete (@{i}playwright@{ui}, @{i}lz4@{ui}, @{i}Pillow@{ui}).
    - Laedt die optimierte Chromium-Browser-Engine herunter.
    - Kompiliert die native SIMD-Grafikbeschleunigung (@{b}fast_pixconv.so@{ub}).
    - Ermittelt die IP-Adresse Ihres Rechners im Netzwerk.
 
 @{b}Manuelles Starten:@{ub}
-   @{b}./run_server.sh@{ub} (bzw. @{b}./run_rpi4.sh@{ub})
+   @{b}./run_server.sh@{ub} (bzw. @{b}./run_intel.sh@{ub} / @{b}./run_rpi4.sh@{ub})
 
 @{b}Ports im Netzwerk:@{ub}
 - Port @{b}7788@{ub}: Haupt-Streaming-Port (MJPEG/LZ4 und Steuerung)
@@ -941,6 +951,31 @@ shutil.copy2("cachyos-linux-server/vortexbrowser.service", os.path.join(SERVER_C
 if os.path.exists("cachyos-linux-server/README_CACHYOS.md"):
     shutil.copy2("cachyos-linux-server/README_CACHYOS.md", os.path.join(SERVER_CACHYOS_DRAWER, "README_CACHYOS.txt"))
 
+# Populate Server-Intel Drawer
+shutil.copy2("intel-server/server.py", os.path.join(SERVER_INTEL_DRAWER, "server.py"))
+shutil.copy2("intel-server/fast_pixconv.c", os.path.join(SERVER_INTEL_DRAWER, "fast_pixconv.c"))
+if os.path.exists("intel-server/fast_pixconv.so"):
+    shutil.copy2("intel-server/fast_pixconv.so", os.path.join(SERVER_INTEL_DRAWER, "fast_pixconv.so"))
+shutil.copy2("intel-server/darkreader.js", os.path.join(SERVER_INTEL_DRAWER, "darkreader.js"))
+shutil.copy2("intel-server/requirements.txt", os.path.join(SERVER_INTEL_DRAWER, "requirements.txt"))
+shutil.copy2("intel-server/sync_twitch_login.py", os.path.join(SERVER_INTEL_DRAWER, "sync_twitch_login.py"))
+if os.path.exists("sync_twitch_login.sh"):
+    shutil.copy2("sync_twitch_login.sh", os.path.join(SERVER_INTEL_DRAWER, "sync_twitch_login.sh"))
+    os.chmod(os.path.join(SERVER_INTEL_DRAWER, "sync_twitch_login.sh"), 0o755)
+if os.path.exists("intel-server/extensions"):
+    shutil.copytree("intel-server/extensions", os.path.join(SERVER_INTEL_DRAWER, "extensions"), dirs_exist_ok=True)
+shutil.copy2("intel-server/install_intel.sh", os.path.join(SERVER_INTEL_DRAWER, "install_intel.sh"))
+shutil.copy2("intel-server/install_intel.sh", os.path.join(SERVER_INTEL_DRAWER, "install_server.sh"))
+os.chmod(os.path.join(SERVER_INTEL_DRAWER, "install_intel.sh"), 0o755)
+os.chmod(os.path.join(SERVER_INTEL_DRAWER, "install_server.sh"), 0o755)
+shutil.copy2("intel-server/run_intel.sh", os.path.join(SERVER_INTEL_DRAWER, "run_intel.sh"))
+shutil.copy2("intel-server/run_intel.sh", os.path.join(SERVER_INTEL_DRAWER, "run_server.sh"))
+os.chmod(os.path.join(SERVER_INTEL_DRAWER, "run_intel.sh"), 0o755)
+os.chmod(os.path.join(SERVER_INTEL_DRAWER, "run_server.sh"), 0o755)
+shutil.copy2("intel-server/vortexbrowser.service", os.path.join(SERVER_INTEL_DRAWER, "vortexbrowser.service"))
+if os.path.exists("intel-server/README_INTEL.md"):
+    shutil.copy2("intel-server/README_INTEL.md", os.path.join(SERVER_INTEL_DRAWER, "README_INTEL.txt"))
+
 # Populate Server-RaspberryPi4 Drawer
 shutil.copy2("rpi4-server/server.py", os.path.join(SERVER_RPI4_DRAWER, "server.py"))
 shutil.copy2("rpi4-server/fast_pixconv.c", os.path.join(SERVER_RPI4_DRAWER, "fast_pixconv.c"))
@@ -995,14 +1030,15 @@ VERZEICHNISSTRUKTUR:
   * icons/             : Symbolleisten-Icons
 - {APP_NAME}.info      : Workbench-Ordner-Icon fuer den Client-Ordner
 - Server-Linux/        : Der Rendering-Server fuer Standard-Linux-PCs (x86_64)
+- Server-Intel/        : Optimiert fuer Intel Atom (x5-Z8350), Celeron & Core (VA-API / EGL / SSE SIMD)
 - Server-CachyOS-Linux/: High-Performance Server fuer CachyOS/Arch (Full HD 1080p, AVX2, AMD/Intel GPU)
 - Server-RaspberryPi4/ : Der Rendering-Server optimiert fuer Raspberry Pi 4/5 (ARM64)
 
 SCHNELLSTART:
 -------------
-1. Server einrichten (auf Linux PC oder Raspberry Pi):
-   - Kopieren Sie "Server-Linux/" oder "Server-RaspberryPi4/" auf Ihren Rechner.
-   - Starten Sie "./install_server.sh" und anschliessend "./run_server.sh".
+1. Server einrichten (auf Linux PC, Intel Stick/Mini-PC oder Raspberry Pi):
+   - Kopieren Sie "Server-Intel/", "Server-Linux/" oder "Server-RaspberryPi4/" auf Ihren Rechner.
+   - Starten Sie "./install_server.sh" (bzw. "./install_intel.sh") und anschliessend "./run_server.sh".
    - Notieren Sie sich die IP-Adresse.
 
 2. Amiga-Client installieren:
@@ -1032,7 +1068,7 @@ print(f"[+] Created AmigaOS 4 LHA: {LHA_ARCHIVE} ({os.path.getsize(LHA_ARCHIVE)}
 # -------------------------------------------------------------
 # Create 2: Linux Server Zip Archive
 # -------------------------------------------------------------
-print(f"=== [5/6] Creating Linux & Raspberry Pi Server Archives ===")
+print(f"=== [5/6] Creating Linux, Intel & Raspberry Pi Server Archives ===")
 LINUX_ZIP = os.path.join(DIST_DIR, f"{APP_NAME}-{VER_STR}-Linux.zip")
 with zipfile.ZipFile(LINUX_ZIP, "w", zipfile.ZIP_DEFLATED) as zf:
     for root, dirs, files in os.walk(SERVER_LINUX_DRAWER):
@@ -1043,7 +1079,19 @@ with zipfile.ZipFile(LINUX_ZIP, "w", zipfile.ZIP_DEFLATED) as zf:
 print(f"[+] Created Linux Server Zip: {LINUX_ZIP} ({os.path.getsize(LINUX_ZIP)} bytes)")
 
 # -------------------------------------------------------------
-# Create 2b: CachyOS-Linux Server Zip Archive
+# Create 2b: Intel Server Zip Archive
+# -------------------------------------------------------------
+INTEL_ZIP = os.path.join(DIST_DIR, f"{APP_NAME}-{VER_STR}-Intel.zip")
+with zipfile.ZipFile(INTEL_ZIP, "w", zipfile.ZIP_DEFLATED) as zf:
+    for root, dirs, files in os.walk(SERVER_INTEL_DRAWER):
+        for file in files:
+            full_path = os.path.join(root, file)
+            rel_path = os.path.join("Server-Intel", os.path.relpath(full_path, SERVER_INTEL_DRAWER))
+            zf.write(full_path, rel_path)
+print(f"[+] Created Intel Server Zip: {INTEL_ZIP} ({os.path.getsize(INTEL_ZIP)} bytes)")
+
+# -------------------------------------------------------------
+# Create 2c: CachyOS-Linux Server Zip Archive
 # -------------------------------------------------------------
 CACHYOS_ZIP = os.path.join(DIST_DIR, f"{APP_NAME}-{VER_STR}-CachyOS-Linux.zip")
 with zipfile.ZipFile(CACHYOS_ZIP, "w", zipfile.ZIP_DEFLATED) as zf:

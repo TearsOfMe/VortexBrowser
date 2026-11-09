@@ -5196,9 +5196,93 @@ class AmigaClientSession:
 
 
 # ============================================================================
-# GPU Acceleration Helper
+# Hardware Detection & GPU Acceleration Helper
 # ============================================================================
-def get_gpu_launch_flags(disable_gpu: bool = False) -> Tuple[List[str], bool]:
+def detect_hardware_profile() -> dict:
+    """
+    Detects CPU architecture, CPU vendor/model, core count, GPU vendor (Intel/AMD/NVIDIA/Broadcom),
+    and available hardware acceleration devices (/dev/dri, VA-API, etc.).
+    """
+    profile = {
+        "arch": platform.machine().lower(),
+        "cpu_vendor": "Unknown",
+        "cpu_model": "Unknown",
+        "cpu_cores": os.cpu_count() or 4,
+        "is_low_power": False,
+        "has_intel_gpu": False,
+        "has_amd_gpu": False,
+        "has_nvidia_gpu": False,
+        "has_dri": False,
+        "dri_render_nodes": [],
+        "recommended_driver": None,
+    }
+
+    # 1. Inspect /proc/cpuinfo on Linux
+    if os.path.exists("/proc/cpuinfo"):
+        try:
+            with open("/proc/cpuinfo", "r", encoding="utf-8", errors="ignore") as f:
+                content = f.read()
+                for line in content.splitlines():
+                    if "vendor_id" in line and profile["cpu_vendor"] == "Unknown":
+                        val = line.split(":", 1)[1].strip()
+                        if "GenuineIntel" in val:
+                            profile["cpu_vendor"] = "Intel"
+                        elif "AuthenticAMD" in val:
+                            profile["cpu_vendor"] = "AMD"
+                    elif "model name" in line and profile["cpu_model"] == "Unknown":
+                        profile["cpu_model"] = line.split(":", 1)[1].strip()
+                    elif "Hardware" in line and profile["cpu_model"] == "Unknown":
+                        profile["cpu_model"] = line.split(":", 1)[1].strip()
+        except Exception:
+            pass
+
+    # Check for low-power CPUs (Intel Atom, Celeron, Pentium, older chips with <= 4 low-IPC cores)
+    model_lower = profile["cpu_model"].lower()
+    if any(k in model_lower for k in ["atom", "x5-", "x7-", "celeron", "pentium", "j1900", "n3450", "n4000", "n5000", "silvermont", "airmont", "goldmont"]):
+        profile["is_low_power"] = True
+    elif profile["cpu_vendor"] == "Intel" and profile["cpu_cores"] <= 4 and ("core" not in model_lower and "xeon" not in model_lower):
+        profile["is_low_power"] = True
+
+    # 2. Check DRM / GPU nodes
+    if os.path.exists("/dev/dri"):
+        render_nodes = sorted(glob.glob("/dev/dri/renderD*"))
+        card_nodes = sorted(glob.glob("/dev/dri/card*"))
+        profile["has_dri"] = bool(render_nodes or card_nodes)
+        profile["dri_render_nodes"] = render_nodes
+
+        # Check vendor IDs in sysfs
+        for vpath in glob.glob("/sys/class/drm/card*/device/vendor"):
+            try:
+                with open(vpath, "r", encoding="utf-8", errors="ignore") as f:
+                    vendor_id = f.read().strip().lower()
+                    if vendor_id == "0x8086":
+                        profile["has_intel_gpu"] = True
+                    elif vendor_id in ("0x1002", "0x1022"):
+                        profile["has_amd_gpu"] = True
+                    elif vendor_id == "0x10de":
+                        profile["has_nvidia_gpu"] = True
+            except Exception:
+                pass
+
+    # Fallback vendor detection from cpu_vendor if integrated graphics
+    if profile["has_dri"] and not (profile["has_intel_gpu"] or profile["has_amd_gpu"] or profile["has_nvidia_gpu"]):
+        if profile["cpu_vendor"] == "Intel":
+            profile["has_intel_gpu"] = True
+        elif profile["cpu_vendor"] == "AMD":
+            profile["has_amd_gpu"] = True
+
+    # Check VA-API driver recommendation for Intel
+    if profile["has_intel_gpu"]:
+        # Atom x5/x7 (Cherry Trail / Braswell, Gen 8) and older Haswell/Broadwell run best with i965
+        if profile["is_low_power"] or any(k in model_lower for k in ["z8350", "z8300", "z8500", "z8700", "n3000", "n3050", "n3150", "n3700", "cherryview", "braswell"]):
+            profile["recommended_driver"] = "i965"
+        else:
+            profile["recommended_driver"] = "iHD"
+
+    return profile
+
+
+def get_gpu_launch_flags(disable_gpu: bool = False, hw_profile: Optional[dict] = None) -> Tuple[List[str], bool]:
     """
     Determines optimal Chromium GPU hardware acceleration flags for headless streaming.
     Returns (flags_list, is_gpu_detected).
@@ -5206,18 +5290,33 @@ def get_gpu_launch_flags(disable_gpu: bool = False) -> Tuple[List[str], bool]:
     if disable_gpu:
         return ["--disable-gpu", "--disable-software-rasterizer"], False
 
-    # Check for DRM render/card nodes
-    has_dri = os.path.exists("/dev/dri") and bool(
-        glob.glob("/dev/dri/renderD*") or glob.glob("/dev/dri/card*")
-    )
+    if hw_profile is None:
+        hw_profile = detect_hardware_profile()
+
+    has_dri = hw_profile.get("has_dri", False)
 
     gpu_flags = [
         "--enable-gpu",
         "--ignore-gpu-blocklist",
         "--enable-gpu-rasterization",
         "--enable-zero-copy",
-        "--enable-features=CanvasOopRasterization,VaapiVideoDecoder,VaapiVideoEncoder,VaapiIgnoreDriverChecks",
     ]
+
+    if hw_profile.get("has_intel_gpu") or (has_dri and hw_profile.get("cpu_vendor") == "Intel"):
+        # Intel GPU: EGL backend + VA-API decoder & encoder
+        gpu_flags.extend([
+            "--use-gl=egl",
+            "--enable-features=CanvasOopRasterization,VaapiVideoDecoder,VaapiVideoEncoder,VaapiIgnoreDriverChecks",
+            "--disable-features=UseChromeOSDirectVideoDecoder",
+        ])
+    else:
+        # AMD / Mesa / Generic GPU
+        gpu_flags.extend([
+            "--use-gl=angle",
+            "--use-angle=vulkan" if hw_profile.get("has_amd_gpu") else "--use-gl=egl",
+            "--enable-features=CanvasOopRasterization,VaapiVideoDecoder,VaapiVideoEncoder,VaapiIgnoreDriverChecks",
+        ])
+
     return gpu_flags, has_dri
 
 
@@ -5350,13 +5449,50 @@ async def run_server(args: argparse.Namespace) -> None:
             logger.warning(" (OHNE sudo) auszufuehren, um Berechtigungskonflikte zu vermeiden.")
             logger.warning("=" * 68)
 
-        gpu_flags, has_dri = get_gpu_launch_flags(disable_gpu=getattr(args, "disable_gpu", False))
+        hw = detect_hardware_profile()
+        logger.info(
+            "Hardware Profile: %s | CPU: %s (%s, %d cores%s) | DRI: %s",
+            hw.get("arch", "x86_64"),
+            hw.get("cpu_model", "Unknown"),
+            hw.get("cpu_vendor", "Unknown"),
+            hw.get("cpu_cores", 4),
+            ", Low-Power Atom/Celeron" if hw.get("is_low_power") else "",
+            "Yes" if hw.get("has_dri") else "No",
+        )
+
+        # Setup Intel VA-API driver if recommended and installed
+        if hw.get("has_intel_gpu") and hw.get("recommended_driver") and "LIBVA_DRIVER_NAME" not in os.environ:
+            rec = hw["recommended_driver"]
+            for cand in [
+                f"/usr/lib/dri/{rec}_drv_video.so",
+                f"/usr/lib/x86_64-linux-gnu/dri/{rec}_drv_video.so",
+                f"/usr/lib64/dri/{rec}_drv_video.so",
+            ]:
+                if os.path.exists(cand):
+                    os.environ["LIBVA_DRIVER_NAME"] = rec
+                    logger.info("Intel VA-API Driver configured: LIBVA_DRIVER_NAME=%s", rec)
+                    break
+
+        gpu_flags, has_dri = get_gpu_launch_flags(
+            disable_gpu=getattr(args, "disable_gpu", False),
+            hw_profile=hw,
+        )
         if getattr(args, "disable_gpu", False):
             logger.info("GPU Hardware Acceleration: DISABLED by user flag (--disable-gpu)")
+        elif hw.get("has_intel_gpu"):
+            logger.info("GPU Hardware Acceleration: ENABLED (Intel VA-API & EGL hardware rasterization active)")
         elif has_dri:
             logger.info("GPU Hardware Acceleration: ENABLED (Vulkan / ANGLE / VA-API / /dev/dri render node detected)")
         else:
             logger.info("GPU Hardware Acceleration: ENABLED (ANGLE Vulkan requested, fallback to SwiftShader if no DRM)")
+
+        # On Atom / Celeron 4-core chips, dedicate 2 threads to raster and preserve 2 threads
+        # for Python asyncio loop, screencast frame grab, and SIMD compression.
+        if hw.get("is_low_power") or hw.get("cpu_cores", 4) <= 4:
+            raster_threads = 2
+            logger.info("Low-power CPU detected: Adjusted raster threads to 2 (preserves cores for stream encoding)")
+        else:
+            raster_threads = 4
 
         launch_args = [
             "--ozone-platform=headless",
@@ -5369,7 +5505,7 @@ async def run_server(args: argparse.Namespace) -> None:
             "--enable-smooth-scrolling",
             "--autoplay-policy=no-user-gesture-required",
             "--disable-blink-features=AutomationControlled",
-            "--num-raster-threads=4",
+            f"--num-raster-threads={raster_threads}",
             "--enable-low-res-tiling",
             "--disable-background-timer-throttling",
             "--disable-renderer-backgrounding",
@@ -5447,7 +5583,7 @@ async def run_server(args: argparse.Namespace) -> None:
                 "--enable-smooth-scrolling",
                 "--autoplay-policy=no-user-gesture-required",
                 "--disable-blink-features=AutomationControlled",
-                "--num-raster-threads=4",
+                f"--num-raster-threads={raster_threads}",
                 "--enable-low-res-tiling",
                 "--disable-background-timer-throttling",
                 "--disable-renderer-backgrounding",
