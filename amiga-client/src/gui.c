@@ -80,9 +80,9 @@ static struct NewMenu s_main_menu[] = {
     { NM_ITEM,  (STRPTR)"Beenden",                                     (STRPTR)"Q", 0, 0, (APTR)MID_PROJ_QUIT },
 
     { NM_TITLE, (STRPTR)"Bearbeiten",                                  NULL,        0, 0, NULL },
-    { NM_ITEM,  (STRPTR)"Ausschneiden",                                (STRPTR)"X", 0, 0, (APTR)MID_EDIT_CUT },
-    { NM_ITEM,  (STRPTR)"Kopieren",                                    (STRPTR)"C", 0, 0, (APTR)MID_EDIT_COPY },
-    { NM_ITEM,  (STRPTR)"Einfuegen",                                   (STRPTR)"V", 0, 0, (APTR)MID_EDIT_PASTE },
+    { NM_ITEM,  (STRPTR)"Ausschneiden",                                (STRPTR)"x", 0, 0, (APTR)MID_EDIT_CUT },
+    { NM_ITEM,  (STRPTR)"Kopieren",                                    (STRPTR)"c", 0, 0, (APTR)MID_EDIT_COPY },
+    { NM_ITEM,  (STRPTR)"Einfuegen",                                   (STRPTR)"v", 0, 0, (APTR)MID_EDIT_PASTE },
 
     { NM_TITLE, (STRPTR)"Ansicht",                                     NULL,        0, 0, NULL },
     { NM_ITEM,  (STRPTR)"Stream: 1:1 Nativ (Fenster-Groesse)",         NULL,        0, 0, (APTR)MID_STREAM_RES_NATIVE },

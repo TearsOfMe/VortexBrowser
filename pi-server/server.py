@@ -1554,13 +1554,11 @@ class H264LiveStreamEncoder:
                 "-i", "-",
                 "-vf", "format=nv12,hwupload",
                 "-c:v", "h264_vaapi",
-                "-async_depth", "1",
                 "-b:v", f"{self.bitrate_k}k",
                 "-maxrate", f"{self.bitrate_k * 3 // 2}k",
                 "-bufsize", f"{self.bitrate_k // 2}k",
                 "-g", str(self.fps),
                 "-bf", "0",
-                "-x264-params", f"keyint={self.fps}:min-keyint={self.fps}:scenecut=0:repeat-headers=1",
                 "-f", "h264", "-"
             ]
         try:
@@ -1607,35 +1605,29 @@ class H264LiveStreamEncoder:
     def encode_frame(self, yuv_bytes: bytes) -> Optional[bytes]:
         if not self.proc or not self.proc.stdin or self._fd is None:
             return None
+        if self.proc.poll() is not None:
+            self._start_encoder()
+            if not self.proc or not self.proc.stdin or self._fd is None:
+                return None
         try:
-            if self.proc.poll() is not None:
-                self._start_encoder()
-                if not self.proc or not self.proc.stdin or self._fd is None:
-                    return None
             self.proc.stdin.write(yuv_bytes)
             self.proc.stdin.flush()
-        except (BrokenPipeError, OSError, ValueError, Exception):
+        except (BrokenPipeError, OSError):
             self._start_encoder()
             return None
 
-        if self._fd is None or not isinstance(self._fd, int) or self._fd < 0:
-            return None
-
         # Wait up to 40ms for ffmpeg to output the encoded NAL frame
+        r, _, _ = select.select([self._fd], [], [], 0.04)
         chunks = []
-        try:
-            r, _, _ = select.select([self._fd], [], [], 0.04)
-            if r:
-                for _ in range(30):
-                    try:
-                        chunk = os.read(self._fd, 65536)
-                        if not chunk:
-                            break
-                        chunks.append(chunk)
-                    except (BlockingIOError, OSError):
+        if r:
+            for _ in range(30):
+                try:
+                    chunk = os.read(self._fd, 65536)
+                    if not chunk:
                         break
-        except Exception:
-            return None
+                    chunks.append(chunk)
+                except (BlockingIOError, OSError):
+                    break
         return b"".join(chunks) if chunks else None
 
     def stop(self) -> None:
@@ -1651,7 +1643,7 @@ class H264LiveStreamEncoder:
                 except Exception:
                     pass
             self.proc = None
-        self._fd = None
+            self._fd = None
 
 
 # ============================================================================
@@ -3234,11 +3226,8 @@ class AmigaClientSession:
                                             }
                                             for (const f of document.querySelectorAll('iframe')) {
                                                 try {
-                                                    if (f.contentDocument) {
-                                                        const iv = Array.from(f.contentDocument.querySelectorAll('video'));
-                                                        for (const v of iv) {
-                                                            if (!v.paused && !v.ended && v.readyState >= 2) return true;
-                                                        }
+                                                    if (f.contentDocument && Array.from(f.contentDocument.querySelectorAll('video')).some(v => !v.paused && !v.ended && v.readyState >= 2)) {
+                                                        return true;
                                                     }
                                                 } catch (e) {}
                                             }
@@ -3246,7 +3235,7 @@ class AmigaClientSession:
                                         return false;
                                     }"""
                                 ),
-                                timeout=0.6,
+                                timeout=0.5,
                             )
                             self._video_element_playing = bool(is_playing)
                     except Exception:
@@ -3255,7 +3244,7 @@ class AmigaClientSession:
                 self.background_tasks.add(t_vid)
                 t_vid.add_done_callback(self.background_tasks.discard)
 
-            video_active = audio_active or self._video_element_playing or (is_video_site and audio_active)
+            video_active = audio_active or self._video_element_playing or (is_video_site and (audio_active or self._video_element_playing))
             if video_active:
                 self._last_video_state_time = now_tick
                 if not self.is_video_mode:
@@ -5304,6 +5293,10 @@ def _cleanup_existing_server_and_locks(port: int, profile_dir: str) -> None:
 # Main Server Entrypoint
 # ============================================================================
 async def run_server(args: argparse.Namespace) -> None:
+    if hasattr(args, "log_level") and args.log_level:
+        lvl = getattr(logging, str(args.log_level).upper(), logging.CRITICAL)
+        logger.setLevel(lvl)
+        logging.getLogger().setLevel(lvl)
     engine = getattr(args, "engine", "chromium").lower()
     profile_dir = os.path.expanduser(
         "~/.config/vortexbrowse/firefox_profile" if engine == "firefox" else "~/.config/vortexbrowse/chromium_profile"
@@ -5538,7 +5531,7 @@ async def run_server(args: argparse.Namespace) -> None:
                         codec_mode=getattr(args, "codec", "auto"),
                         engine=engine,
                         stream_mode=getattr(args, "stream_mode", "auto"),
-                        video_bitrate=getattr(args, "video_bitrate", 4000),
+                        video_bitrate=getattr(args, "video_bitrate", 8000),
                     )
                     active_session = session
 
@@ -5605,12 +5598,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--codec", choices=["auto", "jpeg", "lz4", "h264"], default="auto", help="Streaming codec (default: auto)")
     parser.add_argument("--stream-mode", choices=["auto", "lz4", "h264"], default="auto", help="Video streaming mode (default: auto = adaptive H.264 on video, LZ4 otherwise)")
     parser.add_argument("--video-bitrate", type=int, default=8000, help="H.264 video stream bitrate in kbps (default: 8000 kbps)")
-    parser.add_argument(
-        "--log-level",
-        choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"],
-        default=os.environ.get("VORTEX_LOG_LEVEL", "CRITICAL").upper(),
-        help="Logging verbosity (default: CRITICAL) [env: VORTEX_LOG_LEVEL]",
-    )
+    parser.add_argument("--log-level", default=os.environ.get("VORTEX_LOG_LEVEL", "CRITICAL"), help="Log level (default: CRITICAL)")
     parser.add_argument("--jpeg-quality", type=int, default=82, help="JPEG capture quality 20-100 (default: 82 for Full HD 1080p@25fps)")
     parser.add_argument("--enable-extensions", dest="enable_extensions", action="store_true", default=True, help="Enable browser extensions (uBlock, h264ify) [default: enabled]")
     parser.add_argument("--disable-extensions", dest="enable_extensions", action="store_false", help="Disable all browser extensions")
@@ -5626,12 +5614,7 @@ def parse_args() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
-    args = parse_args()
-    if hasattr(args, "log_level"):
-        lvl = getattr(logging, args.log_level.upper(), logging.CRITICAL)
-        logger.setLevel(lvl)
-        logging.getLogger().setLevel(lvl)
     try:
-        asyncio.run(run_server(args))
+        asyncio.run(run_server(parse_args()))
     except KeyboardInterrupt:
         logger.info("VortexBrowse Server stopped.")

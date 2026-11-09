@@ -126,12 +126,15 @@ AUDIO_CHANNELS      = 2
 AUDIO_CHUNK_BYTES   = 8192  # ~92ms of 22050Hz 16-bit stereo PCM
 AUDIO_SINK_NAME     = "vortexbrowse_sink"
 
+_LOG_LEVEL_STR = os.environ.get("VORTEX_LOG_LEVEL", "CRITICAL").upper()
+_LOG_LEVEL = getattr(logging, _LOG_LEVEL_STR, logging.CRITICAL)
 logging.basicConfig(
-    level=logging.INFO,
+    level=_LOG_LEVEL,
     format="[%(asctime)s] [VortexServer] %(levelname)s: %(message)s",
     datefmt="%H:%M:%S",
 )
 logger = logging.getLogger("VortexServer")
+logger.setLevel(_LOG_LEVEL)
 
 AMIGA_RAWKEY_MAP = {
     0x40: "Space",
@@ -1527,7 +1530,7 @@ class H264LiveStreamEncoder:
     Supports hardware VA-API on Linux (AMD/Intel VCN/VA-API) or ultrafast libx264 zerolatency.
     Feeds YUV420P frames and yields Annex-B NAL packets.
     """
-    def __init__(self, width: int, height: int, fps: int = 25, bitrate_k: int = 4000):
+    def __init__(self, width: int, height: int, fps: int = 25, bitrate_k: int = 8000):
         self.width = width
         self.height = height
         self.fps = max(1, min(60, fps))
@@ -5528,7 +5531,7 @@ async def run_server(args: argparse.Namespace) -> None:
                         codec_mode=getattr(args, "codec", "auto"),
                         engine=engine,
                         stream_mode=getattr(args, "stream_mode", "auto"),
-                        video_bitrate=getattr(args, "video_bitrate", 4000),
+                        video_bitrate=getattr(args, "video_bitrate", 8000),
                     )
                     active_session = session
 
