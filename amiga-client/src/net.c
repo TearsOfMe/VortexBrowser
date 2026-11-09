@@ -391,20 +391,6 @@ BOOL net_handle_incoming(VortexApp *app)
                 snprintf(app->current_url, sizeof(app->current_url), "%s", clean_url);
                 gui_update_url_bar(app, clean_url);
                 app_set_status("Seite geladen: %s", clean_title);
-
-                /* Standard Browser Auto-Fill:
-                 * Check if we have saved credentials for this domain.
-                 * If yes, automatically pre-fill them without auto-submitting.
-                 */
-                if (clean_url[0] != '\0') {
-                    const PasswordEntry *pe = passwords_find_by_domain(app, clean_url);
-                    if (pe && pe->username[0] != '\0' && pe->password[0] != '\0') {
-                        char fill_cmd[384];
-                        snprintf(fill_cmd, sizeof(fill_cmd), "@AUTOLOGIN_FILL:%s\t%s", pe->username, pe->password);
-                        net_send_url(app, fill_cmd);
-                        app_set_status("Zugangsdaten fuer '%s' eingefuellt.", pe->username);
-                    }
-                }
             }
 
             /* Rebuild tab bar display so updated title is visible immediately */

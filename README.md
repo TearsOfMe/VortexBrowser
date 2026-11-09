@@ -40,9 +40,9 @@ VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwrigh
    - Vollständiger nativer Download-Manager (`Amiga+D`) mit Live-Geschwindigkeitsanzeige, Fortschritt in Prozent, Restzeitschätzung (ETA), Datei- und Ordneröffner.
    - Saubere Umlaut- und Zeichensatz-Behandlung für Dateinamen und Reaction-Buttons.
 
-4. **Passwort-Manager & Auto-Login:**
+4. **Passwort-Manager:**
    - Integrierter Passwort-Tresor (`Amiga+K`) mit starker Blowfish-CBC- und SHA-256-Verschlüsselung.
-   - Ein-Klick Auto-Login für die aktuelle Website über `Amiga+L`.
+   - Benutzername und Passwort bequem per Knopfdruck ins Amiga-Clipboard kopieren.
    - Speicherort in `ENVARC:VortexBrowser/passwords.enc`.
    - **Twitch-Unterstützung:** Nahtloses Session-Token-Login (`twitch_token.txt`), um Bot-Schranken auf dem Amiga zu umgehen.
 
