@@ -114,7 +114,7 @@ STRUCT_MSG_DL_RESP_BODY = struct.Struct(">IBx")
 STRUCT_MSG_DL_CHUNK     = struct.Struct(">BII")
 STRUCT_MSG_DL_COMPLETE  = struct.Struct(">BI")
 STRUCT_MSG_AUDIO        = struct.Struct(">BHBBII")
-STRUCT_MSG_NAV_UPDATE   = struct.Struct(">B512s")
+STRUCT_MSG_NAV_UPDATE   = struct.Struct(">BI512s128s")
 STRUCT_MSG_CTX_MENU     = struct.Struct(">B512s128s512s")
 STRUCT_MSG_PROGRESS     = struct.Struct(">BBx64s")
 STRUCT_MSG_UPLOAD_REQ   = struct.Struct(">BII256s")
@@ -1855,12 +1855,50 @@ class AmigaClientSession:
                 self.running = False
                 return False
 
-    def _send_nav_update(self, url: str) -> None:
+    def _send_nav_update(self, url: str, tab_idx: int = -1, title: str = "") -> None:
         if not self.running or not url:
             return
-        url_bytes = url.encode("utf-8", errors="replace")[:511].ljust(512, b"\x00")
-        pkt = STRUCT_MSG_NAV_UPDATE.pack(MSG_NAV_UPDATE, url_bytes)
-        t = asyncio.create_task(self.send_packet(pkt))
+
+        async def _do_send():
+            nonlocal title
+            t_idx = tab_idx
+            if t_idx < 0:
+                try:
+                    if self.page and self.tabs and self.page in self.tabs:
+                        t_idx = self.tabs.index(self.page)
+                    else:
+                        t_idx = self.active_tab_idx
+                except Exception:
+                    t_idx = 0
+
+            target_page = self.tabs[t_idx] if (0 <= t_idx < len(self.tabs)) else self.page
+
+            # Try to fetch real document title from target page
+            if not title and target_page:
+                try:
+                    raw_title = await asyncio.wait_for(target_page.title(), timeout=0.6)
+                    title = (raw_title or "").strip()
+                except Exception:
+                    title = ""
+
+            # Fallback title if empty
+            if not title:
+                if "127.0.0.1" in url or "localhost" in url or url.startswith("@"):
+                    title = "Startseite"
+                else:
+                    h = url
+                    if h.startswith("http://"): h = h[7:]
+                    elif h.startswith("https://"): h = h[8:]
+                    if h.startswith("www."): h = h[4:]
+                    h = h.split("/", 1)[0].split(":", 1)[0]
+                    title = h if h else "Webseite"
+
+            url_bytes = url.encode("utf-8", errors="replace")[:511].ljust(512, b"\x00")
+            title_bytes = title.encode("utf-8", errors="replace")[:127].ljust(128, b"\x00")
+            pkt = STRUCT_MSG_NAV_UPDATE.pack(MSG_NAV_UPDATE, max(0, t_idx), url_bytes, title_bytes)
+            await self.send_packet(pkt)
+
+        t = asyncio.create_task(_do_send())
         self.background_tasks.add(t)
         t.add_done_callback(self.background_tasks.discard)
 
@@ -1910,6 +1948,8 @@ class AmigaClientSession:
             return
         self._send_progress(100, "Fertig")
         self._on_page_updated()
+        if self.page and self.page.url:
+            self._send_nav_update(self.page.url)
         t = asyncio.create_task(self.save_storage_state())
         self.background_tasks.add(t)
         t.add_done_callback(self.background_tasks.discard)
@@ -1919,6 +1959,8 @@ class AmigaClientSession:
             return
         self._send_progress(75, "Erstelle Seite...")
         self._on_page_updated()
+        if self.page and self.page.url:
+            self._send_nav_update(self.page.url)
 
     def _on_main_frame_navigated(self, frame: Frame) -> None:
         if not self.running or not self.page or frame != self.page.main_frame:
@@ -4694,6 +4736,8 @@ class AmigaClientSession:
                 logger.warning("Navigation warning for '%s': %s", cmd, exc)
             finally:
                 self._send_progress(100, "Fertig")
+                if self.page and self.page.url:
+                    self._send_nav_update(self.page.url)
                 self.active_until = time.monotonic() + 3.0
                 self._trigger_full_refresh(True)
                 self._schedule_delayed_frames()

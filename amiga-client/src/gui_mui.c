@@ -1111,10 +1111,10 @@ void gui_mui_update_url_bar(VortexApp *app, const char *url)
 
     /* Update active tab's URL and title */
     if (app->num_tabs > 0 && app->active_tab_idx < app->num_tabs) {
-        if (disp[0] != '\0') {
-            strncpy(app->tabs[app->active_tab_idx].url, disp, sizeof(app->tabs[0].url) - 1);
-            app->tabs[app->active_tab_idx].url[sizeof(app->tabs[0].url) - 1] = '\0';
+        strncpy(app->tabs[app->active_tab_idx].url, disp, sizeof(app->tabs[0].url) - 1);
+        app->tabs[app->active_tab_idx].url[sizeof(app->tabs[0].url) - 1] = '\0';
 
+        if (disp[0] != '\0') {
             if (strcmp(app->tabs[app->active_tab_idx].title, "Startseite") == 0 ||
                 strcmp(app->tabs[app->active_tab_idx].title, "Neuer Tab") == 0 ||
                 app->tabs[app->active_tab_idx].title[0] == '\0') {
@@ -1132,6 +1132,9 @@ void gui_mui_update_url_bar(VortexApp *app, const char *url)
                     gui_mui_rebuild_tabs(app);
                 }
             }
+        } else {
+            strncpy(app->tabs[app->active_tab_idx].title, "Startseite", sizeof(app->tabs[0].title) - 1);
+            gui_mui_rebuild_tabs(app);
         }
     }
 }
