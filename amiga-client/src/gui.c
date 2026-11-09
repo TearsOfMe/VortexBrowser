@@ -66,9 +66,7 @@ static struct NewMenu s_main_menu[] = {
     { NM_ITEM,  (STRPTR)"Aktuellen Tab schliessen",                    (STRPTR)"W", 0, 0, (APTR)MID_TAB_CLOSE },
     { NM_ITEM,  NM_BARLABEL,                                           NULL,        0, 0, NULL },
     { NM_ITEM,  (STRPTR)"Passwort-Manager...",                         (STRPTR)"K", 0, 0, (APTR)MID_PROJ_PASSWORDS },
-    { NM_ITEM,  (STRPTR)"Auto-Login fuer Seite...",                    (STRPTR)"L", 0, 0, (APTR)MID_PROJ_AUTOLOGIN },
     { NM_ITEM,  (STRPTR)"Download-Manager...",                         (STRPTR)"D", 0, 0, (APTR)MID_PROJ_DOWNLOADS },
-    { NM_ITEM,  (STRPTR)"In VideoVortex abspielen",                    (STRPTR)"Y", 0, 0, (APTR)MID_PROJ_VIDEOVORTEX },
     { NM_ITEM,  NM_BARLABEL,                                           NULL,        0, 0, NULL },
     { NM_ITEM,  (STRPTR)"Server konfigurieren...",                     (STRPTR)"1", 0, 0, (APTR)MID_SET_SERVER_CUSTOM },
     { NM_ITEM,  (STRPTR)"Mit Server verbinden",                        (STRPTR)"2", 0, 0, (APTR)MID_PROJ_CONNECT },
@@ -80,9 +78,9 @@ static struct NewMenu s_main_menu[] = {
     { NM_ITEM,  (STRPTR)"Beenden",                                     (STRPTR)"Q", 0, 0, (APTR)MID_PROJ_QUIT },
 
     { NM_TITLE, (STRPTR)"Bearbeiten",                                  NULL,        0, 0, NULL },
-    { NM_ITEM,  (STRPTR)"Ausschneiden",                                (STRPTR)"x", 0, 0, (APTR)MID_EDIT_CUT },
-    { NM_ITEM,  (STRPTR)"Kopieren",                                    (STRPTR)"c", 0, 0, (APTR)MID_EDIT_COPY },
-    { NM_ITEM,  (STRPTR)"Einfuegen",                                   (STRPTR)"v", 0, 0, (APTR)MID_EDIT_PASTE },
+    { NM_ITEM,  (STRPTR)"Ausschneiden",                                (STRPTR)"X", 0, 0, (APTR)MID_EDIT_CUT },
+    { NM_ITEM,  (STRPTR)"Kopieren",                                    (STRPTR)"C", 0, 0, (APTR)MID_EDIT_COPY },
+    { NM_ITEM,  (STRPTR)"Einfuegen",                                   (STRPTR)"V", 0, 0, (APTR)MID_EDIT_PASTE },
 
     { NM_TITLE, (STRPTR)"Ansicht",                                     NULL,        0, 0, NULL },
     { NM_ITEM,  (STRPTR)"Stream: 1:1 Nativ (Fenster-Groesse)",         NULL,        0, 0, (APTR)MID_STREAM_RES_NATIVE },
@@ -1482,10 +1480,6 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
             gui_open_password_manager(app);
             break;
 
-        case MID_PROJ_AUTOLOGIN:
-            gui_do_autologin_current_domain(app);
-            break;
-
         case MID_PROJ_DOWNLOADS:
             gui_open_download_manager(app);
             break;
@@ -1503,21 +1497,6 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
         case MID_PROJ_QUIT:
             app->running = FALSE;
             break;
-
-        case MID_PROJ_VIDEOVORTEX: {
-            if (IDOS) {
-                if (app->current_url[0] && app->current_url[0] != '@') {
-                    char sys_cmd[1024];
-                    snprintf(sys_cmd, sizeof(sys_cmd), "Run <>NIL: APPDIR:VideoVortex URL \"%s\"", app->current_url);
-                    IDOS->SystemTags(sys_cmd, TAG_DONE);
-                    app_set_status("Uebergebe Video an VideoVortex: %s", app->current_url);
-                } else {
-                    IDOS->SystemTags("Run <>NIL: APPDIR:VideoVortex", TAG_DONE);
-                    app_set_status("Starte VideoVortex...");
-                }
-            }
-            break;
-        }
 
         case MID_STREAM_VIDEO_AUTO: {
             app->prefs.video_stream_mode = STREAM_VIDEO_AUTO;
@@ -1734,7 +1713,6 @@ static void open_main_menu_popup(VortexApp *app, int16_t mx, int16_t my)
             PMITEM("Aktuellen Tab schliessen"),       PMIA_ID, MID_TAB_CLOSE, PMEND,
             PMBAR(), PMEND,
             PMITEM("Passwort-Manager..."),            PMIA_ID, MID_PROJ_PASSWORDS, PMEND,
-            PMITEM("Auto-Login fuer Seite..."),       PMIA_ID, MID_PROJ_AUTOLOGIN, PMEND,
             PMITEM("Download-Manager..."),            PMIA_ID, MID_PROJ_DOWNLOADS, PMEND,
             PMBAR(), PMEND,
             PMITEM("Server konfigurieren..."),        PMIA_ID, MID_SET_SERVER_CUSTOM, PMEND,
@@ -2694,7 +2672,7 @@ BOOL gui_init(VortexApp *app)
         BUTTON_BevelStyle, BVS_NONE,
         BUTTON_Transparent,TRUE,
         fav_img ? GA_Image : TAG_IGNORE, (Tag)fav_img,
-        GA_HintInfo,       "Webseiten-Favicon (Klick fuer Passwort-Manager / Auto-Login)",
+        GA_HintInfo,       "Webseiten-Favicon (Klick fuer Passwort-Manager)",
         TAG_DONE);
 
     app->gad_url = IIntuition->NewObject(NULL, "string.gadget",
@@ -4050,7 +4028,6 @@ void gui_handle_events(VortexApp *app)
                 CTX_DOWNLOAD_PAGE,
                 CTX_NEW_TAB,
                 CTX_CLOSE_TAB,
-                CTX_AUTOLOGIN,
                 CTX_MAIN_MENU,
                 CTX_TOGGLE_DARK_THEME
             };
@@ -4088,7 +4065,6 @@ void gui_handle_events(VortexApp *app)
                         PMITEM("Link zu Lesezeichen hinzufuegen"), PMIA_ID, CTX_FAV_LINK, PMEND,
                         PMBAR(), PMEND,
                         PMITEM("Aktuellen Tab schliessen"), PMIA_ID, CTX_CLOSE_TAB, PMEND,
-                        PMITEM("Auto-Login fuer Seite"), PMIA_ID, CTX_AUTOLOGIN, PMEND,
                         PMBAR(), PMEND,
                         PMITEM("Zurueck"), PMIA_ID, CTX_BACK, PMEND,
                         PMITEM("Vorwaerts"), PMIA_ID, CTX_FORWARD, PMEND,
@@ -4106,7 +4082,6 @@ void gui_handle_events(VortexApp *app)
                         PMBAR(), PMEND,
                         PMITEM("Neuen Tab oeffnen"), PMIA_ID, CTX_NEW_TAB, PMEND,
                         PMITEM("Aktuellen Tab schliessen"), PMIA_ID, CTX_CLOSE_TAB, PMEND,
-                        PMITEM("Auto-Login fuer Seite"), PMIA_ID, CTX_AUTOLOGIN, PMEND,
                         PMBAR(), PMEND,
                         PMITEM("Zurueck"), PMIA_ID, CTX_BACK, PMEND,
                         PMITEM("Vorwaerts"), PMIA_ID, CTX_FORWARD, PMEND,
@@ -4127,7 +4102,6 @@ void gui_handle_events(VortexApp *app)
                         PMITEM("Neuen Tab oeffnen"), PMIA_ID, CTX_NEW_TAB, PMEND,
                         PMITEM("Aktuellen Tab schliessen"), PMIA_ID, CTX_CLOSE_TAB, PMEND,
                         PMBAR(), PMEND,
-                        PMITEM("Auto-Login (Zugangsdaten ausfuellen)"), PMIA_ID, CTX_AUTOLOGIN, PMEND,
                         PMITEM("Aktuelle Seite zu Lesezeichen (+Fav)"), PMIA_ID, CTX_FAV_PAGE, PMEND,
                         PMITEM("Aktuelle Adresse herunterladen (ASL)..."), PMIA_ID, CTX_DOWNLOAD_PAGE, PMEND,
                         PMBAR(), PMEND,
@@ -4156,19 +4130,18 @@ void gui_handle_events(VortexApp *app)
                 es.es_Title        = (STRPTR)"VortexBrowser Kontextmenue";
                 if (has_link) {
                     es.es_TextFormat   = (STRPTR)"Link: %s";
-                    es.es_GadgetFormat = (STRPTR)"Link oeffnen|Neuer Tab|Tab schliessen|Auto-Login|Herunterladen (ASL)|In URL kopieren|Hauptmenue|Zurueck|Abbrechen";
+                    es.es_GadgetFormat = (STRPTR)"Link oeffnen|Neuer Tab|Tab schliessen|Herunterladen (ASL)|In URL kopieren|Hauptmenue|Zurueck|Abbrechen";
                     LONG choice = IIntuition->EasyRequest(app->win, &es, NULL, app->ctx_menu.link_url);
                     if (choice == 1) selected_id = CTX_OPEN_LINK;
                     else if (choice == 2) selected_id = CTX_OPEN_NEW_WIN;
                     else if (choice == 3) selected_id = CTX_CLOSE_TAB;
-                    else if (choice == 4) selected_id = CTX_AUTOLOGIN;
-                    else if (choice == 5) selected_id = CTX_DOWNLOAD_LINK;
-                    else if (choice == 6) selected_id = CTX_COPY_LINK_URL;
-                    else if (choice == 7) selected_id = CTX_MAIN_MENU;
-                    else if (choice == 8) selected_id = CTX_BACK;
+                    else if (choice == 4) selected_id = CTX_DOWNLOAD_LINK;
+                    else if (choice == 5) selected_id = CTX_COPY_LINK_URL;
+                    else if (choice == 6) selected_id = CTX_MAIN_MENU;
+                    else if (choice == 7) selected_id = CTX_BACK;
                 } else {
                     es.es_TextFormat   = (STRPTR)"Seiten-Aktion waehlen:";
-                    es.es_GadgetFormat = (STRPTR)"Zurueck|Vorwaerts|Neu laden|Startseite|Neuer Tab|Tab schliessen|Auto-Login|Hauptmenue|Abbrechen";
+                    es.es_GadgetFormat = (STRPTR)"Zurueck|Vorwaerts|Neu laden|Startseite|Neuer Tab|Tab schliessen|Hauptmenue|Abbrechen";
                     LONG choice = IIntuition->EasyRequest(app->win, &es, NULL);
                     if (choice == 1) selected_id = CTX_BACK;
                     else if (choice == 2) selected_id = CTX_FORWARD;
@@ -4176,8 +4149,7 @@ void gui_handle_events(VortexApp *app)
                     else if (choice == 4) selected_id = CTX_HOME;
                     else if (choice == 5) selected_id = CTX_NEW_TAB;
                     else if (choice == 6) selected_id = CTX_CLOSE_TAB;
-                    else if (choice == 7) selected_id = CTX_AUTOLOGIN;
-                    else if (choice == 8) selected_id = CTX_MAIN_MENU;
+                    else if (choice == 7) selected_id = CTX_MAIN_MENU;
                 }
             }
 
@@ -4200,9 +4172,6 @@ void gui_handle_events(VortexApp *app)
                     }
                     break;
 
-                case CTX_AUTOLOGIN:
-                    gui_do_autologin_current_domain(app);
-                    break;
                 case CTX_OPEN_LINK:
                     gui_update_url_bar(app, app->ctx_menu.link_url);
                     net_send_url(app, app->ctx_menu.link_url);
@@ -4313,25 +4282,18 @@ void gui_update_url_bar(VortexApp *app, const char *url)
         strncpy(app->tabs[app->active_tab_idx].url, url, sizeof(app->tabs[0].url) - 1);
         app->tabs[app->active_tab_idx].url[sizeof(app->tabs[0].url) - 1] = '\0';
         if (disp[0] != '\0' && strncmp(disp, "http", 4) == 0) {
-            if (app->tabs[app->active_tab_idx].title[0] == '\0' ||
-                strcmp(app->tabs[app->active_tab_idx].title, "Startseite") == 0 ||
-                strcmp(app->tabs[app->active_tab_idx].title, "Neuer Tab") == 0) {
-                const char *p = disp;
-                if (strncmp(p, "http://", 7) == 0) p += 7;
-                else if (strncmp(p, "https://", 8) == 0) p += 8;
-                if (strncmp(p, "www.", 4) == 0) p += 4;
-                char host[64];
-                size_t hi = 0;
-                while (*p && *p != '/' && *p != ':' && hi < sizeof(host) - 1) host[hi++] = *p++;
-                host[hi] = '\0';
-                if (host[0] != '\0') {
-                    snprintf(app->tabs[app->active_tab_idx].title, sizeof(app->tabs[0].title), "%s", host);
-                    gui_tabs_rebuild(app);
-                }
+            const char *p = disp;
+            if (strncmp(p, "http://", 7) == 0) p += 7;
+            else if (strncmp(p, "https://", 8) == 0) p += 8;
+            if (strncmp(p, "www.", 4) == 0) p += 4;
+            char host[64];
+            size_t hi = 0;
+            while (*p && *p != '/' && *p != ':' && hi < sizeof(host) - 1) host[hi++] = *p++;
+            host[hi] = '\0';
+            if (host[0] != '\0') {
+                snprintf(app->tabs[app->active_tab_idx].title, sizeof(app->tabs[0].title), "%s", host);
+                gui_tabs_rebuild(app);
             }
-        } else if (disp[0] == '\0') {
-            strncpy(app->tabs[app->active_tab_idx].title, "Startseite", sizeof(app->tabs[0].title) - 1);
-            gui_tabs_rebuild(app);
         }
     }
     if (disp[0] == '\0' && gad->SpecialInfo) {

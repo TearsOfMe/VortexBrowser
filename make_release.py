@@ -58,7 +58,7 @@ und minimaler CPU-Auslastung.
       - @{"Multi-Tab-Browsing" link "Tabs"}
       - @{"Schnellwahl & Lesezeichen" link "Bookmarks"}
       - @{"Download-Manager" link "Downloads"}
-      - @{"Passwort-Manager & Auto-Login" link "Passwords"}
+      - @{"Passwort-Manager" link "Passwords"}
       - @{"Dark Mode (Dunkles Theme)" link "DarkMode"}
       - @{"Audio-Streaming (16-Bit AHI)" link "Audio"}
       - @{"Kontextmenues & Mausbedienung" link "MouseContext"}
@@ -157,7 +157,7 @@ VortexBrowser bietet eine intuitive, an modernen Amiga-Standards orientierte Rea
 - @{"Multi-Tab-Browsing" link "Tabs"}
 - @{"Schnellwahl & Lesezeichen" link "Bookmarks"}
 - @{"Download-Manager" link "Downloads"}
-- @{"Passwort-Manager & Auto-Login" link "Passwords"}
+- @{"Passwort-Manager" link "Passwords"}
 - @{"Dark Mode (Dunkles Theme)" link "DarkMode"}
 - @{"Audio-Streaming (16-Bit AHI)" link "Audio"}
 - @{"Kontextmenues & Mausbedienung" link "MouseContext"}
@@ -237,8 +237,8 @@ Der Download-Manager von VortexBrowser bietet eine uebersichtliche Verwaltung al
 
 @endnode
 
-@node "Passwords" "Passwort-Manager & Auto-Login"
-@{b}Passwort-Manager & Auto-Login@{ub}
+@node "Passwords" "Passwort-Manager"
+@{b}Passwort-Manager@{ub}
 
 VortexBrowser enthaelt einen sicheren, integrierten Passwort-Manager:
 
@@ -248,9 +248,9 @@ VortexBrowser enthaelt einen sicheren, integrierten Passwort-Manager:
   Es werden keinerlei Passwoerter im Klartext abgelegt!
 - @{b}Passwort-Tresor oeffnen:@{ub}
   Druecken Sie @{b}Amiga+K@{ub} oder waehlen Sie im Menue @{b}Projekt -> Passwort-Manager...@{ub}.
-- @{b}Auto-Login fuer die aktuelle Seite:@{ub}
-  Druecken Sie @{b}Amiga+L@{ub}. VortexBrowser erkennt automatisch die Anmeldefelder der
-  aktuellen Website und fuellt Benutzername und Passwort selbstaendig aus.
+- @{b}Benutzerdaten kopieren:@{ub}
+  Benutzername und Passwort koennen bequem per Mausklick in die Amiga-Zwischenablage
+  kopiert werden.
 
 @endnode
 
@@ -421,7 +421,6 @@ dank bi-linearer Filterung gestochen scharf und fluessig bleibt!
   @{b}Amiga+W@{ub}       Aktuellen Tab schliessen
   @{b}Amiga+D@{ub}       Download-Manager oeffnen
   @{b}Amiga+K@{ub}       Passwort-Manager oeffnen
-  @{b}Amiga+L@{ub}       Auto-Login fuer aktuelle Seite ausfuehren
   @{b}Amiga+E@{ub}       Einstellungen (Preferences) oeffnen
   @{b}Amiga+Q@{ub}       VortexBrowser beenden
 
@@ -518,7 +517,7 @@ and 16-bit 48kHz audio directly to AmigaOS with native Reaction GUI controls.
 - Full multi-tab browsing (Amiga+T to open, Amiga+W to close).
 - Quick launch toolbar with icons and customizable bookmarks.
 - Integrated Download Manager (Amiga+D).
-- Encrypted Password Vault & Auto-Login (Amiga+K / Amiga+L).
+- Encrypted Password Vault (Amiga+K).
 - Complete Dark Mode toggle (Amiga+U) with DarkReader and dark Reaction GUI.
 - Hardware-accelerated scaling via CompositeTags (select 720p or 540p stream for low CPU).
 - 16-bit stereo 48kHz synchronized audio via AHI.
@@ -592,9 +591,9 @@ SCHRITT 2: {APP_NAME} auf dem Amiga starten
   - Umschalten mit: Amiga+U.
   - Dunkle Webseiten via DarkReader und dunkle Amiga Reaction-Oberflaeche!
 
-* Passwort-Manager & Auto-Login:
+* Passwort-Manager:
   - Passwort-Manager oeffnen: Amiga+K
-  - Gespeichertes Login automatisch eintragen: Amiga+L
+  - Passwoerter verschluesselt speichern und per Klick ins Clipboard kopieren
   - Sichere Blowfish-Verschluesselung in PROGDIR:passwords.dat!
 
 * TIPP ZUR CPU-ENTLASTUNG (fuer SAM440, SAM460, G4):
@@ -682,7 +681,6 @@ STEP 2: Start {APP_NAME} on AmigaOS 4
   Amiga+W   : Close active tab
   Amiga+D   : Open Download Manager
   Amiga+K   : Open Password Vault
-  Amiga+L   : Auto-Login for current site
   Amiga+U   : Toggle Dark Mode (Light/Dark Theme)
   Amiga+E   : Open Preferences
   Amiga+Q   : Quit {APP_NAME}
@@ -990,7 +988,7 @@ VERZEICHNISSTRUKTUR:
   * {APP_NAME}         : Ausfuehrbares Programm (ReAction Standard)
   * {APP_NAME}-AltiVec : Ausfuehrbares Programm (PowerPC G4 AltiVec SIMD)
   * {APP_NAME}-MUI     : Ausfuehrbares Programm (MUI 4/5 Oberflaeche)
-  * {APP_NAME}.info    : Echtes AmigaOS 4 Icon im VideoVortex-Look
+  * {APP_NAME}.info    : Echtes AmigaOS 4 Dual-State Glow Icon
   * {APP_NAME}.guide   : Ausfuehrliches AmigaGuide-Handbuch
   * LIESMICH.txt       : Deutsche Kurzanleitung
   * README.txt         : Englische Kurzanleitung
