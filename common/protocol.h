@@ -42,6 +42,7 @@ extern "C" {
 #define MSG_UPLOAD_REQUEST    0x0C  /* Server -> Amiga: Trigger ASL FileRequester for file upload */
 #define MSG_UPLOAD_RESPONSE   0x0D  /* Amiga -> Server: User selected file info (or cancel) */
 #define MSG_UPLOAD_CHUNK      0x0E  /* Amiga -> Server: 64KB data chunk of file being uploaded */
+#define MSG_PASSWORD_SAVE     0x0F  /* Server -> Amiga: Captured submitted login credentials for saving */
 
 /* Pixel Formats for MSG_FRAME.format */
 #define FMT_ARGB32            1     /* 32-bit Big-Endian ARGB (PIXF_A8R8G8B8, 4 bytes/px) */
@@ -225,6 +226,16 @@ typedef struct MsgUploadChunk {
     uint32_t chunk_len;         /* Byte length of following raw chunk payload (Big-Endian) */
 } MsgUploadChunk;
 
+/* 0x0F: MSG_PASSWORD_SAVE (512 bytes)
+ * Wire layout: [uint8_t msg_type=0x0F] [MsgPasswordSave (512B)]
+ * Python struct format: ">256s128s128s"
+ */
+typedef struct MsgPasswordSave {
+    char url[256];      /* Target domain or URL (Null-terminated) */
+    char username[128]; /* Submitted username or email (Null-terminated) */
+    char password[128]; /* Submitted password (Null-terminated) */
+} MsgPasswordSave;
+
 /* CODEC_LZ4_RECT: 2D Bounding Box Sub-Rectangle Header (8 bytes)
  * Precedes LZ4 compressed sub-rectangle payload for CODEC_LZ4_RECT
  * Python struct format: ">HHHH"
@@ -254,6 +265,7 @@ typedef char vb_assert_msg_upload_req_size[(sizeof(MsgUploadRequest) == 264) ? 1
 typedef char vb_assert_msg_upload_resp_size[(sizeof(MsgUploadResponse) == 266) ? 1 : -1];
 typedef char vb_assert_msg_upload_chunk_size[(sizeof(MsgUploadChunk) == 8) ? 1 : -1];
 typedef char vb_assert_msg_rect_size[(sizeof(MsgRectHdr) == 8) ? 1 : -1];
+typedef char vb_assert_msg_pw_save_size[(sizeof(MsgPasswordSave) == 512) ? 1 : -1];
 
 #ifdef __cplusplus
 }

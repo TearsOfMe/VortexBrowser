@@ -39,5 +39,6 @@ BOOL passwords_add(struct VortexApp *app, const char *domain, const char *user, 
 BOOL passwords_update(struct VortexApp *app, int index, const char *domain, const char *user, const char *pass, const char *notes);
 BOOL passwords_remove(struct VortexApp *app, int index);
 const PasswordEntry *passwords_find_by_domain(struct VortexApp *app, const char *domain);
+BOOL passwords_add_or_update(struct VortexApp *app, const char *domain, const char *user, const char *pass, const char *notes);
 
 #endif /* VORTEXBROWSE_PASSWORDS_H */

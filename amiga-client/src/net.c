@@ -25,6 +25,7 @@
 #include "download.h"
 #include "audio.h"
 #include "clipboard.h"
+#include "passwords.h"
 
 static BOOL send_all(LONG sock, const void *buf, uint32_t len)
 {
@@ -363,6 +364,20 @@ BOOL net_handle_incoming(VortexApp *app)
                 gui_update_url_bar(app, nav.url);
                 app_set_status("Seite geladen: %s",
                                app->current_url[0] ? app->current_url : "Portal");
+
+                /* Standard Browser Auto-Fill:
+                 * Check if we have saved credentials for this domain.
+                 * If yes, automatically pre-fill them without auto-submitting.
+                 */
+                if (app->current_url[0] != '\0' && strncmp(nav.url, "http://127.0.0.1:", 17) != 0) {
+                    const PasswordEntry *pe = passwords_find_by_domain(app, nav.url);
+                    if (pe && pe->username[0] != '\0' && pe->password[0] != '\0') {
+                        char fill_cmd[384];
+                        snprintf(fill_cmd, sizeof(fill_cmd), "@AUTOLOGIN_FILL:%s\t%s", pe->username, pe->password);
+                        net_send_url(app, fill_cmd);
+                        app_set_status("Zugangsdaten fuer '%s' eingefuellt.", pe->username);
+                    }
+                }
             }
             break;
         }
@@ -568,6 +583,44 @@ BOOL net_handle_incoming(VortexApp *app)
                     free(chunk_buf);
                     IDOS->Close(fh);
                     app_set_status("Datei hochgeladen: %s (%u KB)", chosen_file, (unsigned)(sent_total / 1024));
+                }
+            }
+            break;
+        }
+
+        case MSG_PASSWORD_SAVE: {
+            MsgPasswordSave pw_save;
+            if (!recv_exact(app->sock_fd, &pw_save, sizeof(MsgPasswordSave))) {
+                net_disconnect(app);
+                return FALSE;
+            }
+            pw_save.url[sizeof(pw_save.url) - 1] = '\0';
+            pw_save.username[sizeof(pw_save.username) - 1] = '\0';
+            pw_save.password[sizeof(pw_save.password) - 1] = '\0';
+
+            if (pw_save.url[0] != '\0' && pw_save.username[0] != '\0' && pw_save.password[0] != '\0') {
+                /* Check if this exact password is already saved */
+                const PasswordEntry *existing = passwords_find_by_domain(app, pw_save.url);
+                BOOL is_same = FALSE;
+                if (existing && strcmp(existing->username, pw_save.username) == 0 && strcmp(existing->password, pw_save.password) == 0) {
+                    is_same = TRUE;
+                }
+
+                if (!is_same) {
+                    struct EasyStruct es = {
+                        sizeof(struct EasyStruct),
+                        0,
+                        "Passwort speichern",
+                        "Moechten Sie das Passwort fuer\n'%s' (Benutzer: %s)\nim sicheren Passwort-Manager speichern?",
+                        "Speichern|Nicht jetzt"
+                    };
+                    struct Window *target_win = app->win;
+                    LONG res = IIntuition->EasyRequest(target_win, &es, NULL, pw_save.url, pw_save.username);
+                    if (res == 1) {
+                        if (passwords_add_or_update(app, pw_save.url, pw_save.username, pw_save.password, NULL)) {
+                            app_set_status("Passwort fuer '%s' gespeichert.", pw_save.username);
+                        }
+                    }
                 }
             }
             break;

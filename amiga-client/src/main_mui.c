@@ -25,6 +25,7 @@
 #include "clipboard.h"
 #include "download.h"
 #include "audio.h"
+#include "passwords.h"
 
 VortexApp g_app;
 
@@ -213,6 +214,7 @@ int main(int argc, char **argv)
     favorites_init(&g_app);
     audio_init(&g_app);
     clipboard_init();
+    passwords_init(&g_app);
 
     if (!gui_mui_init(&g_app)) {
         audio_cleanup(&g_app);
@@ -334,6 +336,7 @@ int main(int argc, char **argv)
     audio_cleanup(&g_app);
     clipboard_cleanup();
     download_cleanup(&g_app);
+    passwords_cleanup(&g_app);
     gui_mui_cleanup(&g_app);
     renderer_cleanup(&g_app);
     close_libs();
