@@ -353,24 +353,51 @@ BOOL net_handle_incoming(VortexApp *app)
                 net_disconnect(app);
                 return FALSE;
             }
+            uint32_t tidx = VB_BE32(nav.tab_idx);
             nav.url[sizeof(nav.url) - 1] = '\0';
-            if (nav.url[0] != '\0') {
-                if (strncmp(nav.url, "http://127.0.0.1:", 17) == 0) {
-                    app->current_url[0] = '\0';
-                } else {
-                    strncpy(app->current_url, nav.url, sizeof(app->current_url) - 1);
-                    app->current_url[sizeof(app->current_url) - 1] = '\0';
-                }
-                gui_update_url_bar(app, nav.url);
-                app_set_status("Seite geladen: %s",
-                               app->current_url[0] ? app->current_url : "Portal");
+            nav.title[sizeof(nav.title) - 1] = '\0';
+
+            BOOL is_portal = (strncmp(nav.url, "http://127.0.0.1:", 17) == 0 ||
+                              strncmp(nav.url, "http://localhost:", 17) == 0 ||
+                              nav.url[0] == '\0' || nav.url[0] == '@');
+            const char *clean_url = is_portal ? "" : nav.url;
+
+            char clean_title[64];
+            if (is_portal) {
+                snprintf(clean_title, sizeof(clean_title), "Startseite");
+            } else if (nav.title[0] != '\0') {
+                strncpy(clean_title, nav.title, sizeof(clean_title) - 1);
+                clean_title[sizeof(clean_title) - 1] = '\0';
+            } else {
+                const char *p = clean_url;
+                if (strncmp(p, "http://", 7) == 0) p += 7;
+                else if (strncmp(p, "https://", 8) == 0) p += 8;
+                if (strncmp(p, "www.", 4) == 0) p += 4;
+                char host[64];
+                size_t hi = 0;
+                while (*p && *p != '/' && *p != ':' && hi < sizeof(host) - 1) host[hi++] = *p++;
+                host[hi] = '\0';
+                snprintf(clean_title, sizeof(clean_title), "%s", host[0] ? host : "Webseite");
+            }
+
+            /* Update specific tab URL & title so each tab stays completely in sync */
+            if (tidx < app->num_tabs) {
+                snprintf(app->tabs[tidx].url, sizeof(app->tabs[tidx].url), "%s", clean_url);
+                snprintf(app->tabs[tidx].title, sizeof(app->tabs[tidx].title), "%s", clean_title);
+            }
+
+            /* If update is for the currently active tab, refresh address bar & status */
+            if (tidx == app->active_tab_idx || tidx >= app->num_tabs) {
+                snprintf(app->current_url, sizeof(app->current_url), "%s", clean_url);
+                gui_update_url_bar(app, clean_url);
+                app_set_status("Seite geladen: %s", clean_title);
 
                 /* Standard Browser Auto-Fill:
                  * Check if we have saved credentials for this domain.
                  * If yes, automatically pre-fill them without auto-submitting.
                  */
-                if (app->current_url[0] != '\0' && strncmp(nav.url, "http://127.0.0.1:", 17) != 0) {
-                    const PasswordEntry *pe = passwords_find_by_domain(app, nav.url);
+                if (clean_url[0] != '\0') {
+                    const PasswordEntry *pe = passwords_find_by_domain(app, clean_url);
                     if (pe && pe->username[0] != '\0' && pe->password[0] != '\0') {
                         char fill_cmd[384];
                         snprintf(fill_cmd, sizeof(fill_cmd), "@AUTOLOGIN_FILL:%s\t%s", pe->username, pe->password);
@@ -379,6 +406,9 @@ BOOL net_handle_incoming(VortexApp *app)
                     }
                 }
             }
+
+            /* Rebuild tab bar display so updated title is visible immediately */
+            gui_tabs_rebuild(app);
             break;
         }
 

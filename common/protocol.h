@@ -159,12 +159,14 @@ typedef struct MsgAudio {
     uint32_t payload_len; /* Compressed/transmitted byte length (Big-Endian) */
 } MsgAudio;
 
-/* 0x08: MSG_NAV_UPDATE (512 bytes)
- * Wire layout: [uint8_t msg_type=0x08] [MsgNavUpdate (512B)]
- * Python struct format: ">512s"
+/* 0x08: MSG_NAV_UPDATE (644 bytes)
+ * Wire layout: [uint8_t msg_type=0x08] [MsgNavUpdate (644B)]
+ * Python struct format: ">I512s128s"
  */
 typedef struct MsgNavUpdate {
-    char url[512]; /* Null-terminated current browser URL */
+    uint32_t tab_idx;   /* Target tab index (0..VB_MAX_TABS-1, Big-Endian) */
+    char     url[512];  /* Null-terminated current browser URL */
+    char     title[128];/* Null-terminated page title / document title */
 } MsgNavUpdate;
 
 /* 0x09: MSG_CONTEXT_MENU (1152 bytes)
@@ -257,7 +259,7 @@ typedef char vb_assert_msg_dl_resp_size[(sizeof(MsgDownloadResponse) == 6) ? 1 :
 typedef char vb_assert_msg_dl_chunk_size[(sizeof(MsgDownloadChunk) == 8) ? 1 : -1];
 typedef char vb_assert_msg_dl_comp_size[(sizeof(MsgDownloadComplete) == 4) ? 1 : -1];
 typedef char vb_assert_msg_audio_size[(sizeof(MsgAudio) == 12) ? 1 : -1];
-typedef char vb_assert_msg_nav_size[(sizeof(MsgNavUpdate) == 512) ? 1 : -1];
+typedef char vb_assert_msg_nav_size[(sizeof(MsgNavUpdate) == 644) ? 1 : -1];
 typedef char vb_assert_msg_ctx_size[(sizeof(MsgContextMenu) == 1152) ? 1 : -1];
 typedef char vb_assert_msg_prog_size[(sizeof(MsgProgress) == 66) ? 1 : -1];
 typedef char vb_assert_msg_clip_size[(sizeof(MsgClipboard) == 4) ? 1 : -1];

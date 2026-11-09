@@ -4313,18 +4313,25 @@ void gui_update_url_bar(VortexApp *app, const char *url)
         strncpy(app->tabs[app->active_tab_idx].url, url, sizeof(app->tabs[0].url) - 1);
         app->tabs[app->active_tab_idx].url[sizeof(app->tabs[0].url) - 1] = '\0';
         if (disp[0] != '\0' && strncmp(disp, "http", 4) == 0) {
-            const char *p = disp;
-            if (strncmp(p, "http://", 7) == 0) p += 7;
-            else if (strncmp(p, "https://", 8) == 0) p += 8;
-            if (strncmp(p, "www.", 4) == 0) p += 4;
-            char host[64];
-            size_t hi = 0;
-            while (*p && *p != '/' && *p != ':' && hi < sizeof(host) - 1) host[hi++] = *p++;
-            host[hi] = '\0';
-            if (host[0] != '\0') {
-                snprintf(app->tabs[app->active_tab_idx].title, sizeof(app->tabs[0].title), "%s", host);
-                gui_tabs_rebuild(app);
+            if (app->tabs[app->active_tab_idx].title[0] == '\0' ||
+                strcmp(app->tabs[app->active_tab_idx].title, "Startseite") == 0 ||
+                strcmp(app->tabs[app->active_tab_idx].title, "Neuer Tab") == 0) {
+                const char *p = disp;
+                if (strncmp(p, "http://", 7) == 0) p += 7;
+                else if (strncmp(p, "https://", 8) == 0) p += 8;
+                if (strncmp(p, "www.", 4) == 0) p += 4;
+                char host[64];
+                size_t hi = 0;
+                while (*p && *p != '/' && *p != ':' && hi < sizeof(host) - 1) host[hi++] = *p++;
+                host[hi] = '\0';
+                if (host[0] != '\0') {
+                    snprintf(app->tabs[app->active_tab_idx].title, sizeof(app->tabs[0].title), "%s", host);
+                    gui_tabs_rebuild(app);
+                }
             }
+        } else if (disp[0] == '\0') {
+            strncpy(app->tabs[app->active_tab_idx].title, "Startseite", sizeof(app->tabs[0].title) - 1);
+            gui_tabs_rebuild(app);
         }
     }
     if (disp[0] == '\0' && gad->SpecialInfo) {
