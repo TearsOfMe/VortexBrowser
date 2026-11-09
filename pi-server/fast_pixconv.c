@@ -44,7 +44,7 @@
 #define CODEC_JPEG      3
 #define CODEC_LZ4_RECT  4
 
-/* Fast AVX2 256-bit memory comparison returning 0 if equal, 1 if different */
+/* Fast SIMD 256-bit AVX2 / 128-bit SSE2 / SSE4.1 memory comparison returning 0 if equal, 1 if different */
 static inline int fast_memeq(const uint8_t *a, const uint8_t *b, size_t len)
 {
 #if defined(__AVX2__)
@@ -60,6 +60,26 @@ static inline int fast_memeq(const uint8_t *a, const uint8_t *b, size_t len)
         if (!_mm256_testz_si256(comb, comb)) {
             return 0;
         }
+    }
+    for (; i < len; i++) {
+        if (a[i] != b[i]) return 0;
+    }
+    return 1;
+#elif defined(__SSE2__) || defined(_M_X64)
+    size_t i = 0;
+    for (; i + 32 <= len; i += 32) {
+        __m128i va0 = _mm_loadu_si128((const __m128i *)(a + i));
+        __m128i vb0 = _mm_loadu_si128((const __m128i *)(b + i));
+        __m128i xor0 = _mm_xor_si128(va0, vb0);
+        __m128i va1 = _mm_loadu_si128((const __m128i *)(a + i + 16));
+        __m128i vb1 = _mm_loadu_si128((const __m128i *)(b + i + 16));
+        __m128i xor1 = _mm_xor_si128(va1, vb1);
+        __m128i comb = _mm_or_si128(xor0, xor1);
+#if defined(__SSE4_1__)
+        if (!_mm_testz_si128(comb, comb)) return 0;
+#else
+        if (_mm_movemask_epi8(_mm_cmpeq_epi8(comb, _mm_setzero_si128())) != 0xFFFF) return 0;
+#endif
     }
     for (; i < len; i++) {
         if (a[i] != b[i]) return 0;
@@ -598,6 +618,23 @@ static void filter_plane_for_lz4(
             __m256i mk = _mm256_cmpeq_epi8(_mm256_subs_epu8(ad, vt), vz);
             _mm256_storeu_si256((__m256i *)(plane + i), _mm256_blendv_epi8(vc, vp, mk));
         }
+#elif defined(__SSE2__) || defined(_M_X64)
+        __m128i vt = _mm_set1_epi8((char)thresh_t);
+        __m128i vz = _mm_setzero_si128();
+        for (; i + 16 <= total; i += 16) {
+            __m128i vc = _mm_loadu_si128((const __m128i *)(plane + i));
+            __m128i vp = _mm_loadu_si128((const __m128i *)(prev_plane + i));
+            __m128i d1 = _mm_subs_epu8(vc, vp);
+            __m128i d2 = _mm_subs_epu8(vp, vc);
+            __m128i ad = _mm_or_si128(d1, d2);
+            __m128i mk = _mm_cmpeq_epi8(_mm_subs_epu8(ad, vt), vz);
+#if defined(__SSE4_1__)
+            _mm_storeu_si128((__m128i *)(plane + i), _mm_blendv_epi8(vc, vp, mk));
+#else
+            __m128i res = _mm_or_si128(_mm_and_si128(mk, vp), _mm_andnot_si128(mk, vc));
+            _mm_storeu_si128((__m128i *)(plane + i), res);
+#endif
+        }
 #endif
         for (; i < total; i++) {
             int diff = (int)plane[i] - (int)prev_plane[i];
@@ -621,6 +658,10 @@ static void filter_plane_for_lz4(
     __m256i vt = _mm256_set1_epi8((char)thresh_t);
     __m256i vv = _mm256_set1_epi8((char)thresh_v);
     __m256i vz = _mm256_setzero_si256();
+#elif defined(__SSE2__) || defined(_M_X64)
+    __m128i vt = _mm_set1_epi8((char)thresh_t);
+    __m128i vv = _mm_set1_epi8((char)thresh_v);
+    __m128i vz = _mm_setzero_si128();
 #endif
     for (int y = 1; y < h; y++) {
         uint8_t       *cur_row   = plane + (size_t)y * (size_t)w;
@@ -648,6 +689,33 @@ static void filter_plane_for_lz4(
             res = _mm256_blendv_epi8(res, vp, mkt);
 
             _mm256_storeu_si256((__m256i *)(cur_row + x), res);
+        }
+#elif defined(__SSE2__) || defined(_M_X64)
+        for (; x + 16 <= w; x += 16) {
+            __m128i vc = _mm_loadu_si128((const __m128i *)(cur_row + x));
+            __m128i vp = _mm_loadu_si128((const __m128i *)(prev_row + x));
+            __m128i va = _mm_loadu_si128((const __m128i *)(above_row + x));
+
+            __m128i dv1 = _mm_subs_epu8(vc, va);
+            __m128i dv2 = _mm_subs_epu8(va, vc);
+            __m128i adv = _mm_or_si128(dv1, dv2);
+            __m128i mkv = _mm_cmpeq_epi8(_mm_subs_epu8(adv, vv), vz);
+#if defined(__SSE4_1__)
+            __m128i res = _mm_blendv_epi8(vc, va, mkv);
+#else
+            __m128i res = _mm_or_si128(_mm_and_si128(mkv, va), _mm_andnot_si128(mkv, vc));
+#endif
+
+            __m128i dt1 = _mm_subs_epu8(vc, vp);
+            __m128i dt2 = _mm_subs_epu8(vp, vc);
+            __m128i adt = _mm_or_si128(dt1, dt2);
+            __m128i mkt = _mm_cmpeq_epi8(_mm_subs_epu8(adt, vt), vz);
+#if defined(__SSE4_1__)
+            res = _mm_blendv_epi8(res, vp, mkt);
+#else
+            res = _mm_or_si128(_mm_and_si128(mkt, vp), _mm_andnot_si128(mkt, res));
+#endif
+            _mm_storeu_si128((__m128i *)(cur_row + x), res);
         }
 #endif
         for (; x < w; x++) {
