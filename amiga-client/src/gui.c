@@ -246,10 +246,14 @@ static ULONG s_orig_winbar_active_hook = 0;
 static ULONG s_orig_winbar_inact_hook = 0;
 static ULONG s_orig_winborder_active_hook = 0;
 static ULONG s_orig_winborder_inact_hook = 0;
+static ULONG s_orig_screenbar_hook = 0;
 static ULONG s_orig_tab_title_hook = 0;
 static ULONG s_orig_tab_active_hook = 0;
 static ULONG s_orig_tab_inact_hook = 0;
 static ULONG s_orig_winborder_look = 0;
+static ULONG s_orig_winbar_thick = 0;
+static ULONG s_orig_winframe_thick = 0;
+static ULONG s_orig_clicktab_look = 0;
 
 static uint32 dark_backfill_hook_func(struct Hook *hook, struct RastPort *rp, struct BackFillMessage *msg)
 {
@@ -1383,14 +1387,19 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
                         GUIA_WindowBarInactBackfill,    (Tag)s_orig_winbar_inact_hook,
                         GUIA_WindowBorderBackfill,      (Tag)s_orig_winborder_active_hook,
                         GUIA_WindowBorderInactBackfill, (Tag)s_orig_winborder_inact_hook,
+                        GUIA_ScreenBarBackfill,        (Tag)s_orig_screenbar_hook,
                         GUIA_WindowBorderLook,          (Tag)s_orig_winborder_look,
+                        GUIA_WindowBarFrameThickness,  (Tag)s_orig_winbar_thick,
+                        GUIA_WindowFrameThickness,     (Tag)s_orig_winframe_thick,
                         GUIA_TabTitleBackfill,          (Tag)s_orig_tab_title_hook,
                         GUIA_TabActiveBackfill,         (Tag)s_orig_tab_active_hook,
                         GUIA_TabInactiveBackfill,       (Tag)s_orig_tab_inact_hook,
+                        GUIA_ClickTabLook,             (Tag)s_orig_clicktab_look,
                         TAG_DONE);
                     IIntuition->FreeScreenDrawInfo(s_orig_gui_screen, dri);
                 }
                 s_orig_gui_attrs_saved = FALSE;
+                s_orig_gui_screen = NULL;
             }
             if (app->connected) {
                 char dcmd[32];
@@ -2588,20 +2597,26 @@ BOOL gui_init(VortexApp *app)
 
     if (app->prefs.dark_theme == 1) {
         gui_alloc_dark_pens(pub_scr);
-        if (pub_scr) {
-            struct DrawInfo *dri = IIntuition->GetScreenDrawInfo(pub_scr);
+        /* Set screen-wide GUI attributes ONLY if running on our private custom screen.
+         * NEVER modify the shared Workbench screen's global GUI attributes! */
+        if (app->custom_screen) {
+            struct DrawInfo *dri = IIntuition->GetScreenDrawInfo(app->custom_screen);
             if (dri) {
                 if (!s_orig_gui_attrs_saved) {
-                    s_orig_gui_screen = pub_scr;
+                    s_orig_gui_screen = app->custom_screen;
                     IIntuition->GetGUIAttrs(NULL, dri,
                         GUIA_WindowBarBackfill,        &s_orig_winbar_active_hook,
                         GUIA_WindowBarInactBackfill,    &s_orig_winbar_inact_hook,
                         GUIA_WindowBorderBackfill,      &s_orig_winborder_active_hook,
                         GUIA_WindowBorderInactBackfill, &s_orig_winborder_inact_hook,
+                        GUIA_ScreenBarBackfill,        &s_orig_screenbar_hook,
                         GUIA_WindowBorderLook,          &s_orig_winborder_look,
+                        GUIA_WindowBarFrameThickness,  &s_orig_winbar_thick,
+                        GUIA_WindowFrameThickness,     &s_orig_winframe_thick,
                         GUIA_TabTitleBackfill,          &s_orig_tab_title_hook,
                         GUIA_TabActiveBackfill,         &s_orig_tab_active_hook,
                         GUIA_TabInactiveBackfill,       &s_orig_tab_inact_hook,
+                        GUIA_ClickTabLook,             &s_orig_clicktab_look,
                         TAG_DONE);
                     s_orig_gui_attrs_saved = TRUE;
                 }
@@ -2620,24 +2635,28 @@ BOOL gui_init(VortexApp *app)
                     GUIA_TabInactiveBackfill,      (Tag)&s_dark_winbar_inact_hook,
                     GUIA_ClickTabLook,             (Tag)(CLICKTAB_ACTIVEFILLSELECT | CLICKTAB_ACTIVEBOLD | CLICKTAB_INACTIVEDARK),
                     TAG_DONE);
-                IIntuition->FreeScreenDrawInfo(pub_scr, dri);
+                IIntuition->FreeScreenDrawInfo(app->custom_screen, dri);
             }
         }
     } else {
-        if (s_orig_gui_attrs_saved && pub_scr) {
-            struct DrawInfo *dri = IIntuition->GetScreenDrawInfo(pub_scr);
+        if (s_orig_gui_attrs_saved && s_orig_gui_screen) {
+            struct DrawInfo *dri = IIntuition->GetScreenDrawInfo(s_orig_gui_screen);
             if (dri) {
                 IIntuition->SetGUIAttrs(NULL, dri,
                     GUIA_WindowBarBackfill,        (Tag)s_orig_winbar_active_hook,
                     GUIA_WindowBarInactBackfill,    (Tag)s_orig_winbar_inact_hook,
                     GUIA_WindowBorderBackfill,      (Tag)s_orig_winborder_active_hook,
                     GUIA_WindowBorderInactBackfill, (Tag)s_orig_winborder_inact_hook,
+                    GUIA_ScreenBarBackfill,        (Tag)s_orig_screenbar_hook,
                     GUIA_WindowBorderLook,          (Tag)s_orig_winborder_look,
+                    GUIA_WindowBarFrameThickness,  (Tag)s_orig_winbar_thick,
+                    GUIA_WindowFrameThickness,     (Tag)s_orig_winframe_thick,
                     GUIA_TabTitleBackfill,          (Tag)s_orig_tab_title_hook,
                     GUIA_TabActiveBackfill,         (Tag)s_orig_tab_active_hook,
                     GUIA_TabInactiveBackfill,       (Tag)s_orig_tab_inact_hook,
+                    GUIA_ClickTabLook,             (Tag)s_orig_clicktab_look,
                     TAG_DONE);
-                IIntuition->FreeScreenDrawInfo(pub_scr, dri);
+                IIntuition->FreeScreenDrawInfo(s_orig_gui_screen, dri);
             }
             s_orig_gui_attrs_saved = FALSE;
             s_orig_gui_screen = NULL;
@@ -2758,6 +2777,7 @@ BOOL gui_init(VortexApp *app)
         CHILD_WeightedWidth, 0,
         LAYOUT_AddChild,     app->gad_url,
         CHILD_WeightedWidth, 48,
+        CHILD_MinWidth,      60,
         LAYOUT_AddChild,     btn_clear_url,
         CHILD_WeightedWidth, 0,
         LAYOUT_AddChild,     btn_go,
@@ -2768,6 +2788,7 @@ BOOL gui_init(VortexApp *app)
         CHILD_WeightedWidth, 0,
         LAYOUT_AddChild,     app->gad_search,
         CHILD_WeightedWidth, 20,
+        CHILD_MinWidth,      40,
         LAYOUT_AddChild,     btn_search_go,
         CHILD_WeightedWidth, 0,
         TAG_DONE);
@@ -2827,8 +2848,8 @@ BOOL gui_init(VortexApp *app)
 
     if (!app->custom_screen &&
         app->prefs.resolution.has_win_pos &&
-        app->prefs.resolution.win_w >= 400 &&
-        app->prefs.resolution.win_h >= 300) {
+        app->prefs.resolution.win_w >= 200 &&
+        app->prefs.resolution.win_h >= 150) {
         win_left = app->prefs.resolution.win_x;
         win_top  = app->prefs.resolution.win_y;
         win_w    = app->prefs.resolution.win_w;
@@ -2970,8 +2991,8 @@ BOOL gui_init(VortexApp *app)
         GA_ID,             GID_SPACE,
         GA_ReadOnly,       TRUE,
         GA_FollowMouse,    TRUE,
-        SPACE_MinWidth,    640,
-        SPACE_MinHeight,   400,
+        SPACE_MinWidth,    200,
+        SPACE_MinHeight,   150,
         SPACE_Transparent, TRUE,
         SPACE_BevelStyle,  BVS_NONE,
         SPACE_RenderHook,  &s_render_hook,
@@ -3051,6 +3072,7 @@ BOOL gui_init(VortexApp *app)
         LAYOUT_SpaceOuter,   FALSE,
         LAYOUT_AddChild,     app->gad_clicktab,
         CHILD_WeightedWidth, 100,
+        CHILD_MinWidth,      60,
         LAYOUT_AddChild,     app->gad_tab_new,
         CHILD_WeightedWidth, 0,
         LAYOUT_AddChild,     app->gad_tab_close,
@@ -3154,6 +3176,8 @@ BOOL gui_init(VortexApp *app)
         WA_Top,               (uint32)win_top,
         WA_Width,             (uint32)win_w,
         WA_Height,            (uint32)win_h,
+        WA_MaxWidth,          ~0UL,
+        WA_MaxHeight,         ~0UL,
         WA_IDCMP,             IDCMP_CLOSEWINDOW | IDCMP_GADGETUP | IDCMP_GADGETDOWN |
                               IDCMP_RAWKEY | IDCMP_VANILLAKEY | IDCMP_MOUSEBUTTONS |
                               IDCMP_MOUSEMOVE | IDCMP_EXTENDEDMOUSE | IDCMP_NEWSIZE |
@@ -3209,6 +3233,9 @@ BOOL gui_init(VortexApp *app)
     }
 
     if (app->win) {
+        /* Allow window to be resized freely down to 200x150, overriding layout GM_DOMAIN min constraints */
+        IIntuition->WindowLimits(app->win, 200, 150, 0, 0);
+
         if (app->prefs.dark_theme == 1) {
             gui_draw_dark_titlebar(app);
         }
@@ -3321,10 +3348,14 @@ void gui_cleanup(VortexApp *app)
                 GUIA_WindowBarInactBackfill,    (Tag)s_orig_winbar_inact_hook,
                 GUIA_WindowBorderBackfill,      (Tag)s_orig_winborder_active_hook,
                 GUIA_WindowBorderInactBackfill, (Tag)s_orig_winborder_inact_hook,
+                GUIA_ScreenBarBackfill,        (Tag)s_orig_screenbar_hook,
                 GUIA_WindowBorderLook,          (Tag)s_orig_winborder_look,
+                GUIA_WindowBarFrameThickness,  (Tag)s_orig_winbar_thick,
+                GUIA_WindowFrameThickness,     (Tag)s_orig_winframe_thick,
                 GUIA_TabTitleBackfill,          (Tag)s_orig_tab_title_hook,
                 GUIA_TabActiveBackfill,         (Tag)s_orig_tab_active_hook,
                 GUIA_TabInactiveBackfill,       (Tag)s_orig_tab_inact_hook,
+                GUIA_ClickTabLook,             (Tag)s_orig_clicktab_look,
                 TAG_DONE);
             IIntuition->FreeScreenDrawInfo(s_orig_gui_screen, dri);
         }

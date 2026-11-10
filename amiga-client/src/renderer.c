@@ -1764,8 +1764,8 @@ void renderer_sync_viewport_size(VortexApp *app)
             break;
     }
 
-    if (w > 1920) w = 1920;
-    if (h > 1080) h = 1080;
+    if (w > 3840) w = 3840;
+    if (h > 2160) h = 2160;
 
     RendererState *r = &app->renderer;
 

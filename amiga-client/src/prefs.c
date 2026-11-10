@@ -206,10 +206,10 @@ static BOOL load_from_file(VortexApp *app, const char *path)
             app->prefs.resolution.win_y = (int16_t)atoi(val);
         } else if (strcmp(key, "win_w") == 0) {
             int ww = atoi(val);
-            if (ww >= 400 && ww <= 4096) app->prefs.resolution.win_w = (uint16_t)ww;
+            if (ww >= 200 && ww <= 4096) app->prefs.resolution.win_w = (uint16_t)ww;
         } else if (strcmp(key, "win_h") == 0) {
             int wh = atoi(val);
-            if (wh >= 300 && wh <= 4096) app->prefs.resolution.win_h = (uint16_t)wh;
+            if (wh >= 150 && wh <= 4096) app->prefs.resolution.win_h = (uint16_t)wh;
         } else if (strcmp(key, "screen_mode") == 0) {
             app->prefs.resolution.screen_mode = (uint8_t)atoi(val);
             app->prefs.resolution.use_custom_screen = (app->prefs.resolution.screen_mode != VB_SCREEN_WORKBENCH);
@@ -332,7 +332,7 @@ static BOOL load_from_file(VortexApp *app, const char *path)
         app->prefs.resolution.preset_idx  = 5;
         app->prefs.resolution.has_win_pos = FALSE;
     }
-    if (app->prefs.resolution.win_w < 400 || app->prefs.resolution.win_h < 300) {
+    if (app->prefs.resolution.win_w < 200 || app->prefs.resolution.win_h < 150) {
         app->prefs.resolution.has_win_pos = FALSE;
     }
 
@@ -522,7 +522,7 @@ void prefs_load_tooltypes(VortexApp *app, int argc, char **argv)
 void prefs_capture_window_box(VortexApp *app)
 {
     if (!app || !app->win) return;
-    if (app->win->Width >= 400 && app->win->Height >= 300) {
+    if (app->win->Width >= 200 && app->win->Height >= 150) {
         app->prefs.resolution.win_x       = app->win->LeftEdge;
         app->prefs.resolution.win_y       = app->win->TopEdge;
         app->prefs.resolution.win_w       = app->win->Width;
