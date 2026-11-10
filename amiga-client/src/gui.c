@@ -782,7 +782,6 @@ static Object *create_quicklink_button(uint32 gid, const char *label, const char
         BUTTON_Justification,  BCJ_CENTER,
         BUTTON_HorizAlignment, BALIGN_CENTER,
         BUTTON_VertAlignment,  BALIGN_CENTER,
-        BUTTON_DomainString,   (Tag)s_quick_btn_labels[idx],
         GA_HintInfo,           (Tag)s_quick_btn_hints[idx],
         s_dark_pens.allocated ? BUTTON_BackgroundPen : TAG_IGNORE, (uint32)s_dark_pens.btn_bg_pen,
         s_dark_pens.allocated ? BUTTON_TextPen : TAG_IGNORE,       (uint32)s_dark_pens.txt_pen,
@@ -1101,6 +1100,59 @@ static void get_string_gadget_text(Object *gad_obj, char *out_buf, size_t out_ca
                        out_buf[len - 1] == '\r' || out_buf[len - 1] == '\n')) {
         out_buf[--len] = '\0';
     }
+}
+
+static BOOL is_url_or_command(const char *str)
+{
+    if (!str || !*str) return FALSE;
+    while (*str == ' ' || *str == '\t') str++;
+    if (*str == '\0') return FALSE;
+
+    /* Vortex Browser internal commands start with @ or / */
+    if (str[0] == '@' || str[0] == '/') return TRUE;
+
+    /* Protocol schemes */
+    if (strncmp(str, "http://", 7) == 0 ||
+        strncmp(str, "https://", 8) == 0 ||
+        strncmp(str, "ftp://", 6) == 0 ||
+        strncmp(str, "file://", 7) == 0 ||
+        strncmp(str, "about:", 6) == 0) {
+        return TRUE;
+    }
+
+    /* If it contains spaces, treat as search query */
+    if (strchr(str, ' ')) return FALSE;
+
+    /* If it contains a dot and no spaces (e.g. google.de, aminet.net, os4depot.net), treat as URL */
+    if (strchr(str, '.')) return TRUE;
+
+    return FALSE;
+}
+
+static void build_search_url(VortexApp *app, const char *query, char *out_url, size_t out_cap)
+{
+    if (!out_url || out_cap == 0) return;
+    out_url[0] = '\0';
+    if (!query) return;
+
+    char enc_buf[512];
+    size_t ei = 0;
+    for (size_t si = 0; query[si] != '\0' && ei + 4 < sizeof(enc_buf); si++) {
+        unsigned char c = (unsigned char)query[si];
+        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+            (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~') {
+            enc_buf[ei++] = (char)c;
+        } else if (c == ' ') {
+            enc_buf[ei++] = '+';
+        } else {
+            snprintf(&enc_buf[ei], 4, "%%%02X", (unsigned)c);
+            ei += 3;
+        }
+    }
+    enc_buf[ei] = '\0';
+
+    uint8_t se = (app && app->prefs.search_engine < NUM_SEARCH_ENGINES) ? app->prefs.search_engine : 0;
+    snprintf(out_url, out_cap, g_search_engines[se].query_url_fmt, enc_buf);
 }
 
 static void parse_host_port(const char *input, char *out_host, size_t host_cap, uint16_t *out_port)
@@ -2708,57 +2760,10 @@ BOOL gui_init(VortexApp *app)
         TAG_DONE);
 
     Object *btn_clear_url = create_toolbar_button(GID_CLEAR_URL, c_clear, 3, "X", "Adresseingabe leeren", pub_scr);
-    Object *btn_go = create_toolbar_button(GID_GO, c_go, 3, "Los", "URL aufrufen", pub_scr);
+    Object *btn_go = create_toolbar_button(GID_GO, c_go, 3, "Los", "URL aufrufen oder Suche starten", pub_scr);
 
-    static const char *const s_search_engine_labels[] = {
-        "DuckDuckGo",
-        "Google",
-        "Bing",
-        "Startpage",
-        "Ecosia",
-        "Wikipedia",
-        "YouTube",
-        "Aminet",
-        "OS4Depot",
-        NULL
-    };
-
-    Object *lbl_search = IIntuition->NewObject(NULL, "button.gadget",
-        GA_Text,              (Tag)"Suche:",
-        GA_ReadOnly,          TRUE,
-        BUTTON_BevelStyle,    BVS_NONE,
-        BUTTON_Transparent,   TRUE,
-        BUTTON_Justification, BCJ_RIGHT,
-        s_dark_pens.allocated ? BUTTON_TextPen : TAG_IGNORE, (uint32)s_dark_pens.txt_pen,
-        TAG_DONE);
-
-    uint16 init_se_sel = app->prefs.search_engine;
-    if (init_se_sel >= NUM_SEARCH_ENGINES) init_se_sel = 0;
-
-    app->gad_search_chooser = IIntuition->NewObject(NULL, "chooser.gadget",
-        GA_ID,              GID_SEARCH_CHOOSER,
-        GA_RelVerify,       TRUE,
-        CHOOSER_PopUp,      TRUE,
-        CHOOSER_LabelArray, s_search_engine_labels,
-        CHOOSER_Selected,   init_se_sel,
-        CHOOSER_MaxLabels,  NUM_SEARCH_ENGINES,
-        GA_HintInfo,        "Suchmaschine waehlen (Standard: DuckDuckGo)",
-        TAG_DONE);
-
-    app->gad_search = IIntuition->NewObject(NULL, "string.gadget",
-        GA_ID,            GID_SEARCH,
-        GA_RelVerify,     TRUE,
-        GA_TabCycle,      FALSE,
-        GA_HintInfo,      "Suchbegriff eingeben und Enter druecken",
-        STRINGA_MaxChars, 128,
-        STRINGA_TextVal,  "",
-        s_dark_pens.allocated ? STRINGA_Pens : TAG_IGNORE,
-            (uint32)((s_dark_pens.inp_bg_pen << 16) | (s_dark_pens.txt_pen & 0xFFFF)),
-        s_dark_pens.allocated ? STRINGA_ActivePens : TAG_IGNORE,
-            (uint32)((s_dark_pens.inp_bg_pen << 16) | (s_dark_pens.txt_pen & 0xFFFF)),
-        TAG_DONE);
-
-    Object *btn_search_go = create_toolbar_button(GID_SEARCH_GO, c_search, 2, "Los", "Web mit gewaehlter Suchmaschine durchsuchen", pub_scr);
+    app->gad_search_chooser = NULL;
+    app->gad_search = NULL;
 
     Object *nav_row1 = IIntuition->NewObject(NULL, "layout.gadget",
         LAYOUT_Orientation,  LAYOUT_ORIENT_HORIZ,
@@ -2776,20 +2781,11 @@ BOOL gui_init(VortexApp *app)
         LAYOUT_AddChild,     app->gad_url_favicon,
         CHILD_WeightedWidth, 0,
         LAYOUT_AddChild,     app->gad_url,
-        CHILD_WeightedWidth, 48,
-        CHILD_MinWidth,      60,
+        CHILD_WeightedWidth, 100,
+        CHILD_MinWidth,      40,
         LAYOUT_AddChild,     btn_clear_url,
         CHILD_WeightedWidth, 0,
         LAYOUT_AddChild,     btn_go,
-        CHILD_WeightedWidth, 0,
-        LAYOUT_AddChild,     lbl_search,
-        CHILD_WeightedWidth, 0,
-        LAYOUT_AddChild,     app->gad_search_chooser,
-        CHILD_WeightedWidth, 0,
-        LAYOUT_AddChild,     app->gad_search,
-        CHILD_WeightedWidth, 20,
-        CHILD_MinWidth,      40,
-        LAYOUT_AddChild,     btn_search_go,
         CHILD_WeightedWidth, 0,
         TAG_DONE);
 
@@ -2872,49 +2868,41 @@ BOOL gui_init(VortexApp *app)
     uint16 init_w = win_w;
 
     /* Multi-row wrapping for QuickLink buttons:
-     * If the buttons exceed the available row width, wrap into a new line (neue Zeile).
+     * To ensure the window width can freely resize down to ~200px without being blocked
+     * by horizontal button accumulation, each row holds at most 2 quicklinks (min domain ~110px).
      */
-    #define MAX_QL_ROWS 4
+    #define MAX_QL_ROWS 8
     Object *ql_row_objs[MAX_QL_ROWS] = { NULL };
     Object *row_items[MAX_QL_ROWS][VB_MAX_QUICKLINKS + 2];
     int row_item_count[MAX_QL_ROWS] = { 0 };
 
-    int first_row_limit = (int)init_w - 460; /* Space for right-side tools */
-    if (first_row_limit < 180) first_row_limit = 180;
-    int next_row_limit  = (int)init_w - 40;  /* Full width for wrapped lines */
-    if (next_row_limit < 200) next_row_limit = 200;
-
     int cur_row = 0;
-    int cur_w   = 0;
-    int cur_limit = first_row_limit;
 
     for (int i = 0; i < app->prefs.num_quick_links && i < VB_MAX_QUICKLINKS; i++) {
         if (!app->gad_quick_btn[i]) continue;
 
-        int label_len = (int)strlen(app->prefs.quick_links[i].label);
-        int item_w = label_len * 8 + 32;
-        if (item_w < 40) item_w = 40;
-
-        /* If adding this button exceeds current row width, start a new row */
-        if (row_item_count[cur_row] > 0 && (cur_w + item_w > cur_limit) && cur_row < MAX_QL_ROWS - 1) {
+        /* Wrap after 2 buttons per row so no row's GM_DOMAIN exceeds ~110px */
+        if (row_item_count[cur_row] >= 2 && cur_row < MAX_QL_ROWS - 1) {
             cur_row++;
-            cur_w = 0;
-            cur_limit = next_row_limit;
         }
 
         row_items[cur_row][row_item_count[cur_row]++] = app->gad_quick_btn[i];
-        cur_w += item_w + 6;
     }
 
     if (app->gad_quick_add) {
-        /* Always place '+' and '-' directly adjacent to the last quicklink button */
+        if (row_item_count[cur_row] >= 2 && cur_row < MAX_QL_ROWS - 1) {
+            cur_row++;
+        }
         row_items[cur_row][row_item_count[cur_row]++] = app->gad_quick_add;
     }
     if (app->gad_quick_remove) {
+        if (row_item_count[cur_row] >= 2 && cur_row < MAX_QL_ROWS - 1) {
+            cur_row++;
+        }
         row_items[cur_row][row_item_count[cur_row]++] = app->gad_quick_remove;
     }
 
-    int ql_row_count = cur_row + 1;
+    int ql_row_count = (row_item_count[0] > 0) ? (cur_row + 1) : 0;
 
     for (int r = 0; r < ql_row_count; r++) {
         struct TagItem row_tags[64];
@@ -2931,22 +2919,22 @@ BOOL gui_init(VortexApp *app)
             row_tags[t++].ti_Data = (Tag)row_items[r][it];
             row_tags[t].ti_Tag = CHILD_WeightedWidth;
             row_tags[t++].ti_Data = 0;
+            row_tags[t].ti_Tag = CHILD_MinWidth;
+            row_tags[t++].ti_Data = 20;
         }
 
-        if (r > 0) {
-            /* Overflow rows get a trailing spacer so items remain left-aligned */
-            Object *sp = IIntuition->NewObject(NULL, "space.gadget",
-                SPACE_Transparent, FALSE,
-                SPACE_MinWidth,    4,
-                s_dark_pens.allocated ? GA_BackFill : TAG_IGNORE,      (Tag)&s_dark_backfill_hook,
-                s_dark_pens.allocated ? SPACE_RenderHook : TAG_IGNORE, (Tag)&s_space_dark_render_hook,
-                TAG_DONE);
-            if (sp) {
-                row_tags[t].ti_Tag = LAYOUT_AddChild;
-                row_tags[t++].ti_Data = (Tag)sp;
-                row_tags[t].ti_Tag = CHILD_WeightedWidth;
-                row_tags[t++].ti_Data = 100;
-            }
+        /* Trailing spacer so items remain left-aligned */
+        Object *sp = IIntuition->NewObject(NULL, "space.gadget",
+            SPACE_Transparent, FALSE,
+            SPACE_MinWidth,    2,
+            s_dark_pens.allocated ? GA_BackFill : TAG_IGNORE,      (Tag)&s_dark_backfill_hook,
+            s_dark_pens.allocated ? SPACE_RenderHook : TAG_IGNORE, (Tag)&s_space_dark_render_hook,
+            TAG_DONE);
+        if (sp) {
+            row_tags[t].ti_Tag = LAYOUT_AddChild;
+            row_tags[t++].ti_Data = (Tag)sp;
+            row_tags[t].ti_Tag = CHILD_WeightedWidth;
+            row_tags[t++].ti_Data = 100;
         }
 
         if (s_dark_pens.allocated) {
@@ -2960,28 +2948,29 @@ BOOL gui_init(VortexApp *app)
         ql_row_objs[r] = IIntuition->NewObjectA(NULL, "layout.gadget", row_tags);
     }
 
-    Object *row2_spacer = IIntuition->NewObject(NULL, "space.gadget",
+    Object *tools_spacer = IIntuition->NewObject(NULL, "space.gadget",
         SPACE_Transparent, FALSE,
-        SPACE_MinWidth,    4,
+        SPACE_MinWidth,    2,
         s_dark_pens.allocated ? GA_BackFill : TAG_IGNORE,      (Tag)&s_dark_backfill_hook,
         s_dark_pens.allocated ? SPACE_RenderHook : TAG_IGNORE, (Tag)&s_space_dark_render_hook,
         TAG_DONE);
 
-    Object *nav_row2 = IIntuition->NewObject(NULL, "layout.gadget",
+    Object *tools_row = IIntuition->NewObject(NULL, "layout.gadget",
         LAYOUT_Orientation,  LAYOUT_ORIENT_HORIZ,
         s_dark_pens.allocated ? LAYOUT_LayoutBackFill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
         LAYOUT_SpaceInner,   TRUE,
         LAYOUT_SpaceOuter,   FALSE,
-        LAYOUT_AddChild,     ql_row_objs[0],
-        CHILD_WeightedWidth, 0,
-        LAYOUT_AddChild,     row2_spacer,
-        CHILD_WeightedWidth, 100, /* Absorbs all remaining width -> keeps buttons strictly left-aligned */
+        LAYOUT_AddChild,     tools_spacer,
+        CHILD_WeightedWidth, 100,
         LAYOUT_AddChild,     app->gad_fav_chooser,
         CHILD_WeightedWidth, 0,
+        CHILD_MinWidth,      60,
         LAYOUT_AddChild,     btn_downloads,
         CHILD_WeightedWidth, 0,
+        CHILD_MinWidth,      20,
         LAYOUT_AddChild,     btn_connect,
         CHILD_WeightedWidth, 0,
+        CHILD_MinWidth,      20,
         TAG_DONE);
 
     /* ------------------------------------------------------------------------
@@ -3088,14 +3077,8 @@ BOOL gui_init(VortexApp *app)
     root_tags[rt].ti_Tag = LAYOUT_DeferLayout;
     root_tags[rt++].ti_Data = FALSE;
 
-    /* Row 1: Schnellwahl (Bookmarks Toolbar) */
-    root_tags[rt].ti_Tag = LAYOUT_AddChild;
-    root_tags[rt++].ti_Data = (Tag)nav_row2;
-    root_tags[rt].ti_Tag = CHILD_WeightedHeight;
-    root_tags[rt++].ti_Data = 0;
-
-    /* Add wrapped quicklink rows (neue Zeilen) if buttons exceeded width */
-    for (int r = 1; r < ql_row_count; r++) {
+    /* Row 1: Schnellwahl (Bookmarks Toolbar) rows */
+    for (int r = 0; r < ql_row_count; r++) {
         if (ql_row_objs[r]) {
             root_tags[rt].ti_Tag = LAYOUT_AddChild;
             root_tags[rt++].ti_Data = (Tag)ql_row_objs[r];
@@ -3103,6 +3086,12 @@ BOOL gui_init(VortexApp *app)
             root_tags[rt++].ti_Data = 0;
         }
     }
+
+    /* Tools Row: Lesezeichen chooser, Downloads, Verbinden */
+    root_tags[rt].ti_Tag = LAYOUT_AddChild;
+    root_tags[rt++].ti_Data = (Tag)tools_row;
+    root_tags[rt].ti_Tag = CHILD_WeightedHeight;
+    root_tags[rt++].ti_Data = 0;
 
     /* Row 2: Navigation, URL Address Bar & Web Search Bar */
     root_tags[rt].ti_Tag = LAYOUT_AddChild;
@@ -3800,8 +3789,17 @@ void gui_handle_events(VortexApp *app)
                         char url_buf[VB_MAX_URL_LEN];
                         get_string_gadget_text(app->gad_url, url_buf, sizeof(url_buf));
                         if (url_buf[0] != '\0') {
-                            gui_update_url_bar(app, url_buf);
-                            net_send_url(app, url_buf);
+                            if (is_url_or_command(url_buf)) {
+                                gui_update_url_bar(app, url_buf);
+                                net_send_url(app, url_buf);
+                            } else {
+                                char search_url[VB_MAX_URL_LEN];
+                                build_search_url(app, url_buf, search_url, sizeof(search_url));
+                                gui_update_url_bar(app, search_url);
+                                net_send_url(app, search_url);
+                                uint8_t se = (app->prefs.search_engine < NUM_SEARCH_ENGINES) ? app->prefs.search_engine : 0;
+                                app_set_status("Suche (%s): %s", g_search_engines[se].name, url_buf);
+                            }
                         }
                         break;
                     }
@@ -3816,32 +3814,16 @@ void gui_handle_events(VortexApp *app)
                                 app_set_status("Suchmaschine gewaehlt: %s", g_search_engines[sel].name);
                             }
                         }
-                        /* If a search term is already entered, execute search with the newly chosen engine */
-                        char s_buf[256];
-                        get_string_gadget_text(app->gad_search, s_buf, sizeof(s_buf));
-                        if (s_buf[0] != '\0') {
-                            char enc_buf[512];
-                            size_t ei = 0;
-                            for (size_t si = 0; s_buf[si] != '\0' && ei + 4 < sizeof(enc_buf); si++) {
-                                unsigned char c = (unsigned char)s_buf[si];
-                                if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
-                                    (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~') {
-                                    enc_buf[ei++] = (char)c;
-                                } else if (c == ' ') {
-                                    enc_buf[ei++] = '+';
-                                } else {
-                                    snprintf(&enc_buf[ei], 4, "%%%02X", (unsigned)c);
-                                    ei += 3;
-                                }
-                            }
-                            enc_buf[ei] = '\0';
-                            uint8_t se = (app->prefs.search_engine < NUM_SEARCH_ENGINES) ? app->prefs.search_engine : 0;
+                        /* If a query is entered in Omnibar URL bar, execute search */
+                        char url_buf[VB_MAX_URL_LEN];
+                        get_string_gadget_text(app->gad_url, url_buf, sizeof(url_buf));
+                        if (url_buf[0] != '\0' && !is_url_or_command(url_buf)) {
                             char search_url[VB_MAX_URL_LEN];
-                            snprintf(search_url, sizeof(search_url), g_search_engines[se].query_url_fmt, enc_buf);
+                            build_search_url(app, url_buf, search_url, sizeof(search_url));
                             gui_update_url_bar(app, search_url);
                             net_send_url(app, search_url);
-                        } else if (app->gad_search && app->win) {
-                            IIntuition->ActivateGadget((struct Gadget *)app->gad_search, app->win, NULL);
+                        } else if (app->gad_url && app->win) {
+                            IIntuition->ActivateGadget((struct Gadget *)app->gad_url, app->win, NULL);
                         }
                         break;
                     }
@@ -3856,28 +3838,14 @@ void gui_handle_events(VortexApp *app)
                             }
                         }
                         char s_buf[256];
-                        get_string_gadget_text(app->gad_search, s_buf, sizeof(s_buf));
+                        get_string_gadget_text(app->gad_search ? app->gad_search : app->gad_url, s_buf, sizeof(s_buf));
                         if (s_buf[0] != '\0') {
-                            char enc_buf[512];
-                            size_t ei = 0;
-                            for (size_t si = 0; s_buf[si] != '\0' && ei + 4 < sizeof(enc_buf); si++) {
-                                unsigned char c = (unsigned char)s_buf[si];
-                                if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
-                                    (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~') {
-                                    enc_buf[ei++] = (char)c;
-                                } else if (c == ' ') {
-                                    enc_buf[ei++] = '+';
-                                } else {
-                                    snprintf(&enc_buf[ei], 4, "%%%02X", (unsigned)c);
-                                    ei += 3;
-                                }
-                            }
-                            enc_buf[ei] = '\0';
-                            uint8_t se = (app->prefs.search_engine < NUM_SEARCH_ENGINES) ? app->prefs.search_engine : 0;
                             char search_url[VB_MAX_URL_LEN];
-                            snprintf(search_url, sizeof(search_url), g_search_engines[se].query_url_fmt, enc_buf);
+                            build_search_url(app, s_buf, search_url, sizeof(search_url));
                             gui_update_url_bar(app, search_url);
                             net_send_url(app, search_url);
+                            uint8_t se = (app->prefs.search_engine < NUM_SEARCH_ENGINES) ? app->prefs.search_engine : 0;
+                            app_set_status("Suche (%s): %s", g_search_engines[se].name, s_buf);
                         }
                         break;
                     }
