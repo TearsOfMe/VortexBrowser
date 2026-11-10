@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec "${SCRIPT_DIR}/pi-server/run_server.sh" "$@"
+exec "${SCRIPT_DIR}/server/run_server.sh" "$@"

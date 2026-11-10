@@ -90,11 +90,8 @@ Um die ToolTypes zu bearbeiten:
 
 ## Verzeichnisstruktur des Gesamtpakets
 
-- `amiga-client/`: Quelltext und Assets des AmigaOS 4 Clients
-- `intel-server/`: Optimiert für Intel Atom x5-Z8350, Celeron & Core (VA-API Hardwarebeschleunigung, EGL, SSE4 SIMD, 2-Thread-Atom-Rastering)
-- `cachyos-linux-server/`: High-End Rendering-Server für CachyOS / Arch / Fedora (Ryzen PRO, AVX2, powerprofilesctl)
-- `pi-server/`: Standard-Linux-Server (x86_64 / ARM64)
-- `rpi4-server/`: Optimierter Server für Raspberry Pi 4 / 5
+- `amiga-client/`: Quelltext, Icons und Assets des AmigaOS 4 Clients
+- `server/`: Universeller Linux Rendering-Server mit Hardware-Autodetect (Intel QuickSync/VA-API, AMD Vulkan/VA-API, Raspberry Pi V3D/EGL, AVX2/SSE4/NEON SIMD)
 - `make_release.py`: Erstellt automatisch alle fertigen Release-Archive (`.lha`, `.zip`)
 
 ---
@@ -103,15 +100,15 @@ Um die ToolTypes zu bearbeiten:
 
 ### 1. Release-Pakete schnüren
 ```bash
-# Kompiliert das SIMD-Modul und baut alle Release-Archive (LHA für Amiga, ZIPs für Linux/Pi/CachyOS)
+# Kompiliert das SIMD-Modul und baut alle Release-Archive (LHA für Amiga, ZIP für Server und Komplettpaket)
 python3 make_release.py
 ```
 
-### 2. Server starten (Linux PC, CachyOS oder Raspberry Pi)
+### 2. Server starten (Linux PC, CachyOS, Intel oder Raspberry Pi)
 ```bash
-cd cachyos-linux-server   # oder pi-server / rpi4-server
-./install_server.sh           # Einmalige automatische Einrichtung
-./run_server.sh               # Server starten
+cd server
+./install_server.sh           # Einmalige automatische Einrichtung (erkennt Hardware & installiert Treiber)
+./run_server.sh               # Server starten (wählt Auflösung & Beschleunigung optimal)
 ```
 
 ### 3. Client auf AmigaOS 4.1 starten
