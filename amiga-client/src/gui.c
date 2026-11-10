@@ -2725,7 +2725,7 @@ BOOL gui_init(VortexApp *app)
     static const char *const c_home[]    = { "home", "start" };
     static const char *const c_clear[]   = { "clear", "delete", "cross" };
     static const char *const c_go[]      = { "go", "arrowright", "return" };
-    static const char *const c_search[]  = { "search", "find" };
+    static const char *const c_search[]  = { "search", "find", "glass", "lens", NULL };
     static const char *const c_connect[] = { "network", "connect" };
 
     /* ------------------------------------------------------------------------
@@ -2763,8 +2763,45 @@ BOOL gui_init(VortexApp *app)
     Object *btn_clear_url = create_toolbar_button(GID_CLEAR_URL, c_clear, 3, "X", "Adresseingabe leeren", pub_scr);
     Object *btn_go = create_toolbar_button(GID_GO, c_go, 3, "Los", "URL aufrufen oder Suche starten", pub_scr);
 
-    app->gad_search_chooser = NULL;
-    app->gad_search = NULL;
+    static const char *const s_search_engine_labels[] = {
+        "DuckDuckGo",
+        "Google",
+        "Bing",
+        "Startpage",
+        "Ecosia",
+        "Wikipedia",
+        "YouTube",
+        "Aminet",
+        "OS4Depot",
+        NULL
+    };
+
+    uint16 init_se_sel = app->prefs.search_engine;
+    if (init_se_sel >= NUM_SEARCH_ENGINES) init_se_sel = 0;
+
+    app->gad_search_chooser = IIntuition->NewObject(NULL, "chooser.gadget",
+        GA_ID,              GID_SEARCH_CHOOSER,
+        GA_RelVerify,       TRUE,
+        CHOOSER_PopUp,      TRUE,
+        CHOOSER_LabelArray, s_search_engine_labels,
+        CHOOSER_Selected,   init_se_sel,
+        CHOOSER_MaxLabels,  NUM_SEARCH_ENGINES,
+        GA_HintInfo,        "Suchmaschine waehlen (Standard: DuckDuckGo)",
+        TAG_DONE);
+
+    app->gad_search = IIntuition->NewObject(NULL, "string.gadget",
+        GA_ID,            GID_SEARCH,
+        GA_RelVerify,     TRUE,
+        GA_TabCycle,      FALSE,
+        GA_HintInfo,      "Suchbegriff eingeben und Enter druecken",
+        STRINGA_MaxChars, 255,
+        s_dark_pens.allocated ? STRINGA_Pens : TAG_IGNORE,
+            (uint32)((s_dark_pens.inp_bg_pen << 16) | (s_dark_pens.txt_pen & 0xFFFF)),
+        s_dark_pens.allocated ? STRINGA_ActivePens : TAG_IGNORE,
+            (uint32)((s_dark_pens.inp_bg_pen << 16) | (s_dark_pens.txt_pen & 0xFFFF)),
+        TAG_DONE);
+
+    Object *btn_search = create_toolbar_button(GID_SEARCH_GO, c_search, 4, "Suche", "Suche ausfuehren", pub_scr);
 
     app->gad_fav_chooser = IIntuition->NewObject(NULL, "chooser.gadget",
         GA_ID,             GID_FAV_CHOOSER,
@@ -2794,11 +2831,18 @@ BOOL gui_init(VortexApp *app)
         LAYOUT_AddChild,     app->gad_url_favicon,
         CHILD_WeightedWidth, 0,
         LAYOUT_AddChild,     app->gad_url,
-        CHILD_WeightedWidth, 100,
+        CHILD_WeightedWidth, 60,
         CHILD_MinWidth,      40,
         LAYOUT_AddChild,     btn_clear_url,
         CHILD_WeightedWidth, 0,
         LAYOUT_AddChild,     btn_go,
+        CHILD_WeightedWidth, 0,
+        LAYOUT_AddChild,     app->gad_search_chooser,
+        CHILD_WeightedWidth, 0,
+        LAYOUT_AddChild,     app->gad_search,
+        CHILD_WeightedWidth, 40,
+        CHILD_MinWidth,      30,
+        LAYOUT_AddChild,     btn_search,
         CHILD_WeightedWidth, 0,
         LAYOUT_AddChild,     app->gad_fav_chooser,
         CHILD_WeightedWidth, 0,
@@ -3066,7 +3110,13 @@ BOOL gui_init(VortexApp *app)
     root_tags[rt].ti_Tag = LAYOUT_DeferLayout;
     root_tags[rt++].ti_Data = FALSE;
 
-    /* Row 1: Schnellwahl (Bookmarks Toolbar) rows */
+    /* Row 1: Navigation, URL Address Bar & Web Search Bar */
+    root_tags[rt].ti_Tag = LAYOUT_AddChild;
+    root_tags[rt++].ti_Data = (Tag)nav_row1;
+    root_tags[rt].ti_Tag = CHILD_WeightedHeight;
+    root_tags[rt++].ti_Data = 0;
+
+    /* Row 2: Schnellwahl (Bookmarks Toolbar) rows */
     for (int r = 0; r < ql_row_count; r++) {
         if (ql_row_objs[r]) {
             root_tags[rt].ti_Tag = LAYOUT_AddChild;
@@ -3075,12 +3125,6 @@ BOOL gui_init(VortexApp *app)
             root_tags[rt++].ti_Data = 0;
         }
     }
-
-    /* Row 2: Navigation, URL Address Bar & Web Search Bar */
-    root_tags[rt].ti_Tag = LAYOUT_AddChild;
-    root_tags[rt++].ti_Data = (Tag)nav_row1;
-    root_tags[rt].ti_Tag = CHILD_WeightedHeight;
-    root_tags[rt++].ti_Data = 0;
 
     root_tags[rt].ti_Tag = LAYOUT_AddChild;
     root_tags[rt++].ti_Data = (Tag)tab_row;
