@@ -201,41 +201,6 @@ typedef struct VortexApp {
     int16_t        active_quicklink_idx;
     char           win_title[512];
 
-    /* MUI GUI objects (for VortexBrowser-MUI) */
-    BOOL           is_mui;
-    Object        *mui_app;
-    Object        *mui_win;
-    Object        *mui_viewport;
-    Object        *mui_url;
-    Object        *mui_search;
-    Object        *mui_status;
-    Object        *mui_gauge;
-    Object        *mui_security_badge;
-    Object        *mui_search_engine_cycle;
-    Object        *mui_throbber;
-    Object        *mui_zone_indicator;
-    Object        *mui_fps_info;
-    Object        *mui_fav_cycle;
-    Object        *mui_server_cycle;
-    Object        *mui_quick_group;
-    Object        *mui_quick_btn[VB_MAX_QUICKLINKS];
-    Object        *mui_btn_add_ql;
-    Object        *mui_btn_rem_ql;
-    Object        *mui_btn_prefs;
-    Object        *mui_tab_bar_group;
-    Object        *mui_tab_item[VB_MAX_TABS];
-    Object        *mui_tab_btn[VB_MAX_TABS];
-    Object        *mui_tab_close_btn[VB_MAX_TABS];
-    Object        *mui_btn_add_tab;
-    Object        *mui_tab_spacer;
-    int            mui_search_engine_idx;
-    BOOL           mui_loading;
-    uint32         mui_throbber_step;
-    char         **mui_fav_entries;
-    int            mui_fav_entries_count;
-    struct IBox    mui_viewport_box;
-    struct RastPort *mui_rp;
-
     /* Preferences */
     VortexPrefs    prefs;
 

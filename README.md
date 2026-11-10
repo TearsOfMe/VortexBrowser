@@ -1,7 +1,7 @@
 # VortexBrowser – High-Performance Headless Web Browser Streaming System
 **(Universeller Linux Server [AMD/Intel/Raspberry Pi] $\rightarrow$ AmigaOS 4.1 PowerPC Client)**
 
-VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwright / Rustwright + DirectCDP WebSocket) auf einem **universellen Linux-Server** (automatische Hardware-Erkennung für AMD Ryzen Vulkan, Intel QuickSync VA-API und Raspberry Pi 4/5 V3D) und streamt die Bilddaten hocheffizient komprimiert per **Planar YUV420P + 2D Dirty-Rect + LZ4** an einen nativen **AmigaOS 4.1 PowerPC Reaction/MUI-Client**.
+VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwright / Rustwright + DirectCDP WebSocket) auf einem **universellen Linux-Server** (automatische Hardware-Erkennung für AMD Ryzen Vulkan, Intel QuickSync VA-API und Raspberry Pi 4/5 V3D) und streamt die Bilddaten hocheffizient komprimiert per **Planar YUV420P + 2D Dirty-Rect + LZ4** an einen nativen **AmigaOS 4.1 PowerPC Reaction-Client**.
 
 ---
 
@@ -20,17 +20,10 @@ VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwrigh
    - **AVX2-Mikroprädiktor:** Verdoppelt die LZ4-Kompressionsrate bei vollen 8-Bit Farbtiefe (PSNR > 44 dB, verlustfreie Wahrnehmung) ohne CPU-Last auf dem Amiga.
    - **Rustwright + DirectCDP Core:** Direkte WebSocket-Screencast-Anbindung ohne Node.js-Treiber-Overhead.
 
-2. **Zwei native GUI-Engines zur Auswahl (ReAction & MUI im Odyssey-Look):**
-   - **Standard ReAction (`VortexBrowser` & `VortexBrowser-AltiVec`):** Klassisches AmigaOS 4 System-Look-and-Feel mit Tabs (`clicktab.gadget`), Font-Zoom, Screen-Cloning und GPU-Composite-Skalierung.
-   - **MUI Edition (`VortexBrowser-MUI` im Odyssey Web Browser Look):**
-     - Exakt nachempfundene Benutzeroberfläche des beliebten AmigaOS 4 Odyssey Web Browsers:
-       - **Navigationsleiste (`navigationgroup`):** Schnellzugriff auf `<` (Zurück), `>` (Vorwärts), `Neu`, `Stopp`, `Start`, `Downloads`, `Passwörter`, flexibler Abstandhalter und animierter Lade-Throbber.
-       - **Schnellwahlleiste (`fastlinkparentgroup`):** Lesezeichen-Buttons mit Favicons, flexibler Abstandhalter, Server-Schnellauswahl und Verbinden-Button.
-       - **Adress- & Suchzeile (`urlgroup`):** `+ Tab` Button, Sicherheits-Indikator (`[🔒 https]` / `[🌐 http]`), URL-Eingabezeile, `[X]`, `[Los]`, Trenner, `+Lesez.`, Lesezeichen-Dropdown, interaktiver `BalanceObject`-Teiler und Suchleiste mit Suchmaschinen-Wahl (`DuckDuckGo`, `Google`, `Wikipedia`, `Aminet`, `OS4Depot`, `YouTube`).
-       - **Integrierte Tableiste & Web-Viewport (`pagegroup`):** Nahtlos im nativen Register-Rahmen (`MUIV_Frame_Register` mit `MUII_RegisterBack`) gebündelt – mit dynamischen Tab-Titeln, optisch verschmolzenem aktivem Tab, Tab-Schließen-Buttons `[x]`, neuem Tab `[+]` und direkt angeschlossenem Web-Viewport.
-       - **Segmentierte Statusleiste (`statusgroup`):** Aufgeteilt in Sicherheits-Zone (`[🔒 Sicher]`), vertikale Trennbalken, Statusmeldung / Hover-URLs, Fortschrittsbalken und Hardware-Stream-Status (`Stream: Auto [H.264 VA-API HW] | 25 FPS | 8000 kbps`).
-       - **Menüstruktur:** Entspricht der bekannten Odyssey-Menüführung inklusive Video-Bitrateneinstellungen (Standard: 8000 kbps, bis 10.000 kbps).
-       - **Lautloser Start:** Keine Shell-/Konsolen-Ausgaben beim Programmstart; das aktive Streaming-System wird übersichtlich direkt in der Statusleiste angezeigt.
+2. **Native AmigaOS 4 ReAction Benutzeroberfläche:**
+   - **Klassisches AmigaOS 4 Look-and-Feel (`VortexBrowser` & `VortexBrowser-AltiVec`):** Nahtlose Integration mit Tabs (`clicktab.gadget`), Font-Zoom, Screen-Cloning und GPU-Composite-Skalierung.
+   - **Dynamische Breitenanpassung der Schnellwahl-Buttons:** Die Schnellwahl-Leiste nutzt automatisch die gesamte verfügbare Fensterbreite.
+   - **Unbegrenzte Favoriten:** In den Einstellungen (`Amiga+E`) können unbegrenzt viele Lesezeichen und Schnellwahl-Seiten gepflegt werden.
 
 3. **Multi-Tab-Browsing & Sitzungswiederherstellung:**
    - Echte Tabs über `clicktab.gadget` mit AmigaOS 4 Standard-Bedienung (`Amiga+T` für neuen Tab, `Amiga+W` zum Schließen).
@@ -61,7 +54,7 @@ VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwrigh
 
 ## Workbench Icon-ToolTypes & Konfiguration
 
-VortexBrowser unterstützt die vollständige Konfiguration über standardmäßige AmigaOS 4 **ToolTypes** in den `.info`-Dateien (`VortexBrowser.info`, `VortexBrowser-AltiVec.info`, `VortexBrowser-MUI.info`).
+VortexBrowser unterstützt die vollständige Konfiguration über standardmäßige AmigaOS 4 **ToolTypes** in den `.info`-Dateien (`VortexBrowser.info`, `VortexBrowser-AltiVec.info`).
 
 Um die ToolTypes zu bearbeiten:
 1. Klicken Sie das Programm-Icon auf der Workbench an.
@@ -84,7 +77,7 @@ Um die ToolTypes zu bearbeiten:
 > [!NOTE]
 > **AmigaOS-Klammerkonvention:**
 > Einträge in runden Klammern wie `(SERVER=...)` gelten in AmigaOS als **inaktiv / Vorlage**. Um einen ToolType scharfzuschalten, entfernen Sie die Klammern (z. B. `SERVER=192.168.178.2`) und klicken Sie auf **Speichern**.
-> Der im Icon hinterlegte **Stack** beträgt **200000** Byte (~200 KB) und stellt einen stabilen Betrieb von Netzwerk, FFmpeg/VA-API und MUI/ReAction sicher.
+> Der im Icon hinterlegte **Stack** beträgt **200000** Byte (~200 KB) und stellt einen stabilen Betrieb von Netzwerk, FFmpeg/VA-API und ReAction sicher.
 
 ---
 

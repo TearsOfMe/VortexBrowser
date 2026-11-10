@@ -35,11 +35,9 @@ LDFLAGS = -L../sdk_va -L$(SDK)/local/newlib/lib -lavcodec -lavutil -lva -llz4 -l
 
 SRCS_COMMON = src/net.c src/renderer.c src/favorites.c src/download.c src/audio.c src/prefs.c src/clipboard.c src/passwords.c
 SRCS_ALL    = src/main.c src/gui.c src/gui_prefs.c src/gui_passwords.c src/gui_download.c $(SRCS_COMMON)
-SRCS_MUI    = src/main_mui.c src/gui_mui.c src/gui_prefs.c $(SRCS_COMMON)
 
 # Universal objects (Hybrid: scalar app code + isolated AltiVec SIMD unit for dynamic dispatch)
 OBJS_UNIVERSAL = $(SRCS_ALL:.c=.o) src/renderer_altivec.o
-OBJS_MUI       = $(SRCS_MUI:.c=.o) src/renderer_altivec.o
 
 # Dedicated Pure AltiVec objects
 OBJS_ALTIVEC_DIR = obj_altivec
@@ -47,17 +45,12 @@ OBJS_PURE_ALTIVEC = $(patsubst src/%.c,$(OBJS_ALTIVEC_DIR)/%.o,$(SRCS_ALL)) $(OB
 
 TARGET_UNIVERSAL = VortexBrowser
 TARGET_ALTIVEC   = VortexBrowser-AltiVec
-TARGET_MUI       = VortexBrowser-MUI
 
-all: $(TARGET_UNIVERSAL) $(TARGET_ALTIVEC) $(TARGET_MUI)
+all: $(TARGET_UNIVERSAL) $(TARGET_ALTIVEC)
 
 $(TARGET_UNIVERSAL): $(OBJS_UNIVERSAL)
 	$(CC) $(OBJS_UNIVERSAL) -o $(TARGET_UNIVERSAL) $(LDFLAGS)
 	$(STRIP) -s -R.comment -R.note $(TARGET_UNIVERSAL) -o $(TARGET_UNIVERSAL).stripped
-
-$(TARGET_MUI): $(OBJS_MUI)
-	$(CC) $(OBJS_MUI) -o $(TARGET_MUI) $(LDFLAGS)
-	$(STRIP) -s -R.comment -R.note $(TARGET_MUI) -o $(TARGET_MUI).stripped
 
 src/renderer_altivec.o: src/renderer_altivec.c src/renderer_altivec.h
 	$(CC) $(CFLAGS_ALTIVEC) -c $< -o $@
@@ -76,6 +69,6 @@ $(TARGET_ALTIVEC): $(OBJS_PURE_ALTIVEC)
 	$(STRIP) -s -R.comment -R.note $(TARGET_ALTIVEC) -o $(TARGET_ALTIVEC).stripped
 
 clean:
-	rm -rf src/*.o $(OBJS_ALTIVEC_DIR) $(TARGET_UNIVERSAL) $(TARGET_UNIVERSAL).stripped $(TARGET_ALTIVEC) $(TARGET_ALTIVEC).stripped $(TARGET_MUI) $(TARGET_MUI).stripped
+	rm -rf src/*.o $(OBJS_ALTIVEC_DIR) $(TARGET_UNIVERSAL) $(TARGET_UNIVERSAL).stripped $(TARGET_ALTIVEC) $(TARGET_ALTIVEC).stripped
 
 .PHONY: all clean
