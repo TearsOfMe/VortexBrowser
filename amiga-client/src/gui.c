@@ -778,6 +778,7 @@ static Object *create_quicklink_button(uint32 gid, const char *label, const char
         GA_ID,                 gid,
         GA_RelVerify,          TRUE,
         GA_Text,               (Tag)s_quick_btn_labels[idx],
+        BUTTON_DomainString,   (Tag)s_quick_btn_labels[idx],
         BUTTON_BevelStyle,     BVS_THIN,
         BUTTON_Justification,  BCJ_CENTER,
         BUTTON_HorizAlignment, BALIGN_CENTER,
@@ -2868,37 +2869,44 @@ BOOL gui_init(VortexApp *app)
     uint16 init_w = win_w;
 
     /* Multi-row wrapping for QuickLink buttons:
-     * To ensure the window width can freely resize down to ~200px without being blocked
-     * by horizontal button accumulation, each row holds at most 2 quicklinks (min domain ~110px).
+     * Wrap buttons across rows so they remain clean, readable, and properly aligned.
      */
-    #define MAX_QL_ROWS 8
+    #define MAX_QL_ROWS 4
     Object *ql_row_objs[MAX_QL_ROWS] = { NULL };
     Object *row_items[MAX_QL_ROWS][VB_MAX_QUICKLINKS + 2];
     int row_item_count[MAX_QL_ROWS] = { 0 };
 
+    int first_row_limit = (int)init_w - 460; /* Space for right-side tools if applicable */
+    if (first_row_limit < 200) first_row_limit = 200;
+    int next_row_limit  = (int)init_w - 40;
+    if (next_row_limit < 200) next_row_limit = 200;
+
     int cur_row = 0;
+    int cur_w   = 0;
+    int cur_limit = first_row_limit;
 
     for (int i = 0; i < app->prefs.num_quick_links && i < VB_MAX_QUICKLINKS; i++) {
         if (!app->gad_quick_btn[i]) continue;
 
-        /* Wrap after 2 buttons per row so no row's GM_DOMAIN exceeds ~110px */
-        if (row_item_count[cur_row] >= 2 && cur_row < MAX_QL_ROWS - 1) {
+        int label_len = (int)strlen(app->prefs.quick_links[i].label);
+        int item_w = label_len * 8 + 32;
+        if (item_w < 50) item_w = 50;
+
+        /* Wrap into next row if width limit is reached */
+        if (row_item_count[cur_row] > 0 && (cur_w + item_w > cur_limit) && cur_row < MAX_QL_ROWS - 1) {
             cur_row++;
+            cur_w = 0;
+            cur_limit = next_row_limit;
         }
 
         row_items[cur_row][row_item_count[cur_row]++] = app->gad_quick_btn[i];
+        cur_w += item_w + 6;
     }
 
     if (app->gad_quick_add) {
-        if (row_item_count[cur_row] >= 2 && cur_row < MAX_QL_ROWS - 1) {
-            cur_row++;
-        }
         row_items[cur_row][row_item_count[cur_row]++] = app->gad_quick_add;
     }
     if (app->gad_quick_remove) {
-        if (row_item_count[cur_row] >= 2 && cur_row < MAX_QL_ROWS - 1) {
-            cur_row++;
-        }
         row_items[cur_row][row_item_count[cur_row]++] = app->gad_quick_remove;
     }
 
@@ -2919,8 +2927,6 @@ BOOL gui_init(VortexApp *app)
             row_tags[t++].ti_Data = (Tag)row_items[r][it];
             row_tags[t].ti_Tag = CHILD_WeightedWidth;
             row_tags[t++].ti_Data = 0;
-            row_tags[t].ti_Tag = CHILD_MinWidth;
-            row_tags[t++].ti_Data = 20;
         }
 
         /* Trailing spacer so items remain left-aligned */
@@ -2967,10 +2973,8 @@ BOOL gui_init(VortexApp *app)
         CHILD_MinWidth,      60,
         LAYOUT_AddChild,     btn_downloads,
         CHILD_WeightedWidth, 0,
-        CHILD_MinWidth,      20,
         LAYOUT_AddChild,     btn_connect,
         CHILD_WeightedWidth, 0,
-        CHILD_MinWidth,      20,
         TAG_DONE);
 
     /* ------------------------------------------------------------------------
