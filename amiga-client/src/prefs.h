@@ -14,7 +14,7 @@
 #define DEFAULT_SERVER_HOST   ""
 #define DEFAULT_SERVER_PORT   7788
 
-#define VB_MAX_QUICKLINKS 24
+#define VB_MAX_QUICKLINKS 64
 
 typedef struct QuickLinkItem {
     char label[32];

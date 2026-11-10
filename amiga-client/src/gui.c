@@ -2922,7 +2922,7 @@ BOOL gui_init(VortexApp *app)
     /* Multi-row wrapping for QuickLink buttons:
      * Wrap buttons across rows so they remain clean, readable, and properly aligned.
      */
-    #define MAX_QL_ROWS 4
+    #define MAX_QL_ROWS 8
     Object *ql_row_objs[MAX_QL_ROWS] = { NULL };
     Object *row_items[MAX_QL_ROWS][VB_MAX_QUICKLINKS + 2];
     int row_item_count[MAX_QL_ROWS] = { 0 };
@@ -2964,7 +2964,7 @@ BOOL gui_init(VortexApp *app)
     int ql_row_count = (row_item_count[0] > 0) ? (cur_row + 1) : 0;
 
     for (int r = 0; r < ql_row_count; r++) {
-        struct TagItem row_tags[64];
+        struct TagItem row_tags[128];
         int t = 0;
         row_tags[t].ti_Tag = LAYOUT_Orientation;
         row_tags[t++].ti_Data = LAYOUT_ORIENT_HORIZ;

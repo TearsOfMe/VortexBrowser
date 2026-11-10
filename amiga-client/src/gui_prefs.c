@@ -6,6 +6,7 @@
 #include <proto/dos.h>
 #include <proto/intuition.h>
 #include <proto/chooser.h>
+#include <proto/listbrowser.h>
 
 #include <classes/window.h>
 #include <gadgets/layout.h>
@@ -14,12 +15,15 @@
 #include <gadgets/button.h>
 #include <gadgets/string.h>
 #include <gadgets/chooser.h>
+#include <gadgets/listbrowser.h>
 #include <gadgets/checkbox.h>
 #include <gadgets/slider.h>
 #include <images/bevel.h>
 
 #include <proto/asl.h>
 #include <libraries/asl.h>
+
+extern struct ListBrowserIFace *IListBrowser;
 
 #include "gui_prefs.h"
 #include "prefs.h"
@@ -313,36 +317,62 @@ static void free_chooser_list(struct List *list)
     }
 }
 
-static void rebuild_ql_list(QuickLinkItem *items, int num_items, struct List *list, Object *chooser_obj, struct Window *win, uint16 sel_idx)
+static void rebuild_ql_listbrowser(QuickLinkItem *items, int num_items, struct List *list, Object *lb_obj, struct Window *win, int sel_idx)
 {
-    if (!IChooser || !list) return;
-
-    if (chooser_obj && win) {
-        IIntuition->SetGadgetAttrs((struct Gadget *)chooser_obj, win, NULL,
-                                   CHOOSER_Labels, ~0,
+    if (lb_obj && win) {
+        IIntuition->SetGadgetAttrs((struct Gadget *)lb_obj, win, NULL,
+                                   LISTBROWSER_Labels, (Tag)NULL,
                                    TAG_DONE);
     }
 
-    free_chooser_list(list);
+    if (IListBrowser) {
+        IListBrowser->FreeListBrowserList(list);
+    } else {
+        struct Node *n;
+        while ((n = IExec->RemHead(list)) != NULL) {
+            IExec->FreeVec(n);
+        }
+    }
+    IExec->NewList(list);
+
+    struct Node *sel_node = NULL;
+    char num_buf[16];
 
     for (int i = 0; i < num_items; i++) {
-        char entry_txt[80];
-        snprintf(entry_txt, sizeof(entry_txt), "%d: %s (%s)", i + 1, items[i].label, items[i].url);
-        struct Node *node = IChooser->AllocChooserNode(
-            CNA_CopyText, TRUE,
-            CNA_Text,     entry_txt,
-            CNA_UserData, (APTR)(uintptr_t)i,
-            TAG_DONE);
+        snprintf(num_buf, sizeof(num_buf), "%d", i + 1);
+        struct Node *node = NULL;
+        if (IListBrowser) {
+            node = IListBrowser->AllocListBrowserNode(4,
+                LBNA_UserData, (Tag)i,
+                LBNA_Selected, (i == sel_idx),
+                LBNA_Column, 0,
+                    LBNCA_CopyText, TRUE,
+                    LBNCA_Text, (Tag)num_buf,
+                    LBNCA_HorizJustify, LCJ_RIGHT,
+                LBNA_Column, 1,
+                    LBNCA_CopyText, TRUE,
+                    LBNCA_Text, (Tag)items[i].label,
+                LBNA_Column, 2,
+                    LBNCA_CopyText, TRUE,
+                    LBNCA_Text, (Tag)items[i].url,
+                LBNA_Column, 3,
+                    LBNCA_CopyText, TRUE,
+                    LBNCA_Text, (Tag)items[i].icon,
+                TAG_DONE);
+        }
         if (node) {
             IExec->AddTail(list, node);
+            if (i == sel_idx) {
+                sel_node = node;
+            }
         }
     }
 
-    if (chooser_obj && win) {
-        uint16 sel = (sel_idx < num_items) ? sel_idx : (num_items > 0 ? num_items - 1 : 0);
-        IIntuition->SetGadgetAttrs((struct Gadget *)chooser_obj, win, NULL,
-                                   CHOOSER_Labels,   list,
-                                   CHOOSER_Selected, sel,
+    if (lb_obj && win) {
+        IIntuition->SetGadgetAttrs((struct Gadget *)lb_obj, win, NULL,
+                                   LISTBROWSER_Labels, (Tag)list,
+                                   LISTBROWSER_SelectedNode, (Tag)sel_node,
+                                   LISTBROWSER_MakeNodeVisible, (Tag)sel_node,
                                    TAG_DONE);
     }
 }
@@ -658,16 +688,47 @@ void gui_prefs_open(VortexApp *app)
         TAG_DONE);
 
     /* ------------------------------------------------------------------------
-     * Tab 1: Schnellwahl-Buttons
+     * Tab 1: Schnellwahl-Buttons (Reaction ListBrowser)
      * ------------------------------------------------------------------------ */
     struct List ql_list;
     IExec->NewList(&ql_list);
 
-    Object *gad_ql_chooser = IIntuition->NewObject(NULL, "chooser.gadget",
-        GA_ID,            GID_P_QL_CHOOSER,
-        GA_RelVerify,     TRUE,
-        CHOOSER_Labels,   &ql_list,
-        CHOOSER_Selected, 0,
+    struct ColumnInfo *ql_col_info = NULL;
+    if (IListBrowser) {
+        ql_col_info = IListBrowser->AllocLBColumnInfo(4,
+            LBCIA_Column, 0,
+                LBCIA_Title, "#",
+                LBCIA_Weight, 8,
+                LBCIA_HorizJustify, LCJ_RIGHT,
+                LBCIA_DraggableSeparator, TRUE,
+            LBCIA_Column, 1,
+                LBCIA_Title, "Titel / Name",
+                LBCIA_Weight, 27,
+                LBCIA_DraggableSeparator, TRUE,
+            LBCIA_Column, 2,
+                LBCIA_Title, "Adresse (URL)",
+                LBCIA_Weight, 50,
+                LBCIA_DraggableSeparator, TRUE,
+            LBCIA_Column, 3,
+                LBCIA_Title, "Icon",
+                LBCIA_Weight, 15,
+                LBCIA_DraggableSeparator, TRUE,
+            TAG_DONE);
+    }
+
+    rebuild_ql_listbrowser(temp_ql, temp_num_ql, &ql_list, NULL, NULL, 0);
+
+    Object *gad_ql_chooser = IIntuition->NewObject(NULL, "listbrowser.gadget",
+        GA_ID,                       GID_P_QL_CHOOSER,
+        GA_RelVerify,                TRUE,
+        LISTBROWSER_ColumnInfo,      (Tag)ql_col_info,
+        LISTBROWSER_Labels,          (Tag)&ql_list,
+        LISTBROWSER_ColumnTitles,    TRUE,
+        LISTBROWSER_Separators,      TRUE,
+        LISTBROWSER_Striping,        LBS_ROWS,
+        LISTBROWSER_ShowSelected,    TRUE,
+        LISTBROWSER_AutoFit,         FALSE,
+        LISTBROWSER_Position,        0,
         TAG_DONE);
 
     const char *init_ql_lbl  = (temp_num_ql > 0) ? temp_ql[0].label : "";
@@ -735,7 +796,8 @@ void gui_prefs_open(VortexApp *app)
         LAYOUT_SpaceOuter,    TRUE,
         LAYOUT_DeferLayout,   TRUE,
         LAYOUT_AddChild,      gad_ql_chooser,
-        CHILD_WeightedHeight, 0,
+        CHILD_WeightedHeight, 70,
+        CHILD_MinHeight,      120,
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
@@ -1435,8 +1497,8 @@ void gui_prefs_open(VortexApp *app)
         WA_DragBar,           TRUE,
         WA_Activate,          TRUE,
         WA_SmartRefresh,      TRUE,
-        WA_InnerWidth,        560,
-        WA_InnerHeight,       390,
+        WA_InnerWidth,        600,
+        WA_InnerHeight,       440,
         WA_IDCMP,             IDCMP_CLOSEWINDOW | IDCMP_GADGETUP | IDCMP_VANILLAKEY,
         WINDOW_Position,      WPOS_CENTERSCREEN,
         WINDOW_ParentGroup,   root_prefs_layout,
@@ -1455,8 +1517,8 @@ void gui_prefs_open(VortexApp *app)
         return;
     }
 
-    /* Populate initial chooser lists */
-    rebuild_ql_list(temp_ql, temp_num_ql, &ql_list, gad_ql_chooser, win, 0);
+    /* Populate initial chooser/listbrowser lists */
+    rebuild_ql_listbrowser(temp_ql, temp_num_ql, &ql_list, gad_ql_chooser, win, 0);
     rebuild_fav_list(app, &fav_list, gad_fav_chooser, win, 0);
 
     uint16 current_ql_sel  = 0;
@@ -1532,20 +1594,24 @@ void gui_prefs_open(VortexApp *app)
                     }
                     /* Tab 1: Schnellwahl Events */
                     else if (gid == GID_P_QL_CHOOSER) {
-                        uint32 sel = 0;
-                        IIntuition->GetAttr(CHOOSER_Selected, gad_ql_chooser, &sel);
-                        if (sel < (uint32)temp_num_ql) {
-                            current_ql_sel = (uint16)sel;
-                            set_string_text(gad_ql_lbl,  win, temp_ql[sel].label);
-                            set_string_text(gad_ql_url,  win, temp_ql[sel].url);
-                            set_string_text(gad_ql_icon, win, temp_ql[sel].icon);
+                        struct Node *sel_node = NULL;
+                        IIntuition->GetAttr(LISTBROWSER_SelectedNode, gad_ql_chooser, (uint32 *)&sel_node);
+                        if (sel_node && IListBrowser) {
+                            uint32 ud = 0;
+                            IListBrowser->GetListBrowserNodeAttrs(sel_node, LBNA_UserData, &ud, TAG_DONE);
+                            if (ud < (uint32)temp_num_ql) {
+                                current_ql_sel = (uint16)ud;
+                                set_string_text(gad_ql_lbl,  win, temp_ql[ud].label);
+                                set_string_text(gad_ql_url,  win, temp_ql[ud].url);
+                                set_string_text(gad_ql_icon, win, temp_ql[ud].icon);
+                            }
                         }
                     } else if (gid == GID_P_QL_UPDATE) {
                         if (current_ql_sel < temp_num_ql) {
                             get_string_text(gad_ql_lbl,  temp_ql[current_ql_sel].label, sizeof(temp_ql[0].label));
                             get_string_text(gad_ql_url,  temp_ql[current_ql_sel].url,   sizeof(temp_ql[0].url));
                             get_string_text(gad_ql_icon, temp_ql[current_ql_sel].icon,  sizeof(temp_ql[0].icon));
-                            rebuild_ql_list(temp_ql, temp_num_ql, &ql_list, gad_ql_chooser, win, current_ql_sel);
+                            rebuild_ql_listbrowser(temp_ql, temp_num_ql, &ql_list, gad_ql_chooser, win, current_ql_sel);
                         }
                     } else if (gid == GID_P_QL_ADD) {
                         if (temp_num_ql < VB_MAX_QUICKLINKS) {
@@ -1562,7 +1628,7 @@ void gui_prefs_open(VortexApp *app)
                             strncpy(temp_ql[temp_num_ql].icon,  buf_i, sizeof(temp_ql[0].icon) - 1);
                             current_ql_sel = (uint16)temp_num_ql;
                             temp_num_ql++;
-                            rebuild_ql_list(temp_ql, temp_num_ql, &ql_list, gad_ql_chooser, win, current_ql_sel);
+                            rebuild_ql_listbrowser(temp_ql, temp_num_ql, &ql_list, gad_ql_chooser, win, current_ql_sel);
                         }
                     } else if (gid == GID_P_QL_DELETE) {
                         if (temp_num_ql > 0 && current_ql_sel < temp_num_ql) {
@@ -1573,7 +1639,7 @@ void gui_prefs_open(VortexApp *app)
                             if (current_ql_sel >= temp_num_ql && temp_num_ql > 0) {
                                 current_ql_sel = temp_num_ql - 1;
                             }
-                            rebuild_ql_list(temp_ql, temp_num_ql, &ql_list, gad_ql_chooser, win, current_ql_sel);
+                            rebuild_ql_listbrowser(temp_ql, temp_num_ql, &ql_list, gad_ql_chooser, win, current_ql_sel);
                             if (temp_num_ql > 0) {
                                 set_string_text(gad_ql_lbl,  win, temp_ql[current_ql_sel].label);
                                 set_string_text(gad_ql_url,  win, temp_ql[current_ql_sel].url);
@@ -1590,7 +1656,7 @@ void gui_prefs_open(VortexApp *app)
                             temp_ql[current_ql_sel] = temp_ql[current_ql_sel - 1];
                             temp_ql[current_ql_sel - 1] = t;
                             current_ql_sel--;
-                            rebuild_ql_list(temp_ql, temp_num_ql, &ql_list, gad_ql_chooser, win, current_ql_sel);
+                            rebuild_ql_listbrowser(temp_ql, temp_num_ql, &ql_list, gad_ql_chooser, win, current_ql_sel);
                         }
                     } else if (gid == GID_P_QL_DOWN) {
                         if (current_ql_sel + 1 < temp_num_ql) {
@@ -1598,7 +1664,7 @@ void gui_prefs_open(VortexApp *app)
                             temp_ql[current_ql_sel] = temp_ql[current_ql_sel + 1];
                             temp_ql[current_ql_sel + 1] = t;
                             current_ql_sel++;
-                            rebuild_ql_list(temp_ql, temp_num_ql, &ql_list, gad_ql_chooser, win, current_ql_sel);
+                            rebuild_ql_listbrowser(temp_ql, temp_num_ql, &ql_list, gad_ql_chooser, win, current_ql_sel);
                         }
                     }
                     /* Tab 1: Resolution & Screen Events */
@@ -1937,9 +2003,9 @@ void gui_prefs_open(VortexApp *app)
         }
     }
 
-    /* Detach dynamic chooser lists before disposing window object */
+    /* Detach dynamic chooser/listbrowser lists before disposing window object */
     if (gad_ql_chooser) {
-        IIntuition->SetAttrs(gad_ql_chooser, CHOOSER_Labels, (Tag)NULL, TAG_DONE);
+        IIntuition->SetAttrs(gad_ql_chooser, LISTBROWSER_Labels, (Tag)NULL, TAG_DONE);
     }
     if (gad_fav_chooser) {
         IIntuition->SetAttrs(gad_fav_chooser, CHOOSER_Labels, (Tag)NULL, TAG_DONE);
@@ -1947,6 +2013,11 @@ void gui_prefs_open(VortexApp *app)
 
     IIntuition->DisposeObject(win_obj);
 
-    free_chooser_list(&ql_list);
+    if (IListBrowser) {
+        IListBrowser->FreeListBrowserList(&ql_list);
+        if (ql_col_info) {
+            IListBrowser->FreeLBColumnInfo(ql_col_info);
+        }
+    }
     free_chooser_list(&fav_list);
 }
