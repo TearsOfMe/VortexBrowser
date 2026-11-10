@@ -41,8 +41,8 @@ enum {
     GID_TAB_CLOSE,
     GID_DOWNLOADS,
     GID_URL_FAVICON = 45,
-    GID_QUICK_BASE = 50,     /* 50 .. 50 + VB_MAX_QUICKLINKS - 1 */
-    GID_QUICK_DEL_BASE = 70  /* 70 .. 70 + VB_MAX_QUICKLINKS - 1 */
+    GID_QUICK_BASE = 500,     /* 500 .. 500 + VB_MAX_QUICKLINKS - 1 */
+    GID_QUICK_DEL_BASE = 600  /* 600 .. 600 + VB_MAX_QUICKLINKS - 1 */
 };
 
 /* Amiga Standard Pull-Down Menu Action IDs */

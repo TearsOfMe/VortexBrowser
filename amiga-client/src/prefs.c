@@ -154,23 +154,23 @@ static BOOL load_from_file(VortexApp *app, const char *path)
         }
 
         /* Quick-Launch items */
-        for (int i = 0; i < VB_MAX_QUICKLINKS; i++) {
-            char k_lbl[32], k_url[32], k_ico[32];
-            snprintf(k_lbl, sizeof(k_lbl), "quick%d_label", i + 1);
-            snprintf(k_url, sizeof(k_url), "quick%d_url",   i + 1);
-            snprintf(k_ico, sizeof(k_ico), "quick%d_icon",  i + 1);
-
-            if (strcmp(key, k_lbl) == 0) {
-                strncpy(app->prefs.quick_links[i].label, val, sizeof(app->prefs.quick_links[i].label) - 1);
-                app->prefs.quick_links[i].label[sizeof(app->prefs.quick_links[i].label) - 1] = '\0';
-                if (i + 1 > loaded_links) loaded_links = i + 1;
-            } else if (strcmp(key, k_url) == 0) {
-                strncpy(app->prefs.quick_links[i].url, val, sizeof(app->prefs.quick_links[i].url) - 1);
-                app->prefs.quick_links[i].url[sizeof(app->prefs.quick_links[i].url) - 1] = '\0';
-                if (i + 1 > loaded_links) loaded_links = i + 1;
-            } else if (strcmp(key, k_ico) == 0) {
-                strncpy(app->prefs.quick_links[i].icon, val, sizeof(app->prefs.quick_links[i].icon) - 1);
-                app->prefs.quick_links[i].icon[sizeof(app->prefs.quick_links[i].icon) - 1] = '\0';
+        if (strncmp(key, "quick", 5) == 0) {
+            int qidx = 0;
+            char field[32];
+            if (sscanf(key, "quick%d_%31s", &qidx, field) == 2 && qidx >= 1 && qidx <= VB_MAX_QUICKLINKS) {
+                int i = qidx - 1;
+                if (strcmp(field, "label") == 0) {
+                    strncpy(app->prefs.quick_links[i].label, val, sizeof(app->prefs.quick_links[i].label) - 1);
+                    app->prefs.quick_links[i].label[sizeof(app->prefs.quick_links[i].label) - 1] = '\0';
+                    if (qidx > loaded_links) loaded_links = qidx;
+                } else if (strcmp(field, "url") == 0) {
+                    strncpy(app->prefs.quick_links[i].url, val, sizeof(app->prefs.quick_links[i].url) - 1);
+                    app->prefs.quick_links[i].url[sizeof(app->prefs.quick_links[i].url) - 1] = '\0';
+                    if (qidx > loaded_links) loaded_links = qidx;
+                } else if (strcmp(field, "icon") == 0) {
+                    strncpy(app->prefs.quick_links[i].icon, val, sizeof(app->prefs.quick_links[i].icon) - 1);
+                    app->prefs.quick_links[i].icon[sizeof(app->prefs.quick_links[i].icon) - 1] = '\0';
+                }
             }
         }
 
