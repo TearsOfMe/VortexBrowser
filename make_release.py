@@ -328,7 +328,7 @@ Das Einstellungsfenster ist uebersichtlich in fuenf Reiter unterteilt:
 @{b}Workbench ToolTypes (Icon-Infos)@{ub}
 
 VortexBrowser unterstuetzt die typische Amiga-Konfiguration ueber @{b}ToolTypes@{ub} in
-den Programm-Icons (@{i}VortexBrowser.info@{ui}, @{i}VortexBrowser-AltiVec.info@{ui}, @{i}VortexBrowser-MUI.info@{ui}).
+den Programm-Icons (@{i}VortexBrowser.info@{ui}, @{i}VortexBrowser-AltiVec.info@{ui}).
 
 @{b}So bearbeiten Sie die ToolTypes auf der Workbench:@{ub}
 1. Markieren Sie das Icon mit einem einfachen Mausklick.
@@ -506,7 +506,7 @@ was die CPU-Auslastung auf 20-30% senkt!
 @{b}VortexBrowser 0.99 RC3@{ub} is a remote web rendering browser client for AmigaOS 4.1.
 It renders modern web pages (HTML5, CSS3, ES2024 JavaScript, WebGL, YouTube, etc.)
 on a companion Linux PC, AMD Ryzen, Intel Core/Atom or Raspberry Pi 4/5 server, streaming ultra-smooth visuals
-and 16-bit 48kHz audio directly to AmigaOS with native Reaction or MUI GUI controls.
+and 16-bit 48kHz audio directly to AmigaOS with native Reaction GUI controls.
 
 @{b}Quick Start:@{ub}
 1. On your Linux PC or Raspberry Pi:
@@ -525,7 +525,7 @@ and 16-bit 48kHz audio directly to AmigaOS with native Reaction or MUI GUI contr
 - Full-width quick launch toolbar with customizable bookmarks (unlimited favorites in Prefs).
 - Integrated Download Manager (Amiga+D).
 - Encrypted Password Vault (Amiga+K).
-- Complete Dark Mode toggle (Amiga+U) with DarkReader and dark Reaction/MUI GUI.
+- Complete Dark Mode toggle (Amiga+U) with DarkReader and dark Reaction GUI.
 - Hardware-accelerated scaling via CompositeTags (select 720p or 540p stream for low CPU).
 - 16-bit stereo 48kHz synchronized audio via AHI.
 
@@ -553,7 +553,6 @@ WebGL, etc.) fluessig und ressourcenschonend auf den Amiga bringt.
 ------------------------------------------------------------------------------
 - {APP_NAME}             : Universelles Programm fuer AmigaOS 4 (automatische CPU-Erkennung)
 - {APP_NAME}-AltiVec     : Optimierte Version fuer CPUs mit AltiVec/VMX (G4, X1000)
-- {APP_NAME}-MUI         : MUI-Ausgabe im Design des Odyssey Web Browsers (MUI 4/5)
 - {APP_NAME}.guide       : Ausfuehrliches AmigaGuide-Handbuch mit allen Details
 - LIESMICH.txt          : Diese Schnellstartanleitung (Deutsch)
 - README.txt            : Schnellstartanleitung (Englisch)
@@ -656,7 +655,6 @@ YouTube, and Twitch with low Amiga CPU usage and native Reaction GUI.
 ------------------------------------------------------------------------------
 - {APP_NAME}             : Universal executable with dynamic CPU detection (newlib)
 - {APP_NAME}-AltiVec     : Dedicated SIMD build for PowerPC G4 and AmigaOne X1000
-- {APP_NAME}-MUI         : MUI Edition with Odyssey Web Browser look & layout (MUI 4/5)
 - {APP_NAME}.guide       : Comprehensive AmigaGuide manual
 - LIESMICH.txt          : German quickstart guide
 - README.txt            : English quickstart guide
@@ -736,13 +734,6 @@ if os.path.exists("amiga-client/VortexBrowser-AltiVec.stripped"):
     else:
         shutil.copy2("amiga-client/VortexBrowser.info", os.path.join(AMIGA_DRAWER, "VortexBrowser-AltiVec.info"))
 
-if os.path.exists("amiga-client/VortexBrowser-MUI.stripped"):
-    shutil.copy2("amiga-client/VortexBrowser-MUI.stripped", os.path.join(AMIGA_DRAWER, "VortexBrowser-MUI"))
-    if os.path.exists("amiga-client/VortexBrowser-MUI.info"):
-        shutil.copy2("amiga-client/VortexBrowser-MUI.info", os.path.join(AMIGA_DRAWER, "VortexBrowser-MUI.info"))
-    else:
-        shutil.copy2("amiga-client/VortexBrowser.info", os.path.join(AMIGA_DRAWER, "VortexBrowser-MUI.info"))
-
 # Copy Icons to icons/
 for icon in os.listdir("amiga-client/icons"):
     if icon.endswith(".png"):
@@ -767,7 +758,7 @@ ALT_ICONS_SRC = "amiga-client/alt-icons"
 if os.path.isdir(ALT_ICONS_SRC):
     ALT_ICONS_DST = os.path.join(AMIGA_DRAWER, "Alternative-Icons")
     os.makedirs(ALT_ICONS_DST, exist_ok=True)
-    for fname in ("VortexBrowser.info", "VortexBrowser-AltiVec.info", "VortexBrowser-MUI.info", "VortexBrowser_drawer.info"):
+    for fname in ("VortexBrowser.info", "VortexBrowser-AltiVec.info", "VortexBrowser_drawer.info"):
         src_info = os.path.join(ALT_ICONS_SRC, fname)
         if os.path.exists(src_info):
             shutil.copy2(src_info, os.path.join(ALT_ICONS_DST, fname))
@@ -784,7 +775,6 @@ if os.path.isdir(ALT_ICONS_SRC):
         "'Piktogramm -> Informationen...' per Drag & Drop austauschen).\n\n"
         "- VortexBrowser.info          : Standard ReAction Edition\n"
         "- VortexBrowser-AltiVec.info  : PowerPC AltiVec Edition (mit AltiVec-Badge)\n"
-        "- VortexBrowser-MUI.info      : MUI 4/5 Edition (mit MUI-Badge)\n"
         "- VortexBrowser_drawer.info   : Ordner-Icon (als VortexBrowser.info eine Ebene hoeher)\n"
     )
     with open(os.path.join(ALT_ICONS_DST, "LIESMICH.txt"), "w", encoding="iso-8859-1") as f:
@@ -951,7 +941,6 @@ VERZEICHNISSTRUKTUR:
 - {APP_NAME}/          : Der vollstaendige AmigaOS 4 Client-Ordner
   * {APP_NAME}         : Ausfuehrbares Programm (ReAction Standard)
   * {APP_NAME}-AltiVec : Ausfuehrbares Programm (PowerPC G4 AltiVec SIMD)
-  * {APP_NAME}-MUI     : Ausfuehrbares Programm (MUI 4/5 Oberflaeche)
   * {APP_NAME}.info    : Echtes AmigaOS 4 Dual-State Glow Icon
   * {APP_NAME}.guide   : Ausfuehrliches AmigaGuide-Handbuch
   * LIESMICH.txt       : Deutsche Kurzanleitung

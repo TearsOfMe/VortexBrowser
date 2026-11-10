@@ -346,10 +346,6 @@ def build_icon_set(base_png, out_dir, include_compat=False):
     av_norm, av_sel = render_circular_icon_pair(base_png, badge="AltiVec")
     write_amiga_info(av_norm, av_sel, WBTOOL, os.path.join(out_dir, "VortexBrowser-AltiVec.info"), tooltypes=default_tt)
 
-    # 3. MUI Edition (with MUI badge)
-    mui_norm, mui_sel = render_circular_icon_pair(base_png, badge="MUI")
-    write_amiga_info(mui_norm, mui_sel, WBTOOL, os.path.join(out_dir, "VortexBrowser-MUI.info"), tooltypes=default_tt)
-
 
 if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))

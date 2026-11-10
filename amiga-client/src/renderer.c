@@ -1441,13 +1441,6 @@ void renderer_flush_dirty(VortexApp *app)
     if (!r->dirty || !r->has_frame || !r->src_bm[0]) {
         return;
     }
-    if (app->is_mui) {
-        if (app->mui_rp && app->mui_viewport_box.Width > 2 && app->mui_viewport_box.Height > 2) {
-            renderer_present(app, app->mui_rp, &app->mui_viewport_box);
-            r->dirty = FALSE;
-        }
-        return;
-    }
     if (!app->win || !app->win->RPort || !app->gad_space) {
         return;
     }
@@ -1696,21 +1689,6 @@ void renderer_sync_viewport_size(VortexApp *app)
         return;
     }
 
-    if (app->is_mui) {
-        if (app->mui_viewport_box.Width >= 320 && app->mui_viewport_box.Height >= 200) {
-            uint16_t w = (uint16_t)(app->mui_viewport_box.Width & ~1);
-            uint16_t h = (uint16_t)(app->mui_viewport_box.Height & ~1);
-            if (w != app->renderer.reported_w || h != app->renderer.reported_h) {
-                app->renderer.reported_w = w;
-                app->renderer.reported_h = h;
-                char cmd[64];
-                snprintf(cmd, sizeof(cmd), "@RESIZE:%ux%u", (unsigned)w, (unsigned)h);
-                net_send_url(app, cmd);
-            }
-        }
-        return;
-    }
-
     if (!app->win || !app->gad_space) {
         return;
     }
@@ -1825,28 +1803,6 @@ BOOL renderer_map_window_to_remote(
     int16_t   *out_remote_y
 )
 {
-    if (app->is_mui) {
-        struct IBox area = app->mui_viewport_box;
-        if (area.Width <= 0 || area.Height <= 0) return FALSE;
-        if (win_mouse_x < area.Left || win_mouse_x >= (area.Left + area.Width) ||
-            win_mouse_y < area.Top  || win_mouse_y >= (area.Top + area.Height)) {
-            return FALSE;
-        }
-        int32_t rel_x = (int32_t)(win_mouse_x - area.Left);
-        int32_t rel_y = (int32_t)(win_mouse_y - area.Top);
-        uint16_t sw = app->renderer.src_width  ? app->renderer.src_width  : VORTEXBROWSE_DEFAULT_WIDTH;
-        uint16_t sh = app->renderer.src_height ? app->renderer.src_height : VORTEXBROWSE_DEFAULT_HEIGHT;
-        int32_t rx = (rel_x * (int32_t)sw) / (int32_t)area.Width;
-        int32_t ry = (rel_y * (int32_t)sh) / (int32_t)area.Height;
-        if (rx < 0) rx = 0;
-        if (rx >= sw) rx = sw - 1;
-        if (ry < 0) ry = 0;
-        if (ry >= sh) ry = sh - 1;
-        *out_remote_x = (int16_t)rx;
-        *out_remote_y = (int16_t)ry;
-        return TRUE;
-    }
-
     if (!app->gad_space) {
         return FALSE;
     }
