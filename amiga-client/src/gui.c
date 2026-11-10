@@ -778,6 +778,7 @@ static Object *create_quicklink_button(uint32 gid, const char *label, const char
         GA_ID,                 gid,
         GA_RelVerify,          TRUE,
         GA_Text,               (Tag)s_quick_btn_labels[idx],
+        BUTTON_DomainString,   (Tag)s_quick_btn_labels[idx],
         BUTTON_BevelStyle,     BVS_THIN,
         BUTTON_Justification,  BCJ_CENTER,
         BUTTON_HorizAlignment, BALIGN_CENTER,
@@ -2765,6 +2766,18 @@ BOOL gui_init(VortexApp *app)
     app->gad_search_chooser = NULL;
     app->gad_search = NULL;
 
+    app->gad_fav_chooser = IIntuition->NewObject(NULL, "chooser.gadget",
+        GA_ID,             GID_FAV_CHOOSER,
+        GA_RelVerify,      TRUE,
+        CHOOSER_DropDown,  TRUE,
+        CHOOSER_Title,     "Lesezeichen",
+        CHOOSER_Labels,    &app->fav_chooser_list,
+        CHOOSER_MaxLabels, 32,
+        TAG_DONE);
+    const char *const c_download[] = { "download", "load", "down", "drawer", NULL };
+    Object *btn_downloads = create_toolbar_button(GID_DOWNLOADS, c_download, 4, "Downloads", "Download-Manager oeffnen (Amiga+J)", pub_scr);
+    Object *btn_connect = create_toolbar_button(GID_CONNECT, c_connect, 2, "Verbinden", "Mit Server verbinden", pub_scr);
+
     Object *nav_row1 = IIntuition->NewObject(NULL, "layout.gadget",
         LAYOUT_Orientation,  LAYOUT_ORIENT_HORIZ,
         s_dark_pens.allocated ? LAYOUT_LayoutBackFill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
@@ -2786,6 +2799,12 @@ BOOL gui_init(VortexApp *app)
         LAYOUT_AddChild,     btn_clear_url,
         CHILD_WeightedWidth, 0,
         LAYOUT_AddChild,     btn_go,
+        CHILD_WeightedWidth, 0,
+        LAYOUT_AddChild,     app->gad_fav_chooser,
+        CHILD_WeightedWidth, 0,
+        LAYOUT_AddChild,     btn_downloads,
+        CHILD_WeightedWidth, 0,
+        LAYOUT_AddChild,     btn_connect,
         CHILD_WeightedWidth, 0,
         TAG_DONE);
 
@@ -2814,21 +2833,10 @@ BOOL gui_init(VortexApp *app)
     static const char *const c_rem_ql[] = { "remove", "minus", "delete", NULL };
     app->gad_quick_remove = create_toolbar_button(GID_QUICK_REMOVE, c_rem_ql, 3, "-", "Aktuelle Schnellwahl entfernen", pub_scr);
 
-    const char *const c_download[] = { "download", "load", "down", "drawer", NULL };
-    Object *btn_downloads = create_toolbar_button(GID_DOWNLOADS, c_download, 4, "Downloads", "Download-Manager oeffnen (Amiga+J)", pub_scr);
 
-    app->gad_fav_chooser = IIntuition->NewObject(NULL, "chooser.gadget",
-        GA_ID,             GID_FAV_CHOOSER,
-        GA_RelVerify,      TRUE,
-        CHOOSER_DropDown,  TRUE,
-        CHOOSER_Title,     "Lesezeichen",
-        CHOOSER_Labels,    &app->fav_chooser_list,
-        CHOOSER_MaxLabels, 32,
-        TAG_DONE);
 
     app->gad_server_chooser = NULL;
 
-    Object *btn_connect = create_toolbar_button(GID_CONNECT, c_connect, 2, "Verbinden", "Mit Server verbinden", pub_scr);
 
     uint16 avail_scr_w = pub_scr ? pub_scr->Width  : 1920;
     uint16 avail_scr_h = pub_scr ? pub_scr->Height : 1080;
@@ -2868,37 +2876,44 @@ BOOL gui_init(VortexApp *app)
     uint16 init_w = win_w;
 
     /* Multi-row wrapping for QuickLink buttons:
-     * To ensure the window width can freely resize down to ~200px without being blocked
-     * by horizontal button accumulation, each row holds at most 2 quicklinks (min domain ~110px).
+     * Wrap buttons across rows so they remain clean, readable, and properly aligned.
      */
-    #define MAX_QL_ROWS 8
+    #define MAX_QL_ROWS 4
     Object *ql_row_objs[MAX_QL_ROWS] = { NULL };
     Object *row_items[MAX_QL_ROWS][VB_MAX_QUICKLINKS + 2];
     int row_item_count[MAX_QL_ROWS] = { 0 };
 
+    int first_row_limit = (int)init_w - 460; /* Space for right-side tools if applicable */
+    if (first_row_limit < 200) first_row_limit = 200;
+    int next_row_limit  = (int)init_w - 40;
+    if (next_row_limit < 200) next_row_limit = 200;
+
     int cur_row = 0;
+    int cur_w   = 0;
+    int cur_limit = first_row_limit;
 
     for (int i = 0; i < app->prefs.num_quick_links && i < VB_MAX_QUICKLINKS; i++) {
         if (!app->gad_quick_btn[i]) continue;
 
-        /* Wrap after 2 buttons per row so no row's GM_DOMAIN exceeds ~110px */
-        if (row_item_count[cur_row] >= 2 && cur_row < MAX_QL_ROWS - 1) {
+        int label_len = (int)strlen(app->prefs.quick_links[i].label);
+        int item_w = label_len * 8 + 32;
+        if (item_w < 50) item_w = 50;
+
+        /* Wrap into next row if width limit is reached */
+        if (row_item_count[cur_row] > 0 && (cur_w + item_w > cur_limit) && cur_row < MAX_QL_ROWS - 1) {
             cur_row++;
+            cur_w = 0;
+            cur_limit = next_row_limit;
         }
 
         row_items[cur_row][row_item_count[cur_row]++] = app->gad_quick_btn[i];
+        cur_w += item_w + 6;
     }
 
     if (app->gad_quick_add) {
-        if (row_item_count[cur_row] >= 2 && cur_row < MAX_QL_ROWS - 1) {
-            cur_row++;
-        }
         row_items[cur_row][row_item_count[cur_row]++] = app->gad_quick_add;
     }
     if (app->gad_quick_remove) {
-        if (row_item_count[cur_row] >= 2 && cur_row < MAX_QL_ROWS - 1) {
-            cur_row++;
-        }
         row_items[cur_row][row_item_count[cur_row]++] = app->gad_quick_remove;
     }
 
@@ -2919,8 +2934,6 @@ BOOL gui_init(VortexApp *app)
             row_tags[t++].ti_Data = (Tag)row_items[r][it];
             row_tags[t].ti_Tag = CHILD_WeightedWidth;
             row_tags[t++].ti_Data = 0;
-            row_tags[t].ti_Tag = CHILD_MinWidth;
-            row_tags[t++].ti_Data = 20;
         }
 
         /* Trailing spacer so items remain left-aligned */
@@ -2948,30 +2961,6 @@ BOOL gui_init(VortexApp *app)
         ql_row_objs[r] = IIntuition->NewObjectA(NULL, "layout.gadget", row_tags);
     }
 
-    Object *tools_spacer = IIntuition->NewObject(NULL, "space.gadget",
-        SPACE_Transparent, FALSE,
-        SPACE_MinWidth,    2,
-        s_dark_pens.allocated ? GA_BackFill : TAG_IGNORE,      (Tag)&s_dark_backfill_hook,
-        s_dark_pens.allocated ? SPACE_RenderHook : TAG_IGNORE, (Tag)&s_space_dark_render_hook,
-        TAG_DONE);
-
-    Object *tools_row = IIntuition->NewObject(NULL, "layout.gadget",
-        LAYOUT_Orientation,  LAYOUT_ORIENT_HORIZ,
-        s_dark_pens.allocated ? LAYOUT_LayoutBackFill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
-        LAYOUT_SpaceInner,   TRUE,
-        LAYOUT_SpaceOuter,   FALSE,
-        LAYOUT_AddChild,     tools_spacer,
-        CHILD_WeightedWidth, 100,
-        LAYOUT_AddChild,     app->gad_fav_chooser,
-        CHILD_WeightedWidth, 0,
-        CHILD_MinWidth,      60,
-        LAYOUT_AddChild,     btn_downloads,
-        CHILD_WeightedWidth, 0,
-        CHILD_MinWidth,      20,
-        LAYOUT_AddChild,     btn_connect,
-        CHILD_WeightedWidth, 0,
-        CHILD_MinWidth,      20,
-        TAG_DONE);
 
     /* ------------------------------------------------------------------------
      * Main interactive browser viewport (space.gadget)
@@ -3086,12 +3075,6 @@ BOOL gui_init(VortexApp *app)
             root_tags[rt++].ti_Data = 0;
         }
     }
-
-    /* Tools Row: Lesezeichen chooser, Downloads, Verbinden */
-    root_tags[rt].ti_Tag = LAYOUT_AddChild;
-    root_tags[rt++].ti_Data = (Tag)tools_row;
-    root_tags[rt].ti_Tag = CHILD_WeightedHeight;
-    root_tags[rt++].ti_Data = 0;
 
     /* Row 2: Navigation, URL Address Bar & Web Search Bar */
     root_tags[rt].ti_Tag = LAYOUT_AddChild;
