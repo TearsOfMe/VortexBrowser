@@ -123,19 +123,21 @@ authentischen Look & Feel von AmigaOS 4!
 @{b}Installation & Schnellstart@{ub}
 
 @{b}Schritt 1: Server starten (Linux PC oder Raspberry Pi)@{ub}
-1. Kopieren Sie den Ordner @{b}Server-Linux/@{ub} oder @{b}Server-RaspberryPi4/@{ub} auf Ihren Server.
+1. Entpacken Sie das Server-Archiv @{b}VortexBrowser-0.99-RC3-Server-Linux.zip@{ub}
+   (bzw. kopieren Sie den Ordner @{b}Server-Linux/@{ub}) auf Ihren Server.
 2. Oeffnen Sie ein Terminal im Server-Verzeichnis.
-3. Starten Sie das automatisierte Installationsskript:
-   @{b}./install_server.sh@{ub}  (bzw. @{b}./install_rpi4.sh@{ub})
-   Das Skript richtet automatisch die virtuelle Umgebung ein, installiert alle
-   Abhaengigkeiten und Chromium und kompiliert bei Bedarf die SIMD-Beschleunigung.
-4. Notieren Sie sich die am Ende des Skripts angezeigte @{b}Server-IP-Adresse@{ub}
-   (z. B. 127.0.0.1 oder Ihre lokale Server-IP).
+3. Starten Sie das universelle Installationsskript:
+   @{b}./install_server.sh@{ub}
+   Das Skript erkennt automatisch Ihre Hardware (Intel QuickSync, AMD Radeon Vulkan,
+   Raspberry Pi V3D), richtet die Python-Umgebung ein, installiert Treiber und
+   kompiliert passgenau die native SIMD-Grafikbeschleunigung.
+4. Notieren Sie sich die am Ende angezeigte @{b}Server-IP-Adresse@{ub}
+   (z. B. 192.168.178.2 oder Ihre lokale Server-IP).
 5. Starten Sie den Server mit:
-   @{b}./run_server.sh@{ub}  (bzw. @{b}./run_rpi4.sh@{ub})
+   @{b}./run_server.sh@{ub}
 
 @{b}Schritt 2: VortexBrowser auf dem AmigaOS 4 starten@{ub}
-1. Entpacken Sie das Archiv @{b}VortexBrowser-0.99-RC1-AmigaOS4.lha@{ub} an Ihren
+1. Entpacken Sie das Archiv @{b}VortexBrowser-0.99-RC3-AmigaOS4.lha@{ub} an Ihren
    gewuenschten Ort (z. B. @{b}Work:Internet/VortexBrowser@{ub}).
 2. Starten Sie @{b}VortexBrowser@{ub} per Doppelklick auf das Programm-Icon.
 3. Beim ersten Start fragt VortexBrowser Sie direkt nach der IP-Adresse Ihres Servers
@@ -184,22 +186,14 @@ Sitzungen sauber getrennt bleiben.
 VortexBrowser besitzt eine praktische Schnellwahl-Leiste direkt ueber der Adressleiste:
 
 - @{b}Standard-Schnellwahl-Buttons:@{ub}
-  Enthaelt vorkonfigurierte Schnellzugriffe mit massgeschneiderten Icons fuer beliebte
-  Websites:
-  - @{b}Amiga-News.de@{ub}
-  - @{b}OS4Depot.net@{ub}
-  - @{b}Amigans.net@{ub}
-  - @{b}Aminet.net@{ub}
-  - @{b}YouTube@{ub}
-  - @{b}Twitch@{ub}
-  - @{b}Wikipedia@{ub}
-  - @{b}Google@{ub}
-  - @{b}GitHub@{ub}
+  Enthaelt Schnellzugriffe mit massgeschneiderten Icons fuer beliebte Websites
+  (Amiga-News, OS4Depot, Amigans, Aminet, YouTube, Twitch, Wikipedia, Google, GitHub).
+  Die Buttons nutzen dynamisch die gesamte verfuegbare Breite des Fensters aus.
 
-- @{b}Schnellwahl anpassen:@{ub}
+- @{b}Schnellwahl unbegrenzt erweitern & anpassen:@{ub}
   In den @{b}Einstellungen (Prefs)@{ub} auf dem Reiter @{b}Schnellwahl@{ub} koennen Sie
-  die Beschriftungen, URLs und Symbole der Knoepfe nach Belieben anpassen oder neue
-  eigene Favoriten anlegen.
+  die Beschriftungen, URLs und Symbole der Knoepfe nach Belieben anpassen oder
+  @{b}unbegrenzt viele@{ub} eigene Favoriten anlegen.
 - @{b}Knoepfe [+] und [-]:@{ub}
   Direkt in der Schnellwahl-Leiste koennen Sie mit [+] die aktuelle Seite zur Schnellwahl
   hinzufuegen und mit [-] den aktuellen Eintrag entfernen (wird der letzte geloescht,
@@ -441,38 +435,46 @@ dank bi-linearer Filterung gestochen scharf und fluessig bleibt!
 
 @endnode
 
-@node "ServerSetup" "Server-Einrichtung (Linux PC / Raspberry Pi / Intel)"
-@{b}Server-Einrichtung (Linux PC / Raspberry Pi / Intel)@{ub}
+@node "ServerSetup" "Server-Einrichtung (Universeller Linux-Server)"
+@{b}Server-Einrichtung (Universeller Linux-Server)@{ub}
 
-Der Server kann auf jedem gaengigen Linux-System betrieben werden (z. B. Raspberry Pi 4,
-Raspberry Pi 5, Intel/AMD PC mit Debian, Ubuntu, Linux Mint, CachyOS, Arch, etc.).
+Der universelle VortexBrowser-Server laeuft auf jedem gaengigen Linux-System
+(z. B. Raspberry Pi 4, Raspberry Pi 5, Intel Atom/Core PC, AMD Ryzen unter Debian,
+Ubuntu, CachyOS, Arch Linux, Fedora, Linux Mint, etc.).
 
-@{b}Verfuegbare Server-Profile:@{ub}
-- @{b}Server-Linux/@{ub}: Standard-Server fuer x86_64 PCs (Debian, Ubuntu, Fedora)
-- @{b}Server-Intel/@{ub}: Optimiert fuer Intel Atom (x5-Z8350), Celeron, Pentium und Core Mini-PCs
-  (integrierte Intel VA-API Hardwarebeschleunigung, EGL, SSE4 SIMD und 2-Thread-Atom-Rastering)
-- @{b}Server-CachyOS-Linux/@{ub}: High-Performance AVX2/Vulkan Server fuer modernere PCs & APUs
-- @{b}Server-RaspberryPi4/@{ub}: Optimiert fuer Raspberry Pi 4 / 5 (ARM64)
+@{b}Intelligente Hardware-Erkennung (Universal Server):@{ub}
+Anstelle separater Builds buendelt VortexBrowser alle Faehigkeiten in einem
+einzigen, hochoptimierten Server, der bei Installation und Start die Hardware
+automatisch erkennt und konfiguriert:
+- @{b}Intel QuickSync & VA-API@{ub} (`iHD` / `i965`) fuer Intel Core, Celeron & Atom Mini-PCs
+- @{b}AMD Radeon Vulkan & VA-API@{ub} fuer Ryzen CPUs & APUs (z. B. unter CachyOS / Arch)
+- @{b}Raspberry Pi V3D EGL@{ub} fuer Raspberry Pi 4 und Raspberry Pi 5
+- @{b}Native C-SIMD Pixel-Pipeline@{ub}: Erkennt automatisch AVX2, SSE4.1 oder ARM NEON
+  und kompiliert die SIMD-Routinen passgenau fuer Ihre Prozessor-Architektur.
 
-@{b}Automatische Installation mit install_server.sh / install_intel.sh:@{ub}
-1. Oeffnen Sie ein Terminal im jeweiligen Server-Verzeichnis.
-2. Fuehren Sie das Skript aus:
-   @{b}./install_server.sh@{ub} (bzw. @{b}./install_intel.sh@{ub} oder @{b}./install_rpi4.sh@{ub})
-3. Das Skript fuehrt vollautomatisch folgende Schritte durch:
+@{b}Automatische Installation mit install_server.sh:@{ub}
+1. Entpacken Sie das Server-Archiv @{b}VortexBrowser-0.99-RC3-Server-Linux.zip@{ub}.
+2. Oeffnen Sie ein Terminal im Verzeichnis @{b}Server-Linux/@{ub}.
+3. Fuehren Sie das universelle Installationsskript aus:
+   @{b}./install_server.sh@{ub}
+4. Das Skript fuehrt vollautomatisch folgende Schritte durch:
+   - Erkennt das Linux-Betriebssystem (Arch/CachyOS, Debian/Ubuntu, Fedora/RHEL).
    - Ueberprueft Python 3 (benoetigt Python 3.10 oder neuer).
    - Erstellt eine isolierte virtuelle Umgebung (@{b}.venv@{ub}).
-   - Installiert erforderliche Grafiktreiber (z. B. Intel VA-API i965 / iHD).
-   - Installiert die benoetigten Pakete (@{i}playwright@{ui}, @{i}lz4@{ui}, @{i}Pillow@{ui}).
-   - Laedt die optimierte Chromium-Browser-Engine herunter.
-   - Kompiliert die native SIMD-Grafikbeschleunigung (@{b}fast_pixconv.so@{ub}).
+   - Installiert erforderliche Grafiktreiber (Intel VA-API, AMD Vulkan, Mesa).
+   - Installiert benoetigte Bibliotheken (@{i}playwright@{ui}, @{i}lz4@{ui}, @{i}Pillow@{ui}, @{i}turbojpeg@{ui}).
+   - Sucht vorhandene Browser (Chromium, ungoogled-chromium, Brave) oder laedt Playwright-Chromium.
+   - Kompiliert die native SIMD-Grafikbeschleunigung (@{b}fast_pixconv.so@{ub}) fuer Ihre CPU.
    - Ermittelt die IP-Adresse Ihres Rechners im Netzwerk.
 
-@{b}Manuelles Starten:@{ub}
-   @{b}./run_server.sh@{ub} (bzw. @{b}./run_intel.sh@{ub} / @{b}./run_rpi4.sh@{ub})
+@{b}Server starten:@{ub}
+   @{b}./run_server.sh@{ub}
+   (Waehlt automatisch die ideale Aufloesung: 1080p@25fps auf Desktop-PCs
+   oder sparsame 720p@25fps auf Single-Board-Computern wie dem Raspberry Pi).
 
 @{b}Ports im Netzwerk:@{ub}
-- Port @{b}7788@{ub}: Haupt-Streaming-Port (MJPEG/LZ4 und Steuerung)
-- Port @{b}9757@{ub}: Audio-Streaming
+- Port @{b}7788@{ub}: Haupt-Streaming-Port (MJPEG/LZ4, Steuerung, 2D Dirty-Rect)
+- Port @{b}9757@{ub}: 16-Bit Stereo Audio-Streaming (AHI)
 
 @endnode
 
@@ -503,26 +505,27 @@ was die CPU-Auslastung auf 20-30% senkt!
 
 @{b}VortexBrowser 0.99 RC3@{ub} is a remote web rendering browser client for AmigaOS 4.1.
 It renders modern web pages (HTML5, CSS3, ES2024 JavaScript, WebGL, YouTube, etc.)
-on a companion Linux PC or Raspberry Pi 4/5 server, streaming ultra-smooth visuals
-and 16-bit 48kHz audio directly to AmigaOS with native Reaction GUI controls.
+on a companion Linux PC, AMD Ryzen, Intel Core/Atom or Raspberry Pi 4/5 server, streaming ultra-smooth visuals
+and 16-bit 48kHz audio directly to AmigaOS with native Reaction or MUI GUI controls.
 
 @{b}Quick Start:@{ub}
 1. On your Linux PC or Raspberry Pi:
-   Enter the server directory and run:
+   Extract @{b}VortexBrowser-0.99-RC3-Server-Linux.zip@{ub}, enter the @{b}Server-Linux/@{ub} directory and run:
    @{b}./install_server.sh@{ub}
+   (Automatically detects your CPU/GPU hardware, drivers and SIMD instruction set).
    Then start the server with:
    @{b}./run_server.sh@{ub}
    Note the IP address displayed.
 2. On your Amiga:
-   Double-click @{b}VortexBrowser@{ub}.
+   Extract @{b}VortexBrowser-0.99-RC3-AmigaOS4.lha@{ub} and double-click @{b}VortexBrowser@{ub}.
    Enter your server IP address (Port: 7788) and connect!
 
 @{b}Key Features:@{ub}
 - Full multi-tab browsing (Amiga+T to open, Amiga+W to close).
-- Quick launch toolbar with icons and customizable bookmarks.
+- Full-width quick launch toolbar with customizable bookmarks (unlimited favorites in Prefs).
 - Integrated Download Manager (Amiga+D).
 - Encrypted Password Vault (Amiga+K).
-- Complete Dark Mode toggle (Amiga+U) with DarkReader and dark Reaction GUI.
+- Complete Dark Mode toggle (Amiga+U) with DarkReader and dark Reaction/MUI GUI.
 - Hardware-accelerated scaling via CompositeTags (select 720p or 540p stream for low CPU).
 - 16-bit stereo 48kHz synchronized audio via AHI.
 
@@ -562,12 +565,13 @@ WebGL, etc.) fluessig und ressourcenschonend auf den Amiga bringt.
 ------------------------------------------------------------------------------
 
 SCHRITT 1: Server starten (auf Linux-PC oder Raspberry Pi 4/5)
-1. Entpacken Sie das Server-Archiv (Linux oder Raspberry Pi) auf Ihrem Rechner.
-2. Oeffnen Sie ein Terminal im Server-Ordner und starten Sie die Installation:
+1. Entpacken Sie das Server-Archiv (VortexBrowser-0.99-RC3-Server-Linux.zip) auf Ihrem Rechner.
+2. Oeffnen Sie ein Terminal im Server-Ordner ("Server-Linux/") und starten Sie die Installation:
       ./install_server.sh
+   (Erkennt automatisch Intel-, AMD- und Raspberry Pi-Hardware sowie Grafiktreiber und SIMD)
 3. Starten Sie anschliessend den Server mit:
       ./run_server.sh
-4. Merken Sie sich die angezeigte IP-Adresse (z. B. 127.0.0.1 oder lokale LAN-IP).
+4. Merken Sie sich die angezeigte IP-Adresse (z. B. 192.168.178.2 oder lokale LAN-IP).
 
 SCHRITT 2: {APP_NAME} auf dem Amiga starten
 1. Starten Sie "{APP_NAME}" per Doppelklick.
@@ -585,6 +589,8 @@ SCHRITT 2: {APP_NAME} auf dem Amiga starten
 
 * Schnellwahl:
   - Knoepfe fuer beliebte Amiga- und Medienseiten direkt erreichbar.
+  - Dynamische Anpassung an die gesamte Fensterbreite.
+  - Unbegrenzt viele Favoriten in den Einstellungen (Prefs) konfigurierbar.
   - [+] Seite hinzufuegen, [-] Seite entfernen.
 
 * Download-Manager:
@@ -661,13 +667,14 @@ YouTube, and Twitch with low Amiga CPU usage and native Reaction GUI.
 2. QUICK START IN 2 STEPS
 ------------------------------------------------------------------------------
 
-STEP 1: Start Server (Linux PC or Raspberry Pi 4/5)
-1. Extract the Server archive on your companion Linux machine or Raspberry Pi.
-2. Open a terminal and run:
+STEP 1: Start Server (Linux PC, AMD, Intel or Raspberry Pi 4/5)
+1. Extract "VortexBrowser-0.99-RC3-Server-Linux.zip" on your companion Linux machine.
+2. Open a terminal in "Server-Linux/" and run:
       ./install_server.sh
+   (Automatically detects your CPU/GPU hardware, drivers and SIMD)
 3. Start the server with:
       ./run_server.sh
-4. Note your server's local IP address (e.g. 127.0.0.1 or your LAN IP).
+4. Note your server's local IP address (e.g. 192.168.178.2 or your LAN IP).
 
 STEP 2: Start {APP_NAME} on AmigaOS 4
 1. Launch "{APP_NAME}".
@@ -951,17 +958,15 @@ VERZEICHNISSTRUKTUR:
   * README.txt         : Englische Kurzanleitung
   * icons/             : Symbolleisten-Icons
 - {APP_NAME}.info      : Workbench-Ordner-Icon fuer den Client-Ordner
-- Server-Linux/        : Der Rendering-Server fuer Standard-Linux-PCs (x86_64)
-- Server-Intel/        : Optimiert fuer Intel Atom (x5-Z8350), Celeron & Core (VA-API / EGL / SSE SIMD)
-- Server-CachyOS-Linux/: High-Performance Server fuer CachyOS/Arch (Full HD 1080p, AVX2, AMD/Intel GPU)
-- Server-RaspberryPi4/ : Der Rendering-Server optimiert fuer Raspberry Pi 4/5 (ARM64)
+- Server-Linux/        : Universeller Rendering-Server mit Hardware-Autodetect
+                         (fuer alle Linux-PCs, Intel Core/Atom, AMD Ryzen, Raspberry Pi 4/5)
 
 SCHNELLSTART:
 -------------
-1. Server einrichten (auf Linux PC, Intel Stick/Mini-PC oder Raspberry Pi):
-   - Kopieren Sie "Server-Intel/", "Server-Linux/" oder "Server-RaspberryPi4/" auf Ihren Rechner.
-   - Starten Sie "./install_server.sh" (bzw. "./install_intel.sh") und anschliessend "./run_server.sh".
-   - Notieren Sie sich die IP-Adresse.
+1. Server einrichten (auf Linux PC, Intel Mini-PC/Stick oder Raspberry Pi 4/5):
+   - Kopieren Sie den Ordner "Server-Linux/" auf Ihren Rechner.
+   - Starten Sie "./install_server.sh" und anschliessend "./run_server.sh".
+   - Notieren Sie sich die angezeigte IP-Adresse.
 
 2. Amiga-Client installieren:
    - Kopieren Sie den Ordner "{APP_NAME}/" auf Ihren Amiga (z. B. Work:Internet/).

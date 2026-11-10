@@ -1,7 +1,7 @@
 # VortexBrowser – High-Performance Headless Web Browser Streaming System
-**(Linux PC / CachyOS-Linux / Raspberry Pi 4/5 Server $\rightarrow$ AmigaOS 4.1 PowerPC Client)**
+**(Universeller Linux Server [AMD/Intel/Raspberry Pi] $\rightarrow$ AmigaOS 4.1 PowerPC Client)**
 
-VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwright / Rustwright + DirectCDP WebSocket) auf einem **Linux-Server** (Standard-PC, CachyOS-Linux PC oder Raspberry Pi 4/5) und streamt die Bilddaten hocheffizient komprimiert per **Planar YUV420P + 2D Dirty-Rect + LZ4** an einen nativen **AmigaOS 4.1 PowerPC Reaction-Client**.
+VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwright / Rustwright + DirectCDP WebSocket) auf einem **universellen Linux-Server** (automatische Hardware-Erkennung für AMD Ryzen Vulkan, Intel QuickSync VA-API und Raspberry Pi 4/5 V3D) und streamt die Bilddaten hocheffizient komprimiert per **Planar YUV420P + 2D Dirty-Rect + LZ4** an einen nativen **AmigaOS 4.1 PowerPC Reaction/MUI-Client**.
 
 ---
 
