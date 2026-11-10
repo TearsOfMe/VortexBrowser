@@ -4,28 +4,21 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONTAINER_ID="${1:-7f239cb96d8c259d2d5489d6df3a79b3ef6b736346acb46960f3f928c40f17fd}"
 
-echo "=== [1/3] Building CachyOS Native SIMD Pixel Converter (fast_pixconv.so) ==="
-gcc -O3 -march=native -mavx2 -mfma -fopenmp -DHAVE_TURBOJPEG_LZ4 -shared -fPIC \
-    "${SCRIPT_DIR}/pi-server/fast_pixconv.c" \
-    -lturbojpeg -llz4 \
-    -o "${SCRIPT_DIR}/pi-server/fast_pixconv.so" 2>/dev/null || \
-gcc -O3 -march=native -shared -fPIC \
-    "${SCRIPT_DIR}/pi-server/fast_pixconv.c" \
-    -o "${SCRIPT_DIR}/pi-server/fast_pixconv.so"
-
-if [ -f "${SCRIPT_DIR}/cachyos-linux-server/fast_pixconv.c" ]; then
-    gcc -O3 -march=znver2 -mtune=znver2 -mavx2 -mfma -fopenmp -DHAVE_TURBOJPEG_LZ4 -shared -fPIC \
-        "${SCRIPT_DIR}/cachyos-linux-server/fast_pixconv.c" \
+echo "=== [1/3] Building Universal Native SIMD Pixel Converter (fast_pixconv.so) ==="
+if [ -f "${SCRIPT_DIR}/server/fast_pixconv.c" ]; then
+    gcc -O3 -march=native -mtune=native -fopenmp -DHAVE_TURBOJPEG_LZ4 -shared -fPIC \
+        "${SCRIPT_DIR}/server/fast_pixconv.c" \
         -lturbojpeg -llz4 \
-        -o "${SCRIPT_DIR}/cachyos-linux-server/fast_pixconv.so" 2>/dev/null || \
+        -o "${SCRIPT_DIR}/server/fast_pixconv.so" 2>/dev/null || \
     gcc -O3 -march=native -shared -fPIC \
-        "${SCRIPT_DIR}/cachyos-linux-server/fast_pixconv.c" \
-        -o "${SCRIPT_DIR}/cachyos-linux-server/fast_pixconv.so"
+        "${SCRIPT_DIR}/server/fast_pixconv.c" \
+        -o "${SCRIPT_DIR}/server/fast_pixconv.so" 2>/dev/null || true
 fi
 
-gcc -O3 -march=native -shared -fPIC \
-    "${SCRIPT_DIR}/rpi4-server/fast_pixconv.c" \
-    -o "${SCRIPT_DIR}/rpi4-server/fast_pixconv.so" 2>/dev/null || true
+if [ -f "${SCRIPT_DIR}/cachyos-linux-server/fast_pixconv.c" ]; then
+    cp -f "${SCRIPT_DIR}/server/fast_pixconv.c" "${SCRIPT_DIR}/cachyos-linux-server/fast_pixconv.c" 2>/dev/null || true
+    [ -f "${SCRIPT_DIR}/server/fast_pixconv.so" ] && cp -f "${SCRIPT_DIR}/server/fast_pixconv.so" "${SCRIPT_DIR}/cachyos-linux-server/fast_pixconv.so" 2>/dev/null || true
+fi
 
 echo "=== [2/3] Cross-Compiling AmigaOS 4.1 PowerPC Client (Universal + AltiVec) via Docker ==="
 docker exec "${CONTAINER_ID}" bash -c "mkdir -p /tmp/vb_build/common /tmp/vb_build/amiga-client /tmp/vb_build/sdk_va"

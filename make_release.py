@@ -911,101 +911,30 @@ Environment=PYTHONUNBUFFERED=1
 WantedBy=default.target
 """
 
-# Populate Server-Linux Drawer
-shutil.copy2("pi-server/server.py", os.path.join(SERVER_LINUX_DRAWER, "server.py"))
-shutil.copy2("pi-server/fast_pixconv.c", os.path.join(SERVER_LINUX_DRAWER, "fast_pixconv.c"))
-shutil.copy2("pi-server/fast_pixconv.so", os.path.join(SERVER_LINUX_DRAWER, "fast_pixconv.so"))
-shutil.copy2("pi-server/darkreader.js", os.path.join(SERVER_LINUX_DRAWER, "darkreader.js"))
-shutil.copy2("pi-server/requirements.txt", os.path.join(SERVER_LINUX_DRAWER, "requirements.txt"))
-if os.path.exists("pi-server/extensions"):
-    shutil.copytree("pi-server/extensions", os.path.join(SERVER_LINUX_DRAWER, "extensions"), dirs_exist_ok=True)
-with open(os.path.join(SERVER_LINUX_DRAWER, "run_server.sh"), "w") as f:
-    f.write(SERVER_RUN_SH)
-os.chmod(os.path.join(SERVER_LINUX_DRAWER, "run_server.sh"), 0o755)
-with open(os.path.join(SERVER_LINUX_DRAWER, "install_server.sh"), "w") as f:
-    f.write(SERVER_INSTALL_SH)
-os.chmod(os.path.join(SERVER_LINUX_DRAWER, "install_server.sh"), 0o755)
-shutil.copy2("cachyos-linux-server/sync_twitch_login.py", os.path.join(SERVER_LINUX_DRAWER, "sync_twitch_login.py"))
-if os.path.exists("sync_twitch_login.sh"):
-    shutil.copy2("sync_twitch_login.sh", os.path.join(SERVER_LINUX_DRAWER, "sync_twitch_login.sh"))
-    os.chmod(os.path.join(SERVER_LINUX_DRAWER, "sync_twitch_login.sh"), 0o755)
-
-# Populate Server-CachyOS-Linux Drawer
-shutil.copy2("cachyos-linux-server/server.py", os.path.join(SERVER_CACHYOS_DRAWER, "server.py"))
-shutil.copy2("cachyos-linux-server/fast_pixconv.c", os.path.join(SERVER_CACHYOS_DRAWER, "fast_pixconv.c"))
-if os.path.exists("cachyos-linux-server/fast_pixconv.so"):
-    shutil.copy2("cachyos-linux-server/fast_pixconv.so", os.path.join(SERVER_CACHYOS_DRAWER, "fast_pixconv.so"))
-shutil.copy2("cachyos-linux-server/darkreader.js", os.path.join(SERVER_CACHYOS_DRAWER, "darkreader.js"))
-shutil.copy2("cachyos-linux-server/requirements.txt", os.path.join(SERVER_CACHYOS_DRAWER, "requirements.txt"))
-shutil.copy2("cachyos-linux-server/sync_twitch_login.py", os.path.join(SERVER_CACHYOS_DRAWER, "sync_twitch_login.py"))
-if os.path.exists("sync_twitch_login.sh"):
-    shutil.copy2("sync_twitch_login.sh", os.path.join(SERVER_CACHYOS_DRAWER, "sync_twitch_login.sh"))
-    os.chmod(os.path.join(SERVER_CACHYOS_DRAWER, "sync_twitch_login.sh"), 0o755)
-if os.path.exists("cachyos-linux-server/extensions"):
-    shutil.copytree("cachyos-linux-server/extensions", os.path.join(SERVER_CACHYOS_DRAWER, "extensions"), dirs_exist_ok=True)
-shutil.copy2("cachyos-linux-server/install_server.sh", os.path.join(SERVER_CACHYOS_DRAWER, "install_server.sh"))
-os.chmod(os.path.join(SERVER_CACHYOS_DRAWER, "install_server.sh"), 0o755)
-shutil.copy2("cachyos-linux-server/run_server.sh", os.path.join(SERVER_CACHYOS_DRAWER, "run_server.sh"))
-os.chmod(os.path.join(SERVER_CACHYOS_DRAWER, "run_server.sh"), 0o755)
-shutil.copy2("cachyos-linux-server/vortexbrowser.service", os.path.join(SERVER_CACHYOS_DRAWER, "vortexbrowser.service"))
-if os.path.exists("cachyos-linux-server/README_CACHYOS.md"):
-    shutil.copy2("cachyos-linux-server/README_CACHYOS.md", os.path.join(SERVER_CACHYOS_DRAWER, "README_CACHYOS.txt"))
-
-# Populate Server-Intel Drawer
-shutil.copy2("intel-server/server.py", os.path.join(SERVER_INTEL_DRAWER, "server.py"))
-shutil.copy2("intel-server/fast_pixconv.c", os.path.join(SERVER_INTEL_DRAWER, "fast_pixconv.c"))
-if os.path.exists("intel-server/fast_pixconv.so"):
-    shutil.copy2("intel-server/fast_pixconv.so", os.path.join(SERVER_INTEL_DRAWER, "fast_pixconv.so"))
-shutil.copy2("intel-server/darkreader.js", os.path.join(SERVER_INTEL_DRAWER, "darkreader.js"))
-shutil.copy2("intel-server/requirements.txt", os.path.join(SERVER_INTEL_DRAWER, "requirements.txt"))
-shutil.copy2("intel-server/sync_twitch_login.py", os.path.join(SERVER_INTEL_DRAWER, "sync_twitch_login.py"))
-if os.path.exists("sync_twitch_login.sh"):
-    shutil.copy2("sync_twitch_login.sh", os.path.join(SERVER_INTEL_DRAWER, "sync_twitch_login.sh"))
-    os.chmod(os.path.join(SERVER_INTEL_DRAWER, "sync_twitch_login.sh"), 0o755)
-if os.path.exists("intel-server/extensions"):
-    shutil.copytree("intel-server/extensions", os.path.join(SERVER_INTEL_DRAWER, "extensions"), dirs_exist_ok=True)
-shutil.copy2("intel-server/install_intel.sh", os.path.join(SERVER_INTEL_DRAWER, "install_intel.sh"))
-shutil.copy2("intel-server/install_intel.sh", os.path.join(SERVER_INTEL_DRAWER, "install_server.sh"))
-os.chmod(os.path.join(SERVER_INTEL_DRAWER, "install_intel.sh"), 0o755)
-os.chmod(os.path.join(SERVER_INTEL_DRAWER, "install_server.sh"), 0o755)
-shutil.copy2("intel-server/run_intel.sh", os.path.join(SERVER_INTEL_DRAWER, "run_intel.sh"))
-shutil.copy2("intel-server/run_intel.sh", os.path.join(SERVER_INTEL_DRAWER, "run_server.sh"))
-os.chmod(os.path.join(SERVER_INTEL_DRAWER, "run_intel.sh"), 0o755)
-os.chmod(os.path.join(SERVER_INTEL_DRAWER, "run_server.sh"), 0o755)
-shutil.copy2("intel-server/vortexbrowser.service", os.path.join(SERVER_INTEL_DRAWER, "vortexbrowser.service"))
-if os.path.exists("intel-server/README_INTEL.md"):
-    shutil.copy2("intel-server/README_INTEL.md", os.path.join(SERVER_INTEL_DRAWER, "README_INTEL.txt"))
-
-# Populate Server-RaspberryPi4 Drawer
-shutil.copy2("rpi4-server/server.py", os.path.join(SERVER_RPI4_DRAWER, "server.py"))
-shutil.copy2("rpi4-server/fast_pixconv.c", os.path.join(SERVER_RPI4_DRAWER, "fast_pixconv.c"))
-if os.path.exists("rpi4-server/fast_pixconv_aarch64.so"):
-    shutil.copy2("rpi4-server/fast_pixconv_aarch64.so", os.path.join(SERVER_RPI4_DRAWER, "fast_pixconv.so"))
-    shutil.copy2("rpi4-server/fast_pixconv_aarch64.so", os.path.join(SERVER_RPI4_DRAWER, "fast_pixconv_aarch64.so"))
-shutil.copy2("rpi4-server/darkreader.js", os.path.join(SERVER_RPI4_DRAWER, "darkreader.js"))
-shutil.copy2("rpi4-server/requirements.txt", os.path.join(SERVER_RPI4_DRAWER, "requirements.txt"))
-if os.path.exists("rpi4-server/extensions"):
-    shutil.copytree("rpi4-server/extensions", os.path.join(SERVER_RPI4_DRAWER, "extensions"), dirs_exist_ok=True)
-if os.path.exists("rpi4-server/install_rpi4.sh"):
-    shutil.copy2("rpi4-server/install_rpi4.sh", os.path.join(SERVER_RPI4_DRAWER, "install_server.sh"))
-else:
-    with open(os.path.join(SERVER_RPI4_DRAWER, "install_server.sh"), "w") as f:
-        f.write(SERVER_INSTALL_SH)
-os.chmod(os.path.join(SERVER_RPI4_DRAWER, "install_server.sh"), 0o755)
-
-if os.path.exists("rpi4-server/run_rpi4.sh"):
-    shutil.copy2("rpi4-server/run_rpi4.sh", os.path.join(SERVER_RPI4_DRAWER, "run_server.sh"))
-else:
-    with open(os.path.join(SERVER_RPI4_DRAWER, "run_server.sh"), "w") as f:
-        f.write(SERVER_RUN_SH)
-os.chmod(os.path.join(SERVER_RPI4_DRAWER, "run_server.sh"), 0o755)
-
-if os.path.exists("rpi4-server/README_RPI4.md"):
-    shutil.copy2("rpi4-server/README_RPI4.md", os.path.join(SERVER_RPI4_DRAWER, "README_RPI4.txt"))
-shutil.copy2("rpi4-server/sync_twitch_login.py", os.path.join(SERVER_RPI4_DRAWER, "sync_twitch_login.py"))
-if os.path.exists("sync_twitch_login.sh"):
-    shutil.copy2("sync_twitch_login.sh", os.path.join(SERVER_RPI4_DRAWER, "sync_twitch_login.sh"))
-    os.chmod(os.path.join(SERVER_RPI4_DRAWER, "sync_twitch_login.sh"), 0o755)
+# -------------------------------------------------------------
+# Populate Universal Server-Linux Drawer from single server/ codebase
+# -------------------------------------------------------------
+for s_drawer in [SERVER_LINUX_DRAWER, SERVER_CACHYOS_DRAWER, SERVER_INTEL_DRAWER, SERVER_RPI4_DRAWER]:
+    shutil.copy2("server/server.py", os.path.join(s_drawer, "server.py"))
+    shutil.copy2("server/fast_pixconv.c", os.path.join(s_drawer, "fast_pixconv.c"))
+    if os.path.exists("server/fast_pixconv.so"):
+        shutil.copy2("server/fast_pixconv.so", os.path.join(s_drawer, "fast_pixconv.so"))
+    shutil.copy2("server/darkreader.js", os.path.join(s_drawer, "darkreader.js"))
+    shutil.copy2("server/requirements.txt", os.path.join(s_drawer, "requirements.txt"))
+    shutil.copy2("server/sync_twitch_login.py", os.path.join(s_drawer, "sync_twitch_login.py"))
+    if os.path.exists("server/sync_twitch_login.sh"):
+        shutil.copy2("server/sync_twitch_login.sh", os.path.join(s_drawer, "sync_twitch_login.sh"))
+        os.chmod(os.path.join(s_drawer, "sync_twitch_login.sh"), 0o755)
+    if os.path.exists("server/extensions"):
+        shutil.copytree("server/extensions", os.path.join(s_drawer, "extensions"), dirs_exist_ok=True)
+    shutil.copy2("server/install_server.sh", os.path.join(s_drawer, "install_server.sh"))
+    os.chmod(os.path.join(s_drawer, "install_server.sh"), 0o755)
+    shutil.copy2("server/run_server.sh", os.path.join(s_drawer, "run_server.sh"))
+    os.chmod(os.path.join(s_drawer, "run_server.sh"), 0o755)
+    if os.path.exists("server/vortexbrowser.service"):
+        shutil.copy2("server/vortexbrowser.service", os.path.join(s_drawer, "vortexbrowser.service"))
+    if os.path.exists("server/README.md"):
+        shutil.copy2("server/README.md", os.path.join(s_drawer, "README.txt"))
 
 # -------------------------------------------------------------
 # Overall German and English Readmes for Complete Archive
