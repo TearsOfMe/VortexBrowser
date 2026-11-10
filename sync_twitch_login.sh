@@ -52,9 +52,7 @@ echo "=================================================================="
 # Function to locate local Python script
 find_local_script() {
     for cand in \
-        "${SCRIPT_DIR}/cachyos-linux-server/sync_twitch_login.py" \
-        "${SCRIPT_DIR}/pi-server/sync_twitch_login.py" \
-        "${SCRIPT_DIR}/rpi4-server/sync_twitch_login.py" \
+        "${SCRIPT_DIR}/server/sync_twitch_login.py" \
         "${SCRIPT_DIR}/sync_twitch_login.py"; do
         if [ -f "$cand" ]; then
             echo "$cand"
@@ -168,10 +166,8 @@ if [ "$IS_LOCAL" -eq 1 ]; then
     cd "$SCRIPT_DIR"
     if [ -d ".venv" ]; then
         PYTHON=".venv/bin/python"
-    elif [ -d "cachyos-linux-server/.venv" ]; then
-        PYTHON="cachyos-linux-server/.venv/bin/python"
-    elif [ -d "pi-server/.venv" ]; then
-        PYTHON="pi-server/.venv/bin/python"
+    elif [ -d "server/.venv" ]; then
+        PYTHON="server/.venv/bin/python"
     else
         PYTHON="python3"
     fi

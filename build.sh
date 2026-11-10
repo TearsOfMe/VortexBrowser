@@ -15,11 +15,6 @@ if [ -f "${SCRIPT_DIR}/server/fast_pixconv.c" ]; then
         -o "${SCRIPT_DIR}/server/fast_pixconv.so" 2>/dev/null || true
 fi
 
-if [ -f "${SCRIPT_DIR}/cachyos-linux-server/fast_pixconv.c" ]; then
-    cp -f "${SCRIPT_DIR}/server/fast_pixconv.c" "${SCRIPT_DIR}/cachyos-linux-server/fast_pixconv.c" 2>/dev/null || true
-    [ -f "${SCRIPT_DIR}/server/fast_pixconv.so" ] && cp -f "${SCRIPT_DIR}/server/fast_pixconv.so" "${SCRIPT_DIR}/cachyos-linux-server/fast_pixconv.so" 2>/dev/null || true
-fi
-
 echo "=== [2/3] Cross-Compiling AmigaOS 4.1 PowerPC Client (Universal + AltiVec) via Docker ==="
 docker exec "${CONTAINER_ID}" bash -c "mkdir -p /tmp/vb_build/common /tmp/vb_build/amiga-client /tmp/vb_build/sdk_va"
 docker cp "${SCRIPT_DIR}/common/." "${CONTAINER_ID}:/tmp/vb_build/common/"
