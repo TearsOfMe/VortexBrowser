@@ -16,9 +16,6 @@ RELEASE_DATE = "06.11.2026"
 STAGING_DIR = os.path.join(DIST_DIR, "staging")
 AMIGA_DRAWER = os.path.join(STAGING_DIR, "VortexBrowser")
 SERVER_LINUX_DRAWER = os.path.join(STAGING_DIR, "Server-Linux")
-SERVER_CACHYOS_DRAWER = os.path.join(STAGING_DIR, "Server-CachyOS-Linux")
-SERVER_INTEL_DRAWER = os.path.join(STAGING_DIR, "Server-Intel")
-SERVER_RPI4_DRAWER = os.path.join(STAGING_DIR, "Server-RaspberryPi4")
 
 print(f"=== [1/6] Preparing Staging Directories for {APP_NAME} {VER_STR} ===")
 if os.path.exists(DIST_DIR):
@@ -26,9 +23,6 @@ if os.path.exists(DIST_DIR):
 os.makedirs(AMIGA_DRAWER, exist_ok=True)
 os.makedirs(os.path.join(AMIGA_DRAWER, "icons"), exist_ok=True)
 os.makedirs(SERVER_LINUX_DRAWER, exist_ok=True)
-os.makedirs(SERVER_CACHYOS_DRAWER, exist_ok=True)
-os.makedirs(SERVER_INTEL_DRAWER, exist_ok=True)
-os.makedirs(SERVER_RPI4_DRAWER, exist_ok=True)
 
 # -------------------------------------------------------------
 # AmigaGuide Documentation
@@ -914,27 +908,26 @@ WantedBy=default.target
 # -------------------------------------------------------------
 # Populate Universal Server-Linux Drawer from single server/ codebase
 # -------------------------------------------------------------
-for s_drawer in [SERVER_LINUX_DRAWER, SERVER_CACHYOS_DRAWER, SERVER_INTEL_DRAWER, SERVER_RPI4_DRAWER]:
-    shutil.copy2("server/server.py", os.path.join(s_drawer, "server.py"))
-    shutil.copy2("server/fast_pixconv.c", os.path.join(s_drawer, "fast_pixconv.c"))
-    if os.path.exists("server/fast_pixconv.so"):
-        shutil.copy2("server/fast_pixconv.so", os.path.join(s_drawer, "fast_pixconv.so"))
-    shutil.copy2("server/darkreader.js", os.path.join(s_drawer, "darkreader.js"))
-    shutil.copy2("server/requirements.txt", os.path.join(s_drawer, "requirements.txt"))
-    shutil.copy2("server/sync_twitch_login.py", os.path.join(s_drawer, "sync_twitch_login.py"))
-    if os.path.exists("server/sync_twitch_login.sh"):
-        shutil.copy2("server/sync_twitch_login.sh", os.path.join(s_drawer, "sync_twitch_login.sh"))
-        os.chmod(os.path.join(s_drawer, "sync_twitch_login.sh"), 0o755)
-    if os.path.exists("server/extensions"):
-        shutil.copytree("server/extensions", os.path.join(s_drawer, "extensions"), dirs_exist_ok=True)
-    shutil.copy2("server/install_server.sh", os.path.join(s_drawer, "install_server.sh"))
-    os.chmod(os.path.join(s_drawer, "install_server.sh"), 0o755)
-    shutil.copy2("server/run_server.sh", os.path.join(s_drawer, "run_server.sh"))
-    os.chmod(os.path.join(s_drawer, "run_server.sh"), 0o755)
-    if os.path.exists("server/vortexbrowser.service"):
-        shutil.copy2("server/vortexbrowser.service", os.path.join(s_drawer, "vortexbrowser.service"))
-    if os.path.exists("server/README.md"):
-        shutil.copy2("server/README.md", os.path.join(s_drawer, "README.txt"))
+shutil.copy2("server/server.py", os.path.join(SERVER_LINUX_DRAWER, "server.py"))
+shutil.copy2("server/fast_pixconv.c", os.path.join(SERVER_LINUX_DRAWER, "fast_pixconv.c"))
+if os.path.exists("server/fast_pixconv.so"):
+    shutil.copy2("server/fast_pixconv.so", os.path.join(SERVER_LINUX_DRAWER, "fast_pixconv.so"))
+shutil.copy2("server/darkreader.js", os.path.join(SERVER_LINUX_DRAWER, "darkreader.js"))
+shutil.copy2("server/requirements.txt", os.path.join(SERVER_LINUX_DRAWER, "requirements.txt"))
+shutil.copy2("server/sync_twitch_login.py", os.path.join(SERVER_LINUX_DRAWER, "sync_twitch_login.py"))
+if os.path.exists("server/sync_twitch_login.sh"):
+    shutil.copy2("server/sync_twitch_login.sh", os.path.join(SERVER_LINUX_DRAWER, "sync_twitch_login.sh"))
+    os.chmod(os.path.join(SERVER_LINUX_DRAWER, "sync_twitch_login.sh"), 0o755)
+if os.path.exists("server/extensions"):
+    shutil.copytree("server/extensions", os.path.join(SERVER_LINUX_DRAWER, "extensions"), dirs_exist_ok=True)
+shutil.copy2("server/install_server.sh", os.path.join(SERVER_LINUX_DRAWER, "install_server.sh"))
+os.chmod(os.path.join(SERVER_LINUX_DRAWER, "install_server.sh"), 0o755)
+shutil.copy2("server/run_server.sh", os.path.join(SERVER_LINUX_DRAWER, "run_server.sh"))
+os.chmod(os.path.join(SERVER_LINUX_DRAWER, "run_server.sh"), 0o755)
+if os.path.exists("server/vortexbrowser.service"):
+    shutil.copy2("server/vortexbrowser.service", os.path.join(SERVER_LINUX_DRAWER, "vortexbrowser.service"))
+if os.path.exists("server/README.md"):
+    shutil.copy2("server/README.md", os.path.join(SERVER_LINUX_DRAWER, "README.txt"))
 
 # -------------------------------------------------------------
 # Overall German and English Readmes for Complete Archive
@@ -995,56 +988,20 @@ if res.returncode != 0:
 print(f"[+] Created AmigaOS 4 LHA: {LHA_ARCHIVE} ({os.path.getsize(LHA_ARCHIVE)} bytes)")
 
 # -------------------------------------------------------------
-# Create 2: Linux Server Zip Archive
+# Create 2: Universal Linux Server Zip Archive
 # -------------------------------------------------------------
-print(f"=== [5/6] Creating Linux, Intel & Raspberry Pi Server Archives ===")
-LINUX_ZIP = os.path.join(DIST_DIR, f"{APP_NAME}-{VER_STR}-Linux.zip")
+print(f"=== [5/6] Creating Universal Linux Server & Complete Archives ===")
+LINUX_ZIP = os.path.join(DIST_DIR, f"{APP_NAME}-{VER_STR}-Server-Linux.zip")
 with zipfile.ZipFile(LINUX_ZIP, "w", zipfile.ZIP_DEFLATED) as zf:
     for root, dirs, files in os.walk(SERVER_LINUX_DRAWER):
         for file in files:
             full_path = os.path.join(root, file)
             rel_path = os.path.join("Server-Linux", os.path.relpath(full_path, SERVER_LINUX_DRAWER))
             zf.write(full_path, rel_path)
-print(f"[+] Created Linux Server Zip: {LINUX_ZIP} ({os.path.getsize(LINUX_ZIP)} bytes)")
+print(f"[+] Created Universal Linux Server Zip: {LINUX_ZIP} ({os.path.getsize(LINUX_ZIP)} bytes)")
 
 # -------------------------------------------------------------
-# Create 2b: Intel Server Zip Archive
-# -------------------------------------------------------------
-INTEL_ZIP = os.path.join(DIST_DIR, f"{APP_NAME}-{VER_STR}-Intel.zip")
-with zipfile.ZipFile(INTEL_ZIP, "w", zipfile.ZIP_DEFLATED) as zf:
-    for root, dirs, files in os.walk(SERVER_INTEL_DRAWER):
-        for file in files:
-            full_path = os.path.join(root, file)
-            rel_path = os.path.join("Server-Intel", os.path.relpath(full_path, SERVER_INTEL_DRAWER))
-            zf.write(full_path, rel_path)
-print(f"[+] Created Intel Server Zip: {INTEL_ZIP} ({os.path.getsize(INTEL_ZIP)} bytes)")
-
-# -------------------------------------------------------------
-# Create 2c: CachyOS-Linux Server Zip Archive
-# -------------------------------------------------------------
-CACHYOS_ZIP = os.path.join(DIST_DIR, f"{APP_NAME}-{VER_STR}-CachyOS-Linux.zip")
-with zipfile.ZipFile(CACHYOS_ZIP, "w", zipfile.ZIP_DEFLATED) as zf:
-    for root, dirs, files in os.walk(SERVER_CACHYOS_DRAWER):
-        for file in files:
-            full_path = os.path.join(root, file)
-            rel_path = os.path.join("Server-CachyOS-Linux", os.path.relpath(full_path, SERVER_CACHYOS_DRAWER))
-            zf.write(full_path, rel_path)
-print(f"[+] Created CachyOS-Linux Server Zip: {CACHYOS_ZIP} ({os.path.getsize(CACHYOS_ZIP)} bytes)")
-
-# -------------------------------------------------------------
-# Create 3: Raspberry Pi 4 Server Zip Archive
-# -------------------------------------------------------------
-RPI4_ZIP = os.path.join(DIST_DIR, f"{APP_NAME}-{VER_STR}-RaspberryPi4.zip")
-with zipfile.ZipFile(RPI4_ZIP, "w", zipfile.ZIP_DEFLATED) as zf:
-    for root, dirs, files in os.walk(SERVER_RPI4_DRAWER):
-        for file in files:
-            full_path = os.path.join(root, file)
-            rel_path = os.path.join("Server-RaspberryPi4", os.path.relpath(full_path, SERVER_RPI4_DRAWER))
-            zf.write(full_path, rel_path)
-print(f"[+] Created Raspberry Pi 4 Server Zip: {RPI4_ZIP} ({os.path.getsize(RPI4_ZIP)} bytes)")
-
-# -------------------------------------------------------------
-# Create 4: Complete Zip Archive
+# Create 3: Complete Zip Archive
 # -------------------------------------------------------------
 COMPLETE_ZIP = os.path.join(DIST_DIR, f"{APP_NAME}-{VER_STR}-Complete.zip")
 with zipfile.ZipFile(COMPLETE_ZIP, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -1059,4 +1016,4 @@ print(f"=== [6/6] Verifying Archives ===")
 res = subprocess.run(["lha", "v", LHA_ARCHIVE], capture_output=True, text=True)
 print(res.stdout)
 
-print("\nRelease packaging successfully completed for AmigaOS 4, Linux, and Raspberry Pi 4!")
+print("\nRelease packaging successfully completed for AmigaOS 4 and Universal Linux Server!")
