@@ -26,6 +26,7 @@ enum {
     GID_PW_SHOW_PASS,
     GID_PW_COPY_USER,
     GID_PW_COPY_PASS,
+    GID_PW_AUTOLOGIN,
     GID_PW_ADD,
     GID_PW_DEL,
     GID_PW_CLOSE
@@ -236,6 +237,13 @@ void gui_open_password_manager(VortexApp *app)
         CHECKBOX_Checked, FALSE,
         TAG_DONE);
 
+    Object *btn_autologin = IIntuition->NewObject(NULL, "button.gadget",
+        GA_ID,        GID_PW_AUTOLOGIN,
+        GA_RelVerify, TRUE,
+        GA_Text,      "In Seite einloggen (Auto-Login)",
+        GA_HintInfo,  "Zugangsdaten automatisch im aktuellen Web-Formular ausfuellen und absenden",
+        TAG_DONE);
+
     Object *btn_add = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_PW_ADD,
         GA_RelVerify, TRUE,
@@ -325,7 +333,11 @@ void gui_open_password_manager(VortexApp *app)
         LAYOUT_AddChild,      app->pw_gad_show_pass,
         CHILD_WeightedHeight, 0,
 
-        /* Group 6: Action Buttons */
+        /* Group 6: Auto-Login Button */
+        LAYOUT_AddChild,      btn_autologin,
+        CHILD_WeightedHeight, 0,
+
+        /* Group 7: Action Buttons */
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      btn_add,
@@ -435,6 +447,14 @@ void gui_handle_password_manager_events(VortexApp *app)
                     IIntuition->GetAttr(CHECKBOX_Checked, app->pw_gad_show_pass, &chk);
                     app->pw_show_plaintext = (chk != 0);
                     update_fields(app, app->pw_cur_sel);
+                } else if (gid == GID_PW_AUTOLOGIN) {
+                    if (app->password_store && app->pw_cur_sel >= 0 && app->pw_cur_sel < app->password_store->count) {
+                        PasswordEntry *pe = &app->password_store->entries[app->pw_cur_sel];
+                        char cmd[384];
+                        snprintf(cmd, sizeof(cmd), "@AUTOLOGIN:%s\t%s", pe->username, pe->password);
+                        net_send_url(app, cmd);
+                        app_set_status("Auto-Login gesendet: %s (%s)", pe->domain, pe->username);
+                    }
                 } else if (gid == GID_PW_COPY_USER) {
                     if (app->password_store && app->pw_cur_sel >= 0 && app->pw_cur_sel < app->password_store->count) {
                         clipboard_write_text(app->password_store->entries[app->pw_cur_sel].username);
@@ -473,3 +493,30 @@ void gui_handle_password_manager_events(VortexApp *app)
     }
 }
 
+void gui_do_autologin_current_domain(VortexApp *app)
+{
+    if (!app) return;
+
+    if (!app->password_store) {
+        passwords_init(app);
+    }
+
+    const char *url = app->current_url[0] ? app->current_url :
+                      (app->num_tabs > 0 ? app->tabs[app->active_tab_idx].url : "");
+    if (!url || url[0] == '\0' || url[0] == '@') {
+        app_set_status("Keine aktive Webseite fuer Auto-Login.");
+        gui_open_password_manager(app);
+        return;
+    }
+
+    const PasswordEntry *pe = passwords_find_by_domain(app, url);
+    if (pe) {
+        char cmd[384];
+        snprintf(cmd, sizeof(cmd), "@AUTOLOGIN:%s\t%s", pe->username, pe->password);
+        net_send_url(app, cmd);
+        app_set_status("Auto-Login fuer '%s' ausgefuehrt (%s)...", pe->domain, pe->username);
+    } else {
+        app_set_status("Kein Login fuer Domaene gefunden. Passwort-Manager geoeffnet.");
+        gui_open_password_manager(app);
+    }
+}

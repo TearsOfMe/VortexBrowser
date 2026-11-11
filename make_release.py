@@ -782,6 +782,14 @@ if os.path.isdir(ALT_ICONS_SRC):
     if os.path.exists(KYVOS_README_INFO):
         shutil.copy2(KYVOS_README_INFO, os.path.join(ALT_ICONS_DST, "LIESMICH.txt.info"))
 
+# Copy Catalogs (Locale translations) into catalogs/ drawer
+CATALOGS_SRC = "amiga-client/catalogs"
+if os.path.isdir(CATALOGS_SRC):
+    CATALOGS_DST = os.path.join(AMIGA_DRAWER, "catalogs")
+    shutil.copytree(CATALOGS_SRC, CATALOGS_DST, dirs_exist_ok=True)
+    if os.path.exists(KYVOS_DOCS_INFO):
+        shutil.copy2(KYVOS_DOCS_INFO, os.path.join(AMIGA_DRAWER, "catalogs.info"))
+
 # Drawer Icon for VortexBrowser drawer
 if os.path.exists("amiga-client/VortexBrowser_drawer.info"):
     shutil.copy2("amiga-client/VortexBrowser_drawer.info", os.path.join(STAGING_DIR, f"{APP_NAME}.info"))

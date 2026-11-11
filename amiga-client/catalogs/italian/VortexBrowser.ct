@@ -1,0 +1,358 @@
+## version $VER: VortexBrowser.catalog 1.0 (11.11.2026)
+## language italiano
+## codeset 4
+;
+MSG_WIN_TITLE
+VortexBrowser
+;
+MSG_DL_WIN_TITLE
+Scaricamenti - VortexBrowser
+;
+MSG_PW_WIN_TITLE
+Gestore password - VortexBrowser
+;
+MSG_PREFS_WIN_TITLE
+Impostazioni - VortexBrowser
+;
+MSG_MENU_PROJECT
+Progetto
+;
+MSG_MENU_OPEN_URL
+Apri URL...
+;
+MSG_MENU_OPEN_FILE
+Apri file locale...
+;
+MSG_MENU_SAVE_SOURCE
+Salva sorgente HTML...
+;
+MSG_MENU_PRINT
+Stampa pagina...
+;
+MSG_MENU_ABOUT
+Informazioni su VortexBrowser...
+;
+MSG_MENU_QUIT
+Esci
+;
+MSG_MENU_NAVIGATION
+Navigazione
+;
+MSG_MENU_BACK
+Indietro
+;
+MSG_MENU_FORWARD
+Avanti
+;
+MSG_MENU_RELOAD
+Ricarica
+;
+MSG_MENU_STOP
+Interrompi caricamento
+;
+MSG_MENU_HOME
+Pagina iniziale
+;
+MSG_MENU_TAB_NEW
+Apri nuova scheda
+;
+MSG_MENU_TAB_CLOSE
+Chiudi scheda corrente
+;
+MSG_MENU_BOOKMARKS
+Segnalibri
+;
+MSG_MENU_BOOKMARKS_BAR
+Barra dei segnalibri
+;
+MSG_MENU_ADD_BOOKMARK
+Aggiungi segnalibro
+;
+MSG_MENU_ADD_QUICKLINK
+Aggiungi a selezione rapida
+;
+MSG_MENU_VIEW
+Visualizza
+;
+MSG_MENU_ZOOM_IN
+Ingrandisci (+)
+;
+MSG_MENU_ZOOM_OUT
+Riduci (-)
+;
+MSG_MENU_ZOOM_RESET
+Dimensione predefinita (100%)
+;
+MSG_MENU_FULLSCREEN
+Schermo intero
+;
+MSG_MENU_DARK_MODE
+Modalità scura
+;
+MSG_MENU_SETTINGS
+Impostazioni
+;
+MSG_MENU_PREFERENCES
+Preferenze...
+;
+MSG_MENU_PASSWORDS
+Gestore password...
+;
+MSG_MENU_DOWNLOADS
+Gestore scaricamenti...
+;
+MSG_MENU_EDIT
+Modifica
+;
+MSG_MENU_CUT
+Taglia
+;
+MSG_MENU_COPY
+Copia
+;
+MSG_MENU_PASTE
+Incolla
+;
+MSG_BTN_BACK
+Indietro
+;
+MSG_BTN_FORWARD
+Avanti
+;
+MSG_BTN_RELOAD
+Ricarica
+;
+MSG_BTN_STOP
+Stop
+;
+MSG_BTN_HOME
+Home
+;
+MSG_BTN_GO
+Vai
+;
+MSG_BTN_DOWNLOADS
+Scaricamenti
+;
+MSG_BTN_CONNECT
+Connetti
+;
+MSG_BTN_DISCONNECT
+Disconnetti
+;
+MSG_BTN_CLEAR
+Cancella
+;
+MSG_CHOOSER_BOOKMARKS
+Segnalibri
+;
+MSG_HINT_BACK
+Torna indietro (Amiga+Sinistra)
+;
+MSG_HINT_FORWARD
+Vai avanti (Amiga+Destra)
+;
+MSG_HINT_RELOAD
+Ricarica pagina (Amiga+R)
+;
+MSG_HINT_STOP
+Interrompi caricamento (Esc)
+;
+MSG_HINT_HOME
+Apri pagina iniziale (Amiga+H)
+;
+MSG_HINT_CLEAR_URL
+Cancella barra indirizzo
+;
+MSG_HINT_GO
+Apri indirizzo o avvia ricerca web
+;
+MSG_HINT_DOWNLOADS
+Apri gestore scaricamenti (Amiga+J)
+;
+MSG_HINT_CONNECT
+Connetti al server
+;
+MSG_HINT_ADD_QL
+Aggiungi pagina corrente a selezione rapida
+;
+MSG_HINT_REM_QL
+Rimuovi da selezione rapida
+;
+MSG_HINT_NEW_TAB
+Apri nuova scheda (Amiga+T)
+;
+MSG_HINT_CLOSE_TAB
+Chiudi scheda corrente (Amiga+W)
+;
+MSG_DL_COL_FILE
+File
+;
+MSG_DL_COL_STATUS
+Stato
+;
+MSG_DL_COL_SIZE
+Dimensione
+;
+MSG_DL_COL_PERCENT
+%
+;
+MSG_DL_COL_SPEED
+Velocità
+;
+MSG_DL_COL_ETA
+Tempo rimanente
+;
+MSG_DL_COL_TARGET
+Percorso destinazione
+;
+MSG_DL_STATUS_NONE
+Nessuno scaricamento attivo
+;
+MSG_DL_STATUS_ACTIVE
+%d scaricamento attivo%s (%s) | %d completato/i
+;
+MSG_DL_STATUS_ALL_DONE
+Tutti gli scaricamenti completati (%d file)
+;
+MSG_DL_BTN_OPEN_FILE
+Apri file
+;
+MSG_DL_HINT_OPEN_FILE
+Esegui il file scaricato con il visualizzatore predefinito (o doppio clic)
+;
+MSG_DL_BTN_OPEN_DIR
+Apri cassetto
+;
+MSG_DL_HINT_OPEN_DIR
+Apri la cartella di destinazione sul Workbench
+;
+MSG_DL_BTN_CANCEL
+Annulla
+;
+MSG_DL_HINT_CANCEL
+Interrompi e annulla scaricamento in corso
+;
+MSG_DL_BTN_REMOVE
+Elimina voce
+;
+MSG_DL_HINT_REMOVE
+Rimuovi la voce selezionata dall'elenco
+;
+MSG_DL_BTN_CLEANUP
+Pulisci
+;
+MSG_DL_HINT_CLEANUP
+Rimuovi tutti gli scaricamenti completati o annullati
+;
+MSG_DL_BTN_CLOSE
+Chiudi
+;
+MSG_DL_HINT_CLOSE
+Chiudi finestra scaricamenti (i download continuano in background)
+;
+MSG_STATUS_READY
+Pronto.
+;
+MSG_STATUS_CONNECTING
+Connessione al server %s:%u in corso...
+;
+MSG_STATUS_CONNECTED
+Connesso a %s:%u
+;
+MSG_STATUS_DISCONNECTED
+Disconnesso dal server
+;
+MSG_STATUS_LOADING
+Caricamento: %s
+;
+MSG_SEARCH_PROMPT
+Cerca (%s): %s
+;
+MSG_CTX_OPEN_LINK
+Apri collegamento
+;
+MSG_CTX_OPEN_NEW_TAB
+Apri collegamento in nuova scheda
+;
+MSG_CTX_FAV_LINK
+Aggiungi collegamento ai segnalibri
+;
+MSG_CTX_DOWNLOAD_LINK
+Scarica destinazione collegamento...
+;
+MSG_CTX_COPY_LINK
+Copia indirizzo del collegamento
+;
+MSG_CTX_COPY_IMAGE_URL
+Copia indirizzo dell'immagine
+;
+MSG_CTX_DOWNLOAD_IMAGE
+Scarica immagine...
+;
+MSG_CTX_MAIN_MENU
+Menu principale...
+;
+MSG_GEN_YES
+Sì
+;
+MSG_GEN_NO
+No
+;
+MSG_GEN_OK
+OK
+;
+MSG_GEN_CANCEL
+Annulla
+;
+MSG_PREFS_SAVE
+Salva
+;
+MSG_PREFS_USE
+Usa
+;
+MSG_PREFS_CANCEL
+Annulla
+;
+MSG_PREFS_TAB_SERVER
+Server
+;
+MSG_PREFS_TAB_DISPLAY
+Schermo
+;
+MSG_PREFS_TAB_BROWSER
+Browser
+;
+MSG_PREFS_TAB_QUICKDIAL
+Selezione rapida
+;
+MSG_PREFS_TAB_BOOKMARKS
+Segnalibri
+;
+MSG_PREFS_TAB_DOWNLOADS
+Scaricamenti
+;
+MSG_PREFS_TAB_SYSTEM
+Sistema
+;
+MSG_PREFS_TAB_ABOUT
+Informazioni
+;
+MSG_PREFS_ADD
+Aggiungi
+;
+MSG_PREFS_UPDATE
+Aggiorna
+;
+MSG_PREFS_REMOVE
+Elimina
+;
+MSG_PREFS_MOVE_UP
+Sposta su
+;
+MSG_PREFS_MOVE_DOWN
+Sposta giù
+;
+MSG_PREFS_CHOOSE_DIR
+Scegli cassetto...
+;

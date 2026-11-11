@@ -50,6 +50,7 @@
 #include "gui_passwords.h"
 #include "gui_download.h"
 #include "clipboard.h"
+#include "locale_strings.h"
 
 extern struct SocketIFace *ISocket;
 
@@ -61,9 +62,9 @@ static void open_quicklink_popup(VortexApp *app, int qidx, int16_t mx, int16_t m
 static struct NewMenu s_main_menu[] = {
     { NM_TITLE, (STRPTR)"Projekt",                                     NULL,        0, 0, NULL },
     { NM_ITEM,  (STRPTR)"Neu (Startseite)",                            NULL,        0, 0, (APTR)MID_PROJ_NEW },
-    { NM_ITEM,  (STRPTR)"URL oeffnen...",                              (STRPTR)"O", 0, 0, (APTR)MID_PROJ_OPEN },
+    { NM_ITEM,  (STRPTR)"URL öffnen...",                              (STRPTR)"O", 0, 0, (APTR)MID_PROJ_OPEN },
     { NM_ITEM,  (STRPTR)"Neuer Tab",                                   (STRPTR)"T", 0, 0, (APTR)MID_TAB_NEW },
-    { NM_ITEM,  (STRPTR)"Aktuellen Tab schliessen",                    (STRPTR)"W", 0, 0, (APTR)MID_TAB_CLOSE },
+    { NM_ITEM,  (STRPTR)"Aktuellen Tab schließen",                    (STRPTR)"W", 0, 0, (APTR)MID_TAB_CLOSE },
     { NM_ITEM,  NM_BARLABEL,                                           NULL,        0, 0, NULL },
     { NM_ITEM,  (STRPTR)"Passwort-Manager...",                         (STRPTR)"K", 0, 0, (APTR)MID_PROJ_PASSWORDS },
     { NM_ITEM,  (STRPTR)"Download-Manager...",                         (STRPTR)"D", 0, 0, (APTR)MID_PROJ_DOWNLOADS },
@@ -73,17 +74,17 @@ static struct NewMenu s_main_menu[] = {
     { NM_ITEM,  (STRPTR)"Verbindung trennen",                          NULL,        0, 0, (APTR)MID_PROJ_DISCONNECT },
     { NM_ITEM,  NM_BARLABEL,                                           NULL,        0, 0, NULL },
     { NM_ITEM,  (STRPTR)"Einstellungen...",                            (STRPTR)"E", 0, 0, (APTR)MID_SETTINGS },
-    { NM_ITEM,  (STRPTR)"Ueber VortexBrowser...",                      (STRPTR)"?", 0, 0, (APTR)MID_PROJ_ABOUT },
+    { NM_ITEM,  (STRPTR)"Über VortexBrowser...",                      (STRPTR)"?", 0, 0, (APTR)MID_PROJ_ABOUT },
     { NM_ITEM,  NM_BARLABEL,                                           NULL,        0, 0, NULL },
     { NM_ITEM,  (STRPTR)"Beenden",                                     (STRPTR)"Q", 0, 0, (APTR)MID_PROJ_QUIT },
 
     { NM_TITLE, (STRPTR)"Bearbeiten",                                  NULL,        0, 0, NULL },
     { NM_ITEM,  (STRPTR)"Ausschneiden",                                (STRPTR)"X", 0, 0, (APTR)MID_EDIT_CUT },
     { NM_ITEM,  (STRPTR)"Kopieren",                                    (STRPTR)"C", 0, 0, (APTR)MID_EDIT_COPY },
-    { NM_ITEM,  (STRPTR)"Einfuegen",                                   (STRPTR)"V", 0, 0, (APTR)MID_EDIT_PASTE },
+    { NM_ITEM,  (STRPTR)"Einfügen",                                   (STRPTR)"V", 0, 0, (APTR)MID_EDIT_PASTE },
 
     { NM_TITLE, (STRPTR)"Ansicht",                                     NULL,        0, 0, NULL },
-    { NM_ITEM,  (STRPTR)"Stream: 1:1 Nativ (Fenster-Groesse)",         NULL,        0, 0, (APTR)MID_STREAM_RES_NATIVE },
+    { NM_ITEM,  (STRPTR)"Stream: 1:1 Nativ (Fenster-Größe)",         NULL,        0, 0, (APTR)MID_STREAM_RES_NATIVE },
     { NM_ITEM,  (STRPTR)"Stream: 720p HD (1280x720) [30-50 FPS]",      NULL,        0, 0, (APTR)MID_STREAM_RES_720P },
     { NM_ITEM,  (STRPTR)"Stream: 540p qHD (960x540) [Turbo]",          NULL,        0, 0, (APTR)MID_STREAM_RES_540P },
     { NM_ITEM,  (STRPTR)"Stream: 1080p FHD (1920x1080)",               NULL,        0, 0, (APTR)MID_STREAM_RES_1080P },
@@ -103,20 +104,20 @@ static struct NewMenu s_main_menu[] = {
     { NM_ITEM,  (STRPTR)"Vollbild / Bildschirm umschalten (F11)",      NULL,        0, 0, (APTR)MID_TOGGLE_SCREEN },
     { NM_ITEM,  (STRPTR)"Statusleiste umschalten",                     NULL,        0, 0, (APTR)MID_TOGGLE_STATUSBAR },
     { NM_ITEM,  NM_BARLABEL,                                           NULL,        0, 0, NULL },
-    { NM_ITEM,  (STRPTR)"Schrift groesser (+)",                        (STRPTR)"+", 0, 0, (APTR)MID_FONT_LARGER },
-    { NM_ITEM,  (STRPTR)"Schrift kleiner (-)",                         (STRPTR)"-", 0, 0, (APTR)MID_FONT_SMALLER },
-    { NM_ITEM,  (STRPTR)"Standard-Schriftgroesse (16px)",              (STRPTR)"0", 0, 0, (APTR)MID_FONT_RESET },
+    { NM_ITEM,  (STRPTR)"Schrift vergrößern (+)",                        (STRPTR)"+", 0, 0, (APTR)MID_FONT_LARGER },
+    { NM_ITEM,  (STRPTR)"Schrift verkleinern (-)",                         (STRPTR)"-", 0, 0, (APTR)MID_FONT_SMALLER },
+    { NM_ITEM,  (STRPTR)"Standard-Schriftgröße (16px)",              (STRPTR)"0", 0, 0, (APTR)MID_FONT_RESET },
 
     { NM_TITLE, (STRPTR)"Navigation",                                  NULL,        0, 0, NULL },
-    { NM_ITEM,  (STRPTR)"Zurueck",                                     (STRPTR)"B", 0, 0, (APTR)MID_NAV_BACK },
-    { NM_ITEM,  (STRPTR)"Vorwaerts",                                   (STRPTR)"F", 0, 0, (APTR)MID_NAV_FORWARD },
+    { NM_ITEM,  (STRPTR)"Zurück",                                     (STRPTR)"B", 0, 0, (APTR)MID_NAV_BACK },
+    { NM_ITEM,  (STRPTR)"Vorwärts",                                   (STRPTR)"F", 0, 0, (APTR)MID_NAV_FORWARD },
     { NM_ITEM,  (STRPTR)"Neu laden",                                   (STRPTR)"R", 0, 0, (APTR)MID_NAV_RELOAD },
     { NM_ITEM,  (STRPTR)"Stopp",                                       (STRPTR)"S", 0, 0, (APTR)MID_NAV_STOP },
     { NM_ITEM,  (STRPTR)"Startseite",                                  (STRPTR)"H", 0, 0, (APTR)MID_NAV_HOME },
 
     { NM_TITLE, (STRPTR)"Lesezeichen",                                 NULL,        0, 0, NULL },
-    { NM_ITEM,  (STRPTR)"Lesezeichen hinzufuegen",                     (STRPTR)"A", 0, 0, (APTR)MID_FAV_ADD },
-    { NM_ITEM,  (STRPTR)"Zu Schnellwahl hinzufuegen",                  NULL,        0, 0, (APTR)MID_QUICK_ADD_CURRENT },
+    { NM_ITEM,  (STRPTR)"Lesezeichen hinzufügen",                     (STRPTR)"A", 0, 0, (APTR)MID_FAV_ADD },
+    { NM_ITEM,  (STRPTR)"Zu Schnellwahl hinzufügen",                  NULL,        0, 0, (APTR)MID_QUICK_ADD_CURRENT },
     { NM_ITEM,  NM_BARLABEL,                                           NULL,        0, 0, NULL },
     { NM_ITEM,  (STRPTR)"Amiga-News.de",                               NULL,        0, 0, (APTR)MID_FAV_AMIGANEWS },
     { NM_ITEM,  (STRPTR)"OS4Depot.net",                                NULL,        0, 0, (APTR)MID_FAV_OS4DEPOT },
@@ -127,6 +128,72 @@ static struct NewMenu s_main_menu[] = {
 
     { NM_END,   NULL,                                                  NULL,        0, 0, NULL }
 };
+
+static void gui_localize_menu(void)
+{
+    for (int i = 0; s_main_menu[i].nm_Type != NM_END; i++) {
+        if (s_main_menu[i].nm_Type == NM_TITLE) {
+            if (strcmp(s_main_menu[i].nm_Label, "Projekt") == 0)
+                s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_PROJECT);
+            else if (strcmp(s_main_menu[i].nm_Label, "Bearbeiten") == 0)
+                s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_EDIT);
+            else if (strcmp(s_main_menu[i].nm_Label, "Ansicht") == 0)
+                s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_VIEW);
+            else if (strcmp(s_main_menu[i].nm_Label, "Navigation") == 0)
+                s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_NAVIGATION);
+            else if (strcmp(s_main_menu[i].nm_Label, "Lesezeichen") == 0)
+                s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_BOOKMARKS);
+        } else if (s_main_menu[i].nm_Type == NM_ITEM) {
+            uint32 mid = (uint32)s_main_menu[i].nm_UserData;
+            switch (mid) {
+                case MID_PROJ_OPEN:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_OPEN_URL); break;
+                case MID_TAB_NEW:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_TAB_NEW); break;
+                case MID_TAB_CLOSE:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_TAB_CLOSE); break;
+                case MID_PROJ_PASSWORDS:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_PASSWORDS); break;
+                case MID_PROJ_DOWNLOADS:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_DOWNLOADS); break;
+                case MID_SETTINGS:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_PREFERENCES); break;
+                case MID_PROJ_ABOUT:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_ABOUT); break;
+                case MID_PROJ_QUIT:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_QUIT); break;
+                case MID_EDIT_CUT:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_CUT); break;
+                case MID_EDIT_COPY:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_COPY); break;
+                case MID_EDIT_PASTE:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_PASTE); break;
+                case MID_FONT_LARGER:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_ZOOM_IN); break;
+                case MID_FONT_SMALLER:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_ZOOM_OUT); break;
+                case MID_FONT_RESET:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_ZOOM_RESET); break;
+                case MID_NAV_BACK:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_BACK); break;
+                case MID_NAV_FORWARD:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_FORWARD); break;
+                case MID_NAV_RELOAD:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_RELOAD); break;
+                case MID_NAV_STOP:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_STOP); break;
+                case MID_NAV_HOME:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_HOME); break;
+                case MID_FAV_ADD:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_ADD_BOOKMARK); break;
+                case MID_QUICK_ADD_CURRENT:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_ADD_QUICKLINK); break;
+                default:
+                    break;
+            }
+        }
+    }
+}
 
 #define MAX_AISS_IMAGES 32
 static Object *s_aiss_images[MAX_AISS_IMAGES];
@@ -2731,11 +2798,11 @@ BOOL gui_init(VortexApp *app)
     /* ------------------------------------------------------------------------
      * Row 1: Navigation, URL Address Bar & Web Search Bar
      * ------------------------------------------------------------------------ */
-    Object *btn_back = create_toolbar_button(GID_BACK, c_back, 6, "<", "Zurueck (Historie)", pub_scr);
-    Object *btn_fwd = create_toolbar_button(GID_FORWARD, c_fwd, 6, ">", "Vorwaerts (Historie)", pub_scr);
-    Object *btn_reload = create_toolbar_button(GID_RELOAD, c_reload, 3, "Neu", "Seite neu laden", pub_scr);
-    Object *btn_stop = create_toolbar_button(GID_STOP, c_stop, 2, "Stopp", "Ladevorgang stoppen", pub_scr);
-    Object *btn_home = create_toolbar_button(GID_HOME, c_home, 2, "Start", "Startseite / Schnellwahl", pub_scr);
+    Object *btn_back = create_toolbar_button(GID_BACK, c_back, 6, GetVString(MSG_BTN_BACK), GetVString(MSG_HINT_BACK), pub_scr);
+    Object *btn_fwd = create_toolbar_button(GID_FORWARD, c_fwd, 6, GetVString(MSG_BTN_FORWARD), GetVString(MSG_HINT_FORWARD), pub_scr);
+    Object *btn_reload = create_toolbar_button(GID_RELOAD, c_reload, 3, GetVString(MSG_BTN_RELOAD), GetVString(MSG_HINT_RELOAD), pub_scr);
+    Object *btn_stop = create_toolbar_button(GID_STOP, c_stop, 2, GetVString(MSG_BTN_STOP), GetVString(MSG_HINT_STOP), pub_scr);
+    Object *btn_home = create_toolbar_button(GID_HOME, c_home, 2, GetVString(MSG_BTN_HOME), GetVString(MSG_HINT_HOME), pub_scr);
 
     struct Image *fav_img = load_favicon_image(app->current_url, pub_scr);
     app->gad_url_favicon = IIntuition->NewObject(NULL, "button.gadget",
@@ -2744,14 +2811,14 @@ BOOL gui_init(VortexApp *app)
         BUTTON_BevelStyle, BVS_NONE,
         BUTTON_Transparent,TRUE,
         fav_img ? GA_Image : TAG_IGNORE, (Tag)fav_img,
-        GA_HintInfo,       "Webseiten-Favicon (Klick fuer Passwort-Manager)",
+        GA_HintInfo,       "Webseiten-Favicon (Klick für Passwort-Manager)",
         TAG_DONE);
 
     app->gad_url = IIntuition->NewObject(NULL, "string.gadget",
         GA_ID,            GID_URL,
         GA_RelVerify,     TRUE,
         GA_TabCycle,      FALSE,
-        GA_HintInfo,      "Webadresse (URL) eingeben und Enter druecken",
+        GA_HintInfo,      "Webadresse (URL) eingeben und Enter drücken",
         STRINGA_MaxChars, VB_MAX_URL_LEN - 1,
         STRINGA_TextVal,  app->current_url[0] ? app->current_url : "",
         s_dark_pens.allocated ? STRINGA_Pens : TAG_IGNORE,
@@ -2760,8 +2827,8 @@ BOOL gui_init(VortexApp *app)
             (uint32)((s_dark_pens.inp_bg_pen << 16) | (s_dark_pens.txt_pen & 0xFFFF)),
         TAG_DONE);
 
-    Object *btn_clear_url = create_toolbar_button(GID_CLEAR_URL, c_clear, 3, "X", "Adresseingabe leeren", pub_scr);
-    Object *btn_go = create_toolbar_button(GID_GO, c_go, 3, "Los", "URL aufrufen oder Suche starten", pub_scr);
+    Object *btn_clear_url = create_toolbar_button(GID_CLEAR_URL, c_clear, 3, GetVString(MSG_BTN_CLEAR), GetVString(MSG_HINT_CLEAR_URL), pub_scr);
+    Object *btn_go = create_toolbar_button(GID_GO, c_go, 3, GetVString(MSG_BTN_GO), GetVString(MSG_HINT_GO), pub_scr);
 
     static const char *const s_search_engine_labels[] = {
         "DuckDuckGo",
@@ -2786,14 +2853,14 @@ BOOL gui_init(VortexApp *app)
         CHOOSER_LabelArray, s_search_engine_labels,
         CHOOSER_Selected,   init_se_sel,
         CHOOSER_MaxLabels,  NUM_SEARCH_ENGINES,
-        GA_HintInfo,        "Suchmaschine waehlen (Standard: DuckDuckGo)",
+        GA_HintInfo,        "Suchmaschine wählen (Standard: DuckDuckGo)",
         TAG_DONE);
 
     app->gad_search = IIntuition->NewObject(NULL, "string.gadget",
         GA_ID,            GID_SEARCH,
         GA_RelVerify,     TRUE,
         GA_TabCycle,      FALSE,
-        GA_HintInfo,      "Suchbegriff eingeben und Enter druecken",
+        GA_HintInfo,      "Suchbegriff eingeben und Enter drücken",
         STRINGA_MaxChars, 255,
         s_dark_pens.allocated ? STRINGA_Pens : TAG_IGNORE,
             (uint32)((s_dark_pens.inp_bg_pen << 16) | (s_dark_pens.txt_pen & 0xFFFF)),
@@ -2801,19 +2868,19 @@ BOOL gui_init(VortexApp *app)
             (uint32)((s_dark_pens.inp_bg_pen << 16) | (s_dark_pens.txt_pen & 0xFFFF)),
         TAG_DONE);
 
-    Object *btn_search = create_toolbar_button(GID_SEARCH_GO, c_search, 4, "Suche", "Suche ausfuehren", pub_scr);
+    Object *btn_search = create_toolbar_button(GID_SEARCH_GO, c_search, 4, "Suche", "Suche ausführen", pub_scr);
 
     app->gad_fav_chooser = IIntuition->NewObject(NULL, "chooser.gadget",
         GA_ID,             GID_FAV_CHOOSER,
         GA_RelVerify,      TRUE,
         CHOOSER_DropDown,  TRUE,
-        CHOOSER_Title,     "Lesezeichen",
+        CHOOSER_Title,     (Tag)GetVString(MSG_CHOOSER_BOOKMARKS),
         CHOOSER_Labels,    &app->fav_chooser_list,
         CHOOSER_MaxLabels, 32,
         TAG_DONE);
     const char *const c_download[] = { "download", "load", "down", "drawer", NULL };
-    Object *btn_downloads = create_toolbar_button(GID_DOWNLOADS, c_download, 4, "Downloads", "Download-Manager oeffnen (Amiga+J)", pub_scr);
-    Object *btn_connect = create_toolbar_button(GID_CONNECT, c_connect, 2, "Verbinden", "Mit Server verbinden", pub_scr);
+    Object *btn_downloads = create_toolbar_button(GID_DOWNLOADS, c_download, 4, GetVString(MSG_BTN_DOWNLOADS), GetVString(MSG_HINT_DOWNLOADS), pub_scr);
+    Object *btn_connect = create_toolbar_button(GID_CONNECT, c_connect, 2, GetVString(MSG_BTN_CONNECT), GetVString(MSG_HINT_CONNECT), pub_scr);
 
     Object *nav_row1 = IIntuition->NewObject(NULL, "layout.gadget",
         LAYOUT_Orientation,  LAYOUT_ORIENT_HORIZ,
@@ -2872,10 +2939,10 @@ BOOL gui_init(VortexApp *app)
 
     /* Schnellwahl '+' und '-' Buttons */
     static const char *const c_add_ql[] = { "add", "plus", "new", NULL };
-    app->gad_quick_add = create_toolbar_button(GID_QUICK_ADD, c_add_ql, 3, "+", "Aktuelle Seite zur Schnellwahl hinzufuegen", pub_scr);
+    app->gad_quick_add = create_toolbar_button(GID_QUICK_ADD, c_add_ql, 3, "+", GetVString(MSG_HINT_ADD_QL), pub_scr);
 
     static const char *const c_rem_ql[] = { "remove", "minus", "delete", NULL };
-    app->gad_quick_remove = create_toolbar_button(GID_QUICK_REMOVE, c_rem_ql, 3, "-", "Aktuelle Schnellwahl entfernen", pub_scr);
+    app->gad_quick_remove = create_toolbar_button(GID_QUICK_REMOVE, c_rem_ql, 3, "-", GetVString(MSG_HINT_REM_QL), pub_scr);
 
 
 
@@ -3082,10 +3149,10 @@ BOOL gui_init(VortexApp *app)
         TAG_DONE);
 
     const char *c_add_tab[] = { "add", "plus", "new" };
-    app->gad_tab_new = create_toolbar_button(GID_TAB_NEW, c_add_tab, 3, "+", "Neuen Tab oeffnen (Amiga+T)", pub_scr);
+    app->gad_tab_new = create_toolbar_button(GID_TAB_NEW, c_add_tab, 3, "+", GetVString(MSG_HINT_NEW_TAB), pub_scr);
 
     const char *c_rem_tab[] = { "remove", "minus", "delete", "close", NULL };
-    app->gad_tab_close = create_toolbar_button(GID_TAB_CLOSE, c_rem_tab, 4, "-", "Aktuellen Tab schliessen (Amiga+W)", pub_scr);
+    app->gad_tab_close = create_toolbar_button(GID_TAB_CLOSE, c_rem_tab, 4, "-", GetVString(MSG_HINT_CLOSE_TAB), pub_scr);
 
     Object *tab_row = IIntuition->NewObject(NULL, "layout.gadget",
         LAYOUT_Orientation,  LAYOUT_ORIENT_HORIZ,
@@ -3168,7 +3235,8 @@ BOOL gui_init(VortexApp *app)
         return FALSE;
     }
 
-    snprintf(app->win_title, sizeof(app->win_title), "VortexBrowser");
+    gui_localize_menu();
+    snprintf(app->win_title, sizeof(app->win_title), "%s", GetVString(MSG_WIN_TITLE));
 
     app->win_obj = IIntuition->NewObject(NULL, "window.class",
         WA_Title,             app->win_title,
@@ -4084,55 +4152,55 @@ void gui_handle_events(VortexApp *app)
                 if (has_link) {
                     menu_obj = PMMENU(hdr_buf),
                         PMA_MenuHandler, &pm_hook,
-                        PMITEM("Link oeffnen"), PMIA_ID, CTX_OPEN_LINK, PMEND,
-                        PMITEM("Link in neuem Tab oeffnen"), PMIA_ID, CTX_OPEN_NEW_WIN, PMEND,
-                        PMITEM("Verknuepftes Ziel speichern unter (ASL)..."), PMIA_ID, CTX_DOWNLOAD_LINK, PMEND,
-                        PMITEM("Link-Adresse in URL-Leiste kopieren"), PMIA_ID, CTX_COPY_LINK_URL, PMEND,
-                        PMITEM("Link zu Lesezeichen hinzufuegen"), PMIA_ID, CTX_FAV_LINK, PMEND,
+                        PMITEM(GetVString(MSG_CTX_OPEN_LINK)), PMIA_ID, CTX_OPEN_LINK, PMEND,
+                        PMITEM(GetVString(MSG_CTX_OPEN_NEW_TAB)), PMIA_ID, CTX_OPEN_NEW_WIN, PMEND,
+                        PMITEM(GetVString(MSG_CTX_DOWNLOAD_LINK)), PMIA_ID, CTX_DOWNLOAD_LINK, PMEND,
+                        PMITEM(GetVString(MSG_CTX_COPY_LINK)), PMIA_ID, CTX_COPY_LINK_URL, PMEND,
+                        PMITEM(GetVString(MSG_CTX_FAV_LINK)), PMIA_ID, CTX_FAV_LINK, PMEND,
                         PMBAR(), PMEND,
-                        PMITEM("Aktuellen Tab schliessen"), PMIA_ID, CTX_CLOSE_TAB, PMEND,
+                        PMITEM(GetVString(MSG_MENU_TAB_CLOSE)), PMIA_ID, CTX_CLOSE_TAB, PMEND,
                         PMBAR(), PMEND,
-                        PMITEM("Zurueck"), PMIA_ID, CTX_BACK, PMEND,
-                        PMITEM("Vorwaerts"), PMIA_ID, CTX_FORWARD, PMEND,
-                        PMITEM("Seite neu laden"), PMIA_ID, CTX_RELOAD, PMEND,
-                        PMITEM("Startseite (Speed-Dial)"), PMIA_ID, CTX_HOME, PMEND,
+                        PMITEM(GetVString(MSG_MENU_BACK)), PMIA_ID, CTX_BACK, PMEND,
+                        PMITEM(GetVString(MSG_MENU_FORWARD)), PMIA_ID, CTX_FORWARD, PMEND,
+                        PMITEM(GetVString(MSG_MENU_RELOAD)), PMIA_ID, CTX_RELOAD, PMEND,
+                        PMITEM(GetVString(MSG_MENU_HOME)), PMIA_ID, CTX_HOME, PMEND,
                         PMBAR(), PMEND,
                         PMITEM(app->prefs.dark_theme ? "Helles Theme" : "Dunkles Theme"), PMIA_ID, CTX_TOGGLE_DARK_THEME, PMEND,
-                        PMITEM("VortexBrowser Hauptmenue..."), PMIA_ID, CTX_MAIN_MENU, PMEND,
+                        PMITEM(GetVString(MSG_CTX_MAIN_MENU)), PMIA_ID, CTX_MAIN_MENU, PMEND,
                     PMEND;
                 } else if (has_media) {
                     menu_obj = PMMENU(hdr_buf),
                         PMA_MenuHandler, &pm_hook,
                         PMITEM("Bild / Medium anzeigen"), PMIA_ID, CTX_OPEN_MEDIA, PMEND,
-                        PMITEM("Bild / Medium speichern unter (ASL)..."), PMIA_ID, CTX_DOWNLOAD_MEDIA, PMEND,
+                        PMITEM(GetVString(MSG_CTX_DOWNLOAD_IMAGE)), PMIA_ID, CTX_DOWNLOAD_MEDIA, PMEND,
                         PMBAR(), PMEND,
-                        PMITEM("Neuen Tab oeffnen"), PMIA_ID, CTX_NEW_TAB, PMEND,
-                        PMITEM("Aktuellen Tab schliessen"), PMIA_ID, CTX_CLOSE_TAB, PMEND,
+                        PMITEM(GetVString(MSG_MENU_TAB_NEW)), PMIA_ID, CTX_NEW_TAB, PMEND,
+                        PMITEM(GetVString(MSG_MENU_TAB_CLOSE)), PMIA_ID, CTX_CLOSE_TAB, PMEND,
                         PMBAR(), PMEND,
-                        PMITEM("Zurueck"), PMIA_ID, CTX_BACK, PMEND,
-                        PMITEM("Vorwaerts"), PMIA_ID, CTX_FORWARD, PMEND,
-                        PMITEM("Seite neu laden"), PMIA_ID, CTX_RELOAD, PMEND,
-                        PMITEM("Startseite (Speed-Dial)"), PMIA_ID, CTX_HOME, PMEND,
+                        PMITEM(GetVString(MSG_MENU_BACK)), PMIA_ID, CTX_BACK, PMEND,
+                        PMITEM(GetVString(MSG_MENU_FORWARD)), PMIA_ID, CTX_FORWARD, PMEND,
+                        PMITEM(GetVString(MSG_MENU_RELOAD)), PMIA_ID, CTX_RELOAD, PMEND,
+                        PMITEM(GetVString(MSG_MENU_HOME)), PMIA_ID, CTX_HOME, PMEND,
                         PMBAR(), PMEND,
                         PMITEM(app->prefs.dark_theme ? "Helles Theme" : "Dunkles Theme"), PMIA_ID, CTX_TOGGLE_DARK_THEME, PMEND,
-                        PMITEM("VortexBrowser Hauptmenue..."), PMIA_ID, CTX_MAIN_MENU, PMEND,
+                        PMITEM(GetVString(MSG_CTX_MAIN_MENU)), PMIA_ID, CTX_MAIN_MENU, PMEND,
                     PMEND;
                 } else {
                     menu_obj = PMMENU(hdr_buf),
                         PMA_MenuHandler, &pm_hook,
-                        PMITEM("Zurueck"), PMIA_ID, CTX_BACK, PMEND,
-                        PMITEM("Vorwaerts"), PMIA_ID, CTX_FORWARD, PMEND,
-                        PMITEM("Seite neu laden"), PMIA_ID, CTX_RELOAD, PMEND,
-                        PMITEM("Startseite (Speed-Dial)"), PMIA_ID, CTX_HOME, PMEND,
+                        PMITEM(GetVString(MSG_MENU_BACK)), PMIA_ID, CTX_BACK, PMEND,
+                        PMITEM(GetVString(MSG_MENU_FORWARD)), PMIA_ID, CTX_FORWARD, PMEND,
+                        PMITEM(GetVString(MSG_MENU_RELOAD)), PMIA_ID, CTX_RELOAD, PMEND,
+                        PMITEM(GetVString(MSG_MENU_HOME)), PMIA_ID, CTX_HOME, PMEND,
                         PMBAR(), PMEND,
-                        PMITEM("Neuen Tab oeffnen"), PMIA_ID, CTX_NEW_TAB, PMEND,
-                        PMITEM("Aktuellen Tab schliessen"), PMIA_ID, CTX_CLOSE_TAB, PMEND,
+                        PMITEM(GetVString(MSG_MENU_TAB_NEW)), PMIA_ID, CTX_NEW_TAB, PMEND,
+                        PMITEM(GetVString(MSG_MENU_TAB_CLOSE)), PMIA_ID, CTX_CLOSE_TAB, PMEND,
                         PMBAR(), PMEND,
                         PMITEM("Aktuelle Seite zu Lesezeichen (+Fav)"), PMIA_ID, CTX_FAV_PAGE, PMEND,
                         PMITEM("Aktuelle Adresse herunterladen (ASL)..."), PMIA_ID, CTX_DOWNLOAD_PAGE, PMEND,
                         PMBAR(), PMEND,
                         PMITEM(app->prefs.dark_theme ? "Helles Theme (Light Mode)" : "Dunkles Theme (Dark Mode)"), PMIA_ID, CTX_TOGGLE_DARK_THEME, PMEND,
-                        PMITEM("VortexBrowser Hauptmenue..."), PMIA_ID, CTX_MAIN_MENU, PMEND,
+                        PMITEM(GetVString(MSG_CTX_MAIN_MENU)), PMIA_ID, CTX_MAIN_MENU, PMEND,
                     PMEND;
                 }
 
@@ -4153,10 +4221,10 @@ void gui_handle_events(VortexApp *app)
                 struct EasyStruct es;
                 memset(&es, 0, sizeof(es));
                 es.es_StructSize   = sizeof(struct EasyStruct);
-                es.es_Title        = (STRPTR)"VortexBrowser Kontextmenue";
+                es.es_Title        = (STRPTR)"VortexBrowser Kontextmenü";
                 if (has_link) {
                     es.es_TextFormat   = (STRPTR)"Link: %s";
-                    es.es_GadgetFormat = (STRPTR)"Link oeffnen|Neuer Tab|Tab schliessen|Herunterladen (ASL)|In URL kopieren|Hauptmenue|Zurueck|Abbrechen";
+                    es.es_GadgetFormat = (STRPTR)"Link öffnen|Neuer Tab|Tab schließen|Herunterladen (ASL)|In URL kopieren|Hauptmenü|Zurück|Abbrechen";
                     LONG choice = IIntuition->EasyRequest(app->win, &es, NULL, app->ctx_menu.link_url);
                     if (choice == 1) selected_id = CTX_OPEN_LINK;
                     else if (choice == 2) selected_id = CTX_OPEN_NEW_WIN;
@@ -4166,8 +4234,8 @@ void gui_handle_events(VortexApp *app)
                     else if (choice == 6) selected_id = CTX_MAIN_MENU;
                     else if (choice == 7) selected_id = CTX_BACK;
                 } else {
-                    es.es_TextFormat   = (STRPTR)"Seiten-Aktion waehlen:";
-                    es.es_GadgetFormat = (STRPTR)"Zurueck|Vorwaerts|Neu laden|Startseite|Neuer Tab|Tab schliessen|Hauptmenue|Abbrechen";
+                    es.es_TextFormat   = (STRPTR)"Seiten-Aktion wählen:";
+                    es.es_GadgetFormat = (STRPTR)"Zurück|Vorwärts|Neu laden|Startseite|Neuer Tab|Tab schließen|Hauptmenü|Abbrechen";
                     LONG choice = IIntuition->EasyRequest(app->win, &es, NULL);
                     if (choice == 1) selected_id = CTX_BACK;
                     else if (choice == 2) selected_id = CTX_FORWARD;

@@ -28,12 +28,12 @@ INCLUDES = -I../common \
            -I$(SDK)/local/common/include \
            -I$(SDK)/local/newlib/include
 
-CFLAGS         = $(OPTIMIZE) -Wall -Wno-deprecated-declarations $(INCLUDES)
-CFLAGS_ALTIVEC = $(OPTIMIZE_ALTIVEC) -Wall -Wno-deprecated-declarations $(INCLUDES)
+CFLAGS         = $(OPTIMIZE) -Wall -Wno-deprecated-declarations -finput-charset=UTF-8 -fexec-charset=ISO-8859-1 $(INCLUDES)
+CFLAGS_ALTIVEC = $(OPTIMIZE_ALTIVEC) -Wall -Wno-deprecated-declarations -finput-charset=UTF-8 -fexec-charset=ISO-8859-1 $(INCLUDES)
 
 LDFLAGS = -L../sdk_va -L$(SDK)/local/newlib/lib -lavcodec -lavutil -lva -llz4 -ljpeg -lauto
 
-SRCS_COMMON = src/net.c src/renderer.c src/favorites.c src/download.c src/audio.c src/prefs.c src/clipboard.c src/passwords.c
+SRCS_COMMON = src/net.c src/renderer.c src/favorites.c src/download.c src/audio.c src/prefs.c src/clipboard.c src/passwords.c src/locale_strings.c
 SRCS_ALL    = src/main.c src/gui.c src/gui_prefs.c src/gui_passwords.c src/gui_download.c $(SRCS_COMMON)
 
 # Universal objects (Hybrid: scalar app code + isolated AltiVec SIMD unit for dynamic dispatch)
@@ -46,7 +46,16 @@ OBJS_PURE_ALTIVEC = $(patsubst src/%.c,$(OBJS_ALTIVEC_DIR)/%.o,$(SRCS_ALL)) $(OB
 TARGET_UNIVERSAL = VortexBrowser
 TARGET_ALTIVEC   = VortexBrowser-AltiVec
 
-all: $(TARGET_UNIVERSAL) $(TARGET_ALTIVEC)
+all: catalogs $(TARGET_UNIVERSAL) $(TARGET_ALTIVEC)
+
+catalogs:
+	@mkdir -p catalogs/deutsch catalogs/english catalogs/italian catalogs/italiano catalogs/french catalogs/francais
+	flexcat catalogs/VortexBrowser.cd catalogs/deutsch/VortexBrowser.ct CATALOG=catalogs/deutsch/VortexBrowser.catalog NOOPTIM
+	flexcat catalogs/VortexBrowser.cd catalogs/english/VortexBrowser.ct CATALOG=catalogs/english/VortexBrowser.catalog NOOPTIM
+	flexcat catalogs/VortexBrowser.cd catalogs/italian/VortexBrowser.ct CATALOG=catalogs/italian/VortexBrowser.catalog NOOPTIM
+	flexcat catalogs/VortexBrowser.cd catalogs/italiano/VortexBrowser.ct CATALOG=catalogs/italiano/VortexBrowser.catalog NOOPTIM
+	flexcat catalogs/VortexBrowser.cd catalogs/french/VortexBrowser.ct CATALOG=catalogs/french/VortexBrowser.catalog NOOPTIM
+	flexcat catalogs/VortexBrowser.cd catalogs/francais/VortexBrowser.ct CATALOG=catalogs/francais/VortexBrowser.catalog NOOPTIM
 
 $(TARGET_UNIVERSAL): $(OBJS_UNIVERSAL)
 	$(CC) $(OBJS_UNIVERSAL) -o $(TARGET_UNIVERSAL) $(LDFLAGS)

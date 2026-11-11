@@ -14,6 +14,7 @@
 #include "app.h"
 #include "download.h"
 #include "gui_download.h"
+#include "locale_strings.h"
 
 extern struct ListBrowserIFace *IListBrowser;
 
@@ -222,12 +223,12 @@ void gui_download_manager_update(VortexApp *app)
         if (active_count > 0) {
             char spd_buf[32];
             format_speed(total_spd, spd_buf, sizeof(spd_buf));
-            snprintf(summary, sizeof(summary), "%d aktiver Download%s (%s) | %d abgeschlossen",
+            snprintf(summary, sizeof(summary), GetVString(MSG_DL_STATUS_ACTIVE),
                      active_count, (active_count > 1 ? "s" : ""), spd_buf, completed_count);
         } else if (completed_count > 0) {
-            snprintf(summary, sizeof(summary), "Alle Downloads abgeschlossen (%d Dateien)", completed_count);
+            snprintf(summary, sizeof(summary), GetVString(MSG_DL_STATUS_ALL_DONE), completed_count);
         } else {
-            snprintf(summary, sizeof(summary), "Keine aktiven Downloads");
+            snprintf(summary, sizeof(summary), "%s", GetVString(MSG_DL_STATUS_NONE));
         }
 
         IIntuition->SetGadgetAttrs((struct Gadget *)app->dl_gad_status_txt, app->dl_win, NULL,
@@ -257,35 +258,35 @@ void gui_open_download_manager(VortexApp *app)
     if (!app->dl_col_info) {
         app->dl_col_info = IListBrowser->AllocLBColumnInfo(7,
             LBCIA_Column, 0,
-                LBCIA_Title, "Datei",
+                LBCIA_Title, GetVString(MSG_DL_COL_FILE),
                 LBCIA_Weight, 26,
                 LBCIA_DraggableSeparator, TRUE,
             LBCIA_Column, 1,
-                LBCIA_Title, "Status",
+                LBCIA_Title, GetVString(MSG_DL_COL_STATUS),
                 LBCIA_Weight, 12,
                 LBCIA_DraggableSeparator, TRUE,
             LBCIA_Column, 2,
-                LBCIA_Title, "Groesse",
+                LBCIA_Title, GetVString(MSG_DL_COL_SIZE),
                 LBCIA_Weight, 16,
                 LBCIA_DraggableSeparator, TRUE,
                 LBCIA_HorizJustify, LCJ_RIGHT,
             LBCIA_Column, 3,
-                LBCIA_Title, "%",
+                LBCIA_Title, GetVString(MSG_DL_COL_PERCENT),
                 LBCIA_Weight, 8,
                 LBCIA_DraggableSeparator, TRUE,
                 LBCIA_HorizJustify, LCJ_RIGHT,
             LBCIA_Column, 4,
-                LBCIA_Title, "Speed",
+                LBCIA_Title, GetVString(MSG_DL_COL_SPEED),
                 LBCIA_Weight, 12,
                 LBCIA_DraggableSeparator, TRUE,
                 LBCIA_HorizJustify, LCJ_RIGHT,
             LBCIA_Column, 5,
-                LBCIA_Title, "Restzeit",
+                LBCIA_Title, GetVString(MSG_DL_COL_ETA),
                 LBCIA_Weight, 10,
                 LBCIA_DraggableSeparator, TRUE,
                 LBCIA_HorizJustify, LCJ_CENTER,
             LBCIA_Column, 6,
-                LBCIA_Title, "Zielpfad",
+                LBCIA_Title, GetVString(MSG_DL_COL_TARGET),
                 LBCIA_Weight, 16,
                 LBCIA_DraggableSeparator, TRUE,
             TAG_DONE);
@@ -307,7 +308,7 @@ void gui_open_download_manager(VortexApp *app)
     app->dl_gad_status_txt = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,                GID_DL_STATUS_TXT,
         GA_ReadOnly,          TRUE,
-        GA_Text,              (Tag)"Keine aktiven Downloads",
+        GA_Text,              (Tag)GetVString(MSG_DL_STATUS_NONE),
         BUTTON_Justification, BCJ_LEFT,
         BUTTON_BevelStyle,    BVS_FIELD,
         TAG_DONE);
@@ -315,43 +316,43 @@ void gui_open_download_manager(VortexApp *app)
     app->dl_gad_btn_open_file = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_DL_BTN_OPEN_FILE,
         GA_RelVerify, TRUE,
-        GA_Text,      "Datei oeffnen",
-        GA_HintInfo,  "Heruntergeladene Datei mit Standard-Programm ausfuehren (auch Doppelklick in Liste)",
+        GA_Text,      GetVString(MSG_DL_BTN_OPEN_FILE),
+        GA_HintInfo,  GetVString(MSG_DL_HINT_OPEN_FILE),
         TAG_DONE);
 
     app->dl_gad_btn_open_dir = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_DL_BTN_OPEN_DIR,
         GA_RelVerify, TRUE,
-        GA_Text,      "Ordner oeffnen",
-        GA_HintInfo,  "Zielordner der Datei auf der Workbench oeffnen",
+        GA_Text,      GetVString(MSG_DL_BTN_OPEN_DIR),
+        GA_HintInfo,  GetVString(MSG_DL_HINT_OPEN_DIR),
         TAG_DONE);
 
     app->dl_gad_btn_cancel = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_DL_BTN_CANCEL,
         GA_RelVerify, TRUE,
-        GA_Text,      "Abbrechen",
-        GA_HintInfo,  "Laufenden Download stoppen und abbrechen",
+        GA_Text,      GetVString(MSG_DL_BTN_CANCEL),
+        GA_HintInfo,  GetVString(MSG_DL_HINT_CANCEL),
         TAG_DONE);
 
     app->dl_gad_btn_remove = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_DL_BTN_REMOVE,
         GA_RelVerify, TRUE,
-        GA_Text,      "Eintrag loeschen",
-        GA_HintInfo,  "Ausgewaehlten Eintrag aus der Liste entfernen",
+        GA_Text,      GetVString(MSG_DL_BTN_REMOVE),
+        GA_HintInfo,  GetVString(MSG_DL_HINT_REMOVE),
         TAG_DONE);
 
     app->dl_gad_btn_clear = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_DL_BTN_CLEAR,
         GA_RelVerify, TRUE,
-        GA_Text,      "Aufraeumen",
-        GA_HintInfo,  "Alle abgeschlossenen und abgebrochenen Downloads aus der Liste entfernen",
+        GA_Text,      GetVString(MSG_DL_BTN_CLEANUP),
+        GA_HintInfo,  GetVString(MSG_DL_HINT_CLEANUP),
         TAG_DONE);
 
     app->dl_gad_btn_close = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_DL_BTN_CLOSE,
         GA_RelVerify, TRUE,
-        GA_Text,      "Schliessen",
-        GA_HintInfo,  "Download-Manager Fenster schliessen (Downloads laufen im Hintergrund weiter)",
+        GA_Text,      GetVString(MSG_DL_BTN_CLOSE),
+        GA_HintInfo,  GetVString(MSG_DL_HINT_CLOSE),
         TAG_DONE);
 
     Object *btn_row = IIntuition->NewObject(NULL, "layout.gadget",
@@ -387,8 +388,8 @@ void gui_open_download_manager(VortexApp *app)
     if (!root_layout) return;
 
     app->dl_win_obj = IIntuition->NewObject(NULL, "window.class",
-        WA_Title,             "Downloads - VortexBrowser",
-        WA_ScreenTitle,       "VortexBrowser",
+        WA_Title,             (Tag)GetVString(MSG_DL_WIN_TITLE),
+        WA_ScreenTitle,       (Tag)"VortexBrowser",
         target_scr ? WA_CustomScreen : TAG_IGNORE, (Tag)target_scr,
         WA_CloseGadget,       TRUE,
         WA_DepthGadget,       TRUE,

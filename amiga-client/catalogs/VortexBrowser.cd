@@ -1,0 +1,360 @@
+; Catalog Description file for VortexBrowser
+; Built-in language: English
+;
+; Format: MSG_ID (ID//)
+; Default English String
+;
+MSG_WIN_TITLE (1//)
+VortexBrowser
+;
+MSG_DL_WIN_TITLE (2//)
+Downloads - VortexBrowser
+;
+MSG_PW_WIN_TITLE (3//)
+Password Manager - VortexBrowser
+;
+MSG_PREFS_WIN_TITLE (4//)
+Settings - VortexBrowser
+;
+MSG_MENU_PROJECT (10//)
+Project
+;
+MSG_MENU_OPEN_URL (11//)
+Open URL...
+;
+MSG_MENU_OPEN_FILE (12//)
+Open Local File...
+;
+MSG_MENU_SAVE_SOURCE (13//)
+Save HTML Source...
+;
+MSG_MENU_PRINT (14//)
+Print Page...
+;
+MSG_MENU_ABOUT (15//)
+About VortexBrowser...
+;
+MSG_MENU_QUIT (16//)
+Quit
+;
+MSG_MENU_NAVIGATION (20//)
+Navigation
+;
+MSG_MENU_BACK (21//)
+Back
+;
+MSG_MENU_FORWARD (22//)
+Forward
+;
+MSG_MENU_RELOAD (23//)
+Reload
+;
+MSG_MENU_STOP (24//)
+Stop Loading
+;
+MSG_MENU_HOME (25//)
+Home
+;
+MSG_MENU_TAB_NEW (26//)
+Open New Tab
+;
+MSG_MENU_TAB_CLOSE (27//)
+Close Current Tab
+;
+MSG_MENU_BOOKMARKS (30//)
+Bookmarks
+;
+MSG_MENU_BOOKMARKS_BAR (31//)
+Bookmarks Toolbar
+;
+MSG_MENU_ADD_BOOKMARK (32//)
+Add Bookmark
+;
+MSG_MENU_ADD_QUICKLINK (33//)
+Add to QuickLinks
+;
+MSG_MENU_VIEW (40//)
+View
+;
+MSG_MENU_ZOOM_IN (41//)
+Zoom In (+)
+;
+MSG_MENU_ZOOM_OUT (42//)
+Zoom Out (-)
+;
+MSG_MENU_ZOOM_RESET (43//)
+Default Zoom (100%)
+;
+MSG_MENU_FULLSCREEN (44//)
+Toggle Fullscreen
+;
+MSG_MENU_DARK_MODE (45//)
+Dark Mode
+;
+MSG_MENU_SETTINGS (50//)
+Settings
+;
+MSG_MENU_PREFERENCES (51//)
+Preferences...
+;
+MSG_MENU_PASSWORDS (52//)
+Password Manager...
+;
+MSG_MENU_DOWNLOADS (53//)
+Download Manager...
+;
+MSG_MENU_EDIT (60//)
+Edit
+;
+MSG_MENU_CUT (61//)
+Cut
+;
+MSG_MENU_COPY (62//)
+Copy
+;
+MSG_MENU_PASTE (63//)
+Paste
+;
+MSG_BTN_BACK (100//)
+Back
+;
+MSG_BTN_FORWARD (101//)
+Forward
+;
+MSG_BTN_RELOAD (102//)
+Reload
+;
+MSG_BTN_STOP (103//)
+Stop
+;
+MSG_BTN_HOME (104//)
+Home
+;
+MSG_BTN_GO (105//)
+Go
+;
+MSG_BTN_DOWNLOADS (106//)
+Downloads
+;
+MSG_BTN_CONNECT (107//)
+Connect
+;
+MSG_BTN_DISCONNECT (108//)
+Disconnect
+;
+MSG_BTN_CLEAR (109//)
+Clear
+;
+MSG_CHOOSER_BOOKMARKS (110//)
+Bookmarks
+;
+MSG_HINT_BACK (120//)
+Navigate Back (Amiga+Left)
+;
+MSG_HINT_FORWARD (121//)
+Navigate Forward (Amiga+Right)
+;
+MSG_HINT_RELOAD (122//)
+Reload Page (Amiga+R)
+;
+MSG_HINT_STOP (123//)
+Stop Loading (Esc)
+;
+MSG_HINT_HOME (124//)
+Open Home Page (Amiga+H)
+;
+MSG_HINT_CLEAR_URL (125//)
+Clear Address Bar
+;
+MSG_HINT_GO (126//)
+Open URL or start web search
+;
+MSG_HINT_DOWNLOADS (127//)
+Open Download Manager (Amiga+J)
+;
+MSG_HINT_CONNECT (128//)
+Connect to Server
+;
+MSG_HINT_ADD_QL (129//)
+Add Current Page to QuickLinks
+;
+MSG_HINT_REM_QL (130//)
+Remove QuickLink
+;
+MSG_HINT_NEW_TAB (131//)
+Open New Tab (Amiga+T)
+;
+MSG_HINT_CLOSE_TAB (132//)
+Close Current Tab (Amiga+W)
+;
+MSG_DL_COL_FILE (200//)
+File
+;
+MSG_DL_COL_STATUS (201//)
+Status
+;
+MSG_DL_COL_SIZE (202//)
+Size
+;
+MSG_DL_COL_PERCENT (203//)
+%
+;
+MSG_DL_COL_SPEED (204//)
+Speed
+;
+MSG_DL_COL_ETA (205//)
+Time Left
+;
+MSG_DL_COL_TARGET (206//)
+Target Path
+;
+MSG_DL_STATUS_NONE (210//)
+No active downloads
+;
+MSG_DL_STATUS_ACTIVE (211//)
+%d active download%s (%s) | %d completed
+;
+MSG_DL_STATUS_ALL_DONE (212//)
+All downloads completed (%d files)
+;
+MSG_DL_BTN_OPEN_FILE (220//)
+Open File
+;
+MSG_DL_HINT_OPEN_FILE (221//)
+Execute downloaded file with default viewer (or double-click)
+;
+MSG_DL_BTN_OPEN_DIR (222//)
+Open Drawer
+;
+MSG_DL_HINT_OPEN_DIR (223//)
+Open target drawer on Workbench
+;
+MSG_DL_BTN_CANCEL (224//)
+Cancel
+;
+MSG_DL_HINT_CANCEL (225//)
+Cancel and abort running download
+;
+MSG_DL_BTN_REMOVE (226//)
+Delete Entry
+;
+MSG_DL_HINT_REMOVE (227//)
+Remove selected entry from list
+;
+MSG_DL_BTN_CLEANUP (228//)
+Clean Up
+;
+MSG_DL_HINT_CLEANUP (229//)
+Remove all completed and canceled downloads from list
+;
+MSG_DL_BTN_CLOSE (230//)
+Close
+;
+MSG_DL_HINT_CLOSE (231//)
+Close Download Manager window (downloads continue in background)
+;
+MSG_STATUS_READY (300//)
+Ready.
+;
+MSG_STATUS_CONNECTING (301//)
+Connecting to server %s:%u...
+;
+MSG_STATUS_CONNECTED (302//)
+Connected to %s:%u
+;
+MSG_STATUS_DISCONNECTED (303//)
+Disconnected from server
+;
+MSG_STATUS_LOADING (304//)
+Loading: %s
+;
+MSG_SEARCH_PROMPT (310//)
+Search (%s): %s
+;
+MSG_CTX_OPEN_LINK (400//)
+Open Link
+;
+MSG_CTX_OPEN_NEW_TAB (401//)
+Open Link in New Tab
+;
+MSG_CTX_FAV_LINK (402//)
+Add Link to Bookmarks
+;
+MSG_CTX_DOWNLOAD_LINK (403//)
+Download Link Target...
+;
+MSG_CTX_COPY_LINK (404//)
+Copy Link URL
+;
+MSG_CTX_COPY_IMAGE_URL (405//)
+Copy Image URL
+;
+MSG_CTX_DOWNLOAD_IMAGE (406//)
+Download Image...
+;
+MSG_CTX_MAIN_MENU (407//)
+Main Menu...
+;
+MSG_GEN_YES (500//)
+Yes
+;
+MSG_GEN_NO (501//)
+No
+;
+MSG_GEN_OK (502//)
+OK
+;
+MSG_GEN_CANCEL (503//)
+Cancel
+;
+MSG_PREFS_SAVE (510//)
+Save
+;
+MSG_PREFS_USE (511//)
+Use
+;
+MSG_PREFS_CANCEL (512//)
+Cancel
+;
+MSG_PREFS_TAB_SERVER (520//)
+Server
+;
+MSG_PREFS_TAB_DISPLAY (521//)
+Display
+;
+MSG_PREFS_TAB_BROWSER (522//)
+Browser
+;
+MSG_PREFS_TAB_QUICKDIAL (523//)
+Quick Dial
+;
+MSG_PREFS_TAB_BOOKMARKS (524//)
+Bookmarks
+;
+MSG_PREFS_TAB_DOWNLOADS (525//)
+Downloads
+;
+MSG_PREFS_TAB_SYSTEM (526//)
+System
+;
+MSG_PREFS_TAB_ABOUT (527//)
+About
+;
+MSG_PREFS_ADD (530//)
+Add
+;
+MSG_PREFS_UPDATE (531//)
+Update
+;
+MSG_PREFS_REMOVE (532//)
+Delete
+;
+MSG_PREFS_MOVE_UP (533//)
+Move Up
+;
+MSG_PREFS_MOVE_DOWN (534//)
+Move Down
+;
+MSG_PREFS_CHOOSE_DIR (535//)
+Choose Drawer...
+;

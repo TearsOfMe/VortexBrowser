@@ -31,6 +31,7 @@ extern struct ListBrowserIFace *IListBrowser;
 #include "net.h"
 #include "renderer.h"
 #include "gui_download.h"
+#include "locale_strings.h"
 
 enum {
     GID_P_TAB = 1,
@@ -98,7 +99,7 @@ enum {
 static const char *const s_tab_labels[] = {
     "Server & Streaming",
     "Schnellwahl",
-    "Bildschirm & Aufloesung",
+    "Bildschirm & Auflösung",
     "Schrift & Zeichensatz",
     "Lesezeichen",
     "Downloads",
@@ -106,7 +107,7 @@ static const char *const s_tab_labels[] = {
 };
 
 static const char *const s_server_preset_labels[] = {
-    "Sekundaerer Server (127.0.0.1:9757)",
+    "Sekundärer Server (127.0.0.1:9757)",
     "Standard Server (127.0.0.1:7788)",
     "Benutzerdefiniert (Manuelle Adresse)",
     NULL
@@ -126,14 +127,14 @@ static const char *const s_res_labels[] = {
     "1920 x 1080 (Full HD)",
     "800 x 600 (SVGA)",
     "1280 x 1024 (SXGA)",
-    "Automatisch anpassen (Fenstergroesse)",
+    "Automatisch anpassen (Fenstergröße)",
     "Benutzerdefiniert (Eigene B x H)",
     NULL
 };
 
 /* Stream Resolution (Server stream resolution scaled by GPU) */
 static const char *const s_stream_res_labels[] = {
-    "1:1 Fenster-Groesse (Standard / Nativ)",
+    "1:1 Fenster-Größe (Standard / Nativ)",
     "720p HD (1280x720) [30-50 FPS / Video-Boost]",
     "540p qHD (960x540) [Turbo]",
     "1080p Full HD (1920x1080)",
@@ -161,14 +162,14 @@ static const char *const s_theme_labels[] = {
 
 static const char *const s_screen_mode_labels[] = {
     "Workbench (Fenster-Modus)",
-    "Eigener Public Screen (Manuelle Aufloesung / Vollbild)",
+    "Eigener Public Screen (Manuelle Auflösung / Vollbild)",
     "Workbench klonen (Eigener Screen wie Workbench)",
     NULL
 };
 
 /* GUI Charset and Font sizes */
 static const char *const s_gui_charset_labels[] = {
-    "ISO-8859-1 (Westeuropaeisch / Amiga Standard)",
+    "ISO-8859-1 (Westeuropäisch / Amiga Standard)",
     "UTF-8 (Unicode)",
     "Windows-1252 (ANSI)",
     "ISO-8859-15 (Westeuropa mit Euro)",
@@ -179,15 +180,15 @@ static const char *const s_gui_fontsize_labels[] = {
     "Standard (Workbench-Systemschrift)",
     "Klein (8 pt)",
     "Mittel (10 pt)",
-    "Gross (12 pt)",
-    "Sehr gross (14 pt)",
+    "Groß (12 pt)",
+    "Sehr groß (14 pt)",
     NULL
 };
 
 /* Web Charset, Zoom & Font */
 static const char *const s_web_charset_labels[] = {
     "UTF-8 (Internationaler Standard)",
-    "ISO-8859-1 (Westeuropaeisch)",
+    "ISO-8859-1 (Westeuropäisch)",
     "Windows-1252 (Westeuropa / Windows)",
     "Automatisch erkennen",
     NULL
@@ -195,9 +196,9 @@ static const char *const s_web_charset_labels[] = {
 
 static const char *const s_web_fontsize_labels[] = {
     "16 px (Standard)",
-    "18 px (Gross)",
-    "20 px (Sehr gross)",
-    "22 px (Extra gross)",
+    "18 px (Groß)",
+    "20 px (Sehr groß)",
+    "22 px (Extra groß)",
     "24 px (Riesig)",
     "14 px (Kompakt)",
     "12 px (Klein)",
@@ -208,10 +209,10 @@ static const uint16 s_web_fontsize_values[] = { 16, 18, 20, 22, 24, 14, 12 };
 
 static const char *const s_web_zoom_labels[] = {
     "100% (Normal)",
-    "110% (Leicht vergroessert)",
-    "125% (Gross - empfohlen fuer 1024x768 / HD)",
-    "150% (Sehr gross)",
-    "175% (Extra gross)",
+    "110% (Leicht vergrößert)",
+    "125% (Groß - empfohlen für 1024x768 / HD)",
+    "150% (Sehr groß)",
+    "175% (Extra groß)",
     "200% (Maximal)",
     "90% (Kompakt)",
     "75% (Sehr klein)",
@@ -269,7 +270,7 @@ static void invoke_screen_mode_requester(struct Window *win, uint32 *io_mode_id,
 
     struct ScreenModeRequester *sm_req = (struct ScreenModeRequester *)IAsl->AllocAslRequestTags(
         ASL_ScreenModeRequest,
-        ASLSM_TitleText,            (Tag)"VortexBrowser Bildschirm-Modus waehlen",
+        ASLSM_TitleText,            (Tag)"VortexBrowser Bildschirm-Modus wählen",
         ASLSM_Window,               (Tag)win,
         ASLSM_SleepWindow,          TRUE,
         ASLSM_InitialDisplayID,     (*io_mode_id ? *io_mode_id : INVALID_ID),
@@ -445,7 +446,7 @@ void gui_prefs_open(VortexApp *app)
         GA_RelVerify,       TRUE,
         CHOOSER_LabelArray, s_server_preset_labels,
         CHOOSER_Selected,   init_srv_preset,
-        GA_HintInfo,        "Vorkonfigurierten Server waehlen oder manuell anpassen",
+        GA_HintInfo,        "Vorkonfigurierten Server wählen oder manuell anpassen",
         TAG_DONE);
 
     char host_str[128];
@@ -478,7 +479,7 @@ void gui_prefs_open(VortexApp *app)
         GA_RelVerify,       TRUE,
         CHOOSER_LabelArray, s_stream_res_labels,
         CHOOSER_Selected,   init_stream_sel,
-        GA_HintInfo,        "Server-Aufloesung waehlen (wird per GPU/Composite skaliert)",
+        GA_HintInfo,        "Server-Auflösung wählen (wird per GPU/Composite skaliert)",
         TAG_DONE);
 
     uint16 init_fps_sel = 1; /* Default: 25 FPS */
@@ -512,7 +513,7 @@ void gui_prefs_open(VortexApp *app)
         SLIDER_LevelFormat, (Tag)"%ld %%",
         SLIDER_LevelPlace,  PLACETEXT_RIGHT,
         SLIDER_LevelDomain, (Tag)"100 %",
-        GA_HintInfo,        "JPEG-Stream-Qualitaet (Standard: 100%% = maximale Bildschaerfe)",
+        GA_HintInfo,        "JPEG-Stream-Qualität (Standard: 100%% = maximale Bildschärfe)",
         TAG_DONE);
 
     Object *gad_stream_mode = IIntuition->NewObject(NULL, "chooser.gadget",
@@ -544,9 +545,9 @@ void gui_prefs_open(VortexApp *app)
     Object *gad_dyn_video = IIntuition->NewObject(NULL, "checkbox.gadget",
         GA_ID,            GID_P_SERVER_DYN_VIDEO,
         GA_RelVerify,     TRUE,
-        GA_Text,          (Tag)"Dynamische JPEG-Qualitaet bei Video (Video-Boost)",
+        GA_Text,          (Tag)"Dynamische JPEG-Qualität bei Video (Video-Boost)",
         CHECKBOX_Checked, app->prefs.dynamic_video_quality,
-        GA_HintInfo,      "Bei Video-Wiedergabe Qualitaet temporaer auf 60%% fuer 30-50 FPS anpassen",
+        GA_HintInfo,      "Bei Video-Wiedergabe Qualität temporär auf 60%% für 30-50 FPS anpassen",
         TAG_DONE);
 
     Object *gad_save_exit = IIntuition->NewObject(NULL, "checkbox.gadget",
@@ -554,7 +555,7 @@ void gui_prefs_open(VortexApp *app)
         GA_RelVerify,     TRUE,
         GA_Text,          (Tag)"Aktuellen Server beim Beenden automatisch speichern",
         CHECKBOX_Checked, app->prefs.save_server_on_exit,
-        GA_HintInfo,      "Zuletzt genutzten Server fuer den naechsten Start merken",
+        GA_HintInfo,      "Zuletzt genutzten Server für den nächsten Start merken",
         TAG_DONE);
 
     Object *server_vlayout = IIntuition->NewObject(NULL, "layout.gadget",
@@ -762,7 +763,7 @@ void gui_prefs_open(VortexApp *app)
     Object *btn_ql_add = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_P_QL_ADD,
         GA_RelVerify, TRUE,
-        GA_Text,      "Neu / Hinzufuegen",
+        GA_Text,      "Neu / Hinzufügen",
         TAG_DONE);
 
     Object *btn_ql_update = IIntuition->NewObject(NULL, "button.gadget",
@@ -1269,7 +1270,7 @@ void gui_prefs_open(VortexApp *app)
     Object *btn_fav_add = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_P_FAV_ADD,
         GA_RelVerify, TRUE,
-        GA_Text,      "Hinzufuegen",
+        GA_Text,      "Hinzufügen",
         TAG_DONE);
 
     Object *btn_fav_update = IIntuition->NewObject(NULL, "button.gadget",
@@ -1281,7 +1282,7 @@ void gui_prefs_open(VortexApp *app)
     Object *btn_fav_delete = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_P_FAV_DELETE,
         GA_RelVerify, TRUE,
-        GA_Text,      "Loeschen",
+        GA_Text,      "Löschen",
         TAG_DONE);
 
     Object *fav_vlayout = IIntuition->NewObject(NULL, "layout.gadget",
@@ -1344,8 +1345,8 @@ void gui_prefs_open(VortexApp *app)
     Object *btn_dl_dir_req = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_P_DL_DIR_REQ,
         GA_RelVerify, TRUE,
-        GA_Text,      "Ordner waehlen...",
-        GA_HintInfo,  "Download-Verzeichnis ueber Dateidialog auswaehlen",
+        GA_Text,      "Ordner wählen...",
+        GA_HintInfo,  "Download-Verzeichnis über Dateidialog auswählen",
         TAG_DONE);
 
     Object *gad_dl_always_ask = IIntuition->NewObject(NULL, "checkbox.gadget",
@@ -1358,8 +1359,8 @@ void gui_prefs_open(VortexApp *app)
     Object *btn_dl_open_mgr = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_P_DL_OPEN_MGR,
         GA_RelVerify, TRUE,
-        GA_Text,      "Download-Manager jetzt oeffnen...",
-        GA_HintInfo,  "Oeffnet das Download-Fenster",
+        GA_Text,      "Download-Manager jetzt öffnen...",
+        GA_HintInfo,  "Öffnet das Download-Fenster",
         TAG_DONE);
 
     Object *dl_vlayout = IIntuition->NewObject(NULL, "layout.gadget",
@@ -1440,22 +1441,22 @@ void gui_prefs_open(VortexApp *app)
     Object *btn_save = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_P_SAVE,
         GA_RelVerify, TRUE,
-        GA_Text,      "Speichern",
+        GA_Text,      GetVString(MSG_PREFS_SAVE),
         GA_HintInfo,  "Einstellungen dauerhaft in ENVARC: und ENV: speichern und anwenden",
         TAG_DONE);
 
     Object *btn_use = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_P_USE,
         GA_RelVerify, TRUE,
-        GA_Text,      "Benutzen",
-        GA_HintInfo,  "Einstellungen temporaer fuer diese Sitzung anwenden",
+        GA_Text,      GetVString(MSG_PREFS_USE),
+        GA_HintInfo,  "Einstellungen temporär für diese Sitzung anwenden",
         TAG_DONE);
 
     Object *btn_cancel = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_P_CANCEL,
         GA_RelVerify, TRUE,
-        GA_Text,      "Abbrechen",
-        GA_HintInfo,  "Aenderungen verwerfen und Fenster schliessen",
+        GA_Text,      GetVString(MSG_PREFS_CANCEL),
+        GA_HintInfo,  "Änderungen verwerfen und Fenster schließen",
         TAG_DONE);
 
     Object *bottom_bar = IIntuition->NewObject(NULL, "layout.gadget",
@@ -1489,8 +1490,8 @@ void gui_prefs_open(VortexApp *app)
     struct Screen *target_scr = (app && app->win && app->win->WScreen) ? app->win->WScreen : (app ? app->custom_screen : NULL);
 
     Object *win_obj = IIntuition->NewObject(NULL, "window.class",
-        WA_Title,             "VortexBrowser Voreinstellungen",
-        WA_ScreenTitle,       "VortexBrowser",
+        WA_Title,             (Tag)GetVString(MSG_PREFS_WIN_TITLE),
+        WA_ScreenTitle,       (Tag)"VortexBrowser",
         target_scr ? WA_CustomScreen : TAG_IGNORE, (Tag)target_scr,
         WA_CloseGadget,       TRUE,
         WA_DepthGadget,       TRUE,
@@ -1742,8 +1743,8 @@ void gui_prefs_open(VortexApp *app)
                             ASL_FileRequest,
                             ASLFR_Window,        win,
                             ASLFR_SleepWindow,   TRUE,
-                            ASLFR_TitleText,     "Download-Verzeichnis waehlen",
-                            ASLFR_PositiveText,  "Auswaehlen",
+                            ASLFR_TitleText,     "Download-Verzeichnis wählen",
+                            ASLFR_PositiveText,  "Auswählen",
                             ASLFR_DrawersOnly,   TRUE,
                             ASLFR_InitialDrawer, (Tag)(cur_dir[0] ? cur_dir : "RAM:"),
                             TAG_DONE);
