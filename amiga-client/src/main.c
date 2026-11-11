@@ -28,6 +28,7 @@
 #include "audio.h"
 #include "clipboard.h"
 #include "passwords.h"
+#include "locale_strings.h"
 
 static const char *used_verstag __attribute__((used)) = "\0$VER: VortexBrowser 0.99 RC3 (06.11.2026)";
 static const char *used_stack   __attribute__((used)) = "\0$STACK:524288";
@@ -298,6 +299,8 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    locale_init_catalog();
+
     prefs_init(&g_app);
     prefs_load(&g_app);
     prefs_load_tooltypes(&g_app, argc, argv);
@@ -495,6 +498,7 @@ int main(int argc, char **argv)
     passwords_cleanup(&g_app);
     gui_cleanup(&g_app);
     renderer_cleanup(&g_app);
+    locale_close_catalog();
     close_libs_and_classes();
 
     DBG_LOG("[Main] VortexBrowse exited cleanly.\n");

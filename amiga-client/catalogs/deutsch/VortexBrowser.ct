@@ -1,0 +1,358 @@
+## version $VER: VortexBrowser.catalog 1.0 (11.11.2026)
+## language deutsch
+## codeset 4
+;
+MSG_WIN_TITLE
+VortexBrowser
+;
+MSG_DL_WIN_TITLE
+Downloads - VortexBrowser
+;
+MSG_PW_WIN_TITLE
+Passwort-Manager - VortexBrowser
+;
+MSG_PREFS_WIN_TITLE
+Einstellungen - VortexBrowser
+;
+MSG_MENU_PROJECT
+Projekt
+;
+MSG_MENU_OPEN_URL
+URL öffnen...
+;
+MSG_MENU_OPEN_FILE
+Lokale Datei öffnen...
+;
+MSG_MENU_SAVE_SOURCE
+HTML-Quelltext speichern...
+;
+MSG_MENU_PRINT
+Seite drucken...
+;
+MSG_MENU_ABOUT
+Über VortexBrowser...
+;
+MSG_MENU_QUIT
+Beenden
+;
+MSG_MENU_NAVIGATION
+Navigation
+;
+MSG_MENU_BACK
+Zurück
+;
+MSG_MENU_FORWARD
+Vorwärts
+;
+MSG_MENU_RELOAD
+Neu laden
+;
+MSG_MENU_STOP
+Laden stoppen
+;
+MSG_MENU_HOME
+Startseite
+;
+MSG_MENU_TAB_NEW
+Neuen Tab öffnen
+;
+MSG_MENU_TAB_CLOSE
+Aktuellen Tab schließen
+;
+MSG_MENU_BOOKMARKS
+Lesezeichen
+;
+MSG_MENU_BOOKMARKS_BAR
+Lesezeichen-Leiste
+;
+MSG_MENU_ADD_BOOKMARK
+Lesezeichen hinzufügen
+;
+MSG_MENU_ADD_QUICKLINK
+Zu Schnellwahl hinzufügen
+;
+MSG_MENU_VIEW
+Ansicht
+;
+MSG_MENU_ZOOM_IN
+Schrift vergrößern (+)
+;
+MSG_MENU_ZOOM_OUT
+Schrift verkleinern (-)
+;
+MSG_MENU_ZOOM_RESET
+Standard-Schriftgröße (100%)
+;
+MSG_MENU_FULLSCREEN
+Vollbild umschalten
+;
+MSG_MENU_DARK_MODE
+Dunkler Modus
+;
+MSG_MENU_SETTINGS
+Einstellungen
+;
+MSG_MENU_PREFERENCES
+Voreinstellungen...
+;
+MSG_MENU_PASSWORDS
+Passwort-Manager...
+;
+MSG_MENU_DOWNLOADS
+Download-Manager...
+;
+MSG_MENU_EDIT
+Bearbeiten
+;
+MSG_MENU_CUT
+Ausschneiden
+;
+MSG_MENU_COPY
+Kopieren
+;
+MSG_MENU_PASTE
+Einfügen
+;
+MSG_BTN_BACK
+Zurück
+;
+MSG_BTN_FORWARD
+Vorwärts
+;
+MSG_BTN_RELOAD
+Neu laden
+;
+MSG_BTN_STOP
+Stopp
+;
+MSG_BTN_HOME
+Startseite
+;
+MSG_BTN_GO
+Los
+;
+MSG_BTN_DOWNLOADS
+Downloads
+;
+MSG_BTN_CONNECT
+Verbinden
+;
+MSG_BTN_DISCONNECT
+Trennen
+;
+MSG_BTN_CLEAR
+Leeren
+;
+MSG_CHOOSER_BOOKMARKS
+Lesezeichen
+;
+MSG_HINT_BACK
+Zurück (Amiga+Links)
+;
+MSG_HINT_FORWARD
+Vorwärts (Amiga+Rechts)
+;
+MSG_HINT_RELOAD
+Seite neu laden (Amiga+R)
+;
+MSG_HINT_STOP
+Laden anhalten (Esc)
+;
+MSG_HINT_HOME
+Startseite öffnen (Amiga+H)
+;
+MSG_HINT_CLEAR_URL
+Adressleiste leeren
+;
+MSG_HINT_GO
+Adresse aufrufen oder Suche starten
+;
+MSG_HINT_DOWNLOADS
+Download-Manager öffnen (Amiga+J)
+;
+MSG_HINT_CONNECT
+Mit Server verbinden
+;
+MSG_HINT_ADD_QL
+Aktuelle Seite zu Schnellwahl hinzufügen
+;
+MSG_HINT_REM_QL
+Aus Schnellwahl entfernen
+;
+MSG_HINT_NEW_TAB
+Neuen Tab öffnen (Amiga+T)
+;
+MSG_HINT_CLOSE_TAB
+Aktuellen Tab schließen (Amiga+W)
+;
+MSG_DL_COL_FILE
+Datei
+;
+MSG_DL_COL_STATUS
+Status
+;
+MSG_DL_COL_SIZE
+Größe
+;
+MSG_DL_COL_PERCENT
+%
+;
+MSG_DL_COL_SPEED
+Geschwindigkeit
+;
+MSG_DL_COL_ETA
+Restzeit
+;
+MSG_DL_COL_TARGET
+Zielpfad
+;
+MSG_DL_STATUS_NONE
+Keine aktiven Downloads
+;
+MSG_DL_STATUS_ACTIVE
+%d aktiver Download%s (%s) | %d abgeschlossen
+;
+MSG_DL_STATUS_ALL_DONE
+Alle Downloads abgeschlossen (%d Dateien)
+;
+MSG_DL_BTN_OPEN_FILE
+Datei öffnen
+;
+MSG_DL_HINT_OPEN_FILE
+Heruntergeladene Datei mit Standard-Programm ausführen (oder Doppelklick)
+;
+MSG_DL_BTN_OPEN_DIR
+Ordner öffnen
+;
+MSG_DL_HINT_OPEN_DIR
+Zielordner der Datei auf der Workbench öffnen
+;
+MSG_DL_BTN_CANCEL
+Abbrechen
+;
+MSG_DL_HINT_CANCEL
+Laufenden Download stoppen und abbrechen
+;
+MSG_DL_BTN_REMOVE
+Eintrag löschen
+;
+MSG_DL_HINT_REMOVE
+Ausgewählten Eintrag aus der Liste entfernen
+;
+MSG_DL_BTN_CLEANUP
+Aufräumen
+;
+MSG_DL_HINT_CLEANUP
+Alle abgeschlossenen und abgebrochenen Downloads aus der Liste entfernen
+;
+MSG_DL_BTN_CLOSE
+Schließen
+;
+MSG_DL_HINT_CLOSE
+Download-Manager schließen (Downloads laufen im Hintergrund weiter)
+;
+MSG_STATUS_READY
+Bereit.
+;
+MSG_STATUS_CONNECTING
+Verbinde mit Server %s:%u...
+;
+MSG_STATUS_CONNECTED
+Verbunden mit %s:%u
+;
+MSG_STATUS_DISCONNECTED
+Verbindung zum Server getrennt
+;
+MSG_STATUS_LOADING
+Lade: %s
+;
+MSG_SEARCH_PROMPT
+Suche (%s): %s
+;
+MSG_CTX_OPEN_LINK
+Link öffnen
+;
+MSG_CTX_OPEN_NEW_TAB
+Link in neuem Tab öffnen
+;
+MSG_CTX_FAV_LINK
+Link zu Lesezeichen hinzufügen
+;
+MSG_CTX_DOWNLOAD_LINK
+Link-Ziel herunterladen...
+;
+MSG_CTX_COPY_LINK
+Link-Adresse kopieren
+;
+MSG_CTX_COPY_IMAGE_URL
+Bild-Adresse kopieren
+;
+MSG_CTX_DOWNLOAD_IMAGE
+Bild herunterladen...
+;
+MSG_CTX_MAIN_MENU
+Hauptmenü...
+;
+MSG_GEN_YES
+Ja
+;
+MSG_GEN_NO
+Nein
+;
+MSG_GEN_OK
+OK
+;
+MSG_GEN_CANCEL
+Abbrechen
+;
+MSG_PREFS_SAVE
+Speichern
+;
+MSG_PREFS_USE
+Benutzen
+;
+MSG_PREFS_CANCEL
+Abbrechen
+;
+MSG_PREFS_TAB_SERVER
+Server
+;
+MSG_PREFS_TAB_DISPLAY
+Anzeige
+;
+MSG_PREFS_TAB_BROWSER
+Browser
+;
+MSG_PREFS_TAB_QUICKDIAL
+Schnellwahl
+;
+MSG_PREFS_TAB_BOOKMARKS
+Lesezeichen
+;
+MSG_PREFS_TAB_DOWNLOADS
+Downloads
+;
+MSG_PREFS_TAB_SYSTEM
+System
+;
+MSG_PREFS_TAB_ABOUT
+Über
+;
+MSG_PREFS_ADD
+Hinzufügen
+;
+MSG_PREFS_UPDATE
+Aktualisieren
+;
+MSG_PREFS_REMOVE
+Löschen
+;
+MSG_PREFS_MOVE_UP
+Nach oben
+;
+MSG_PREFS_MOVE_DOWN
+Nach unten
+;
+MSG_PREFS_CHOOSE_DIR
+Ordner wählen...
+;

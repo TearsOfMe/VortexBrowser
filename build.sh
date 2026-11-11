@@ -27,6 +27,7 @@ docker cp "${CONTAINER_ID}:/tmp/vb_build/amiga-client/VortexBrowser" "${SCRIPT_D
 docker cp "${CONTAINER_ID}:/tmp/vb_build/amiga-client/VortexBrowser.stripped" "${SCRIPT_DIR}/amiga-client/VortexBrowser.stripped"
 docker cp "${CONTAINER_ID}:/tmp/vb_build/amiga-client/VortexBrowser-AltiVec" "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec"
 docker cp "${CONTAINER_ID}:/tmp/vb_build/amiga-client/VortexBrowser-AltiVec.stripped" "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.stripped"
+docker cp "${CONTAINER_ID}:/tmp/vb_build/amiga-client/catalogs/." "${SCRIPT_DIR}/amiga-client/catalogs/"
 cp -f "${SCRIPT_DIR}/amiga-client/VortexBrowser" "${SCRIPT_DIR}/amiga-client/VortexBrowse"
 cp -f "${SCRIPT_DIR}/amiga-client/VortexBrowser.stripped" "${SCRIPT_DIR}/amiga-client/VortexBrowse.stripped"
 
@@ -54,6 +55,10 @@ if [ -d "${KYVOS_DOWNLOAD_DIR}" ]; then
     if [ -d "${SCRIPT_DIR}/amiga-client/icons" ]; then
         mkdir -p "${TARGET_DRAWER}/icons"
         cp -r "${SCRIPT_DIR}/amiga-client/icons/." "${TARGET_DRAWER}/icons/"
+    fi
+    if [ -d "${SCRIPT_DIR}/amiga-client/catalogs" ]; then
+        mkdir -p "${TARGET_DRAWER}/catalogs"
+        cp -r "${SCRIPT_DIR}/amiga-client/catalogs/." "${TARGET_DRAWER}/catalogs/"
     fi
     echo "[+] QEMU Shared Folder updated: ${TARGET_DRAWER}"
 fi
@@ -86,6 +91,14 @@ if [ -n "$AMIGA_FTP_AUTH" ] && [ -n "$AMIGA_FTP_HOST" ]; then
             [ -f "${SCRIPT_DIR}/amiga-client/alt-icons/VortexBrowser_drawer.info" ] && curl -s --max-time 10 --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/alt-icons/VortexBrowser_drawer.info" "${FTP_URL}/Alternative-Icons.info" >/dev/null 2>&1 || true
             for af in "${SCRIPT_DIR}/amiga-client/alt-icons/"*.info; do
                 [ -f "$af" ] && curl -s --max-time 10 --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd --ftp-create-dirs -T "$af" "${FTP_URL}/Alternative-Icons/$(basename "$af")" >/dev/null 2>&1 || true
+            done
+        fi
+        if [ -d "${SCRIPT_DIR}/amiga-client/catalogs" ]; then
+            for cfile in "${SCRIPT_DIR}/amiga-client/catalogs"/*/*.catalog; do
+                if [ -f "$cfile" ]; then
+                    rel_path=$(echo "$cfile" | sed "s|${SCRIPT_DIR}/amiga-client/||")
+                    curl -s --max-time 15 --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd --ftp-create-dirs -T "$cfile" "${FTP_URL}/${rel_path}" >/dev/null 2>&1 || true
+                fi
             done
         fi
         LHA_FILE=$(ls -t "${SCRIPT_DIR}/dist/VortexBrowser-"*"-AmigaOS4.lha" 2>/dev/null | head -n1 || true)
