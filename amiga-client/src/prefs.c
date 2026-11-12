@@ -15,6 +15,7 @@
 #include "app.h"
 #include "net.h"
 #include "renderer.h"
+#include "locale_strings.h"
 
 /* Unified Resolution Presets: One setting for Screen, Window & Web Engine */
 const ResPreset g_res_presets[NUM_RES_PRESETS] = {
@@ -103,6 +104,11 @@ void prefs_init(VortexApp *app)
     strncpy(app->prefs.download_dir, "RAM:", sizeof(app->prefs.download_dir) - 1);
     app->prefs.download_dir[sizeof(app->prefs.download_dir) - 1] = '\0';
     app->prefs.always_ask_download          = TRUE;
+    app->prefs.has_dl_win_pos               = FALSE;
+    app->prefs.dl_win_x                     = 0;
+    app->prefs.dl_win_y                     = 0;
+    app->prefs.dl_win_w                     = 0;
+    app->prefs.dl_win_h                     = 0;
     strncpy(app->prefs.start_url, "https://www.amiga-news.de", sizeof(app->prefs.start_url) - 1);
     app->prefs.start_url[sizeof(app->prefs.start_url) - 1] = '\0';
     app->prefs.save_last_url                = TRUE; /* Default: ON (letzte Seite speichern) */
@@ -276,6 +282,18 @@ static BOOL load_from_file(VortexApp *app, const char *path)
             app->prefs.download_dir[sizeof(app->prefs.download_dir) - 1] = '\0';
         } else if (strcmp(key, "always_ask_download") == 0) {
             app->prefs.always_ask_download = (atoi(val) != 0);
+        } else if (strcmp(key, "has_dl_win_pos") == 0) {
+            app->prefs.has_dl_win_pos = (atoi(val) != 0);
+        } else if (strcmp(key, "dl_win_x") == 0) {
+            app->prefs.dl_win_x = (int16_t)atoi(val);
+        } else if (strcmp(key, "dl_win_y") == 0) {
+            app->prefs.dl_win_y = (int16_t)atoi(val);
+        } else if (strcmp(key, "dl_win_w") == 0) {
+            int w = atoi(val);
+            if (w >= 200 && w <= 4096) app->prefs.dl_win_w = (uint16_t)w;
+        } else if (strcmp(key, "dl_win_h") == 0) {
+            int h = atoi(val);
+            if (h >= 100 && h <= 4096) app->prefs.dl_win_h = (uint16_t)h;
         }
         /* Font & Charset */
         else if (strcmp(key, "gui_charset") == 0) {
@@ -316,7 +334,8 @@ static BOOL load_from_file(VortexApp *app, const char *path)
                     strncpy(app->prefs.saved_tab_urls[idx], val, sizeof(app->prefs.saved_tab_urls[idx]) - 1);
                     app->prefs.saved_tab_urls[idx][sizeof(app->prefs.saved_tab_urls[idx]) - 1] = '\0';
                 } else if (strcmp(field, "title") == 0) {
-                    strncpy(app->prefs.saved_tab_titles[idx], val, sizeof(app->prefs.saved_tab_titles[idx]) - 1);
+                    /* Convert UTF-8 to AmigaOS local charset (codesets.library) if needed */
+                    vb_utf8_to_local(val, app->prefs.saved_tab_titles[idx], sizeof(app->prefs.saved_tab_titles[idx]));
                     app->prefs.saved_tab_titles[idx][sizeof(app->prefs.saved_tab_titles[idx]) - 1] = '\0';
                 }
             }
@@ -531,6 +550,18 @@ void prefs_capture_window_box(VortexApp *app)
     }
 }
 
+void prefs_capture_dl_window_box(VortexApp *app)
+{
+    if (!app || !app->dl_win) return;
+    if (app->dl_win->Width >= 200 && app->dl_win->Height >= 100) {
+        app->prefs.dl_win_x       = app->dl_win->LeftEdge;
+        app->prefs.dl_win_y       = app->dl_win->TopEdge;
+        app->prefs.dl_win_w       = app->dl_win->Width;
+        app->prefs.dl_win_h       = app->dl_win->Height;
+        app->prefs.has_dl_win_pos = TRUE;
+    }
+}
+
 void prefs_capture_tabs(VortexApp *app)
 {
     if (!app) return;
@@ -550,11 +581,12 @@ void prefs_capture_tabs(VortexApp *app)
         for (int i = 0; i < app->num_tabs && count < VB_MAX_TABS; i++) {
             const char *u = app->tabs[i].url;
             const char *t = app->tabs[i].title;
+            const char *home_str = GetVString(MSG_MENU_HOME);
             BOOL is_startpage = (!u || u[0] == '\0' || u[0] == '@' ||
                                  strncmp(u, "about:", 6) == 0 ||
                                  strncmp(u, "http://127.0.0.1:", 17) == 0 ||
                                  strncmp(u, "http://localhost:", 17) == 0 ||
-                                 (t && strcmp(t, "Startseite") == 0 && (!u || u[0] == '\0')));
+                                 (t && (strcmp(t, "Startseite") == 0 || (home_str && strcmp(t, home_str) == 0)) && (!u || u[0] == '\0')));
             /* If there is at least one old web tab, don't persist redundant startpage tabs */
             if (real_tabs > 0 && is_startpage) {
                 continue;
@@ -625,7 +657,12 @@ static BOOL save_to_file(const VortexApp *app, const char *path)
     /* Download Manager */
     fprintf(fp, "# Download Manager Configuration\n");
     fprintf(fp, "download_dir=%s\n", app->prefs.download_dir[0] ? app->prefs.download_dir : "RAM:");
-    fprintf(fp, "always_ask_download=%d\n\n", app->prefs.always_ask_download ? 1 : 0);
+    fprintf(fp, "always_ask_download=%d\n", app->prefs.always_ask_download ? 1 : 0);
+    fprintf(fp, "has_dl_win_pos=%d\n", app->prefs.has_dl_win_pos ? 1 : 0);
+    fprintf(fp, "dl_win_x=%d\n",       (int)app->prefs.dl_win_x);
+    fprintf(fp, "dl_win_y=%d\n",       (int)app->prefs.dl_win_y);
+    fprintf(fp, "dl_win_w=%u\n",       (unsigned)app->prefs.dl_win_w);
+    fprintf(fp, "dl_win_h=%u\n\n",     (unsigned)app->prefs.dl_win_h);
 
     /* Font & Charset */
     fprintf(fp, "# Font & Charset Configuration\n");
@@ -668,6 +705,7 @@ BOOL prefs_save(VortexApp *app, BOOL permanent)
     /* Capture open tabs and window position before saving */
     prefs_capture_tabs(app);
     prefs_capture_window_box(app);
+    prefs_capture_dl_window_box(app);
 
     /* Always synchronize active app server into prefs if set */
     if (app->server_host[0] != '\0' && (app->prefs.save_server_on_exit || app->prefs.server_host[0] == '\0')) {

@@ -26,6 +26,7 @@
 #include "audio.h"
 #include "clipboard.h"
 #include "passwords.h"
+#include "locale_strings.h"
 
 static BOOL send_all(LONG sock, const void *buf, uint32_t len)
 {
@@ -364,10 +365,13 @@ BOOL net_handle_incoming(VortexApp *app)
 
             char clean_title[64];
             if (is_portal) {
-                snprintf(clean_title, sizeof(clean_title), "Startseite");
+                snprintf(clean_title, sizeof(clean_title), "%s", GetVString(MSG_MENU_HOME));
             } else if (nav.title[0] != '\0') {
-                strncpy(clean_title, nav.title, sizeof(clean_title) - 1);
+                vb_utf8_to_local(nav.title, clean_title, sizeof(clean_title));
                 clean_title[sizeof(clean_title) - 1] = '\0';
+                if (clean_title[0] == '\0') {
+                    snprintf(clean_title, sizeof(clean_title), "%s", GetVString(MSG_MENU_HOME));
+                }
             } else {
                 const char *p = clean_url;
                 if (strncmp(p, "http://", 7) == 0) p += 7;

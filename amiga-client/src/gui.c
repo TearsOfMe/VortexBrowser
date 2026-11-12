@@ -2107,13 +2107,15 @@ static void tabs_build_list(VortexApp *app, struct List *out)
     IExec->NewList(out);
     if (!IClickTab) return;
 
+    BOOL use_dark_pen = (app->prefs.dark_theme == 1 && s_dark_pens.allocated && s_dark_pens.txt_pen >= 0);
+
     for (int i = 0; i < app->num_tabs; i++) {
         struct Node *quarantine = NULL;
         struct Node *n = IClickTab->AllocClickTabNode(
             TNA_Text,        (Tag)app->tabs[i].title,
             TNA_Number,      (uint16)i,
             TNA_CloseGadget, (app->num_tabs > 1),
-            s_dark_pens.allocated ? TNA_TextPen : TAG_IGNORE, (uint32)s_dark_pens.txt_pen,
+            use_dark_pen ? TNA_TextPen : TAG_IGNORE, (uint32)(int16)s_dark_pens.txt_pen,
             TAG_DONE);
         if (n && n == s_handled_close_node) {
             /* Allocator handed us the stale address: keep it aside, get another */
@@ -2122,7 +2124,7 @@ static void tabs_build_list(VortexApp *app, struct List *out)
                 TNA_Text,        (Tag)app->tabs[i].title,
                 TNA_Number,      (uint16)i,
                 TNA_CloseGadget, (app->num_tabs > 1),
-                s_dark_pens.allocated ? TNA_TextPen : TAG_IGNORE, (uint32)s_dark_pens.txt_pen,
+                use_dark_pen ? TNA_TextPen : TAG_IGNORE, (uint32)(int16)s_dark_pens.txt_pen,
                 TAG_DONE);
             IClickTab->FreeClickTabNode(quarantine);
         }
@@ -2164,6 +2166,7 @@ void gui_tabs_init(VortexApp *app)
             }
 
             int count = 0;
+            const char *home_str = GetVString(MSG_MENU_HOME);
             for (int i = 0; i < app->prefs.saved_num_tabs && i < VB_MAX_TABS; i++) {
                 const char *u = app->prefs.saved_tab_urls[i];
                 const char *t = app->prefs.saved_tab_titles[i];
@@ -2171,7 +2174,7 @@ void gui_tabs_init(VortexApp *app)
                                      strncmp(u, "about:", 6) == 0 ||
                                      strncmp(u, "http://127.0.0.1:", 17) == 0 ||
                                      strncmp(u, "http://localhost:", 17) == 0 ||
-                                     (t && strcmp(t, "Startseite") == 0 && (!u || u[0] == '\0')));
+                                     (t && (strcmp(t, "Startseite") == 0 || (home_str && strcmp(t, home_str) == 0)) && (!u || u[0] == '\0')));
                 /* If there is at least one old web tab, remove/skip redundant startpage tab */
                 if (real_tabs > 0 && is_startpage) {
                     continue;
@@ -2179,15 +2182,19 @@ void gui_tabs_init(VortexApp *app)
                 app->tabs[count].id = (uint32_t)count;
                 strncpy(app->tabs[count].url, u ? u : "", sizeof(app->tabs[0].url) - 1);
                 app->tabs[count].url[sizeof(app->tabs[0].url) - 1] = '\0';
-                strncpy(app->tabs[count].title, (t && t[0]) ? t : "Web", sizeof(app->tabs[0].title) - 1);
-                app->tabs[count].title[sizeof(app->tabs[0].title) - 1] = '\0';
+                if (t && t[0]) {
+                    vb_utf8_to_local(t, app->tabs[count].title, sizeof(app->tabs[0].title));
+                    app->tabs[count].title[sizeof(app->tabs[0].title) - 1] = '\0';
+                } else {
+                    strncpy(app->tabs[count].title, "Web", sizeof(app->tabs[0].title) - 1);
+                    app->tabs[count].title[sizeof(app->tabs[0].title) - 1] = '\0';
+                }
                 count++;
             }
             if (count == 0) {
                 app->active_tab_idx = 0;
                 app->tabs[0].id     = 0;
-                strncpy(app->tabs[0].title, "Startseite", sizeof(app->tabs[0].title) - 1);
-                app->tabs[0].title[sizeof(app->tabs[0].title) - 1] = '\0';
+                snprintf(app->tabs[0].title, sizeof(app->tabs[0].title), "%s", GetVString(MSG_MENU_HOME));
                 strncpy(app->tabs[0].url, app->current_url, sizeof(app->tabs[0].url) - 1);
                 app->tabs[0].url[sizeof(app->tabs[0].url) - 1] = '\0';
                 app->num_tabs = 1;
@@ -2203,8 +2210,7 @@ void gui_tabs_init(VortexApp *app)
         } else {
             app->active_tab_idx = 0;
             app->tabs[0].id = 0;
-            strncpy(app->tabs[0].title, "Startseite", sizeof(app->tabs[0].title) - 1);
-            app->tabs[0].title[sizeof(app->tabs[0].title) - 1] = '\0';
+            snprintf(app->tabs[0].title, sizeof(app->tabs[0].title), "%s", GetVString(MSG_MENU_HOME));
             strncpy(app->tabs[0].url, app->current_url, sizeof(app->tabs[0].url) - 1);
             app->tabs[0].url[sizeof(app->tabs[0].url) - 1] = '\0';
             app->num_tabs = 1;
@@ -2242,11 +2248,10 @@ void gui_tabs_rebuild(VortexApp *app)
     }
 
     if (app->gad_clicktab && app->win) {
-        IIntuition->SetGadgetAttrs((struct Gadget *)app->gad_clicktab, app->win, NULL,
-                                   CLICKTAB_Labels,  (Tag)&app->tab_list,
-                                   CLICKTAB_Current, (uint32)app->active_tab_idx,
-                                   TAG_DONE);
-        IIntuition->RefreshGList((struct Gadget *)app->gad_clicktab, app->win, NULL, 1);
+        IIntuition->RefreshSetGadgetAttrs((struct Gadget *)app->gad_clicktab, app->win, NULL,
+                                          CLICKTAB_Labels,  (Tag)&app->tab_list,
+                                          CLICKTAB_Current, (uint32)app->active_tab_idx,
+                                          TAG_DONE);
     }
 }
 
@@ -2260,8 +2265,7 @@ void gui_tabs_reset(VortexApp *app)
         app->tabs[0] = app->tabs[app->active_tab_idx];
     }
     if (app->num_tabs == 0) {
-        strncpy(app->tabs[0].title, "Startseite", sizeof(app->tabs[0].title) - 1);
-        app->tabs[0].title[sizeof(app->tabs[0].title) - 1] = '\0';
+        snprintf(app->tabs[0].title, sizeof(app->tabs[0].title), "%s", GetVString(MSG_MENU_HOME));
         app->tabs[0].url[0] = '\0';
     }
     app->tabs[0].id     = 0;
@@ -2280,8 +2284,12 @@ void gui_tab_add(VortexApp *app, const char *title, const char *url, BOOL switch
 
     int idx = app->num_tabs++;
     app->tabs[idx].id = (uint32_t)idx;
-    strncpy(app->tabs[idx].title, title ? title : "Neuer Tab", sizeof(app->tabs[0].title) - 1);
-    app->tabs[idx].title[sizeof(app->tabs[0].title) - 1] = '\0';
+    if (title && title[0]) {
+        vb_utf8_to_local(title, app->tabs[idx].title, sizeof(app->tabs[0].title));
+        app->tabs[idx].title[sizeof(app->tabs[0].title) - 1] = '\0';
+    } else {
+        snprintf(app->tabs[idx].title, sizeof(app->tabs[0].title), "%s", GetVString(MSG_MENU_TAB_NEW));
+    }
     /* Empty URL = server portal/start page (never "about:blank") */
     strncpy(app->tabs[idx].url, url ? url : "", sizeof(app->tabs[0].url) - 1);
     app->tabs[idx].url[sizeof(app->tabs[0].url) - 1] = '\0';
@@ -2324,8 +2332,7 @@ void gui_tab_close(VortexApp *app, uint16 idx)
         /* Last tab: don't close, go back to the start page.
          * Must be "@HOME" - a literal 127.0.0.1:7788 URL would make Chromium
          * load the VortexBrowse binary protocol port as a web page. */
-        strncpy(app->tabs[0].title, "Startseite", sizeof(app->tabs[0].title) - 1);
-        app->tabs[0].title[sizeof(app->tabs[0].title) - 1] = '\0';
+        snprintf(app->tabs[0].title, sizeof(app->tabs[0].title), "%s", GetVString(MSG_MENU_HOME));
         app->tabs[0].url[0] = '\0';
         gui_update_url_bar(app, "");
         net_send_url(app, "@HOME");
@@ -3138,11 +3145,12 @@ BOOL gui_init(VortexApp *app)
     gui_tabs_init(app);
 
     app->gad_clicktab = IIntuition->NewObject(NULL, "clicktab.gadget",
-        GA_ID,              GID_CLICKTAB,
-        GA_RelVerify,       TRUE,
-        CLICKTAB_Labels,    (Tag)&app->tab_list,
-        CLICKTAB_Current,   (uint32)app->active_tab_idx,
-        CLICKTAB_AutoFit,   TRUE,
+        GA_ID,                  GID_CLICKTAB,
+        GA_RelVerify,           TRUE,
+        CLICKTAB_Labels,        (Tag)&app->tab_list,
+        CLICKTAB_Current,       (uint32)app->active_tab_idx,
+        CLICKTAB_AutoFit,       TRUE,
+        CLICKTAB_LabelTruncate, TRUE,
         CLICKTAB_PageGroupBorder, FALSE,
         s_dark_pens.allocated ? CLICKTAB_PageGroupBackFill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
         s_dark_pens.allocated ? GA_BackFill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
@@ -3337,6 +3345,9 @@ BOOL gui_init(VortexApp *app)
 
     /* Perform immediate initial Reaction layout pass */
     IIntuition->IDoMethod(app->win_obj, WM_RETHINK);
+
+    /* Clean initial tab bar layout & rendering inside open window */
+    gui_tabs_rebuild(app);
 
     /* If a decoded frame already exists in memory (rebuild/reopen), paint it immediately */
     if (app->win && app->gad_space && app->renderer.has_frame) {

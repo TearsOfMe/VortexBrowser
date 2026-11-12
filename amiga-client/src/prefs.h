@@ -112,6 +112,11 @@ typedef struct VortexPrefs {
     BOOL             save_server_on_exit;   /* TRUE = Aktuellen Server beim Beenden merken (Default: TRUE) */
     char             download_dir[256];     /* Standard Download-Ordner (Default: "RAM:") */
     BOOL             always_ask_download;  /* TRUE = Immer nach Zielordner fragen (ASL-Requester) */
+    BOOL             has_dl_win_pos;       /* TRUE = Gespeicherte Download-Fensterposition vorhanden */
+    int16_t          dl_win_x;             /* LeftEdge des Download-Fensters */
+    int16_t          dl_win_y;             /* TopEdge des Download-Fensters */
+    uint16_t         dl_win_w;             /* Breite des Download-Fensters */
+    uint16_t         dl_win_h;             /* Hoehe des Download-Fensters */
 
     /* Open Tabs Persistence */
     uint16_t         saved_num_tabs;
@@ -127,6 +132,7 @@ BOOL prefs_load(struct VortexApp *app);
 void prefs_load_tooltypes(struct VortexApp *app, int argc, char **argv);
 BOOL prefs_save(struct VortexApp *app, BOOL permanent);
 void prefs_capture_window_box(struct VortexApp *app);
+void prefs_capture_dl_window_box(struct VortexApp *app);
 void prefs_capture_tabs(struct VortexApp *app);
 void prefs_apply(struct VortexApp *app);
 void prefs_resize_window_to_resolution(struct VortexApp *app, uint16_t req_w, uint16_t req_h);
