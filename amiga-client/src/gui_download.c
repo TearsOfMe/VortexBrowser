@@ -387,6 +387,26 @@ void gui_open_download_manager(VortexApp *app)
 
     if (!root_layout) return;
 
+    /* Window dimensions & position: restore from prefs if saved, else default */
+    uint16 scr_w = target_scr ? target_scr->Width : 1024;
+    uint16 scr_h = target_scr ? target_scr->Height : 768;
+    int16  bar_h = target_scr ? (int16)(target_scr->BarHeight + 1) : 24;
+
+    BOOL has_pos = app->prefs.has_dl_win_pos && (app->prefs.dl_win_w >= 200) && (app->prefs.dl_win_h >= 100);
+    int16  win_x = has_pos ? app->prefs.dl_win_x : (int16)((scr_w > 700) ? (scr_w - 700) / 2 : 0);
+    int16  win_y = has_pos ? app->prefs.dl_win_y : (int16)((scr_h > 320) ? (scr_h - 320) / 2 : bar_h);
+    uint16 win_w = has_pos ? app->prefs.dl_win_w : 700;
+    uint16 win_h = has_pos ? app->prefs.dl_win_h : 320;
+
+    if (win_w > scr_w) win_w = scr_w;
+    if (win_h > scr_h) win_h = scr_h;
+    if (win_x < 0) win_x = 0;
+    if (win_y < bar_h) win_y = bar_h;
+    if ((int)win_x + (int)win_w > (int)scr_w) win_x = (int16)((int)scr_w - (int)win_w);
+    if ((int)win_y + (int)win_h > (int)scr_h) win_y = (int16)((int)scr_h - (int)win_h);
+    if (win_x < 0) win_x = 0;
+    if (win_y < 0) win_y = 0;
+
     app->dl_win_obj = IIntuition->NewObject(NULL, "window.class",
         WA_Title,             (Tag)GetVString(MSG_DL_WIN_TITLE),
         WA_ScreenTitle,       (Tag)"VortexBrowser",
@@ -397,8 +417,11 @@ void gui_open_download_manager(VortexApp *app)
         WA_SizeGadget,        TRUE,
         WA_Activate,          TRUE,
         WA_SmartRefresh,      TRUE,
-        WA_InnerWidth,        700,
-        WA_InnerHeight,       320,
+        WA_Left,              (uint32)win_x,
+        WA_Top,               (uint32)win_y,
+        WA_InnerWidth,        (uint32)win_w,
+        WA_InnerHeight,       (uint32)win_h,
+        WA_IDCMP,             IDCMP_CLOSEWINDOW | IDCMP_GADGETUP | IDCMP_NEWSIZE | IDCMP_CHANGEWINDOW,
         WINDOW_Layout,        root_layout,
         TAG_DONE);
 
@@ -411,12 +434,19 @@ void gui_open_download_manager(VortexApp *app)
         return;
     }
 
+    IIntuition->WindowToFront(app->dl_win);
+    IIntuition->ActivateWindow(app->dl_win);
+
     gui_download_manager_update(app);
 }
 
 void gui_close_download_manager(VortexApp *app)
 {
     if (!app || !app->dl_win_obj) return;
+
+    /* Capture window box before closing and save to prefs */
+    prefs_capture_dl_window_box(app);
+    prefs_save(app, TRUE);
 
     if (app->dl_win && app->dl_gad_listbrowser) {
         IIntuition->SetGadgetAttrs((struct Gadget *)app->dl_gad_listbrowser, app->dl_win, NULL,
@@ -449,6 +479,11 @@ void gui_handle_download_manager_events(VortexApp *app)
             case WMHI_CLOSEWINDOW:
                 gui_close_download_manager(app);
                 return;
+
+            case WMHI_NEWSIZE:
+            case WMHI_CHANGEWINDOW:
+                prefs_capture_dl_window_box(app);
+                break;
 
             case WMHI_GADGETUP: {
                 uint32 gid = result & WMHI_GADGETMASK;

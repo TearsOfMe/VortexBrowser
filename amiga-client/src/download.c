@@ -236,8 +236,6 @@ void download_handle_start(VortexApp *app, const MsgDownloadStart *msg)
         e->status = DL_STATUS_CANCELLED;
         snprintf(e->eta_str, sizeof(e->eta_str), "Abgebr.");
         if (idx == app->download_mgr.count) app->download_mgr.count++;
-        app_set_status("Download abgebrochen: %s", safe_name);
-        app_set_gauge(0);
         net_send_download_response(app, dl_id, 0);
     } else {
         BPTR fh = IDOS->Open(chosen_path, MODE_NEWFILE);
@@ -246,8 +244,6 @@ void download_handle_start(VortexApp *app, const MsgDownloadStart *msg)
             e->status = DL_STATUS_ERROR;
             snprintf(e->eta_str, sizeof(e->eta_str), "Fehler");
             if (idx == app->download_mgr.count) app->download_mgr.count++;
-            app_set_status("Fehler beim Erstellen von: %s", chosen_path);
-            app_set_gauge(0);
             net_send_download_response(app, dl_id, 0);
         } else {
             e->file_handle = fh;
@@ -262,10 +258,6 @@ void download_handle_start(VortexApp *app, const MsgDownloadStart *msg)
             app->download.file_handle   = fh;
             snprintf(app->download.filename, sizeof(app->download.filename), "%s", safe_name);
             snprintf(app->download.dest_path, sizeof(app->download.dest_path), "%s", chosen_path);
-
-            app_set_gauge(0);
-            app_set_status("Starte Download: %s (%llu KB)...", safe_name,
-                           (unsigned long long)(dl_total / 1024ULL));
 
             net_send_download_response(app, dl_id, 1);
         }
@@ -376,12 +368,6 @@ void download_handle_chunk(VortexApp *app, const MsgDownloadChunk *hdr, const ui
 
     if (app->download.download_id == id) {
         app->download.received_size = e->received_size;
-        app_set_gauge(pct);
-        app_set_status("Lade herunter: %s (%llu / %llu KB, %d%%)",
-                       e->filename,
-                       (unsigned long long)(e->received_size / 1024ULL),
-                       (unsigned long long)(e->total_size / 1024ULL),
-                       pct);
     }
 
     /* Rate-limit listbrowser GUI updates to at most once per second while receiving chunks */
@@ -415,9 +401,6 @@ void download_handle_complete(VortexApp *app, const MsgDownloadComplete *msg)
     if (app->download.download_id == id) {
         app->download.active = FALSE;
         app->download.file_handle = ZERO;
-        app_set_gauge(100);
-        app_set_status("Download abgeschlossen: %s (%llu Bytes)",
-                       e->dest_path, (unsigned long long)e->received_size);
     }
 
     DBG_LOG("[Download] Completed id=%u -> '%s' (%llu bytes)\n",
@@ -446,8 +429,6 @@ void download_cancel(VortexApp *app, uint32_t download_id)
             app->download.file_handle = ZERO;
         }
         app->download.active = FALSE;
-        app_set_gauge(0);
-        app_set_status("Download abgebrochen.");
     }
 
     net_send_download_response(app, download_id, 0);
