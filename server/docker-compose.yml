@@ -48,3 +48,29 @@ services:
       - VORTEX_LOG_LEVEL=INFO
     profiles:
       - rpi
+
+  # macOS Docker Desktop (Apple Silicon M1-M4 ARM64 / Intel x86_64)
+  vortex-macos:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VORTEX_TARGET: macos
+    image: vortexbrowser-server:macos-arm64
+    container_name: vortexbrowser-macos
+    restart: unless-stopped
+    shm_size: "2gb"
+    ports:
+      - "7788:7788"
+      - "9757:9757"
+    environment:
+      - VORTEX_PLATFORM=macos
+      - VORTEX_WIDTH=1920
+      - VORTEX_HEIGHT=1080
+      - VORTEX_FPS=30
+      - VORTEX_VIDEO_BITRATE=10000
+      - VORTEX_JPEG_QUALITY=85
+      - VORTEX_LOG_LEVEL=INFO
+      - OMP_NUM_THREADS=6
+    profiles:
+      - macos

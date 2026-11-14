@@ -30,35 +30,53 @@ if [ "${VORTEX_REBUILD_NATIVE:-0}" = "1" ] && [ -f "fast_pixconv.c" ]; then
         fast_pixconv.c -lturbojpeg -llz4 -o fast_pixconv.so 2>/dev/null || true
 fi
 
-# Auto-detect Raspberry Pi / low-power defaults unless overridden via ENV
+# Auto-detect platform / low-power defaults unless overridden via ENV
 ARCH="$(uname -m)"
+PLATFORM="${VORTEX_PLATFORM:-auto}"
 IS_RPI=false
-if [ -f "/sys/firmware/devicetree/base/model" ] && grep -qi "raspberry" /sys/firmware/devicetree/base/model 2>/dev/null; then
+
+if [ "$PLATFORM" = "rpi" ]; then
     IS_RPI=true
-elif [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
-    IS_RPI=true
+elif [ "$PLATFORM" != "macos" ]; then
+    # Only treat aarch64/arm64 as Raspberry Pi if devicetree confirms Broadcom/RPi
+    if [ -f "/sys/firmware/devicetree/base/model" ] && grep -qi "raspberry" /sys/firmware/devicetree/base/model 2>/dev/null; then
+        IS_RPI=true
+    elif [ -f "/proc/device-tree/compatible" ] && grep -qiE "raspberrypi|brcm" /proc/device-tree/compatible 2>/dev/null; then
+        IS_RPI=true
+    fi
 fi
 
 if [ "$IS_RPI" = true ]; then
     DEFAULT_W="1280"
     DEFAULT_H="720"
     DEFAULT_BITRATE="4000"
+    DEFAULT_FPS="25"
+    DEFAULT_OMP="4"
+elif [ "$PLATFORM" = "macos" ]; then
+    # Optimized defaults for Docker Desktop on macOS (Apple Silicon / Intel)
+    DEFAULT_W="1920"
+    DEFAULT_H="1080"
+    DEFAULT_BITRATE="10000"
+    DEFAULT_FPS="30"
+    DEFAULT_OMP="6"
 else
     DEFAULT_W="1920"
     DEFAULT_H="1080"
     DEFAULT_BITRATE="8000"
+    DEFAULT_FPS="25"
+    DEFAULT_OMP="4"
 fi
 
 WIDTH="${VORTEX_WIDTH:-$DEFAULT_W}"
 HEIGHT="${VORTEX_HEIGHT:-$DEFAULT_H}"
-FPS="${VORTEX_FPS:-25}"
+FPS="${VORTEX_FPS:-$DEFAULT_FPS}"
 VIDEO_BITRATE="${VORTEX_VIDEO_BITRATE:-$DEFAULT_BITRATE}"
 JPEG_QUALITY="${VORTEX_JPEG_QUALITY:-82}"
 LOG_LEVEL="${VORTEX_LOG_LEVEL:-INFO}"
 ENGINE="${VORTEX_ENGINE:-chromium}"
 PORT="${VORTEX_PORT:-7788}"
 
-export OMP_NUM_THREADS="${OMP_NUM_THREADS:-4}"
+export OMP_NUM_THREADS="${OMP_NUM_THREADS:-$DEFAULT_OMP}"
 
 echo "============================================================================"
 echo " VortexBrowser Universal Docker Server (${ARCH})"

@@ -8,6 +8,8 @@ VortexBrowse - CachyOS HP EliteDesk 805 G6 (AMD Ryzen PRO / Radeon Vega) Edition
   and streams 44100Hz S16BE Stereo PCM to AmigaOS 4 AHI (ahi.device)
 """
 
+from __future__ import annotations
+
 import argparse
 import asyncio
 import atexit
@@ -290,8 +292,39 @@ def setup_audio_environment() -> None:
                 pass
 
 
+def _find_macos_audio_device() -> Optional[str]:
+    """Finds a virtual loopback audio device on macOS (BlackHole 2ch, Soundflower, etc.)."""
+    try:
+        res = subprocess.run(
+            ["ffmpeg", "-f", "avfoundation", "-list_devices", "true", "-i", ""],
+            capture_output=True, text=True, timeout=4
+        )
+        output = (res.stderr or "") + "\n" + (res.stdout or "")
+        in_audio = False
+        for line in output.splitlines():
+            if "AVFoundation audio devices:" in line:
+                in_audio = True
+                continue
+            if in_audio:
+                for cand in ("BlackHole 2ch", "BlackHole 16ch", "BlackHole", "Soundflower (2ch)", "VB-Cable"):
+                    if cand.lower() in line.lower():
+                        return cand
+    except Exception:
+        pass
+    return None
+
+
 def ensure_audio_sink() -> bool:
-    """Creates and unmutes a dedicated PipeWire/PulseAudio null-sink for AmigaOS 4 audio streaming."""
+    """Creates and unmutes a dedicated PipeWire/PulseAudio null-sink (Linux) or checks BlackHole (macOS)."""
+    if platform.system() == "Darwin":
+        dev = _find_macos_audio_device()
+        if dev:
+            logger.info("macOS virtual audio device '%s' detected for AHI streaming.", dev)
+            return True
+        logger.warning("Kein macOS Virtual Audio Device (z. B. BlackHole 2ch) gefunden. Audio-Streaming deaktiviert.")
+        logger.info("Hinweis fuer macOS Audio: 'brew install blackhole-2ch' und als Standard-Ausgabe waehlen.")
+        return False
+
     setup_audio_environment()
 
     # 1. Test if sound server is reachable; if not, try to start PulseAudio daemon
@@ -338,6 +371,8 @@ def ensure_audio_sink() -> bool:
 
 def unmute_all_browser_sink_inputs() -> None:
     """Ensures PipeWire module-stream-restore never leaves Chromium sink-inputs muted at 0%."""
+    if platform.system() == "Darwin":
+        return
     try:
         out = subprocess.check_output(["pactl", "list", "short", "sink-inputs"], text=True, timeout=2)
         for line in out.splitlines():
@@ -390,30 +425,49 @@ def find_full_chromium_executable(custom_bin: Optional[str] = None) -> Optional[
         except Exception:
             pass
 
-    # Tier 1: Real native installed browsers (.deb / native packages)
-    native_patterns = [
-        os.path.expanduser("~/.local/opt/ungoogled-chromium/usr/lib/chromium/chromium"),
-        os.path.expanduser("~/.local/bin/ungoogled-chromium"),
-        "/usr/bin/ungoogled-chromium",
-        "/usr/lib/ungoogled-chromium/ungoogled-chromium",
-        "/usr/bin/google-chrome-stable",
-        "/usr/bin/google-chrome",
-        "/usr/bin/brave-browser",
-        "/usr/bin/brave",
-        "/usr/bin/chromium-browser",
-        "/usr/bin/chromium",
-        "/usr/lib/chromium-browser/chromium-browser",
-        "/usr/lib/chromium/chromium",
-    ]
+    # Tier 1: Real native installed browsers (.deb / native packages / macOS .app bundles)
+    if platform.system() == "Darwin":
+        native_patterns = [
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+            "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+            "/opt/homebrew/bin/chromium",
+            "/usr/local/bin/chromium",
+            os.path.expanduser("~/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+            os.path.expanduser("~/Applications/Chromium.app/Contents/MacOS/Chromium"),
+        ]
+    else:
+        native_patterns = [
+            os.path.expanduser("~/.local/opt/ungoogled-chromium/usr/lib/chromium/chromium"),
+            os.path.expanduser("~/.local/bin/ungoogled-chromium"),
+            "/usr/bin/ungoogled-chromium",
+            "/usr/lib/ungoogled-chromium/ungoogled-chromium",
+            "/usr/bin/google-chrome-stable",
+            "/usr/bin/google-chrome",
+            "/usr/bin/brave-browser",
+            "/usr/bin/brave",
+            "/usr/bin/chromium-browser",
+            "/usr/bin/chromium",
+            "/usr/lib/chromium-browser/chromium-browser",
+            "/usr/lib/chromium/chromium",
+        ]
     for p in native_patterns:
         if os.path.isfile(p) and os.access(p, os.X_OK) and not is_snap_binary(p):
             return p
 
     # Tier 2: Playwright native Chromium (clean, standalone, no snap confinement, has audio!)
-    pw_patterns = [
-        os.path.expanduser("~/.cache/ms-playwright/chromium-*/chrome-linux64/chrome"),
-        os.path.expanduser("~/.cache/ms-playwright/chromium-*/chrome-linux/chrome"),
-    ]
+    if platform.system() == "Darwin":
+        pw_patterns = [
+            os.path.expanduser("~/Library/Caches/ms-playwright/chromium-*/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"),
+            os.path.expanduser("~/Library/Caches/ms-playwright/chromium-*/chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"),
+            os.path.expanduser("~/Library/Caches/ms-playwright/chromium-*/chrome-mac/Chromium.app/Contents/MacOS/Chromium"),
+        ]
+    else:
+        pw_patterns = [
+            os.path.expanduser("~/.cache/ms-playwright/chromium-*/chrome-linux64/chrome"),
+            os.path.expanduser("~/.cache/ms-playwright/chromium-*/chrome-linux/chrome"),
+        ]
     candidates = []
     for pat in pw_patterns:
         candidates.extend(glob.glob(pat))
@@ -1263,8 +1317,14 @@ def _bind_fast_pixconv_symbols(_lib) -> bool:
 
 try:
     _base_dir = os.path.dirname(os.path.abspath(__file__))
+    _is_macos = (platform.system() == "Darwin")
     _is_arm = platform.machine().lower().startswith(("aarch64", "arm"))
-    _candidates = ["fast_pixconv_aarch64.so", "fast_pixconv.so"] if _is_arm else ["fast_pixconv.so", "fast_pixconv_aarch64.so"]
+    if _is_macos:
+        _candidates = ["fast_pixconv.dylib", "fast_pixconv_arm64.dylib", "fast_pixconv.so"]
+    elif _is_arm:
+        _candidates = ["fast_pixconv_aarch64.so", "fast_pixconv.so"]
+    else:
+        _candidates = ["fast_pixconv.so", "fast_pixconv_aarch64.so"]
     _loaded_path = None
     for _so_name in _candidates:
         _candidate_path = os.path.join(_base_dir, _so_name)
@@ -1282,11 +1342,25 @@ try:
     if _FAST_PIXCONV is None or not _HAS_NATIVE_PACKET_ENCODER:
         _c_src = os.path.join(_base_dir, "fast_pixconv.c")
         if os.path.exists(_c_src):
-            _target_so_name = "fast_pixconv_aarch64.so" if _is_arm else "fast_pixconv.so"
+            if _is_macos:
+                _target_so_name = "fast_pixconv.dylib"
+            else:
+                _target_so_name = "fast_pixconv_aarch64.so" if _is_arm else "fast_pixconv.so"
             _target_so_path = os.path.join(_base_dir, _target_so_name)
             try:
                 logger.info("Attempting auto-compilation of native SIMD + TurboJPEG + LZ4 helper (%s)...", _target_so_name)
-                if _is_arm:
+                if _is_macos:
+                    _hb_prefix = "/opt/homebrew" if os.path.isdir("/opt/homebrew") else "/usr/local"
+                    _hb_tj = f"{_hb_prefix}/opt/jpeg-turbo"
+                    _hb_lz4 = f"{_hb_prefix}/opt/lz4"
+                    _inc_flags = [f"-I{_hb_prefix}/include", f"-I{_hb_tj}/include", f"-I{_hb_lz4}/include"]
+                    _lib_flags = [f"-L{_hb_prefix}/lib", f"-L{_hb_tj}/lib", f"-L{_hb_lz4}/lib"]
+                    _arch_flags = ["-mcpu=apple-m1"] if _is_arm else ["-march=native"]
+                    _compile_cmds = [
+                        ["clang", "-O3", *_arch_flags, *_inc_flags, *_lib_flags, "-DHAVE_TURBOJPEG_LZ4", "-dynamiclib", "-fPIC", "-o", _target_so_path, _c_src, "-lturbojpeg", "-llz4"],
+                        ["clang", "-O3", *_arch_flags, "-dynamiclib", "-fPIC", "-o", _target_so_path, _c_src],
+                    ]
+                elif _is_arm:
                     _compile_cmds = [
                         ["gcc", "-O3", "-march=armv8-a+crc", "-mtune=cortex-a72", "-fopenmp", "-DHAVE_TURBOJPEG_LZ4", "-shared", "-fPIC", "-o", _target_so_path, _c_src, "-lturbojpeg", "-llz4"],
                         ["gcc", "-O3", "-march=armv8-a+crc", "-mtune=cortex-a72", "-shared", "-fPIC", "-o", _target_so_path, _c_src],
@@ -1543,9 +1617,27 @@ class H264LiveStreamEncoder:
 
     def _start_encoder(self) -> None:
         self.stop()
-        use_vaapi = os.path.exists("/dev/dri/renderD128")
+        use_videotoolbox = (platform.system() == "Darwin")
+        use_vaapi = (not use_videotoolbox) and os.path.exists("/dev/dri/renderD128")
         cmd = None
-        if use_vaapi:
+        if use_videotoolbox:
+            cmd = [
+                "ffmpeg", "-y", "-loglevel", "error",
+                "-f", "rawvideo", "-pix_fmt", "yuv420p",
+                "-s", f"{self.width}x{self.height}",
+                "-r", str(self.fps),
+                "-i", "-",
+                "-c:v", "h264_videotoolbox",
+                "-realtime", "true",
+                "-allow_sw", "1",
+                "-b:v", f"{self.bitrate_k}k",
+                "-maxrate", f"{self.bitrate_k * 3 // 2}k",
+                "-bufsize", f"{self.bitrate_k // 2}k",
+                "-g", str(self.fps),
+                "-bf", "0",
+                "-f", "h264", "-"
+            ]
+        elif use_vaapi:
             cmd = [
                 "ffmpeg", "-y", "-loglevel", "error",
                 "-init_hw_device", "vaapi=va:/dev/dri/renderD128",
@@ -2821,21 +2913,42 @@ class AmigaClientSession:
         proc: Optional[asyncio.subprocess.Process] = None
         try:
             unmute_all_browser_sink_inputs()
-            proc = await asyncio.create_subprocess_exec(
-                "parec",
-                f"--device={AUDIO_SINK_NAME}.monitor",
-                "--format=s16be",
-                f"--rate={AUDIO_SAMPLE_RATE}",
-                f"--channels={AUDIO_CHANNELS}",
-                "--latency-msec=45",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.DEVNULL,
-            )
-            logger.info(
-                "Audio stream capture active (%s.monitor -> %dHz S16BE Stereo)",
-                AUDIO_SINK_NAME,
-                AUDIO_SAMPLE_RATE,
-            )
+            if platform.system() == "Darwin":
+                mac_dev = _find_macos_audio_device()
+                if not mac_dev:
+                    return
+                proc = await asyncio.create_subprocess_exec(
+                    "ffmpeg", "-loglevel", "error",
+                    "-f", "avfoundation",
+                    "-i", f":{mac_dev}",
+                    "-ar", str(AUDIO_SAMPLE_RATE),
+                    "-ac", str(AUDIO_CHANNELS),
+                    "-f", "s16be",
+                    "-",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                logger.info(
+                    "macOS Audio stream capture active (%s -> %dHz S16BE Stereo)",
+                    mac_dev,
+                    AUDIO_SAMPLE_RATE,
+                )
+            else:
+                proc = await asyncio.create_subprocess_exec(
+                    "parec",
+                    f"--device={AUDIO_SINK_NAME}.monitor",
+                    "--format=s16be",
+                    f"--rate={AUDIO_SAMPLE_RATE}",
+                    f"--channels={AUDIO_CHANNELS}",
+                    "--latency-msec=45",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                logger.info(
+                    "Audio stream capture active (%s.monitor -> %dHz S16BE Stereo)",
+                    AUDIO_SINK_NAME,
+                    AUDIO_SAMPLE_RATE,
+                )
             chunks_sent = 0
             loop_iter = 0
             while self.running and proc.stdout:
