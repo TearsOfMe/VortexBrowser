@@ -152,7 +152,7 @@ typedef struct MsgDownloadComplete {
  * Python struct format: ">HBBII"
  */
 typedef struct MsgAudio {
-    uint16_t sample_rate; /* Sample frequency in Hz, e.g. 22050 (Big-Endian) */
+    uint16_t sample_rate; /* Sample frequency in Hz, e.g. 44100 (Big-Endian) */
     uint8_t  channels;    /* 1 = Mono, 2 = Stereo */
     uint8_t  codec;       /* 0 = Raw S16BE, 1 = LZ4 S16BE */
     uint32_t raw_len;     /* Uncompressed PCM byte length (Big-Endian) */

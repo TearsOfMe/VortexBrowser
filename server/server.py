@@ -5,7 +5,7 @@ VortexBrowse - CachyOS HP EliteDesk 805 G6 (AMD Ryzen PRO / Radeon Vega) Edition
 - Uses C-native AVX2 + OpenMP + libturbojpeg + liblz4 pipeline (encode_jpeg_to_frame_packet)
 - Streams 12-bpp Planar YUV420P with 2D Dirty-Rect (CODEC_LZ4_RECT) & full-frame LZ4
 - Captures real browser audio via PipeWire/PulseAudio virtual sink (full Chromium + ozone-headless)
-  and streams 22050Hz S16BE Stereo PCM to AmigaOS 4 AHI (ahi.device)
+  and streams 44100Hz S16BE Stereo PCM to AmigaOS 4 AHI (ahi.device)
 """
 
 import argparse
@@ -123,9 +123,9 @@ STRUCT_MSG_UPLOAD_CHUNK = struct.Struct(">BII")
 STRUCT_MSG_PASSWORD_SAVE = struct.Struct(">B256s128s128s")
 
 DOWNLOAD_CHUNK_SIZE = 64 * 1024
-AUDIO_SAMPLE_RATE   = 22050
+AUDIO_SAMPLE_RATE   = 44100
 AUDIO_CHANNELS      = 2
-AUDIO_CHUNK_BYTES   = 8192  # ~92ms of 22050Hz 16-bit stereo PCM
+AUDIO_CHUNK_BYTES   = 8192  # ~46ms of 44100Hz 16-bit stereo PCM (CD quality)
 AUDIO_SINK_NAME     = "vortexbrowse_sink"
 
 _LOG_LEVEL_STR = os.environ.get("VORTEX_LOG_LEVEL", "CRITICAL").upper()
@@ -857,7 +857,7 @@ function playAmigaSynth() {
       <div class="card-body">
         <div>
           <h3>YouTube</h3>
-          <p>Videos &amp; Musik mit direkter 22050Hz AHI-Stereo-Ton&uuml;bertragung auf die Workbench.</p>
+          <p>Videos &amp; Musik mit direkter 44100Hz AHI-Stereo-Ton&uuml;bertragung (CD-Qualit&auml;t) auf die Workbench.</p>
         </div>
         <div class="card-action">
           <a class="btn-action" href="https://www.youtube.com">&Ouml;ffnen</a>

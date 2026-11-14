@@ -1581,7 +1581,7 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
                 "Server-Stream: %ux%u (%s)\n"
                 "Dekodierte Frames: %u\n\n"
                 "=== AUDIO & OPTIMIERUNG ===\n"
-                "Audio-Engine: AHI 16-Bit Stereo (22050 Hz PCM Low-Latency)\n"
+                "Audio-Engine: AHI 16-Bit Stereo (44100 Hz CD-Qualitaet PCM Low-Latency)\n"
                 "CPU-Ziel: PowerPC Universal (Dynamische CPU-Erkennung)\n"
                 "Vector-SIMD: %s\n"
                 "Kompression: LZ4 Realtime Stream Decompressor",
