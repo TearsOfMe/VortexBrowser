@@ -4548,6 +4548,9 @@ class AmigaClientSession:
                     self.tabs.append(new_page)
                     self.active_tab_idx = len(self.tabs) - 1
                     self.page = new_page
+                    self.prev_raw_buf = None
+                    self.last_frame_hash = None
+                    self.force_full_frame = True
                     self._setup_page_listeners(new_page)
                     await self.page.set_viewport_size({"width": self.width, "height": self.height})
                     if self.engine == "chromium":
@@ -4574,6 +4577,9 @@ class AmigaClientSession:
                     await self._stop_screencast()
                     self.active_tab_idx = tidx
                     self.page = self.tabs[tidx]
+                    self.prev_raw_buf = None
+                    self.last_frame_hash = None
+                    self.force_full_frame = True
                     try:
                         await self.page.set_viewport_size({"width": self.width, "height": self.height})
                     except Exception:
@@ -4584,7 +4590,7 @@ class AmigaClientSession:
                     else:
                         self.cdp = None
                     await self._apply_dark_mode(self.page)
-                    self._send_nav_update(self.page.url or "")
+                    self._send_nav_update(self.page.url or "", tab_idx=tidx)
                     self._trigger_full_refresh(True)
                     self._schedule_delayed_frames()
             except Exception as exc:
@@ -4604,6 +4610,9 @@ class AmigaClientSession:
                     if self.active_tab_idx >= len(self.tabs):
                         self.active_tab_idx = len(self.tabs) - 1
                     self.page = self.tabs[self.active_tab_idx]
+                    self.prev_raw_buf = None
+                    self.last_frame_hash = None
+                    self.force_full_frame = True
                     try:
                         await self.page.set_viewport_size({"width": self.width, "height": self.height})
                     except Exception:
@@ -4614,7 +4623,7 @@ class AmigaClientSession:
                     else:
                         self.cdp = None
                     await self._apply_dark_mode(self.page)
-                    self._send_nav_update(self.page.url or "")
+                    self._send_nav_update(self.page.url or "", tab_idx=self.active_tab_idx)
                     self._trigger_full_refresh(True)
                     self._schedule_delayed_frames()
             except Exception as exc:

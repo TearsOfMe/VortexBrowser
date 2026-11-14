@@ -4386,7 +4386,8 @@ void gui_update_url_bar(VortexApp *app, const char *url)
     if (url && app->num_tabs > 0 && app->active_tab_idx < app->num_tabs) {
         strncpy(app->tabs[app->active_tab_idx].url, url, sizeof(app->tabs[0].url) - 1);
         app->tabs[app->active_tab_idx].url[sizeof(app->tabs[0].url) - 1] = '\0';
-        if (disp[0] != '\0' && strncmp(disp, "http", 4) == 0) {
+        /* Only fallback to hostname for tab title if tab title is currently completely empty */
+        if (app->tabs[app->active_tab_idx].title[0] == '\0' && disp[0] != '\0' && strncmp(disp, "http", 4) == 0) {
             const char *p = disp;
             if (strncmp(p, "http://", 7) == 0) p += 7;
             else if (strncmp(p, "https://", 8) == 0) p += 8;
