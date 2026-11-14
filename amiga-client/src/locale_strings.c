@@ -1101,16 +1101,7 @@ void locale_init_catalog(void)
 
     if (IDOS) old_win = IDOS->SetProcWindow((APTR)-1);
 
-    /* 1. Optional user override via ENV:VortexBrowser/language */
-    if (IDOS) {
-        env_len = IDOS->GetVar("VortexBrowser/language", env_lang, sizeof(env_lang), 0);
-        if (env_len > 0 && trim_trailing_ws(env_lang, env_len) > 0) {
-            snprintf(diag_pref, sizeof(diag_pref), "%s", env_lang);
-            resolved = try_resolve_language(env_lang, "ENV", &diag_err);
-        }
-    }
-
-    /* 2. Canonical OS4 OpenCatalogA without OC_Language or OC_BuiltInCodeSet */
+    /* 1. Canonical OS4 OpenCatalogA using system Prefs/Locale without OC_Language or OC_BuiltInCodeSet */
     if (!resolved && ILocale) {
         s_catalog = try_open_catalog_sys(NULL);
         if (s_catalog) {
@@ -1121,7 +1112,7 @@ void locale_init_catalog(void)
         }
     }
 
-    /* 3. Walk s_locale->loc_PrefLanguages[0..9] without aborting on NULL holes */
+    /* 2. Walk s_locale->loc_PrefLanguages[0..9] without aborting on NULL holes */
     if (!resolved && s_locale) {
         int i;
         for (i = 0; i < 10; i++) {
@@ -1137,7 +1128,7 @@ void locale_init_catalog(void)
         }
     }
 
-    /* 4. Fallback system sources: loc_LanguageName and ENV:LanguageName / ENV:Language */
+    /* 3. Fallback system sources: loc_LanguageName and ENV:LanguageName / ENV:Language */
     if (!resolved && s_locale && s_locale->loc_LanguageName && s_locale->loc_LanguageName[0]) {
         const char *lname = (const char *)s_locale->loc_LanguageName;
         if (!diag_pref[0]) {
@@ -1150,13 +1141,26 @@ void locale_init_catalog(void)
         const char *env_vars[2] = { "LanguageName", "Language" };
         size_t i;
         for (i = 0; i < 2 && !resolved; i++) {
-            env_len = IDOS->GetVar(env_vars[i], env_lang, sizeof(env_lang), 0);
+            env_lang[0] = '\0';
+            env_len = IDOS->GetVar(env_vars[i], env_lang, sizeof(env_lang), GVF_GLOBAL_ONLY);
             if (env_len > 0 && trim_trailing_ws(env_lang, env_len) > 0) {
                 if (!diag_pref[0]) {
                     snprintf(diag_pref, sizeof(diag_pref), "%s", env_lang);
                 }
                 resolved = try_resolve_language(env_lang, NULL, &diag_err);
             }
+        }
+    }
+
+    /* 4. Last-resort fallback: ENV:VortexBrowser/language only when system Locale resolved nothing */
+    if (!resolved && IDOS) {
+        env_lang[0] = '\0';
+        env_len = IDOS->GetVar("VortexBrowser/language", env_lang, sizeof(env_lang), GVF_GLOBAL_ONLY);
+        if (env_len > 0 && trim_trailing_ws(env_lang, env_len) > 0) {
+            if (!diag_pref[0]) {
+                snprintf(diag_pref, sizeof(diag_pref), "%s", env_lang);
+            }
+            resolved = try_resolve_language(env_lang, "ENV", &diag_err);
         }
     }
 
