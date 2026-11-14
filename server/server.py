@@ -4161,9 +4161,10 @@ class AmigaClientSession:
                 logger.debug("Emulation.setAutoDarkModeOverride error: %s", exc)
 
         if is_kindle:
-            # Kindle Cloud Reader renders book pages onto <canvas> / transparent bitmap tiles.
-            # DarkReader and forced background overrides turn the page dark while leaving bitmap/canvas
-            # text black (invisible). Disable DarkReader and use clean CSS hue-preserving inversion.
+            # Kindle Cloud Reader renders book pages onto <canvas> / transparent bitmap <img> tiles.
+            # If the user already has Kindle's native dark theme active (.kg-client-theme--dark or dark body),
+            # we MUST NOT apply DarkReader, AutoDarkMode, or CSS inversion — otherwise black turns white!
+            # Only apply CSS inversion when Kindle is in light mode (light background).
             try:
                 if is_dark:
                     kindle_dark_js = """
@@ -4173,21 +4174,34 @@ class AmigaClientSession:
                             let f = document.getElementById('__vb_dark_flash');
                             if (f) f.remove();
                             let s = document.getElementById('__vb_kindle_dark_fix');
-                            if (!s && document.head) {
-                                s = document.createElement('style');
-                                s.id = '__vb_kindle_dark_fix';
-                                document.head.appendChild(s);
+                            const hasNativeDark = !!document.querySelector('.kg-client-theme--dark');
+                            let isDarkBg = hasNativeDark;
+                            if (!isDarkBg && document.body) {
+                                const m = getComputedStyle(document.body).backgroundColor.match(/\\d+/g);
+                                if (m && m.length >= 3) {
+                                    const lum = parseInt(m[0], 10) + parseInt(m[1], 10) + parseInt(m[2], 10);
+                                    if (lum < 200 && !(m[3] === '0')) isDarkBg = true;
+                                }
                             }
-                            if (s) {
-                                s.textContent = `
-                                    html {
-                                        filter: invert(0.91) hue-rotate(180deg) !important;
-                                        background-color: #ffffff !important;
-                                    }
-                                    img[src*="images-amazon"], img[src*="media-amazon"], video {
-                                        filter: invert(1) hue-rotate(180deg) !important;
-                                    }
-                                `;
+                            if (isDarkBg) {
+                                if (s) s.remove();
+                            } else {
+                                if (!s && document.head) {
+                                    s = document.createElement('style');
+                                    s.id = '__vb_kindle_dark_fix';
+                                    document.head.appendChild(s);
+                                }
+                                if (s) {
+                                    s.textContent = `
+                                        html {
+                                            filter: invert(0.91) hue-rotate(180deg) !important;
+                                            background-color: #ffffff !important;
+                                        }
+                                        img[src*="images-amazon"], img[src*="media-amazon"], video {
+                                            filter: invert(1) hue-rotate(180deg) !important;
+                                        }
+                                    `;
+                                }
                             }
                         } catch(e) {}
                     })();
