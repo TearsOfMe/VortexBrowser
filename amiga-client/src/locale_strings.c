@@ -774,13 +774,13 @@ static struct Catalog *try_open_catalog_sys(const char *lang_name)
     return cat;
 }
 
-static uint8 *read_amiga_catalog_blob(const char *path, size_t *out_len, int32 *out_err)
+static uint8 *read_amiga_file_blob(const char *path, size_t *out_len, int32 *out_err)
 {
     BPTR fh;
     uint8 *buf = NULL;
     size_t cap = 0;
     size_t len = 0;
-    enum { MAX_CATALOG_BYTES = 512 * 1024 };
+    enum { MAX_FILE_BYTES = 512 * 1024 };
 
     *out_len = 0;
     if (!IDOS || !path || !path[0]) return NULL;
@@ -804,7 +804,7 @@ static uint8 *read_amiga_catalog_blob(const char *path, size_t *out_len, int32 *
         if (len == cap) {
             size_t new_cap = cap * 2;
             uint8 *nb;
-            if (new_cap > MAX_CATALOG_BYTES) {
+            if (new_cap > MAX_FILE_BYTES) {
                 free(buf);
                 IDOS->Close(fh);
                 return NULL;
@@ -979,7 +979,7 @@ static BOOL try_load_ctlg_direct(const char *lang_name, int32 *out_err)
         size_t blob_len = 0;
         uint8 *blob;
         snprintf(path, sizeof(path), patterns[i], lang_name);
-        blob = read_amiga_catalog_blob(path, &blob_len, out_err);
+        blob = read_amiga_file_blob(path, &blob_len, out_err);
         if (blob) {
             BOOL ok = parse_ctlg_blob(blob, blob_len);
             free(blob);
@@ -1053,13 +1053,275 @@ static BOOL try_resolve_language(const char *raw_lang, const char *source_tag, i
     for (i = 0; i < cand_count; i++) {
         if (try_load_ctlg_direct(candidates[i], out_err)) {
             const char *name = s_fallback_lang[0] ? s_fallback_lang : candidates[i];
-            snprintf(s_active_language, sizeof(s_active_language), "%s (%sdirect)",
-                     name, (source_tag && source_tag[0]) ? "ENV/" : "");
+            if (source_tag && source_tag[0]) {
+                snprintf(s_active_language, sizeof(s_active_language), "%s (%s/direct)", name, source_tag);
+            } else {
+                snprintf(s_active_language, sizeof(s_active_language), "%s (direct)", name);
+            }
             return TRUE;
         }
     }
 
     return FALSE;
+}
+
+typedef struct {
+    BOOL has_prefs;
+    BOOL has_pref_languages;
+    char country_name[32];
+    char country_code[5];
+} ParsedLocalePrefs;
+
+static BOOL parse_locale_prefs_blob(const uint8 *blob, size_t blob_len, ParsedLocalePrefs *out)
+{
+    size_t pos = 12;
+    if (!blob || !out || blob_len < 12) return FALSE;
+    if (memcmp(blob, "FORM", 4) != 0 || memcmp(blob + 8, "PREF", 4) != 0) return FALSE;
+
+    while (pos + 8 <= blob_len) {
+        uint32 cid = read_be32(blob + pos);
+        uint32 csz = read_be32(blob + pos + 4);
+        size_t data_off = pos + 8;
+        uint32 step;
+
+        if ((size_t)csz > blob_len - data_off) break;
+
+        /* 'LCLE': lp_Reserved[4](16) + lp_CountryName[32](32) + lp_PreferredLanguages[10][30](300) */
+        if (cid == 0x4C434C45u && csz >= 348u) {
+            const uint8 *cd = blob + data_off;
+            size_t cn_len = bounded_cstr_len(cd + 16, 32);
+            int i;
+
+            if (cn_len >= sizeof(out->country_name)) cn_len = sizeof(out->country_name) - 1;
+            memcpy(out->country_name, cd + 16, cn_len);
+            out->country_name[cn_len] = '\0';
+
+            out->has_pref_languages = FALSE;
+            for (i = 0; i < 10; i++) {
+                if (cd[48 + i * 30] != '\0') {
+                    out->has_pref_languages = TRUE;
+                    break;
+                }
+            }
+
+            /* cp_CountryCode sits inside lp_CountryData at offset 356 + 16 = 372 */
+            if (csz >= 376u) {
+                size_t cc_len = bounded_cstr_len(cd + 372, 4);
+                if (cc_len >= sizeof(out->country_code)) cc_len = sizeof(out->country_code) - 1;
+                memcpy(out->country_code, cd + 372, cc_len);
+                out->country_code[cc_len] = '\0';
+            }
+
+            out->has_prefs = TRUE;
+            return TRUE;
+        }
+
+        step = csz + (csz & 1u);
+        if (step < csz || (size_t)step > blob_len - data_off) break;
+        pos = data_off + (size_t)step;
+    }
+    return FALSE;
+}
+
+static void read_system_locale_prefs(ParsedLocalePrefs *out)
+{
+    const char *paths[2] = { "ENV:Sys/locale.prefs", "ENVARC:Sys/locale.prefs" };
+    size_t i;
+
+    memset(out, 0, sizeof(*out));
+    if (!IDOS) return;
+
+    for (i = 0; i < 2; i++) {
+        size_t len = 0;
+        uint8 *blob = read_amiga_file_blob(paths[i], &len, NULL);
+        if (blob) {
+            BOOL ok = parse_locale_prefs_blob(blob, len, out);
+            free(blob);
+            if (ok) return;
+        }
+    }
+}
+
+static void unpack_country_code(uint32 code, char out[5])
+{
+    size_t n = 0;
+    int shift;
+    for (shift = 24; shift >= 0; shift -= 8) {
+        unsigned char ch = (unsigned char)((code >> shift) & 0xFFu);
+        if (ch == '\0') break;
+        if (n < 4) out[n++] = (char)ch;
+    }
+    out[n] = '\0';
+}
+
+static void normalize_country_token(const char *src, char *dst, size_t dst_sz)
+{
+    const char *base = src;
+    const unsigned char *p;
+    size_t out = 0;
+    size_t suffix_len = 8; /* strlen(".country") */
+
+    if (!dst || dst_sz == 0) return;
+    dst[0] = '\0';
+    if (!src) return;
+
+    while (*src) {
+        if (*src == ':' || *src == '/') base = src + 1;
+        src++;
+    }
+
+    p = (const unsigned char *)base;
+    while (*p && out + 1 < dst_sz) {
+        unsigned char c = *p;
+        if (c == ' ' || c == '-' || c == '_') {
+            dst[out++] = '_';
+            p++;
+        } else if (c == 0xC3 && p[1] != '\0') {
+            unsigned char n = p[1];
+            if (n >= 0xA0 && n <= 0xA5) { dst[out++] = 'a'; p += 2; continue; }
+            if (n == 0x84)               { dst[out++] = 'a'; p += 2; continue; }
+            if (n == 0xA7 || n == 0x87)  { dst[out++] = 'c'; p += 2; continue; }
+            if (n >= 0xA8 && n <= 0xAB)  { dst[out++] = 'e'; p += 2; continue; }
+            if (n >= 0xAC && n <= 0xAF)  { dst[out++] = 'i'; p += 2; continue; }
+            if (n == 0xB1 || n == 0x91)  { dst[out++] = 'n'; p += 2; continue; }
+            if (n >= 0xB2 && n <= 0xB6)  { dst[out++] = 'o'; p += 2; continue; }
+            if (n == 0x96)               { dst[out++] = 'o'; p += 2; continue; }
+            if (n >= 0xB9 && n <= 0xBC)  { dst[out++] = 'u'; p += 2; continue; }
+            if (n == 0x9C)               { dst[out++] = 'u'; p += 2; continue; }
+            p += 2;
+        } else if (c == 0xC4 || c == 0xE4) {
+            dst[out++] = 'a'; p++;
+        } else if (c == 0xC7 || c == 0xE7) {
+            dst[out++] = 'c'; p++;
+        } else if (c == 0xD1 || c == 0xF1) {
+            dst[out++] = 'n'; p++;
+        } else if (c == 0xD6 || c == 0xF6) {
+            dst[out++] = 'o'; p++;
+        } else if (c == 0xDC || c == 0xFC) {
+            dst[out++] = 'u'; p++;
+        } else {
+            dst[out++] = ascii_tolower((char)c);
+            p++;
+        }
+    }
+    dst[out] = '\0';
+
+    if (out > suffix_len && ascii_eq_ci(dst + out - suffix_len, ".country")) {
+        dst[out - suffix_len] = '\0';
+    }
+}
+
+static const char *map_country_to_language(const char *country_name, const char *country_code)
+{
+    typedef struct {
+        const char *key;
+        const char *lang;
+    } KeyLangEntry;
+
+    static const KeyLangEntry name_map[] = {
+        { "germany",            "german"  },
+        { "deutschland",        "german"  },
+        { "austria",            "german"  },
+        { "osterreich",         "german"  },
+        { "liechtenstein",      "german"  },
+        { "german",             "german"  },
+        { "deutsch",            "german"  },
+        { "italy",              "italian" },
+        { "italia",             "italian" },
+        { "italien",            "italian" },
+        { "san_marino",         "italian" },
+        { "vatican",            "italian" },
+        { "vatican_city",       "italian" },
+        { "italian",            "italian" },
+        { "italiano",           "italian" },
+        { "france",             "french"  },
+        { "frankreich",         "french"  },
+        { "monaco",             "french"  },
+        { "luxembourg",         "french"  },
+        { "luxemburg",          "french"  },
+        { "french",             "french"  },
+        { "francais",           "french"  },
+        { "spain",              "spanish" },
+        { "espana",             "spanish" },
+        { "spanien",            "spanish" },
+        { "mexico",             "spanish" },
+        { "mexiko",             "spanish" },
+        { "argentina",          "spanish" },
+        { "argentinien",        "spanish" },
+        { "colombia",           "spanish" },
+        { "kolumbien",          "spanish" },
+        { "chile",              "spanish" },
+        { "peru",               "spanish" },
+        { "venezuela",          "spanish" },
+        { "ecuador",            "spanish" },
+        { "uruguay",            "spanish" },
+        { "paraguay",           "spanish" },
+        { "bolivia",            "spanish" },
+        { "bolivien",           "spanish" },
+        { "cuba",               "spanish" },
+        { "kuba",               "spanish" },
+        { "dominican_republic", "spanish" },
+        { "costa_rica",         "spanish" },
+        { "panama",             "spanish" },
+        { "guatemala",          "spanish" },
+        { "honduras",           "spanish" },
+        { "nicaragua",          "spanish" },
+        { "el_salvador",        "spanish" },
+        { "puerto_rico",        "spanish" },
+        { "spanish",            "spanish" },
+        { "espanol",            "spanish" },
+        { "united_states",      "english" },
+        { "usa",                "english" },
+        { "united_kingdom",     "english" },
+        { "great_britain",      "english" },
+        { "england",            "english" },
+        { "scotland",           "english" },
+        { "wales",              "english" },
+        { "northern_ireland",   "english" },
+        { "ireland",            "english" },
+        { "irland",             "english" },
+        { "canada",             "english" },
+        { "kanada",             "english" },
+        { "australia",          "english" },
+        { "australien",         "english" },
+        { "new_zealand",        "english" },
+        { "neuseeland",         "english" },
+        { "english",            "english" }
+    };
+    static const KeyLangEntry code_map[] = {
+        { "DEU", "german"  }, { "GER", "german"  }, { "AUT", "german"  }, { "LIE", "german"  },
+        { "ITA", "italian" }, { "SMR", "italian" }, { "VAT", "italian" },
+        { "FRA", "french"  }, { "MCO", "french"  }, { "LUX", "french"  },
+        { "ESP", "spanish" }, { "SPA", "spanish" }, { "MEX", "spanish" }, { "ARG", "spanish" },
+        { "COL", "spanish" }, { "CHL", "spanish" }, { "PER", "spanish" }, { "VEN", "spanish" },
+        { "ECU", "spanish" }, { "URY", "spanish" }, { "URU", "spanish" }, { "PRY", "spanish" },
+        { "PAR", "spanish" }, { "BOL", "spanish" }, { "CUB", "spanish" }, { "DOM", "spanish" },
+        { "CRI", "spanish" }, { "PAN", "spanish" }, { "GTM", "spanish" }, { "HND", "spanish" },
+        { "NIC", "spanish" }, { "SLV", "spanish" }, { "PRI", "spanish" },
+        { "USA", "english" }, { "GBR", "english" }, { "UK",  "english" }, { "ENG", "english" },
+        { "IRL", "english" }, { "CAN", "english" }, { "AUS", "english" }, { "NZL", "english" }
+    };
+    char norm_name[64];
+    size_t i;
+
+    if (country_name && country_name[0]) {
+        normalize_country_token(country_name, norm_name, sizeof(norm_name));
+        for (i = 0; i < sizeof(name_map) / sizeof(name_map[0]); i++) {
+            if (ascii_eq_ci(norm_name, name_map[i].key)) {
+                return name_map[i].lang;
+            }
+        }
+    }
+
+    if (country_code && country_code[0]) {
+        for (i = 0; i < sizeof(code_map) / sizeof(code_map[0]); i++) {
+            if (ascii_eq_ci(country_code, code_map[i].key)) {
+                return code_map[i].lang;
+            }
+        }
+    }
+
+    return NULL;
 }
 
 static size_t trim_trailing_ws(char *buf, int32 len)
@@ -1077,11 +1339,14 @@ void locale_init_catalog(void)
     APTR old_win = NULL;
     char env_lang[64];
     char diag_pref[64];
+    char loc_cc[5];
+    ParsedLocalePrefs lp;
     int32 env_len = -1;
     BOOL resolved = FALSE;
     int32 diag_err = 0;
 
     diag_pref[0] = '\0';
+    loc_cc[0] = '\0';
     locale_free_fallback();
     snprintf(s_active_language, sizeof(s_active_language), "english (built-in)");
 
@@ -1097,11 +1362,29 @@ void locale_init_catalog(void)
 
     if (ILocale) {
         s_locale = ILocale->OpenLocale(NULL);
+        if (s_locale && s_locale->loc_CountryCode != 0) {
+            unpack_country_code(s_locale->loc_CountryCode, loc_cc);
+        }
     }
 
     if (IDOS) old_win = IDOS->SetProcWindow((APTR)-1);
 
-    /* 1. Canonical OS4 OpenCatalogA using system Prefs/Locale without OC_Language or OC_BuiltInCodeSet */
+    read_system_locale_prefs(&lp);
+
+    /* 1. If Prefs/Locale Preferred Languages is empty, infer language from Country */
+    if (!resolved && lp.has_prefs && !lp.has_pref_languages) {
+        const char *cc = lp.country_code[0] ? lp.country_code : loc_cc;
+        const char *cn = lp.country_name[0] ? lp.country_name : (s_locale ? (const char *)s_locale->loc_LocaleName : NULL);
+        const char *inferred = map_country_to_language(cn, cc);
+        if (inferred) {
+            if (!diag_pref[0] && cn && cn[0]) {
+                snprintf(diag_pref, sizeof(diag_pref), "%s", cn);
+            }
+            resolved = try_resolve_language(inferred, "Country", &diag_err);
+        }
+    }
+
+    /* 2. Canonical OS4 OpenCatalogA using system Prefs/Locale without OC_Language or OC_BuiltInCodeSet */
     if (!resolved && ILocale) {
         s_catalog = try_open_catalog_sys(NULL);
         if (s_catalog) {
@@ -1112,7 +1395,7 @@ void locale_init_catalog(void)
         }
     }
 
-    /* 2. Walk s_locale->loc_PrefLanguages[0..9] without aborting on NULL holes */
+    /* 3. Walk s_locale->loc_PrefLanguages[0..9] without aborting on NULL holes */
     if (!resolved && s_locale) {
         int i;
         for (i = 0; i < 10; i++) {
@@ -1128,7 +1411,7 @@ void locale_init_catalog(void)
         }
     }
 
-    /* 3. Fallback system sources: loc_LanguageName and ENV:LanguageName / ENV:Language */
+    /* 4. Fallback system sources: loc_LanguageName and ENV:LanguageName / ENV:Language */
     if (!resolved && s_locale && s_locale->loc_LanguageName && s_locale->loc_LanguageName[0]) {
         const char *lname = (const char *)s_locale->loc_LanguageName;
         if (!diag_pref[0]) {
@@ -1152,7 +1435,15 @@ void locale_init_catalog(void)
         }
     }
 
-    /* 4. Last-resort fallback: ENV:VortexBrowser/language only when system Locale resolved nothing */
+    /* 5. Secondary Country fallback if locale.prefs file was unavailable */
+    if (!resolved && !lp.has_prefs && s_locale) {
+        const char *inferred = map_country_to_language((const char *)s_locale->loc_LocaleName, loc_cc);
+        if (inferred) {
+            resolved = try_resolve_language(inferred, "Country", &diag_err);
+        }
+    }
+
+    /* 6. Last-resort fallback: ENV:VortexBrowser/language only when system Locale resolved nothing */
     if (!resolved && IDOS) {
         env_lang[0] = '\0';
         env_len = IDOS->GetVar("VortexBrowser/language", env_lang, sizeof(env_lang), GVF_GLOBAL_ONLY);
