@@ -1,22 +1,78 @@
 #include "locale_strings.h"
+#include "app.h"
 #include <proto/exec.h>
 #include <proto/locale.h>
 #include <proto/codesets.h>
 #include <libraries/codesets.h>
 #include <proto/dos.h>
 #include <libraries/locale.h>
+#include <utility/tagitem.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
-struct Library        *LocaleBase   = NULL;
-struct LocaleIFace    *ILocale      = NULL;
-struct Library        *CodesetsBase = NULL;
-struct CodesetsIFace  *ICodesets    = NULL;
-static struct Catalog *s_catalog    = NULL;
-static struct Locale  *s_locale     = NULL;
-static char            s_active_language[64] = "english (built-in)";
+typedef struct {
+    uint32      id;
+    const char *str;
+} FallbackCatalogEntry;
+
+struct Library             *LocaleBase         = NULL;
+struct LocaleIFace         *ILocale            = NULL;
+struct Library             *CodesetsBase       = NULL;
+struct CodesetsIFace       *ICodesets          = NULL;
+static struct Catalog      *s_catalog          = NULL;
+static struct Locale       *s_locale           = NULL;
+static char                 s_active_language[128] = "english (built-in)";
+static FallbackCatalogEntry *s_fallback_entries = NULL;
+static size_t               s_fallback_count   = 0;
+static char                *s_fallback_pool    = NULL;
+static char                 s_fallback_lang[64] = "";
+
+static uint32 read_be32(const uint8 *p)
+{
+    return ((uint32)p[0] << 24) | ((uint32)p[1] << 16) |
+           ((uint32)p[2] << 8)  | (uint32)p[3];
+}
+
+static int cmp_fallback_entry(const void *a, const void *b)
+{
+    const FallbackCatalogEntry *ea = (const FallbackCatalogEntry *)a;
+    const FallbackCatalogEntry *eb = (const FallbackCatalogEntry *)b;
+    if (ea->id < eb->id) return -1;
+    if (ea->id > eb->id) return 1;
+    return 0;
+}
+
+static CONST_STRPTR fallback_lookup(ULONG id, CONST_STRPTR def_str)
+{
+    size_t lo = 0;
+    size_t hi = s_fallback_count;
+    while (lo < hi) {
+        size_t mid = lo + (hi - lo) / 2;
+        uint32 mid_id = s_fallback_entries[mid].id;
+        if (mid_id == (uint32)id) {
+            return (CONST_STRPTR)s_fallback_entries[mid].str;
+        }
+        if (mid_id < (uint32)id) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    return def_str;
+}
+
+static void locale_free_fallback(void)
+{
+    free(s_fallback_entries);
+    s_fallback_entries = NULL;
+    s_fallback_count   = 0;
+    free(s_fallback_pool);
+    s_fallback_pool    = NULL;
+    s_fallback_lang[0] = '\0';
+}
 
 typedef struct {
     ULONG id;
@@ -502,6 +558,10 @@ CONST_STRPTR GetVString(ULONG id)
         return ILocale->GetCatalogStr(s_catalog, id, def_str);
     }
 
+    if (s_fallback_entries && s_fallback_count > 0) {
+        return fallback_lookup(id, def_str);
+    }
+
     return def_str;
 }
 
@@ -683,49 +743,270 @@ static void normalize_lang_token(const char *src, char *dst, size_t dst_sz)
     dst[out] = '\0';
 }
 
-static struct Catalog *try_open_catalog_name(const char *lang_name)
+static struct Catalog *try_open_catalog_sys(const char *lang_name)
 {
-    struct Catalog *cat = NULL;
-    char path[256];
-    const char *prefixes[] = {
-        "PROGDIR:catalogs/%s/VortexBrowser.catalog",
-        "PROGDIR:Catalogs/%s/VortexBrowser.catalog",
-        "LOCALE:Catalogs/%s/VortexBrowser.catalog",
-        "LOCALE:catalogs/%s/VortexBrowser.catalog"
-    };
-    size_t i;
+    struct TagItem tags[3];
+    struct Catalog *cat;
+    int n = 0;
 
-    if (!ILocale || !lang_name || !lang_name[0]) return NULL;
+    if (!ILocale) return NULL;
 
-    /* Standard OS4 search across PROGDIR:Catalogs/<lang> and LOCALE:Catalogs/<lang> */
-    cat = ILocale->OpenCatalog(s_locale, "VortexBrowser.catalog",
-        OC_BuiltInLanguage, (Tag)"english",
-        OC_BuiltInCodeSet,  4,
-        OC_Language,        (Tag)lang_name,
-        TAG_DONE);
-    if (cat) return cat;
+    tags[n].ti_Tag  = OC_BuiltInLanguage;
+    tags[n].ti_Data = (Tag)"english";
+    n++;
 
-    /* Fallback explicit paths handle lowercase 'catalogs/' on case-sensitive filesystems */
-    for (i = 0; i < sizeof(prefixes) / sizeof(prefixes[0]); i++) {
-        snprintf(path, sizeof(path), prefixes[i], lang_name);
-        cat = ILocale->OpenCatalog(s_locale, path,
-            OC_BuiltInLanguage, (Tag)"english",
-            OC_BuiltInCodeSet,  4,
-            OC_Language,        (Tag)lang_name,
-            TAG_DONE);
-        if (cat) return cat;
+    /* Omit OC_BuiltInCodeSet per AmigaOS 4 locale.doc so locale.library
+     * converts CSET=4 catalogs to the user's active charset automatically
+     * (e.g. ISO-8859-15 id 111) instead of leaving raw charset handling to the app. */
+    if (lang_name && lang_name[0]) {
+        tags[n].ti_Tag  = OC_Language;
+        tags[n].ti_Data = (Tag)lang_name;
+        n++;
     }
 
-    return NULL;
+    tags[n].ti_Tag  = TAG_DONE;
+    tags[n].ti_Data = 0;
+
+    cat = ILocale->OpenCatalogA(NULL, "VortexBrowser.catalog", tags);
+    if (!cat && s_locale) {
+        cat = ILocale->OpenCatalogA(s_locale, "VortexBrowser.catalog", tags);
+    }
+    return cat;
+}
+
+static uint8 *read_amiga_catalog_blob(const char *path, size_t *out_len, int32 *out_err)
+{
+    BPTR fh;
+    uint8 *buf = NULL;
+    size_t cap = 0;
+    size_t len = 0;
+    enum { MAX_CATALOG_BYTES = 512 * 1024 };
+
+    *out_len = 0;
+    if (!IDOS || !path || !path[0]) return NULL;
+
+    fh = IDOS->Open(path, MODE_OLDFILE);
+    if (!fh) {
+        if (out_err) *out_err = IDOS->IoErr();
+        return NULL;
+    }
+
+    cap = 24576;
+    buf = (uint8 *)malloc(cap);
+    if (!buf) {
+        IDOS->Close(fh);
+        return NULL;
+    }
+
+    for (;;) {
+        int32 avail;
+        int32 got;
+        if (len == cap) {
+            size_t new_cap = cap * 2;
+            uint8 *nb;
+            if (new_cap > MAX_CATALOG_BYTES) {
+                free(buf);
+                IDOS->Close(fh);
+                return NULL;
+            }
+            nb = (uint8 *)realloc(buf, new_cap);
+            if (!nb) {
+                free(buf);
+                IDOS->Close(fh);
+                return NULL;
+            }
+            buf = nb;
+            cap = new_cap;
+        }
+        avail = (int32)(cap - len);
+        got = IDOS->Read(fh, buf + len, avail);
+        if (got < 0) {
+            if (out_err) *out_err = IDOS->IoErr();
+            free(buf);
+            IDOS->Close(fh);
+            return NULL;
+        }
+        if (got == 0) break;
+        len += (size_t)got;
+    }
+
+    IDOS->Close(fh);
+    *out_len = len;
+    return buf;
+}
+
+static size_t bounded_cstr_len(const uint8 *p, size_t max_len)
+{
+    size_t n = 0;
+    while (n < max_len && p[n] != '\0') n++;
+    return n;
+}
+
+static BOOL parse_ctlg_blob(const uint8 *blob, size_t blob_len)
+{
+    size_t pos = 12;
+    size_t strs_off = 0;
+    size_t strs_size = 0;
+    size_t off;
+    size_t count = 0;
+    size_t pool_bytes = 0;
+    FallbackCatalogEntry *entries = NULL;
+    char *pool = NULL;
+    size_t pool_pos = 0;
+    size_t idx = 0;
+    char parsed_lang[64];
+
+    if (!blob || blob_len < 12) return FALSE;
+    if (memcmp(blob, "FORM", 4) != 0 || memcmp(blob + 8, "CTLG", 4) != 0) return FALSE;
+
+    parsed_lang[0] = '\0';
+
+    while (pos + 8 <= blob_len) {
+        uint32 cid = read_be32(blob + pos);
+        uint32 csz = read_be32(blob + pos + 4);
+        size_t data_off = pos + 8;
+        uint32 step;
+
+        if ((size_t)csz > blob_len - data_off) break;
+
+        if (cid == 0x4C414E47u) { /* 'LANG' */
+            size_t n = bounded_cstr_len(blob + data_off, csz);
+            if (n >= sizeof(parsed_lang)) n = sizeof(parsed_lang) - 1;
+            memcpy(parsed_lang, blob + data_off, n);
+            parsed_lang[n] = '\0';
+        } else if (cid == 0x53545253u) { /* 'STRS' */
+            strs_off  = data_off;
+            strs_size = (size_t)csz;
+        }
+
+        step = csz + (csz & 1u);
+        if (step < csz || (size_t)step > blob_len - data_off) break;
+        pos = data_off + (size_t)step;
+    }
+
+    if (strs_size < 8) return FALSE;
+
+    /* Pass 1: validate STRS records and measure total string storage */
+    off = 0;
+    while (off + 8 <= strs_size) {
+        uint32 slen   = read_be32(blob + strs_off + off + 4);
+        uint32 padded = (slen + 3u) & ~3u;
+        size_t slen_actual;
+        size_t adv;
+
+        if ((size_t)slen > strs_size - (off + 8)) break;
+        slen_actual = bounded_cstr_len(blob + strs_off + off + 8, slen);
+        if (pool_bytes + slen_actual + 1 < pool_bytes) return FALSE;
+        pool_bytes += slen_actual + 1;
+        count++;
+
+        if (padded < slen || (size_t)padded > strs_size - (off + 8)) {
+            adv = 8 + (size_t)slen;
+        } else {
+            adv = 8 + (size_t)padded;
+        }
+        off += adv;
+    }
+
+    if (count == 0) return FALSE;
+
+    entries = (FallbackCatalogEntry *)malloc(count * sizeof(FallbackCatalogEntry));
+    pool    = (char *)malloc(pool_bytes);
+    if (!entries || !pool) {
+        free(entries);
+        free(pool);
+        return FALSE;
+    }
+
+    /* Pass 2: copy strings cleanly with guaranteed NUL terminators */
+    off = 0;
+    while (off + 8 <= strs_size && idx < count) {
+        uint32 sid    = read_be32(blob + strs_off + off);
+        uint32 slen   = read_be32(blob + strs_off + off + 4);
+        uint32 padded = (slen + 3u) & ~3u;
+        size_t slen_actual;
+        size_t adv;
+
+        if ((size_t)slen > strs_size - (off + 8)) break;
+        slen_actual = bounded_cstr_len(blob + strs_off + off + 8, slen);
+        memcpy(pool + pool_pos, blob + strs_off + off + 8, slen_actual);
+        pool[pool_pos + slen_actual] = '\0';
+
+        entries[idx].id  = sid;
+        entries[idx].str = pool + pool_pos;
+        pool_pos += slen_actual + 1;
+        idx++;
+
+        if (padded < slen || (size_t)padded > strs_size - (off + 8)) {
+            adv = 8 + (size_t)slen;
+        } else {
+            adv = 8 + (size_t)padded;
+        }
+        off += adv;
+    }
+
+    if (idx == 0) {
+        free(entries);
+        free(pool);
+        return FALSE;
+    }
+
+    qsort(entries, idx, sizeof(FallbackCatalogEntry), cmp_fallback_entry);
+
+    locale_free_fallback();
+    s_fallback_entries = entries;
+    s_fallback_count   = idx;
+    s_fallback_pool    = pool;
+    snprintf(s_fallback_lang, sizeof(s_fallback_lang), "%s", parsed_lang);
+    return TRUE;
+}
+
+static BOOL try_load_ctlg_direct(const char *lang_name, int32 *out_err)
+{
+    const char *patterns[] = {
+        "PROGDIR:Catalogs/%s/VortexBrowser.catalog",
+        "PROGDIR:catalogs/%s/VortexBrowser.catalog",
+        "LOCALE:Catalogs/%s/VortexBrowser.catalog",
+        "LOCALE:catalogs/%s/VortexBrowser.catalog",
+        "Catalogs/%s/VortexBrowser.catalog"
+    };
+    char path[256];
+    size_t i;
+
+    if (!IDOS || !lang_name || !lang_name[0]) return FALSE;
+
+    for (i = 0; i < sizeof(patterns) / sizeof(patterns[0]); i++) {
+        size_t blob_len = 0;
+        uint8 *blob;
+        snprintf(path, sizeof(path), patterns[i], lang_name);
+        blob = read_amiga_catalog_blob(path, &blob_len, out_err);
+        if (blob) {
+            BOOL ok = parse_ctlg_blob(blob, blob_len);
+            free(blob);
+            if (ok) return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static void add_lang_candidate(const char **list, size_t *count, size_t max_count, const char *cand)
+{
+    size_t i;
+    if (!cand || !cand[0] || *count >= max_count) return;
+    for (i = 0; i < *count; i++) {
+        if (ascii_eq_ci(list[i], cand)) return;
+    }
+    list[(*count)++] = cand;
 }
 
 /* Try resolving one preferred language entry (including OS4 standard vs legacy names).
  * Returns TRUE if resolved (either a catalog was opened or built-in English matched). */
-static BOOL try_resolve_language(const char *raw_lang)
+static BOOL try_resolve_language(const char *raw_lang, const char *source_tag, int32 *out_err)
 {
     char norm[64];
-    const char *aliases[3] = { NULL, NULL, NULL };
-    size_t a_count = 0;
+    const char *candidates[6];
+    size_t cand_count = 0;
     size_t i;
 
     if (!raw_lang || !raw_lang[0]) return FALSE;
@@ -738,67 +1019,70 @@ static BOOL try_resolve_language(const char *raw_lang)
         return TRUE;
     }
 
+    /* Try canonical catalog directory names before raw token with charset suffix */
+    add_lang_candidate(candidates, &cand_count, 6, norm);
     if (ascii_eq_ci(norm, "german") || ascii_eq_ci(norm, "deutsch") || ascii_eq_ci(norm, "de")) {
-        aliases[0] = "german";
-        aliases[1] = "deutsch";
-        a_count = 2;
+        add_lang_candidate(candidates, &cand_count, 6, "german");
+        add_lang_candidate(candidates, &cand_count, 6, "deutsch");
     } else if (ascii_eq_ci(norm, "french") || ascii_eq_ci(norm, "francais") || ascii_eq_ci(norm, "fr")) {
-        aliases[0] = "french";
-        aliases[1] = "francais";
-        a_count = 2;
+        add_lang_candidate(candidates, &cand_count, 6, "french");
+        add_lang_candidate(candidates, &cand_count, 6, "francais");
     } else if (ascii_eq_ci(norm, "italian") || ascii_eq_ci(norm, "italiano") || ascii_eq_ci(norm, "it")) {
-        aliases[0] = "italian";
-        aliases[1] = "italiano";
-        a_count = 2;
+        add_lang_candidate(candidates, &cand_count, 6, "italian");
+        add_lang_candidate(candidates, &cand_count, 6, "italiano");
     } else if (ascii_eq_ci(norm, "spanish") || ascii_eq_ci(norm, "espanol") || ascii_eq_ci(norm, "es")) {
-        aliases[0] = "spanish";
-        aliases[1] = "espanol";
-        a_count = 2;
+        add_lang_candidate(candidates, &cand_count, 6, "spanish");
+        add_lang_candidate(candidates, &cand_count, 6, "espanol");
     }
+    add_lang_candidate(candidates, &cand_count, 6, raw_lang);
 
-    /* Try the exact preferred string first (supports third-party catalogs verbatim) */
-    s_catalog = try_open_catalog_name(raw_lang);
-    if (s_catalog) {
-        const char *cat_lang = (const char *)s_catalog->cat_Language;
-        snprintf(s_active_language, sizeof(s_active_language), "%s",
-                 (cat_lang && cat_lang[0]) ? cat_lang : raw_lang);
-        return TRUE;
-    }
-
-    /* Try normalized string if different */
-    if (!ascii_eq_ci(norm, raw_lang)) {
-        s_catalog = try_open_catalog_name(norm);
+    for (i = 0; i < cand_count; i++) {
+        s_catalog = try_open_catalog_sys(candidates[i]);
         if (s_catalog) {
             const char *cat_lang = (const char *)s_catalog->cat_Language;
-            snprintf(s_active_language, sizeof(s_active_language), "%s",
-                     (cat_lang && cat_lang[0]) ? cat_lang : norm);
+            const char *name = (cat_lang && cat_lang[0]) ? cat_lang : candidates[i];
+            if (source_tag && source_tag[0]) {
+                snprintf(s_active_language, sizeof(s_active_language), "%s (%s)", name, source_tag);
+            } else {
+                snprintf(s_active_language, sizeof(s_active_language), "%s", name);
+            }
             return TRUE;
         }
     }
 
-    /* Try canonical OS4 + legacy alias names */
-    for (i = 0; i < a_count; i++) {
-        if (!aliases[i]) continue;
-        s_catalog = try_open_catalog_name(aliases[i]);
-        if (s_catalog) {
-            const char *cat_lang = (const char *)s_catalog->cat_Language;
-            snprintf(s_active_language, sizeof(s_active_language), "%s",
-                     (cat_lang && cat_lang[0]) ? cat_lang : aliases[i]);
+    for (i = 0; i < cand_count; i++) {
+        if (try_load_ctlg_direct(candidates[i], out_err)) {
+            const char *name = s_fallback_lang[0] ? s_fallback_lang : candidates[i];
+            snprintf(s_active_language, sizeof(s_active_language), "%s (%sdirect)",
+                     name, (source_tag && source_tag[0]) ? "ENV/" : "");
             return TRUE;
         }
     }
 
-    (void)0;
     return FALSE;
+}
+
+static size_t trim_trailing_ws(char *buf, int32 len)
+{
+    size_t n = (len > 0) ? (size_t)len : 0;
+    while (n > 0 && (buf[n - 1] == '\n' || buf[n - 1] == '\r' ||
+                     buf[n - 1] == ' '  || buf[n - 1] == '\t')) {
+        buf[--n] = '\0';
+    }
+    return n;
 }
 
 void locale_init_catalog(void)
 {
     APTR old_win = NULL;
     char env_lang[64];
+    char diag_pref[64];
     int32 env_len = -1;
     BOOL resolved = FALSE;
+    int32 diag_err = 0;
 
+    diag_pref[0] = '\0';
+    locale_free_fallback();
     snprintf(s_active_language, sizeof(s_active_language), "english (built-in)");
 
     if (!LocaleBase) {
@@ -813,52 +1097,77 @@ void locale_init_catalog(void)
 
     if (ILocale) {
         s_locale = ILocale->OpenLocale(NULL);
-
-        if (IDOS) old_win = IDOS->SetProcWindow((APTR)-1);
-
-        /* Optional user override via ENV:VortexBrowser/language */
-        if (IDOS) {
-            env_len = IDOS->GetVar("VortexBrowser/language", env_lang, sizeof(env_lang), 0);
-            if (env_len > 0) {
-                while (env_len > 0 && (env_lang[env_len - 1] == '\n' ||
-                       env_lang[env_len - 1] == '\r' || env_lang[env_len - 1] == ' ')) {
-                    env_lang[--env_len] = '\0';
-                }
-                if (env_lang[0] != '\0') {
-                    resolved = try_resolve_language(env_lang);
-                }
-            }
-        }
-
-        /* Standard OpenCatalog lookup using system locale preferences */
-        if (!resolved && (!s_locale || !s_locale->loc_PrefLanguages[0])) {
-            s_catalog = ILocale->OpenCatalog(s_locale, "VortexBrowser.catalog",
-                OC_BuiltInLanguage, (Tag)"english",
-                OC_BuiltInCodeSet,  4,
-                TAG_DONE);
-            if (s_catalog) {
-                const char *cat_lang = (const char *)s_catalog->cat_Language;
-                snprintf(s_active_language, sizeof(s_active_language), "%s",
-                         (cat_lang && cat_lang[0]) ? cat_lang : "catalog");
-                resolved = TRUE;
-            }
-        }
-
-        /* Walk s_locale->loc_PrefLanguages in exact OS4 preference order */
-        if (!resolved && s_locale) {
-            int i;
-            for (i = 0; i < 10 && s_locale->loc_PrefLanguages[i]; i++) {
-                const char *pref = (const char *)s_locale->loc_PrefLanguages[i];
-                if (!pref[0]) continue;
-                if (try_resolve_language(pref)) {
-                    resolved = TRUE;
-                    break;
-                }
-            }
-        }
-
-        if (IDOS) IDOS->SetProcWindow(old_win);
     }
+
+    if (IDOS) old_win = IDOS->SetProcWindow((APTR)-1);
+
+    /* 1. Optional user override via ENV:VortexBrowser/language */
+    if (IDOS) {
+        env_len = IDOS->GetVar("VortexBrowser/language", env_lang, sizeof(env_lang), 0);
+        if (env_len > 0 && trim_trailing_ws(env_lang, env_len) > 0) {
+            snprintf(diag_pref, sizeof(diag_pref), "%s", env_lang);
+            resolved = try_resolve_language(env_lang, "ENV", &diag_err);
+        }
+    }
+
+    /* 2. Canonical OS4 OpenCatalogA without OC_Language or OC_BuiltInCodeSet */
+    if (!resolved && ILocale) {
+        s_catalog = try_open_catalog_sys(NULL);
+        if (s_catalog) {
+            const char *cat_lang = (const char *)s_catalog->cat_Language;
+            snprintf(s_active_language, sizeof(s_active_language), "%s",
+                     (cat_lang && cat_lang[0]) ? cat_lang : "catalog");
+            resolved = TRUE;
+        }
+    }
+
+    /* 3. Walk s_locale->loc_PrefLanguages[0..9] without aborting on NULL holes */
+    if (!resolved && s_locale) {
+        int i;
+        for (i = 0; i < 10; i++) {
+            const char *pref = (const char *)s_locale->loc_PrefLanguages[i];
+            if (!pref || !pref[0]) continue;
+            if (!diag_pref[0]) {
+                snprintf(diag_pref, sizeof(diag_pref), "%s", pref);
+            }
+            if (try_resolve_language(pref, NULL, &diag_err)) {
+                resolved = TRUE;
+                break;
+            }
+        }
+    }
+
+    /* 4. Fallback system sources: loc_LanguageName and ENV:LanguageName / ENV:Language */
+    if (!resolved && s_locale && s_locale->loc_LanguageName && s_locale->loc_LanguageName[0]) {
+        const char *lname = (const char *)s_locale->loc_LanguageName;
+        if (!diag_pref[0]) {
+            snprintf(diag_pref, sizeof(diag_pref), "%s", lname);
+        }
+        resolved = try_resolve_language(lname, NULL, &diag_err);
+    }
+
+    if (!resolved && IDOS) {
+        const char *env_vars[2] = { "LanguageName", "Language" };
+        size_t i;
+        for (i = 0; i < 2 && !resolved; i++) {
+            env_len = IDOS->GetVar(env_vars[i], env_lang, sizeof(env_lang), 0);
+            if (env_len > 0 && trim_trailing_ws(env_lang, env_len) > 0) {
+                if (!diag_pref[0]) {
+                    snprintf(diag_pref, sizeof(diag_pref), "%s", env_lang);
+                }
+                resolved = try_resolve_language(env_lang, NULL, &diag_err);
+            }
+        }
+    }
+
+    if (!resolved && diag_pref[0]) {
+        snprintf(s_active_language, sizeof(s_active_language),
+                 "english (built-in; pref=%.24s, err=%ld)", diag_pref, (long)diag_err);
+    }
+
+    if (IDOS) IDOS->SetProcWindow(old_win);
+
+    DBG_LOG("[Locale] Active language: %s\n", s_active_language);
 
     if (!CodesetsBase) {
         CodesetsBase = IExec->OpenLibrary("codesets.library", 6);
@@ -878,6 +1187,7 @@ const char *locale_get_active_language(void)
 
 void locale_close_catalog(void)
 {
+    locale_free_fallback();
     if (ICodesets) {
         IExec->DropInterface((struct Interface *)ICodesets);
         ICodesets = NULL;
