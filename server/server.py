@@ -1718,6 +1718,7 @@ class AmigaClientSession:
         self.cdp_port: int = 9222
 
         self.soft_scroll: bool = True
+        self.pause_bg_media: bool = False
         self.last_hover_url: Optional[str] = None
         self.last_hover_time: float = 0.0
         self.hover_task: Optional[asyncio.Task] = None
@@ -4130,6 +4131,27 @@ class AmigaClientSession:
             kname = AMIGA_RAWKEY_MAP[key_code]
             await self.page.keyboard.press(" " if kname == "Space" else kname)
 
+    async def _pause_page_media(self, page) -> None:
+        if not self.pause_bg_media or not page:
+            return
+        pause_js = """
+        (() => {
+            try {
+                document.querySelectorAll('video, audio').forEach(m => {
+                    try { if (!m.paused) m.pause(); } catch(e) {}
+                });
+            } catch(e) {}
+        })();
+        """
+        try:
+            for frame in page.frames:
+                try:
+                    await asyncio.wait_for(frame.evaluate(pause_js), timeout=0.5)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
     async def _apply_dark_mode(self, page=None) -> None:
         target_page = page or self.page
         if not target_page:
@@ -4603,6 +4625,12 @@ class AmigaClientSession:
             logger.info("Softscrolling set to %s", self.soft_scroll)
             return
 
+        if cmd.upper().startswith("@PAUSE_BG_MEDIA:"):
+            val = cmd.split(":", 1)[1].strip()
+            self.pause_bg_media = (val == "1" or val.lower() == "true")
+            logger.info("Pause background media set to %s", self.pause_bg_media)
+            return
+
         if cmd.upper().startswith("@NEWTAB"):
             parts = cmd.split(":", 1)
             target = parts[1].strip() if len(parts) > 1 else ""
@@ -4613,6 +4641,8 @@ class AmigaClientSession:
             if self.context:
                 try:
                     self._creating_tab = True
+                    old_page = self.page
+                    await self._pause_page_media(old_page)
                     await self._stop_screencast()
                     new_page = await self.context.new_page()
                     self.tabs.append(new_page)
@@ -4644,6 +4674,9 @@ class AmigaClientSession:
             try:
                 tidx = int(cmd.split(":", 1)[1].strip())
                 if 0 <= tidx < len(self.tabs):
+                    old_page = self.page
+                    if tidx != self.active_tab_idx:
+                        await self._pause_page_media(old_page)
                     await self._stop_screencast()
                     self.active_tab_idx = tidx
                     self.page = self.tabs[tidx]
