@@ -1,5 +1,5 @@
 # VortexBrowser – High-Performance Headless Web Browser Streaming System
-**(Universeller Linux Server [AMD/Intel/Raspberry Pi/Docker] $\rightarrow$ AmigaOS 4.1 PowerPC Client)**
+**(Universeller Linux / macOS Server [AMD/Intel/Apple Silicon/Raspberry Pi/Docker] $\rightarrow$ AmigaOS 4.1 PowerPC Client)**
 
 [English version below / Zur englischen Version wechseln](#english-version)
 
@@ -7,7 +7,7 @@
 
 ## Deutsch
 
-VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwright / Rustwright + DirectCDP WebSocket) auf einem **universellen Linux-Server oder im Docker-Container** (automatische Hardware-Erkennung für AMD Ryzen Vulkan, Intel QuickSync VA-API und Raspberry Pi 4/5 V3D) und streamt die Bilddaten hocheffizient komprimiert per **Planar YUV420P + 2D Dirty-Rect + LZ4** an einen nativen **AmigaOS 4.1 PowerPC Reaction-Client**.
+VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwright / Rustwright + DirectCDP WebSocket) auf einem **universellen Linux- / macOS-Server oder im Docker-Container** (automatische Hardware-Erkennung für AMD Ryzen Vulkan, Intel QuickSync VA-API, **Apple VideoToolbox** und Raspberry Pi 4/5 V3D) und streamt die Bilddaten hocheffizient komprimiert per **Planar YUV420P + 2D Dirty-Rect + LZ4** an einen nativen **AmigaOS 4.1 PowerPC Reaction-Client**.
 
 ---
 
@@ -80,14 +80,22 @@ Um die ToolTypes zu bearbeiten:
 ```bash
 cd server
 ./install_server.sh           # Automatische Einrichtung (Treiber & Dependencies)
-./run_server.sh               # Server starten
+./run_server.sh               # Server starten (oder ./run_linux.sh im Hauptverzeichnis)
 ```
 
-#### 2. Mit Docker oder Docker Compose (x86_64 & Raspberry Pi 4/5)
+#### 2. Nativ auf macOS (Apple Silicon M1–M4 & Intel mit Apple VideoToolbox)
+```bash
+cd server
+chmod +x install_macos.sh run_macos.sh
+./install_macos.sh            # Installiert Python 3.11, FFmpeg, TurboJPEG/LZ4 & baut fast_pixconv.dylib
+./run_macos.sh                # Startet mit h264_videotoolbox Hardware-Encoding
+```
+
+#### 3. Mit Docker oder Docker Compose (Linux x86_64, Raspberry Pi 4/5 & macOS Docker Desktop)
 ```bash
 cd server
 
-# Multi-Arch Docker-Images bauen:
+# Multi-Arch Docker-Images bauen (inkl. macOS-Images):
 ./build_docker.sh
 
 # Starten auf Linux x86_64:
@@ -95,9 +103,12 @@ docker compose up -d vortex-server
 
 # Starten auf Raspberry Pi 4/5 (ARM64):
 docker compose --profile rpi up -d vortex-rpi
+
+# Starten auf macOS (Docker Desktop – Apple Silicon & Intel):
+docker compose -f docker-compose.macos.yml up -d
 ```
 
-#### 3. Client auf AmigaOS 4.1 starten
+#### 4. Client auf AmigaOS 4.1 starten
 1. Archiv `VortexBrowser-0.99-RC3-AmigaOS4.lha` auf dem Amiga entpacken (z. B. nach `Work:Internet/VortexBrowser`).
 2. Doppelklick auf das `VortexBrowser`-Icon.
 3. Server-IP eintragen (oder `Amiga+1` drücken) und auf **Verbinden** klicken.
@@ -108,7 +119,7 @@ docker compose --profile rpi up -d vortex-rpi
 <a name="english-version"></a>
 ## English Version
 
-VortexBrowser renders modern websites via headless Chromium (Playwright / Rustwright + DirectCDP WebSocket) on a **universal Linux server or Docker container** (with automatic hardware acceleration for AMD Ryzen Vulkan, Intel QuickSync VA-API, and Raspberry Pi 4/5 V3D) and streams compressed video data using **Planar YUV420P + 2D Dirty-Rect + LZ4** to a native **AmigaOS 4.1 PowerPC ReAction client**.
+VortexBrowser renders modern websites via headless Chromium (Playwright / Rustwright + DirectCDP WebSocket) on a **universal Linux / macOS server or Docker container** (with automatic hardware acceleration for AMD Ryzen Vulkan, Intel QuickSync VA-API, **Apple VideoToolbox**, and Raspberry Pi 4/5 V3D) and streams compressed video data using **Planar YUV420P + 2D Dirty-Rect + LZ4** to a native **AmigaOS 4.1 PowerPC ReAction client**.
 
 ---
 
@@ -180,14 +191,22 @@ VortexBrowser supports configuration via standard AmigaOS 4 **ToolTypes** in `.i
 ```bash
 cd server
 ./install_server.sh           # Run once: detects hardware & installs drivers
-./run_server.sh               # Starts the server with optimal settings
+./run_server.sh               # Starts the server (or ./run_linux.sh from repo root)
 ```
 
-#### 2. Using Docker or Docker Compose (x86_64 & Raspberry Pi 4/5)
+#### 2. Native on macOS (Apple Silicon M1–M4 & Intel with Apple VideoToolbox)
+```bash
+cd server
+chmod +x install_macos.sh run_macos.sh
+./install_macos.sh            # Installs Python 3.11, FFmpeg, TurboJPEG/LZ4 & compiles fast_pixconv.dylib
+./run_macos.sh                # Launches with h264_videotoolbox hardware encoding
+```
+
+#### 3. Using Docker or Docker Compose (Linux x86_64, Raspberry Pi 4/5 & macOS Docker Desktop)
 ```bash
 cd server
 
-# Build multi-architecture Docker images:
+# Build multi-architecture Docker images (incl. macOS targets):
 ./build_docker.sh
 
 # Run on Linux x86_64 (Intel / AMD):
@@ -195,9 +214,12 @@ docker compose up -d vortex-server
 
 # Run on Raspberry Pi 4/5 (ARM64):
 docker compose --profile rpi up -d vortex-rpi
+
+# Run on macOS (Docker Desktop – Apple Silicon & Intel):
+docker compose -f docker-compose.macos.yml up -d
 ```
 
-#### 3. Starting the Client on AmigaOS 4.1
+#### 4. Starting the Client on AmigaOS 4.1
 1. Unpack `VortexBrowser-0.99-RC3-AmigaOS4.lha` on your Amiga (e.g. into `Work:Internet/VortexBrowser`).
 2. Double-click the `VortexBrowser` icon.
 3. Enter your Linux/Docker server IP (or press `Amiga+1`) and click **Connect**.
