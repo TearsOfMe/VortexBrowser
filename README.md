@@ -1,58 +1,58 @@
 # VortexBrowser – High-Performance Headless Web Browser Streaming System
-**(Universeller Linux Server [AMD/Intel/Raspberry Pi] $\rightarrow$ AmigaOS 4.1 PowerPC Client)**
+**(Universeller Linux Server [AMD/Intel/Raspberry Pi/Docker] $\rightarrow$ AmigaOS 4.1 PowerPC Client)**
 
-VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwright / Rustwright + DirectCDP WebSocket) auf einem **universellen Linux-Server** (automatische Hardware-Erkennung für AMD Ryzen Vulkan, Intel QuickSync VA-API und Raspberry Pi 4/5 V3D) und streamt die Bilddaten hocheffizient komprimiert per **Planar YUV420P + 2D Dirty-Rect + LZ4** an einen nativen **AmigaOS 4.1 PowerPC Reaction-Client**.
+[English version below / Zur englischen Version wechseln](#english-version)
 
 ---
 
-## Highlights & Features
+## Deutsch
+
+VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwright / Rustwright + DirectCDP WebSocket) auf einem **universellen Linux-Server oder im Docker-Container** (automatische Hardware-Erkennung für AMD Ryzen Vulkan, Intel QuickSync VA-API und Raspberry Pi 4/5 V3D) und streamt die Bilddaten hocheffizient komprimiert per **Planar YUV420P + 2D Dirty-Rect + LZ4** an einen nativen **AmigaOS 4.1 PowerPC Reaction-Client**.
+
+---
+
+### Highlights & Features
 
 1. **Hardware-beschleunigtes H.264 Video-Streaming & Dekodierung (va.library + VA-API):**
    - **Eingebettetes FFmpeg (`libavcodec`) auf AmigaOS 4:** Dekodiert H.264 Annex-B Bitstreams direkt in Hardware auf Radeon HD/RX Grafikkarten via `va.library` (`vaPutSurface`) – analog zu Maijestros MPlayer-Architektur.
    - **Hardware-Encoding auf dem Server:** H.264 GPU-Encoding in Echtzeit via `h264_vaapi` (AMD VCN auf Ryzen PRO bzw. Intel QuickSync) bei minimaler Server-CPU-Last (< 3%).
    - **Einstellbare Video-Qualität:**
-     - Neuer Schieberegler in den Amiga-Einstellungen (`Amiga+1`): **Video-Bitrate von 1.000 bis 10.000 kbps (10 Mbit/s)**.
+     - Schieberegler in den Amiga-Einstellungen (`Amiga+1`): **Video-Bitrate von 1.000 bis 10.000 kbps (10 Mbit/s)**.
      - Server-Kommandozeilenoption: `--video-bitrate <kbps>` bzw. Umgebungsvariable `VORTEX_VIDEO_BITRATE`.
    - **Zero-Latency:** Exaktes 1-Sekunden-Keyframe-Intervall (`-g 25`) für sofortigen Sync bei Video-Start und 0 B-Frames (`-bf 0`) für latenzfreie Echtzeitübertragung.
    - **Planar YUV420p (12-Bit) & High-Speed JPEG:** Direkte hardwarenahe Übertragung ohne RGB-Overhead.
    - **Wählbare Framerate (15 / 25 / 30 / 50 / 60 FPS):** Vom Amiga aus flexibel einstellbar via Menü oder Einstellungen.
    - **2D Dirty-Rectangles (`CODEC_LZ4_RECT`):** Für sparsamen Datentransfer bei normalem Web-Browsing.
-   - **AVX2-Mikroprädiktor:** Verdoppelt die LZ4-Kompressionsrate bei vollen 8-Bit Farbtiefe (PSNR > 44 dB, verlustfreie Wahrnehmung) ohne CPU-Last auf dem Amiga.
-   - **Rustwright + DirectCDP Core:** Direkte WebSocket-Screencast-Anbindung ohne Node.js-Treiber-Overhead.
+   - **AVX2 / ARM NEON SIMD-Mikroprädiktor:** Verdoppelt die LZ4-Kompressionsrate bei vollen 8-Bit Farbtiefe ohne CPU-Last auf dem Amiga.
+   - **DirectCDP WebSocket Core:** Direkte WebSocket-Screencast-Anbindung ohne Treiber-Overhead.
 
 2. **Native AmigaOS 4 ReAction Benutzeroberfläche:**
    - **Klassisches AmigaOS 4 Look-and-Feel (`VortexBrowser` & `VortexBrowser-AltiVec`):** Nahtlose Integration mit Tabs (`clicktab.gadget`), Font-Zoom, Screen-Cloning und GPU-Composite-Skalierung.
+   - **Mehrsprachige Benutzeroberfläche (Locale):** Native AmigaOS-Kataloge für Deutsch, Englisch, Französisch und Italienisch (`catalogs/`).
    - **Dynamische Breitenanpassung der Schnellwahl-Buttons:** Die Schnellwahl-Leiste nutzt automatisch die gesamte verfügbare Fensterbreite.
-   - **Unbegrenzte Favoriten:** In den Einstellungen (`Amiga+E`) können unbegrenzt viele Lesezeichen und Schnellwahl-Seiten gepflegt werden.
+   - **Favoriten:** In den Einstellungen (`Amiga+E`) können Lesezeichen und Schnellwahl-Seiten gepflegt werden.
 
 3. **Multi-Tab-Browsing & Sitzungswiederherstellung:**
    - Echte Tabs über `clicktab.gadget` mit AmigaOS 4 Standard-Bedienung (`Amiga+T` für neuen Tab, `Amiga+W` zum Schließen).
    - **Tab-Persistenz:** Sämtliche geöffneten Tabs, Titel und der aktive Tab werden beim Beenden automatisch in `ENVARC:` gespeichert und beim nächsten Start nahtlos wiederhergestellt.
 
-3. **Download-Manager:**
+4. **Download-Manager:**
    - Vollständiger nativer Download-Manager (`Amiga+D`) mit Live-Geschwindigkeitsanzeige, Fortschritt in Prozent, Restzeitschätzung (ETA), Datei- und Ordneröffner.
-   - Saubere Umlaut- und Zeichensatz-Behandlung für Dateinamen und Reaction-Buttons.
+   - Fensterposition und -größe des Download-Managers werden dauerhaft in `ENVARC:` gesichert.
+   - Saubere Umlaut- und Zeichensatz-Behandlung für Dateinamen.
 
-4. **Passwort-Manager:**
+5. **Passwort-Manager:**
    - Integrierter Passwort-Tresor (`Amiga+K`) mit starker Blowfish-CBC- und SHA-256-Verschlüsselung.
-   - Benutzername und Passwort bequem per Knopfdruck ins Amiga-Clipboard kopieren.
+   - Benutzername und Passwort per Knopfdruck ins Amiga-Clipboard kopieren.
    - Speicherort in `ENVARC:VortexBrowser/passwords.enc`.
-   - **Twitch-Unterstützung:** Nahtloses Session-Token-Login (`twitch_token.txt`), um Bot-Schranken auf dem Amiga zu umgehen.
-
-5. **Dateisystem-Stabilität (exFAT / SFS / FFS / RAM):**
-   - Integrierter 512 KB Stack-Cookie (`$STACK: 524288` und `__stack = 524288`).
-   - Deadlock-freie Konfiguration: Benutzereinstellungen werden atomar in `ENV:` und `ENVARC:` gespeichert, ohne Locks auf Dateisysteme wie `exFATFileSystem` zu halten.
+   - **Twitch-Unterstützung:** Session-Token-Login (`twitch_token.txt`), um Bot-Schranken auf dem Amiga zu umgehen.
 
 6. **Audio-Streaming:**
    - Synchroner 16-Bit Stereo-Audiostream über separaten Port 9757 direkt an AmigaOS 4 AHI (`ahi.device`).
 
-7. **Radeon GPU-Skalierung & FPS-Tuning:**
-   - Hardware-Composite-Skalierung über `IGraphics->CompositeTags()` (z. B. 720p HD oder 540p qHD auf volle Bildschirmgröße) entlastet Amiga-CPUs (G4, SAM440, SAM460, X1000, X5000) um bis zu 70%.
-   - Einstellbare Ziel-Framerate direkt in den Client-Einstellungen und im Menü `Ansicht` (15, 25, 30, 50, 60 FPS).
-
 ---
 
-## Workbench Icon-ToolTypes & Konfiguration
+### Workbench Icon-ToolTypes & Konfiguration
 
 VortexBrowser unterstützt die vollständige Konfiguration über standardmäßige AmigaOS 4 **ToolTypes** in den `.info`-Dateien (`VortexBrowser.info`, `VortexBrowser-AltiVec.info`).
 
@@ -61,51 +61,143 @@ Um die ToolTypes zu bearbeiten:
 2. Wählen Sie im Workbench-Menü **Icons $\rightarrow$ Information...** (oder Tastenkombination **`Rechte Amiga + I`**).
 3. Aktivieren Sie die gewünschten ToolTypes durch Entfernen der runden Klammern `(...)` und tragen Sie Ihre Werte ein.
 
-### Unterstützte ToolTypes:
-
 | ToolType | Standard | Beschreibung |
 | :--- | :--- | :--- |
-| `SERVER=<IP/Host>` | `(SERVER=192.168.178.2)` | IP-Adresse oder Rechnername des Rendering-Servers (z. B. `SERVER=192.168.178.2`). |
+| `SERVER=<IP/Host>` | `(SERVER=192.168.178.2)` | IP-Adresse oder Rechnername des Rendering-Servers. |
 | `PORT=<Port>` | `(PORT=7788)` | TCP-Port des Rendering-Servers (Standard: `7788`). |
-| `URL=<URL>` | `(URL=https://www.amiga-news.de)` | Startseite beim Starten über das Icon (`STARTURL` wird ebenfalls erkannt). |
-| `STREAMMODE=<Modus>` | `(STREAMMODE=AUTO)` | Streaming-System: `AUTO` (H.264 bei Video, sonst 2D), `H264` (dauerhaftes Video) oder `LZ4` / `DIRTYRECT` (reines 2D Dirty-Rect). |
-| `BITRATE=<kbps>` | `(BITRATE=8000)` | Video-Bitrate für H.264 in kbps (Wertebereich: `1000` bis `10000`). |
-| `FPS=<Zahl>` | `(FPS=25)` | Ziel-Bildwiederholrate (z. B. `15`, `25`, `30`, `50`, `60`). |
-| `DARKMODE=<0\|1>` | `(DARKMODE=0)` | Dunkles Erscheinungsbild beim Start erzwingen (`1` für Dark Mode, `0` für Hell). |
-| `DOWNLOADDIR=<Pfad>` | `(DOWNLOADDIR=RAM:)` | Standard-Download-Verzeichnis (z. B. `DOWNLOADDIR=Work:Downloads`). |
-
-> [!NOTE]
-> **AmigaOS-Klammerkonvention:**
-> Einträge in runden Klammern wie `(SERVER=...)` gelten in AmigaOS als **inaktiv / Vorlage**. Um einen ToolType scharfzuschalten, entfernen Sie die Klammern (z. B. `SERVER=192.168.178.2`) und klicken Sie auf **Speichern**.
-> Der im Icon hinterlegte **Stack** beträgt **200000** Byte (~200 KB) und stellt einen stabilen Betrieb von Netzwerk, FFmpeg/VA-API und ReAction sicher.
+| `URL=<URL>` | `(URL=https://www.amiga-news.de)` | Startseite beim Starten über das Icon. |
+| `STREAMMODE=<Modus>` | `(STREAMMODE=AUTO)` | Streaming-System: `AUTO`, `H264` oder `LZ4` / `DIRTYRECT`. |
+| `BITRATE=<kbps>` | `(BITRATE=8000)` | Video-Bitrate für H.264 in kbps (`1000` bis `10000`). |
+| `FPS=<Zahl>` | `(FPS=25)` | Ziel-Bildwiederholrate (`15`, `25`, `30`, `50`, `60`). |
+| `DARKMODE=<0\|1>` | `(DARKMODE=0)` | Dunkles Erscheinungsbild beim Start erzwingen (`1`=Dark, `0`=Hell). |
+| `DOWNLOADDIR=<Pfad>` | `(DOWNLOADDIR=RAM:)` | Standard-Download-Verzeichnis. |
 
 ---
 
-## Verzeichnisstruktur des Gesamtpakets
+### Build & Ausführung
 
-- `amiga-client/`: Quelltext, Icons und Assets des AmigaOS 4 Clients
-- `server/`: Universeller Linux Rendering-Server mit Hardware-Autodetect (Intel QuickSync/VA-API, AMD Vulkan/VA-API, Raspberry Pi V3D/EGL, AVX2/SSE4/NEON SIMD)
-- `make_release.py`: Erstellt automatisch alle fertigen Release-Archive (`.lha`, `.zip`)
-
----
-
-## Build & Installation
-
-### 1. Release-Pakete schnüren
-```bash
-# Kompiliert das SIMD-Modul und baut alle Release-Archive (LHA für Amiga, ZIP für Server und Komplettpaket)
-python3 make_release.py
-```
-
-### 2. Server starten (Linux PC, CachyOS, Intel oder Raspberry Pi)
+#### 1. Nativ auf Linux-Host (PC, CachyOS, Debian/Ubuntu, Raspberry Pi)
 ```bash
 cd server
-./install_server.sh           # Einmalige automatische Einrichtung (erkennt Hardware & installiert Treiber)
-./run_server.sh               # Server starten (wählt Auflösung & Beschleunigung optimal)
+./install_server.sh           # Automatische Einrichtung (Treiber & Dependencies)
+./run_server.sh               # Server starten
 ```
 
-### 3. Client auf AmigaOS 4.1 starten
+#### 2. Mit Docker oder Docker Compose (x86_64 & Raspberry Pi 4/5)
+```bash
+cd server
+
+# Multi-Arch Docker-Images bauen:
+./build_docker.sh
+
+# Starten auf Linux x86_64:
+docker compose up -d vortex-server
+
+# Starten auf Raspberry Pi 4/5 (ARM64):
+docker compose --profile rpi up -d vortex-rpi
+```
+
+#### 3. Client auf AmigaOS 4.1 starten
 1. Archiv `VortexBrowser-0.99-RC3-AmigaOS4.lha` auf dem Amiga entpacken (z. B. nach `Work:Internet/VortexBrowser`).
 2. Doppelklick auf das `VortexBrowser`-Icon.
-3. Server-IP eintragen (oder `Amiga+1` drücken) und auf **Verbinden** klicken!
+3. Server-IP eintragen (oder `Amiga+1` drücken) und auf **Verbinden** klicken.
 
+---
+---
+
+<a name="english-version"></a>
+## English Version
+
+VortexBrowser renders modern websites via headless Chromium (Playwright / Rustwright + DirectCDP WebSocket) on a **universal Linux server or Docker container** (with automatic hardware acceleration for AMD Ryzen Vulkan, Intel QuickSync VA-API, and Raspberry Pi 4/5 V3D) and streams compressed video data using **Planar YUV420P + 2D Dirty-Rect + LZ4** to a native **AmigaOS 4.1 PowerPC ReAction client**.
+
+---
+
+### Highlights & Features
+
+1. **Hardware-Accelerated H.264 Video Streaming & Decoding (va.library + VA-API):**
+   - **Embedded FFmpeg (`libavcodec`) on AmigaOS 4:** Decodes H.264 Annex-B bitstreams directly in hardware on Radeon HD/RX graphics cards using `va.library` (`vaPutSurface`).
+   - **Server-Side Hardware Encoding:** Real-time GPU encoding via `h264_vaapi` (AMD VCN on Ryzen PRO or Intel QuickSync) with low CPU usage (< 3%).
+   - **Adjustable Video Quality:**
+     - Bitrate slider in Amiga settings (`Amiga+1`): **1,000 to 10,000 kbps (10 Mbit/s)**.
+     - Server CLI parameter: `--video-bitrate <kbps>` or environment variable `VORTEX_VIDEO_BITRATE`.
+   - **Zero-Latency:** 1-second keyframe interval (`-g 25`) for quick video start and 0 B-frames (`-bf 0`) for real-time delivery.
+   - **Planar YUV420p (12-bit) & High-Speed JPEG:** Direct transmission without RGB conversion overhead.
+   - **Selectable Frame Rates (15 / 25 / 30 / 50 / 60 FPS):** Configurable from the Amiga menu or settings window.
+   - **2D Dirty-Rectangles (`CODEC_LZ4_RECT`):** Efficient bandwidth usage during general web browsing.
+   - **AVX2 / ARM NEON SIMD Predictor:** Improves LZ4 compression ratio at full 8-bit depth without extra Amiga CPU load.
+   - **DirectCDP WebSocket Core:** Low-overhead direct screencast connection.
+
+2. **Native AmigaOS 4 ReAction GUI:**
+   - **Classic AmigaOS 4 Look-and-Feel (`VortexBrowser` & `VortexBrowser-AltiVec`):** ReAction tabs (`clicktab.gadget`), font zooming, screen cloning, and GPU composite scaling.
+   - **Multilingual Support (Locale):** Native AmigaOS catalogs for English, German, French, and Italian in `catalogs/`.
+   - **Dynamic Quick Link Layout:** Toolbar buttons scale to use available window width.
+   - **Bookmarks & Quick Links:** Managed in preferences (`Amiga+E`).
+
+3. **Multi-Tab Browsing & Session Persistence:**
+   - Tabs via `clicktab.gadget` using standard shortcuts (`Amiga+T` for new tab, `Amiga+W` to close).
+   - **Session Restore:** Open tabs, URLs, and active index are stored in `ENVARC:` on exit and restored upon restart.
+
+4. **Download Manager:**
+   - Native Download Manager (`Amiga+D`) displaying download speed, progress percentage, ETA, and buttons to open files or folders.
+   - Window position and size are remembered across sessions in `ENVARC:`.
+   - Proper character set / umlaut conversion for filenames.
+
+5. **Password Manager:**
+   - Secure credential vault (`Amiga+K`) with Blowfish-CBC and SHA-256 encryption.
+   - Copy username and password to Amiga clipboard.
+   - Saved securely in `ENVARC:VortexBrowser/passwords.enc`.
+   - **Twitch Support:** Login token import (`twitch_token.txt`) to bypass bot verification challenges.
+
+6. **Audio Streaming:**
+   - Low-latency 16-bit 44.1 kHz stereo audio streamed via dedicated port 9757 directly to AmigaOS 4 AHI (`ahi.device`).
+
+---
+
+### Workbench Icon ToolTypes & Configuration
+
+VortexBrowser supports configuration via standard AmigaOS 4 **ToolTypes** in `.info` files (`VortexBrowser.info`, `VortexBrowser-AltiVec.info`):
+
+1. Click the application icon on Workbench.
+2. Select **Icons $\rightarrow$ Information...** from Workbench menu (or press **`Right Amiga + I`**).
+3. Remove parentheses `(...)` to activate a ToolType and save.
+
+| ToolType | Default | Description |
+| :--- | :--- | :--- |
+| `SERVER=<IP/Host>` | `(SERVER=192.168.178.2)` | Server IP address or hostname. |
+| `PORT=<Port>` | `(PORT=7788)` | Server TCP port (default: `7788`). |
+| `URL=<URL>` | `(URL=https://www.amiga-news.de)` | Default homepage on startup. |
+| `STREAMMODE=<Mode>` | `(STREAMMODE=AUTO)` | Stream format: `AUTO`, `H264`, or `LZ4` / `DIRTYRECT`. |
+| `BITRATE=<kbps>` | `(BITRATE=8000)` | Video bitrate for H.264 in kbps (`1000` to `10000`). |
+| `FPS=<Number>` | `(FPS=25)` | Target frame rate (`15`, `25`, `30`, `50`, `60`). |
+| `DARKMODE=<0\|1>` | `(DARKMODE=0)` | Force dark appearance (`1`=Dark, `0`=Light). |
+| `DOWNLOADDIR=<Path>` | `(DOWNLOADDIR=RAM:)` | Default download path. |
+
+---
+
+### Build & Run Instructions
+
+#### 1. Native on Linux Host (PC, CachyOS, Debian/Ubuntu, Raspberry Pi)
+```bash
+cd server
+./install_server.sh           # Run once: detects hardware & installs drivers
+./run_server.sh               # Starts the server with optimal settings
+```
+
+#### 2. Using Docker or Docker Compose (x86_64 & Raspberry Pi 4/5)
+```bash
+cd server
+
+# Build multi-architecture Docker images:
+./build_docker.sh
+
+# Run on Linux x86_64 (Intel / AMD):
+docker compose up -d vortex-server
+
+# Run on Raspberry Pi 4/5 (ARM64):
+docker compose --profile rpi up -d vortex-rpi
+```
+
+#### 3. Starting the Client on AmigaOS 4.1
+1. Unpack `VortexBrowser-0.99-RC3-AmigaOS4.lha` on your Amiga (e.g. into `Work:Internet/VortexBrowser`).
+2. Double-click the `VortexBrowser` icon.
+3. Enter your Linux/Docker server IP (or press `Amiga+1`) and click **Connect**.

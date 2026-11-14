@@ -1,0 +1,15 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.so
+*.o
+browser_bin.txt
+vortexbrowser.service
+*.log
+*.sqlite
+*twitch_token*
+*twitch_cookie*
+*storage_state*
+.git/
