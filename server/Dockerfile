@@ -54,13 +54,22 @@ COPY extensions /app/extensions
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh /app/sync_twitch_login.sh
 
-# 4. Compile native C-SIMD pixel pipeline (SSE4.1 on amd64, ARMv8 NEON on arm64)
+ARG VORTEX_TARGET=linux
+ENV VORTEX_TARGET=${VORTEX_TARGET}
+
+# 4. Compile native C-SIMD pixel pipeline (SSE4.1/4.2 on amd64, ARMv8/8.2 NEON on arm64)
 RUN if [ "$TARGETARCH" = "amd64" ]; then \
-        gcc -O3 -msse4.1 -fopenmp -DHAVE_TURBOJPEG_LZ4 -shared -fPIC \
+        SSE_FLAG="-msse4.1"; \
+        if [ "$VORTEX_TARGET" = "macos" ]; then SSE_FLAG="-msse4.2"; fi; \
+        gcc -O3 $SSE_FLAG -fopenmp -DHAVE_TURBOJPEG_LZ4 -shared -fPIC \
             /app/fast_pixconv.c -lturbojpeg -llz4 -o /app/fast_pixconv.so || \
         gcc -O3 -msse4.1 -DHAVE_TURBOJPEG_LZ4 -shared -fPIC \
             /app/fast_pixconv.c -lturbojpeg -llz4 -o /app/fast_pixconv.so; \
     else \
+        ARM_ARCH="-march=armv8-a+simd"; \
+        if [ "$VORTEX_TARGET" = "macos" ]; then ARM_ARCH="-march=armv8.2-a+simd"; fi; \
+        gcc -O3 $ARM_ARCH -fopenmp -DHAVE_TURBOJPEG_LZ4 -shared -fPIC \
+            /app/fast_pixconv.c -lturbojpeg -llz4 -o /app/fast_pixconv.so || \
         gcc -O3 -march=armv8-a+simd -fopenmp -DHAVE_TURBOJPEG_LZ4 -shared -fPIC \
             /app/fast_pixconv.c -lturbojpeg -llz4 -o /app/fast_pixconv.so || \
         gcc -O3 -DHAVE_TURBOJPEG_LZ4 -shared -fPIC \

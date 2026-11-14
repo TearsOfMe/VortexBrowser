@@ -58,6 +58,25 @@ docker compose --profile rpi up -d vortex-rpi
 ```
 *(Oder direkt via: `docker run -d --name vortexbrowser-rpi --shm-size=1g -p 7788:7788 -p 9757:9757 vortexbrowser-server:rpi-arm64`)*
 
+#### Starten auf macOS (Docker Desktop – Apple Silicon & Intel):
+```bash
+docker compose -f docker-compose.macos.yml up -d
+```
+*(Oder direkt via: `docker run -d --name vortexbrowser-macos --shm-size=2g -e VORTEX_PLATFORM=macos -p 7788:7788 -p 9757:9757 vortexbrowser-server:macos-arm64`)*
+
+### 🍎 Schnellstart & Installation (macOS Nativ mit Apple VideoToolbox)
+
+1. Wechseln Sie in den Ordner `server/` und installieren Sie die macOS-Abhängigkeiten:
+   ```bash
+   chmod +x install_macos.sh run_macos.sh
+   ./install_macos.sh
+   ```
+   *Installiert über Homebrew `python@3.11`, `ffmpeg`, `jpeg-turbo`, `lz4`, optional `blackhole-2ch` (für Audio via AVFoundation) und kompiliert `fast_pixconv.dylib` mit Apple Clang (`-mcpu=apple-m1` / `-march=native`).*
+2. Starten Sie den Server nativ mit Hardware-Encoding (`h264_videotoolbox`):
+   ```bash
+   ./run_macos.sh
+   ```
+
 ---
 
 ### ⚙️ Features der Universal-Version
@@ -127,6 +146,25 @@ docker compose up -d vortex-server
 docker compose --profile rpi up -d vortex-rpi
 ```
 *(Or via docker run: `docker run -d --name vortexbrowser-rpi --shm-size=1g -p 7788:7788 -p 9757:9757 vortexbrowser-server:rpi-arm64`)*
+
+#### Run on macOS (Docker Desktop – Apple Silicon & Intel):
+```bash
+docker compose -f docker-compose.macos.yml up -d
+```
+*(Or via docker run: `docker run -d --name vortexbrowser-macos --shm-size=2g -e VORTEX_PLATFORM=macos -p 7788:7788 -p 9757:9757 vortexbrowser-server:macos-arm64`)*
+
+### 🍎 Quickstart & Native Installation (macOS with Apple VideoToolbox)
+
+1. Open a terminal in `server/` and run the macOS installer:
+   ```bash
+   chmod +x install_macos.sh run_macos.sh
+   ./install_macos.sh
+   ```
+   *Installs `python@3.11`, `ffmpeg`, `jpeg-turbo`, `lz4`, and optionally `blackhole-2ch` via Homebrew, and compiles `fast_pixconv.dylib` with Apple Clang (`-mcpu=apple-m1` / `-march=native`).*
+2. Launch the native server with hardware encoding (`h264_videotoolbox`):
+   ```bash
+   ./run_macos.sh
+   ```
 
 ---
 
