@@ -1828,13 +1828,22 @@ class AmigaClientSession:
                 direct = DirectCDPSession(ws_url, fallback_cdp=base_cdp)
                 if await direct.connect():
                     self.cdp = direct
-                    if getattr(self, "_init_turbo_js", None):
+                    if getattr(self, "_init_turbo_js", None) and not getattr(target_page, "_vb_turbo_injected", False):
                         try:
                             await self.cdp.send("Page.enable")
                             await self.cdp.send("Page.setInterceptFileChooserDialog", {"enabled": True})
-                            await self.cdp.send("DOM.enable")
                             await self.cdp.send("Page.addScriptToEvaluateOnNewDocument", {"source": self._init_turbo_js})
                             await self.cdp.send("Runtime.evaluate", {"expression": self._init_turbo_js})
+                            try:
+                                setattr(target_page, "_vb_turbo_injected", True)
+                            except Exception:
+                                pass
+                        except Exception:
+                            pass
+                    else:
+                        try:
+                            await self.cdp.send("Page.enable")
+                            await self.cdp.send("Page.setInterceptFileChooserDialog", {"enabled": True})
                         except Exception:
                             pass
                     # Listen for Page.fileChooserOpened on DirectCDP
