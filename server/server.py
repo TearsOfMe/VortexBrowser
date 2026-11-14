@@ -4131,6 +4131,57 @@ class AmigaClientSession:
             kname = AMIGA_RAWKEY_MAP[key_code]
             await self.page.keyboard.press(" " if kname == "Space" else kname)
 
+    async def _activate_tab(self, tidx: int, old_page=None) -> None:
+        if tidx < 0 or tidx >= len(self.tabs):
+            return
+        await self._stop_screencast()
+        self.active_tab_idx = tidx
+        self.page = self.tabs[tidx]
+        self.prev_raw_buf = None
+        self.last_frame_hash = None
+        self.force_full_frame = True
+
+        # Wake Chromium renderer immediately from background throttling
+        try:
+            await self.page.bring_to_front()
+        except Exception:
+            pass
+
+        # Only resize viewport when dimensions actually changed — avoids triggering
+        # expensive full-page re-layout / re-pagination on heavy apps like read.amazon.com
+        try:
+            vp = self.page.viewport_size
+            if not vp or vp.get("width") != self.width or vp.get("height") != self.height:
+                await self.page.set_viewport_size({"width": self.width, "height": self.height})
+        except Exception:
+            pass
+
+        if self.context and self.engine == "chromium":
+            await self._attach_direct_cdp(self.page)
+            await self._start_screencast()
+        else:
+            self.cdp = None
+
+        # Trigger immediate frame capture BEFORE running background JS tasks
+        self._trigger_full_refresh(True)
+        self._send_nav_update(self.page.url or "", tab_idx=tidx)
+        self._schedule_delayed_frames()
+
+        async def _post_switch_tasks() -> None:
+            if old_page and old_page != self.page:
+                await self._pause_page_media(old_page)
+            if getattr(self.page, "_vb_applied_dark_mode", None) != self.dark_mode:
+                await self._apply_dark_mode(self.page)
+                try:
+                    setattr(self.page, "_vb_applied_dark_mode", self.dark_mode)
+                except Exception:
+                    pass
+                self._trigger_full_refresh(True)
+
+        t = asyncio.create_task(_post_switch_tasks())
+        self.background_tasks.add(t)
+        t.add_done_callback(self.background_tasks.discard)
+
     async def _pause_page_media(self, page) -> None:
         if not self.pause_bg_media or not page:
             return
@@ -4329,6 +4380,10 @@ class AmigaClientSession:
                 logger.debug("DarkReader evaluate error: %s", exc)
 
         await self._apply_web_styling(target_page)
+        try:
+            setattr(target_page, "_vb_applied_dark_mode", self.dark_mode)
+        except Exception:
+            pass
 
     async def _apply_web_styling(self, page=None) -> None:
         target_page = page or self.page
@@ -4674,28 +4729,8 @@ class AmigaClientSession:
             try:
                 tidx = int(cmd.split(":", 1)[1].strip())
                 if 0 <= tidx < len(self.tabs):
-                    old_page = self.page
-                    if tidx != self.active_tab_idx:
-                        await self._pause_page_media(old_page)
-                    await self._stop_screencast()
-                    self.active_tab_idx = tidx
-                    self.page = self.tabs[tidx]
-                    self.prev_raw_buf = None
-                    self.last_frame_hash = None
-                    self.force_full_frame = True
-                    try:
-                        await self.page.set_viewport_size({"width": self.width, "height": self.height})
-                    except Exception:
-                        pass
-                    if self.context and self.engine == "chromium":
-                        await self._attach_direct_cdp(self.page)
-                        await self._start_screencast()
-                    else:
-                        self.cdp = None
-                    await self._apply_dark_mode(self.page)
-                    self._send_nav_update(self.page.url or "", tab_idx=tidx)
-                    self._trigger_full_refresh(True)
-                    self._schedule_delayed_frames()
+                    old_page = self.page if tidx != self.active_tab_idx else None
+                    await self._activate_tab(tidx, old_page=old_page)
             except Exception as exc:
                 logger.warning("Switch tab error: %s", exc)
             return
@@ -4712,23 +4747,7 @@ class AmigaClientSession:
                         pass
                     if self.active_tab_idx >= len(self.tabs):
                         self.active_tab_idx = len(self.tabs) - 1
-                    self.page = self.tabs[self.active_tab_idx]
-                    self.prev_raw_buf = None
-                    self.last_frame_hash = None
-                    self.force_full_frame = True
-                    try:
-                        await self.page.set_viewport_size({"width": self.width, "height": self.height})
-                    except Exception:
-                        pass
-                    if self.context and self.engine == "chromium":
-                        await self._attach_direct_cdp(self.page)
-                        await self._start_screencast()
-                    else:
-                        self.cdp = None
-                    await self._apply_dark_mode(self.page)
-                    self._send_nav_update(self.page.url or "", tab_idx=self.active_tab_idx)
-                    self._trigger_full_refresh(True)
-                    self._schedule_delayed_frames()
+                    await self._activate_tab(self.active_tab_idx)
             except Exception as exc:
                 logger.warning("Close tab error: %s", exc)
             return
