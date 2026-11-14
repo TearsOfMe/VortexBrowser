@@ -90,6 +90,7 @@ void prefs_init(VortexApp *app)
     app->prefs.resolution.has_win_pos       = FALSE;
     app->prefs.soft_scroll                  = TRUE;
     app->prefs.show_status_bar              = FALSE; /* Default: OFF */
+    app->prefs.pause_bg_media               = FALSE; /* Default: OFF */
     app->prefs.stream_res_mode              = STREAM_RES_NATIVE; /* Default: 1:1 Window Size */
     app->prefs.dark_theme                   = 0; /* Default: Hell (Standard) */
     strncpy(app->prefs.server_host, DEFAULT_SERVER_HOST, sizeof(app->prefs.server_host) - 1);
@@ -244,6 +245,8 @@ static BOOL load_from_file(VortexApp *app, const char *path)
             app->prefs.resolution.depth = (uint16_t)d;
         } else if (strcmp(key, "soft_scroll") == 0) {
             app->prefs.soft_scroll = (atoi(val) != 0);
+        } else if (strcmp(key, "pause_bg_media") == 0) {
+            app->prefs.pause_bg_media = (atoi(val) != 0);
         } else if (strcmp(key, "show_status_bar") == 0) {
             app->prefs.show_status_bar = (atoi(val) != 0);
         } else if (strcmp(key, "stream_res_mode") == 0) {
@@ -633,6 +636,7 @@ static BOOL save_to_file(const VortexApp *app, const char *path)
     fprintf(fp, "res_mode_id=0x%08lx\n",  (unsigned long)app->prefs.resolution.mode_id);
     fprintf(fp, "res_depth=%u\n",         (unsigned)app->prefs.resolution.depth);
     fprintf(fp, "soft_scroll=%d\n",       app->prefs.soft_scroll ? 1 : 0);
+    fprintf(fp, "pause_bg_media=%d\n",    app->prefs.pause_bg_media ? 1 : 0);
     fprintf(fp, "show_status_bar=%d\n",   app->prefs.show_status_bar ? 1 : 0);
     fprintf(fp, "stream_res_mode=%u\n",   (unsigned)app->prefs.stream_res_mode);
     fprintf(fp, "dark_theme=%u\n",         (unsigned)app->prefs.dark_theme);
@@ -842,6 +846,11 @@ void prefs_apply(VortexApp *app)
         char scmd[32];
         snprintf(scmd, sizeof(scmd), "@SOFTSCROLL:%d", app->prefs.soft_scroll ? 1 : 0);
         net_send_url(app, scmd);
+
+        /* Pause background tab media on switch/new tab */
+        char pcmd[32];
+        snprintf(pcmd, sizeof(pcmd), "@PAUSE_BG_MEDIA:%d", app->prefs.pause_bg_media ? 1 : 0);
+        net_send_url(app, pcmd);
 
         /* Web Charset */
         const char *enc = "utf-8";

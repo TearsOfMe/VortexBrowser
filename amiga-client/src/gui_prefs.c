@@ -71,6 +71,7 @@ enum {
     GID_P_SOFTSCROLL,
     GID_P_STATUS_BAR,
     GID_P_THEME_CHOOSER,
+    GID_P_PAUSE_BG_MEDIA,
 
     /* Tab 3: Schrift & Zeichensatz */
     GID_P_FONT_GUI_CHARSET = 45,
@@ -935,6 +936,13 @@ void gui_prefs_open(VortexApp *app)
         CHOOSER_Selected,   init_theme_sel,
         TAG_DONE);
 
+    Object *gad_pause_bg_media = IIntuition->NewObject(NULL, "checkbox.gadget",
+        GA_ID,            GID_P_PAUSE_BG_MEDIA,
+        GA_RelVerify,     TRUE,
+        GA_Text,          (Tag)"Video/Audio beim Tab-Wechsel pausieren",
+        CHECKBOX_Checked, app->prefs.pause_bg_media,
+        TAG_DONE);
+
     Object *res_vlayout = IIntuition->NewObject(NULL, "layout.gadget",
         LAYOUT_Orientation,   LAYOUT_ORIENT_VERT,
         LAYOUT_BevelStyle,    BVS_GROUP,
@@ -1036,6 +1044,18 @@ void gui_prefs_open(VortexApp *app)
                                                             TAG_DONE),
                                   CHILD_WeightedWidth,  30,
                                   LAYOUT_AddChild,      gad_theme_chooser,
+                                  CHILD_WeightedWidth,  70,
+                                  TAG_DONE),
+        CHILD_WeightedHeight, 0,
+        LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
+                                  LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
+                                  LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
+                                                            GA_Text,              (Tag)"Tab-Medien:",
+                                                            GA_ReadOnly,          TRUE,
+                                                            BUTTON_Justification, BCJ_LEFT,
+                                                            TAG_DONE),
+                                  CHILD_WeightedWidth,  30,
+                                  LAYOUT_AddChild,      gad_pause_bg_media,
                                   CHILD_WeightedWidth,  70,
                                   TAG_DONE),
         CHILD_WeightedHeight, 0,
@@ -1934,6 +1954,10 @@ void gui_prefs_open(VortexApp *app)
         IIntuition->GetAttr(CHOOSER_Selected, gad_theme_chooser, &theme_sel);
         BOOL theme_changed = ((uint8_t)theme_sel != app->prefs.dark_theme);
         app->prefs.dark_theme = (uint8_t)theme_sel;
+
+        uint32 pbm_val = 0;
+        IIntuition->GetAttr(CHECKBOX_Checked, gad_pause_bg_media, &pbm_val);
+        app->prefs.pause_bg_media = (pbm_val != 0);
 
         BOOL mode_id_changed = (app->prefs.resolution.mode_id != old_mode_id);
         BOOL screen_reopen_needed = screen_mode_changed || (new_use_custom && (res_changed || mode_id_changed));

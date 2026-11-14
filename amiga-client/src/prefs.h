@@ -96,6 +96,7 @@ typedef struct VortexPrefs {
     uint8_t          search_engine;     /* 0 = DuckDuckGo (default), 1..NUM_SEARCH_ENGINES-1 */
     BOOL             soft_scroll;       /* TRUE = Softscrolling (default: TRUE) */
     BOOL             show_status_bar;   /* TRUE = Statusleiste anzeigen (default: FALSE) */
+    BOOL             pause_bg_media;    /* TRUE = Video/Audio bei Tab-Wechsel pausieren */
     char             start_url[512];    /* Startseite / Letzte aufgerufene Seite */
     BOOL             save_last_url;     /* TRUE = Automatisch letzte Seite als Startseite speichern */
     QuickLinkItem    quick_links[VB_MAX_QUICKLINKS];
