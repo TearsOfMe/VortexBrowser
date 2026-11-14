@@ -171,19 +171,19 @@ void gui_download_manager_update(VortexApp *app)
         int pct = (e->total_size > 0) ? (int)((e->received_size * 100ULL) / e->total_size) : 0;
         if (pct > 100) pct = 100;
 
-        const char *status_str = "Laufend";
+        const char *status_str = GetVString(MSG_DL_STATUS_RUNNING);
         if (e->status == DL_STATUS_COMPLETED) {
-            status_str = "Fertig";
+            status_str = GetVString(MSG_DL_STATUS_DONE);
             snprintf(pct_str, sizeof(pct_str), "100%%");
             snprintf(size_str, sizeof(size_str), "%s", tot_str[0] ? tot_str : rec_str);
             snprintf(spd_str, sizeof(spd_str), "-");
         } else if (e->status == DL_STATUS_CANCELLED) {
-            status_str = "Abgebrochen";
+            status_str = GetVString(MSG_DL_STATUS_CANCELLED);
             snprintf(pct_str, sizeof(pct_str), "-");
             snprintf(size_str, sizeof(size_str), "%s", rec_str);
             snprintf(spd_str, sizeof(spd_str), "-");
         } else if (e->status == DL_STATUS_ERROR) {
-            status_str = "Fehler";
+            status_str = GetVString(MSG_DL_STATUS_ERROR);
             snprintf(pct_str, sizeof(pct_str), "-");
             snprintf(size_str, sizeof(size_str), "%s", rec_str);
             snprintf(spd_str, sizeof(spd_str), "-");

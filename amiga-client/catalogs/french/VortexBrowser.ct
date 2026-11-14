@@ -1,4 +1,4 @@
-## version $VER: VortexBrowser.catalog 1.0 (11.11.2026)
+## version $VER: VortexBrowser.catalog 2.0 (14.11.2026)
 ## language french
 ## codeset 4
 ;
@@ -355,4 +355,952 @@ Descendre
 ;
 MSG_PREFS_CHOOSE_DIR
 Choisir tiroir...
+;
+MSG_MENU_NEW_HOME
+Accueil / Page de démarrage
+;
+MSG_MENU_SERVER_CFG
+Configurer le serveur...
+;
+MSG_MENU_SERVER_CONNECT
+Se connecter au serveur
+;
+MSG_MENU_SERVER_DISCONNECT
+Déconnecter
+;
+MSG_MENU_STREAM_RES_NATIVE
+Flux : 1:1 natif (taille fenêtre)
+;
+MSG_MENU_STREAM_RES_720P
+Flux : 720p HD (1280x720) [30-50 FPS]
+;
+MSG_MENU_STREAM_RES_540P
+Flux : 540p qHD (960x540) [Turbo]
+;
+MSG_MENU_STREAM_RES_1080P
+Flux : 1080p FHD (1920x1080)
+;
+MSG_MENU_FPS_15
+FPS : 15 FPS (économie / CPU lent)
+;
+MSG_MENU_FPS_25
+FPS : 25 FPS (standard / PAL fluide)
+;
+MSG_MENU_FPS_30
+FPS : 30 FPS (recommandé YouTube / NTSC)
+;
+MSG_MENU_FPS_50
+FPS : 50 FPS (PAL haute vitesse)
+;
+MSG_MENU_FPS_60
+FPS : 60 FPS (maximum / jeu / PiStorm)
+;
+MSG_MENU_VIDEO_AUTO
+Flux vidéo : Auto (H.264 via va.library)
+;
+MSG_MENU_VIDEO_LZ4
+Flux vidéo : Dirty-Rect uniquement (LZ4)
+;
+MSG_MENU_VIDEO_H264
+Flux vidéo : H.264 uniquement (toujours)
+;
+MSG_MENU_TOGGLE_DARK
+Basculer le mode sombre
+;
+MSG_MENU_TOGGLE_SCREEN
+Basculer plein écran / écran (F11)
+;
+MSG_MENU_TOGGLE_STATUSBAR
+Afficher/masquer la barre d'état
+;
+MSG_POPUP_MAIN_TITLE
+Menu VortexBrowser
+;
+MSG_POPUP_SAVE_SETTINGS
+Enregistrer les paramètres
+;
+MSG_POPUP_OPT_TITLE
+Options de VortexBrowser
+;
+MSG_POPUP_OPT_PROMPT
+Choisir une action :
+;
+MSG_POPUP_OPT_BUTTONS
+Configurer serveur|Connecter|Déconnecter|Accueil|Ajouter signet|À propos|Annuler
+;
+MSG_BTN_SEARCH
+Rechercher
+;
+MSG_HINT_FAVICON
+Favicon du site (clic pour gestionnaire de mots de passe)
+;
+MSG_HINT_URL
+Saisir l'adresse web (URL) et appuyer sur Entrée
+;
+MSG_HINT_SEARCH_CHOOSER
+Choisir le moteur de recherche (défaut : DuckDuckGo)
+;
+MSG_HINT_SEARCH_INPUT
+Saisir les termes de recherche et appuyer sur Entrée
+;
+MSG_HINT_SEARCH_GO
+Lancer la recherche
+;
+MSG_QL_POPUP_TITLE_FMT
+Raccourci : %.40s
+;
+MSG_QL_POPUP_OPEN_CUR
+Ouvrir dans l'onglet actif
+;
+MSG_QL_POPUP_OPEN_NEW
+Ouvrir dans un nouvel onglet
+;
+MSG_QL_POPUP_COPY_URL
+Copier l'URL dans le presse-papiers
+;
+MSG_QL_POPUP_EDIT
+Personnaliser les raccourcis (Préférences)...
+;
+MSG_QL_POPUP_REMOVE
+Supprimer ce bouton
+;
+MSG_QL_POPUP_REQ_TEXT
+Choisir une action pour ce bouton :\n%s
+;
+MSG_QL_POPUP_REQ_BTNS
+Ouvrir ici|Nouvel onglet|Copier l'URL|Supprimer|Annuler
+;
+MSG_QL_ADD_REQ_TITLE
+Ajouter aux raccourcis
+;
+MSG_QL_ADD_REQ_TEXT
+Voulez-vous ajouter cette page aux raccourcis ?\n\nTitre : %s\nURL : %s
+;
+MSG_QL_ADD_REQ_BTNS
+Ajouter|Personnaliser raccourcis...|Annuler
+;
+MSG_CTX_HDR_LINK
+Lien : %.50s
+;
+MSG_CTX_HDR_MEDIA
+Image / Média
+;
+MSG_CTX_OPEN_MEDIA
+Afficher l'image / média
+;
+MSG_CTX_FAV_PAGE
+Ajouter la page aux signets (+Fav)
+;
+MSG_CTX_DL_PAGE
+Télécharger l'adresse actuelle (ASL)...
+;
+MSG_CTX_DARK_ON
+Thème sombre
+;
+MSG_CTX_LIGHT_ON
+Thème clair
+;
+MSG_CTX_DARK_MODE_FULL
+Thème sombre (Mode sombre)
+;
+MSG_CTX_LIGHT_MODE_FULL
+Thème clair (Mode clair)
+;
+MSG_CTX_REQ_TITLE
+Menu contextuel VortexBrowser
+;
+MSG_CTX_REQ_LINK_TEXT
+Lien : %s
+;
+MSG_CTX_REQ_LINK_BTNS
+Ouvrir lien|Nouvel onglet|Fermer onglet|Télécharger (ASL)|Copier URL|Menu principal|Précédent|Annuler
+;
+MSG_CTX_REQ_PAGE_TEXT
+Choisir une action :
+;
+MSG_CTX_REQ_PAGE_BTNS
+Précédent|Suivant|Recharger|Accueil|Nouvel onglet|Fermer onglet|Menu principal|Annuler
+;
+MSG_SRV_DLG_TITLE
+Configurer le serveur
+;
+MSG_SRV_DLG_SCRTITLE
+Paramètres de VortexBrowser
+;
+MSG_SRV_DLG_PROMPT
+Saisir l'adresse du serveur VortexBrowser (IP:Port) :
+;
+MSG_SRV_DLG_HINT
+IP et port du serveur (ex. 127.0.0.1:7788)
+;
+MSG_SRV_DLG_CONNECT
+Connecter
+;
+MSG_ABOUT_CONNECTED
+Connecté
+;
+MSG_ABOUT_DISCONNECTED
+Déconnecté
+;
+MSG_ABOUT_YUV_HW
+Planar YUV420p 12bpp (Matériel DMA+CompositeTags)
+;
+MSG_ABOUT_YUV_SW
+Planar YUV420p 12bpp (Logiciel RGB565)
+;
+MSG_ABOUT_SCR_CUSTOM
+Écran RTG personnalisé
+;
+MSG_ABOUT_SCR_WB
+Écran Workbench
+;
+MSG_ABOUT_ALTIVEC_YES
+AltiVec SIMD 128 bits (Activé - X1000/G4)
+;
+MSG_ABOUT_ALTIVEC_NO
+Base scalaire (Sûr pour X5000/A1222+/Sam460/G3)
+;
+MSG_ABOUT_SEC_SERVER
+VortexBrowser pour AmigaOS 4\nVersion 0.99 RC3\n\n=== INFORMATIONS SERVEUR ===\nAdresse du serveur : %s:%u\nÉtat de connexion : %s\nMoteur serveur : Chromium (Streaming Linux Headless)\n\n
+;
+MSG_ABOUT_SEC_GRAPHICS
+=== RÉSOLUTION & GRAPHIQUES ===\nÉcran : %ux%u (%u bits, %s)\nFenêtre : %ux%u (Pos : %d,%d)\nZone navigateur : %ux%u px (Synchro 1:1)\nFlux serveur : %ux%u (%s)\nTrames décodées : %u\nLangue active : %s\n\n
+;
+MSG_ABOUT_SEC_AUDIO
+=== AUDIO & OPTIMISATION ===\nMoteur audio : AHI 16 bits stéréo (44100 Hz qualité CD PCM faible latence)\nCible CPU : PowerPC Universal (détection CPU dynamique)\nVecteur SIMD : %s\nCompression : Décompression de flux LZ4 temps réel
+;
+MSG_ABOUT_TITLE
+À propos de VortexBrowser
+;
+MSG_CPU_INCOMPAT_TITLE
+VortexBrowser - CPU incompatible
+;
+MSG_CPU_INCOMPAT_BODY
+Cette version ('VortexBrowser-AltiVec') requiert un processeur avec unité SIMD AltiVec/VMX (ex. AmigaOne X1000 ou G4).\n\nSur des systèmes comme AmigaOne X5000, A1222+, Sam460 ou G3, veuillez lancer le programme standard 'VortexBrowser' !
+;
+MSG_STATUS_READY_STREAM
+Prêt - Système de flux : %s | %u kbps
+;
+MSG_STATUS_CONNECTED_STREAM
+Connecté à %s:%u - Flux : %s | %u kbps
+;
+MSG_STATUS_CONN_SYNC
+Connecté à %s:%u - Synchronisation de la zone web...
+;
+MSG_STATUS_CONN_FMT
+Connecté (%ux%u %s %s) | %s
+;
+MSG_STATUS_CONN_H264
+Connecté (%ux%u H.264 matériel VA-API) | %s
+;
+MSG_STATUS_CONN_LZ4
+Connecté (%ux%u LZ4 2D Dirty-Rect) | %s
+;
+MSG_STATUS_NO_BSDSOCKET
+Erreur : bsdsocket.library indisponible !
+;
+MSG_STATUS_NOT_CONNECTED
+Non connecté. Veuillez configurer le serveur (Amiga+1).
+;
+MSG_STATUS_HOST_RESOLVE_ERR
+Impossible de résoudre l'hôte : %s
+;
+MSG_STATUS_SOCKET_ERR
+Échec de création du socket !
+;
+MSG_STATUS_CONN_FAILED
+Échec de connexion à %s:%u !
+;
+MSG_STATUS_PAGE_LOADED
+Page chargée : %s
+;
+MSG_STATUS_LOADING_PAGE
+Chargement de la page : %s ...
+;
+MSG_STATUS_LOADING_STOPPED
+Chargement arrêté.
+;
+MSG_STATUS_CREDENTIALS_FILLED
+Identifiants saisis pour '%s'.
+;
+MSG_STATUS_CLIPBOARD_COPIED
+Texte copié dans le presse-papiers (%u car.)
+;
+MSG_STATUS_SEARCH_ENGINE_SEL
+Moteur de recherche choisi : %s
+;
+MSG_STATUS_BOOKMARK_ADDED
+Ajouté aux signets : %s
+;
+MSG_STATUS_BOOKMARK_SAVED
+Ajouté aux signets (ENVARC:) : %s
+;
+MSG_STATUS_SETTINGS_SAVED
+Paramètres enregistrés définitivement (ENVARC:).
+;
+MSG_STATUS_STREAM_RES_NATIVE
+Résolution du flux : 1:1 natif (taille fenêtre)
+;
+MSG_STATUS_STREAM_RES_720P
+Résolution du flux : 1280x720 (720p HD - 30-50 FPS)
+;
+MSG_STATUS_STREAM_RES_540P
+Résolution du flux : 960x540 (540p qHD - Turbo)
+;
+MSG_STATUS_STREAM_RES_1080P
+Résolution du flux : 1920x1080 (1080p Full HD)
+;
+MSG_STATUS_FPS_SET
+Cadence d'images définie : %u FPS
+;
+MSG_STATUS_THEME_SET
+Thème de couleurs : %s
+;
+MSG_STATUS_THEME_DARK
+Sombre (Mode sombre)
+;
+MSG_STATUS_THEME_LIGHT
+Clair (Défaut)
+;
+MSG_STATUS_STREAM_AUTO
+Streaming : Auto (H.264 sur vidéo via va.library, sinon LZ4)
+;
+MSG_STATUS_STREAM_LZ4
+Streaming : Dirty-Rect / LZ4 uniquement (Classique)
+;
+MSG_STATUS_STREAM_H264
+Streaming : H.264 uniquement (Flux vidéo continu)
+;
+MSG_STATUS_FONT_SIZE
+Taille de police du navigateur : %u px
+;
+MSG_STATUS_FONT_RESET
+Taille de police réinitialisée (16 px / 100%%).
+;
+MSG_STATUS_RES_CUSTOM
+Résolution : %s
+;
+MSG_STATUS_RES_AUTO
+Résolution : Automatique
+;
+MSG_STATUS_MAX_TABS
+Maximum %d onglets autorisés.
+;
+MSG_STATUS_TAB_SWITCH
+Onglet %d : %s
+;
+MSG_STATUS_SCREEN_ACTIVE
+Écran activé : %s (%ux%u)
+;
+MSG_STATUS_SCREEN_CUSTOM
+Écran personnalisé
+;
+MSG_STATUS_QL_STARTED
+Raccourci : %s
+;
+MSG_STATUS_QL_COPIED
+URL copiée : %s
+;
+MSG_STATUS_QL_ADDED
+Raccourci ajouté : %s
+;
+MSG_STATUS_QL_FULL
+Barre de raccourcis pleine (max. %d) !
+;
+MSG_STATUS_QL_NONE
+Aucun bouton de raccourci à supprimer.
+;
+MSG_STATUS_QL_REMOVED_HOME
+Raccourci supprimé : %s (Accueil chargé)
+;
+MSG_STATUS_QL_REMOVED
+Raccourci supprimé : %s
+;
+MSG_STATUS_CTX_OPENING
+Ouverture du menu contextuel (%d, %d)...
+;
+MSG_STATUS_OPENING_NEW_TAB
+Ouverture d'un nouvel onglet : %s
+;
+MSG_STATUS_START_ASL_DL
+Démarrage du téléchargement ASL : %s
+;
+MSG_STATUS_LINK_COPIED
+Lien copié dans le presse-papiers : %s
+;
+MSG_STATUS_LINK_BOOKMARKED
+Lien ajouté aux signets : %s
+;
+MSG_STATUS_START_MEDIA_DL
+Démarrage du téléchargement média : %s
+;
+MSG_STATUS_PAGE_BOOKMARKED
+Page ajoutée aux signets : %s
+;
+MSG_STATUS_START_DL
+Démarrage du téléchargement : %s
+;
+MSG_STATUS_READY_SHORT
+Prêt
+;
+MSG_NET_UPLOAD_TITLE
+VortexBrowser : Choisir un fichier à envoyer...
+;
+MSG_NET_UPLOAD_POS
+Sélectionner
+;
+MSG_NET_UPLOAD_CANCELLED
+Envoi de fichier annulé.
+;
+MSG_NET_UPLOAD_OPEN_ERR
+Erreur lors de l'ouverture du fichier : %s
+;
+MSG_NET_UPLOADING
+Envoi en cours : %s (%u Ko)...
+;
+MSG_NET_UPLOADED
+Fichier envoyé : %s (%u Ko)
+;
+MSG_NET_SAVE_PW_TITLE
+Enregistrer le mot de passe
+;
+MSG_NET_SAVE_PW_BODY
+Voulez-vous enregistrer le mot de passe pour\n'%s' (Utilisateur : %s)\ndans le gestionnaire sécurisé ?
+;
+MSG_NET_SAVE_PW_BTNS
+Enregistrer|Plus tard
+;
+MSG_NET_PW_SAVED
+Mot de passe enregistré pour '%s'.
+;
+MSG_DL_SAVE_TITLE
+VortexBrowser : Enregistrer le téléchargement sous...
+;
+MSG_DL_SAVE_POS
+Enregistrer
+;
+MSG_DL_STATUS_RUNNING
+En cours
+;
+MSG_DL_STATUS_DONE
+Terminé
+;
+MSG_DL_STATUS_CANCELLED
+Annulé
+;
+MSG_DL_STATUS_ERROR
+Erreur
+;
+MSG_DL_ETA_CANCELLED
+Annulé
+;
+MSG_FAV_DEFAULT_PORTAL
+Portail VortexBrowser (Accueil)
+;
+MSG_FAV_GOOGLE_SEARCH
+Recherche Google
+;
+MSG_WEB_PAGE_FALLBACK
+Page web
+;
+MSG_PW_NO_ENTRIES
+(Aucun mot de passe enregistré)
+;
+MSG_PW_BTN_COPY
+Copier
+;
+MSG_PW_CHK_REVEAL
+Afficher le mot de passe en clair
+;
+MSG_PW_BTN_AUTOLOGIN
+Connexion sur la page (Auto-Login)
+;
+MSG_PW_HINT_AUTOLOGIN
+Remplit et envoie automatiquement les identifiants dans le formulaire actuel
+;
+MSG_PW_BTN_SAVE
+Enregistrer / Nouveau
+;
+MSG_PW_HINT_SAVE
+Enregistre de façon chiffrée les identifiants ci-dessus
+;
+MSG_PW_BTN_DELETE
+Supprimer
+;
+MSG_PW_HINT_DELETE
+Supprime les identifiants sélectionnés
+;
+MSG_PW_BTN_CLOSE
+Fermer
+;
+MSG_PW_LBL_SAVED
+Connexions enregistrées :
+;
+MSG_PW_LBL_DOMAIN
+Site web / Domaine :
+;
+MSG_PW_LBL_USER
+Nom d'utilisateur / E-mail :
+;
+MSG_PW_LBL_PASS
+Mot de passe :
+;
+MSG_PW_STATUS_SENT
+Auto-Login envoyé : %s (%s)
+;
+MSG_PW_STATUS_USER_COPIED
+Nom d'utilisateur copié dans le presse-papiers !
+;
+MSG_PW_STATUS_PASS_COPIED
+Mot de passe copié dans le presse-papiers !
+;
+MSG_PW_STATUS_SAVED
+Mot de passe enregistré : %s (%s)
+;
+MSG_PW_STATUS_DELETED
+Identifiants supprimés.
+;
+MSG_PW_STATUS_NO_PAGE
+Aucune page web active pour l'Auto-Login.
+;
+MSG_PW_STATUS_AUTOLOGIN
+Auto-Login exécuté pour '%s' (%s)...
+;
+MSG_PW_STATUS_NOT_FOUND
+Aucun identifiant trouvé pour ce domaine. Gestionnaire ouvert.
+;
+MSG_PREFS_PTAB_SERVER
+Serveur & Streaming
+;
+MSG_PREFS_PTAB_QUICKDIAL
+Raccourcis
+;
+MSG_PREFS_PTAB_DISPLAY
+Affichage & Résolution
+;
+MSG_PREFS_PTAB_FONT
+Police & Jeu de caractères
+;
+MSG_PREFS_PTAB_BOOKMARKS
+Signets
+;
+MSG_PREFS_PTAB_DOWNLOADS
+Téléchargements
+;
+MSG_PREFS_SRV_PRESET_0
+Serveur secondaire (127.0.0.1:9757)
+;
+MSG_PREFS_SRV_PRESET_1
+Serveur par défaut (127.0.0.1:7788)
+;
+MSG_PREFS_SRV_PRESET_2
+Personnalisé (Adresse manuelle)
+;
+MSG_PREFS_SMODE_AUTO
+Auto (Optimisation vidéo adaptative : 25-30 FPS YUV420P)
+;
+MSG_PREFS_SMODE_LZ4
+Dirty-Rect / LZ4 uniquement (Classique, bande passante minimale)
+;
+MSG_PREFS_SMODE_H264
+H.264 (Flux binaire expérimental)
+;
+MSG_PREFS_SRES_NATIVE
+1:1 taille fenêtre (Défaut / Natif)
+;
+MSG_PREFS_SRES_720P
+720p HD (1280x720) [30-50 FPS / Video-Boost]
+;
+MSG_PREFS_SRES_540P
+540p qHD (960x540) [Turbo]
+;
+MSG_PREFS_SRES_1080P
+1080p Full HD (1920x1080)
+;
+MSG_PREFS_FPS_15
+15 FPS (Économie d'énergie / CPU lent)
+;
+MSG_PREFS_FPS_25
+25 FPS (Standard / PAL fluide)
+;
+MSG_PREFS_FPS_30
+30 FPS (Recommandé pour YouTube / NTSC)
+;
+MSG_PREFS_FPS_50
+50 FPS (PAL haute vitesse)
+;
+MSG_PREFS_FPS_60
+60 FPS (Maximum / Jeu / PiStorm)
+;
+MSG_PREFS_SRV_GROUP
+Serveur de streaming & options de connexion
+;
+MSG_PREFS_HINT_SRV_PRESET
+Choisir un serveur prédéfini ou personnaliser
+;
+MSG_PREFS_HINT_SRV_HOST
+Adresse IP ou nom d'hôte du serveur de streaming
+;
+MSG_PREFS_HINT_SRV_PORT
+Port TCP du serveur de streaming (ex. 9757 ou 7788)
+;
+MSG_PREFS_HINT_STREAM_RES
+Choisir la résolution serveur (mise à l'échelle GPU/Composite)
+;
+MSG_PREFS_HINT_FPS
+Définir la cadence d'images (FPS) du flux
+;
+MSG_PREFS_HINT_JPEG_Q
+Qualité JPEG du flux (Défaut : 100% = netteté maximale)
+;
+MSG_PREFS_HINT_STREAM_MODE
+Mode de streaming : 'Auto' passe en H.264 via va.library sur vidéo
+;
+MSG_PREFS_HINT_BITRATE
+Débit du flux vidéo H.264 (1000 à 10000 kbps / 10 Mbps, défaut : 4000)
+;
+MSG_PREFS_CHK_VIDBOOST
+Qualité JPEG dynamique sur vidéo (Video-Boost)
+;
+MSG_PREFS_HINT_VIDBOOST
+Ajuste temporairement la qualité à 60% en lecture vidéo pour 30-50 FPS
+;
+MSG_PREFS_CHK_AUTOSAVE_SRV
+Enregistrer automatiquement le serveur actif en quittant
+;
+MSG_PREFS_HINT_AUTOSAVE_SRV
+Mémoriser le dernier serveur utilisé au prochain démarrage
+;
+MSG_PREFS_LBL_SRV_SELECT
+Choix du serveur :
+;
+MSG_PREFS_LBL_SRV_HOST
+IP / Hôte du serveur :
+;
+MSG_PREFS_LBL_SRV_PORT
+Port :
+;
+MSG_PREFS_LBL_STREAM_RES
+Résolution du flux :
+;
+MSG_PREFS_LBL_FPS
+Images/s (FPS) :
+;
+MSG_PREFS_LBL_JPEG_Q
+Qualité JPEG :
+;
+MSG_PREFS_LBL_VID_STREAM
+Streaming vidéo :
+;
+MSG_PREFS_LBL_VID_BITRATE
+Débit vidéo :
+;
+MSG_PREFS_LBL_VID_OPT
+Optimisation vidéo :
+;
+MSG_PREFS_LBL_ON_EXIT
+À la fermeture :
+;
+MSG_PREFS_SRV_NOTE
+Qualité par défaut : 100% (sans perte). 720p/540p augmente nettement les FPS.
+;
+MSG_PREFS_QL_GROUP
+Barre de raccourcis (Boutons variables avec icônes)
+;
+MSG_PREFS_QL_COL_TITLE
+Titre / Nom
+;
+MSG_PREFS_QL_COL_URL
+Adresse (URL)
+;
+MSG_PREFS_QL_COL_ICON
+Icône
+;
+MSG_PREFS_QL_BTN_ADD
+Nouveau / Ajouter
+;
+MSG_PREFS_QL_LBL_TITLE
+Titre / Nom :
+;
+MSG_PREFS_QL_LBL_URL
+Adresse (URL) :
+;
+MSG_PREFS_QL_LBL_ICON
+Nom d'icône AISS :
+;
+MSG_PREFS_QL_TIP1
+Astuce : Les boutons de la barre ont des icônes et s'adaptent automatiquement.
+;
+MSG_PREFS_QL_TIP2
+De nouveaux boutons peuvent aussi être ajoutés avec le bouton [+].
+;
+MSG_PREFS_RES_0
+1024 x 768 (XGA standard)
+;
+MSG_PREFS_RES_1
+1280 x 720 (HD 720p)
+;
+MSG_PREFS_RES_2
+1920 x 1080 (Full HD)
+;
+MSG_PREFS_RES_3
+800 x 600 (SVGA)
+;
+MSG_PREFS_RES_4
+1280 x 1024 (SXGA)
+;
+MSG_PREFS_RES_5
+Ajuster automatiquement (taille fenêtre)
+;
+MSG_PREFS_RES_6
+Personnalisé (Manuel L x H)
+;
+MSG_PREFS_THEME_0
+Clair (Défaut)
+;
+MSG_PREFS_THEME_1
+Sombre (Mode sombre)
+;
+MSG_PREFS_THEME_2
+Automatique (Système)
+;
+MSG_PREFS_SCR_0
+Workbench (Mode fenêtre)
+;
+MSG_PREFS_SCR_1
+Écran public personnalisé (Résolution manuelle / Plein écran)
+;
+MSG_PREFS_SCR_2
+Cloner le Workbench (Écran personnalisé identique)
+;
+MSG_PREFS_DISP_GROUP
+Résolution centrale & Mode d'écran
+;
+MSG_PREFS_DISP_INTRO
+Une résolution pour l'écran, la fenêtre Amiga et le navigateur :
+;
+MSG_PREFS_LBL_SCR_MODE
+Mode d'écran :
+;
+MSG_PREFS_LBL_RTG_MODE
+Mode écran RTG :
+;
+MSG_PREFS_BTN_SCR_ASL
+Choisir le mode d'écran (ASL)...
+;
+MSG_PREFS_LBL_RESOLUTION
+Résolution :
+;
+MSG_PREFS_LBL_CUSTOM_W
+L pers. :
+;
+MSG_PREFS_LBL_CUSTOM_H
+H :
+;
+MSG_PREFS_LBL_SCROLL
+Molette & Défilement :
+;
+MSG_PREFS_CHK_SOFTSCROLL
+Défilement fluide (Softscrolling)
+;
+MSG_PREFS_LBL_STATUSBAR
+Barre d'état :
+;
+MSG_PREFS_CHK_STATUSBAR
+Afficher la barre d'état (En bas)
+;
+MSG_PREFS_LBL_THEME
+Thème de couleurs :
+;
+MSG_PREFS_LBL_TAB_MEDIA
+Médias des onglets :
+;
+MSG_PREFS_CHK_PAUSE_MEDIA
+Mettre vidéo/audio en pause au changement d'onglet
+;
+MSG_PREFS_DISP_HINT
+Note : Basculez entre l'écran et le Workbench à tout moment avec Amiga+M.
+;
+MSG_PREFS_GCHAR_0
+ISO-8859-1 (Europe occidentale / Standard Amiga)
+;
+MSG_PREFS_GCHAR_1
+UTF-8 (Unicode)
+;
+MSG_PREFS_GCHAR_2
+Windows-1252 (ANSI)
+;
+MSG_PREFS_GCHAR_3
+ISO-8859-15 (Europe occidentale avec Euro)
+;
+MSG_PREFS_GSIZE_0
+Défaut (Police système du Workbench)
+;
+MSG_PREFS_GSIZE_1
+Petite (8 pt)
+;
+MSG_PREFS_GSIZE_2
+Moyenne (10 pt)
+;
+MSG_PREFS_GSIZE_3
+Grande (12 pt)
+;
+MSG_PREFS_GSIZE_4
+Très grande (14 pt)
+;
+MSG_PREFS_WCHAR_0
+UTF-8 (Standard international)
+;
+MSG_PREFS_WCHAR_1
+ISO-8859-1 (Europe occidentale)
+;
+MSG_PREFS_WCHAR_2
+Windows-1252 (Europe occidentale / Windows)
+;
+MSG_PREFS_WCHAR_3
+Détection automatique
+;
+MSG_PREFS_WSIZE_0
+16 px (Défaut)
+;
+MSG_PREFS_WSIZE_1
+18 px (Grand)
+;
+MSG_PREFS_WSIZE_2
+20 px (Très grand)
+;
+MSG_PREFS_WSIZE_3
+22 px (Extra grand)
+;
+MSG_PREFS_WSIZE_4
+24 px (Énorme)
+;
+MSG_PREFS_WSIZE_5
+14 px (Compact)
+;
+MSG_PREFS_WSIZE_6
+12 px (Petit)
+;
+MSG_PREFS_WZOOM_0
+100% (Normal)
+;
+MSG_PREFS_WZOOM_1
+110% (Légèrement agrandi)
+;
+MSG_PREFS_WZOOM_2
+125% (Grand - recommandé pour 1024x768 / HD)
+;
+MSG_PREFS_WZOOM_3
+150% (Très grand)
+;
+MSG_PREFS_WZOOM_4
+175% (Extra grand)
+;
+MSG_PREFS_WZOOM_5
+200% (Maximum)
+;
+MSG_PREFS_WZOOM_6
+90% (Compact)
+;
+MSG_PREFS_WZOOM_7
+75% (Très petit)
+;
+MSG_PREFS_WFAM_0
+Sans-Serif (Défaut / Linéale)
+;
+MSG_PREFS_WFAM_1
+Serif (Avec empattements / Livre)
+;
+MSG_PREFS_WFAM_2
+Monospace (Largeur fixe)
+;
+MSG_PREFS_SE_DDG
+DuckDuckGo (Défaut)
+;
+MSG_PREFS_FONT_GROUP
+Police, jeu de caractères & moteur de recherche
+;
+MSG_PREFS_HDR_WEB
+Navigateur web headless (rendu distant & sites web) :
+;
+MSG_PREFS_LBL_WEB_SIZE
+Taille de police :
+;
+MSG_PREFS_LBL_WEB_ZOOM
+Zoom web & mise à l'échelle :
+;
+MSG_PREFS_LBL_WEB_FAM
+Famille de polices :
+;
+MSG_PREFS_LBL_WEB_CHAR
+Encodage web :
+;
+MSG_PREFS_LBL_SEARCH
+Moteur par défaut :
+;
+MSG_PREFS_HDR_GUI
+Application / Interface AmigaOS (GUI) :
+;
+MSG_PREFS_LBL_GUI_CHAR
+Encodage GUI :
+;
+MSG_PREFS_LBL_GUI_SIZE
+Taille police GUI :
+;
+MSG_PREFS_FAV_GROUP
+Gestion des signets
+;
+MSG_PREFS_FAV_LBL_TITLE
+Titre :
+;
+MSG_PREFS_DL_GROUP
+Paramètres de téléchargement
+;
+MSG_PREFS_DL_HINT_DIR
+Choisir le dossier de téléchargement via le sélecteur
+;
+MSG_PREFS_DL_ASK_CHK
+Toujours demander le tiroir de destination (ASL)
+;
+MSG_PREFS_DL_OPEN_BTN
+Ouvrir le gestionnaire maintenant...
+;
+MSG_PREFS_DL_OPEN_HINT
+Ouvre la fenêtre du gestionnaire de téléchargements
+;
+MSG_PREFS_DL_LBL_DIR
+Tiroir par défaut :
+;
+MSG_PREFS_DL_LBL_ASK
+Sélecteur de fichier :
+;
+MSG_PREFS_DL_LBL_MGR
+Téléchargements :
+;
+MSG_PREFS_DL_NOTE
+Si la confirmation est désactivée, les fichiers vont dans le tiroir par défaut.
+;
+MSG_PREFS_HINT_SAVE
+Enregistre durablement dans ENVARC: et ENV: et applique
+;
+MSG_PREFS_HINT_USE
+Applique les paramètres temporairement pour cette session
+;
+MSG_PREFS_HINT_CANCEL
+Annuler les modifications et fermer la fenêtre
+;
+MSG_PREFS_ASL_DL_TITLE
+Choisir le répertoire de téléchargement
+;
+MSG_PREFS_ASL_DL_POS
+Sélectionner
+;
+MSG_PREFS_ASL_SCR_TITLE
+Choisir le mode d'écran
+;
+MSG_PREFS_QL_NEW_LINK
+Nouveau lien
+;
+MSG_TAB_FALLBACK_LINK
+Lien
 ;

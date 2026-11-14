@@ -7,6 +7,8 @@
 #include <libraries/locale.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 
 struct Library        *LocaleBase   = NULL;
 struct LocaleIFace    *ILocale      = NULL;
@@ -14,6 +16,7 @@ struct Library        *CodesetsBase = NULL;
 struct CodesetsIFace  *ICodesets    = NULL;
 static struct Catalog *s_catalog    = NULL;
 static struct Locale  *s_locale     = NULL;
+static char            s_active_language[64] = "english (built-in)";
 
 typedef struct {
     ULONG id;
@@ -154,6 +157,329 @@ static const StringEntry s_builtins[] = {
     { MSG_PREFS_MOVE_UP,       "Move Up" },
     { MSG_PREFS_MOVE_DOWN,     "Move Down" },
     { MSG_PREFS_CHOOSE_DIR,    "Choose Drawer..." },
+
+    { MSG_MENU_NEW_HOME,          "Home / Startpage" },
+    { MSG_MENU_SERVER_CFG,        "Configure Server..." },
+    { MSG_MENU_SERVER_CONNECT,    "Connect to Server" },
+    { MSG_MENU_SERVER_DISCONNECT, "Disconnect" },
+    { MSG_MENU_STREAM_RES_NATIVE, "Stream: 1:1 Native (Window Size)" },
+    { MSG_MENU_STREAM_RES_720P,   "Stream: 720p HD (1280x720) [30-50 FPS]" },
+    { MSG_MENU_STREAM_RES_540P,   "Stream: 540p qHD (960x540) [Turbo]" },
+    { MSG_MENU_STREAM_RES_1080P,  "Stream: 1080p FHD (1920x1080)" },
+    { MSG_MENU_FPS_15,            "FPS: 15 FPS (Power Saving / Slow CPU)" },
+    { MSG_MENU_FPS_25,            "FPS: 25 FPS (Standard / PAL Smooth)" },
+    { MSG_MENU_FPS_30,            "FPS: 30 FPS (Recommended for YouTube / NTSC)" },
+    { MSG_MENU_FPS_50,            "FPS: 50 FPS (PAL High-Speed)" },
+    { MSG_MENU_FPS_60,            "FPS: 60 FPS (Maximum / Gaming / PiStorm)" },
+    { MSG_MENU_VIDEO_AUTO,        "Video Stream: Auto (H.264 via va.library)" },
+    { MSG_MENU_VIDEO_LZ4,         "Video Stream: Dirty-Rect Only (LZ4)" },
+    { MSG_MENU_VIDEO_H264,        "Video Stream: H.264 Only (Always)" },
+    { MSG_MENU_TOGGLE_DARK,       "Toggle Dark Mode" },
+    { MSG_MENU_TOGGLE_SCREEN,     "Toggle Fullscreen / Screen (F11)" },
+    { MSG_MENU_TOGGLE_STATUSBAR,  "Toggle Status Bar" },
+    { MSG_POPUP_MAIN_TITLE,       "VortexBrowser Menu" },
+    { MSG_POPUP_SAVE_SETTINGS,    "Save Settings" },
+    { MSG_POPUP_OPT_TITLE,        "VortexBrowser Options" },
+    { MSG_POPUP_OPT_PROMPT,       "Choose action:" },
+    { MSG_POPUP_OPT_BUTTONS,      "Configure Server|Connect|Disconnect|Home|Add Bookmark|About|Cancel" },
+    { MSG_BTN_SEARCH,             "Search" },
+    { MSG_HINT_FAVICON,           "Website Favicon (Click for Password Manager)" },
+    { MSG_HINT_URL,               "Enter web address (URL) and press Enter" },
+    { MSG_HINT_SEARCH_CHOOSER,    "Choose search engine (Default: DuckDuckGo)" },
+    { MSG_HINT_SEARCH_INPUT,      "Enter search terms and press Enter" },
+    { MSG_HINT_SEARCH_GO,         "Execute Search" },
+
+    { MSG_QL_POPUP_TITLE_FMT,     "Quick Dial: %.40s" },
+    { MSG_QL_POPUP_OPEN_CUR,      "Open in Current Tab" },
+    { MSG_QL_POPUP_OPEN_NEW,      "Open in New Tab" },
+    { MSG_QL_POPUP_COPY_URL,      "Copy URL to Clipboard" },
+    { MSG_QL_POPUP_EDIT,          "Customize Quick Dial (Prefs)..." },
+    { MSG_QL_POPUP_REMOVE,        "Remove This Button" },
+    { MSG_QL_POPUP_REQ_TEXT,      "Choose action for Quick Dial button:\n%s" },
+    { MSG_QL_POPUP_REQ_BTNS,      "Open in Tab|New Tab|Copy URL|Remove|Cancel" },
+    { MSG_QL_ADD_REQ_TITLE,       "Add to Quick Dial" },
+    { MSG_QL_ADD_REQ_TEXT,        "Do you want to add this page to Quick Dial?\n\nTitle: %s\nURL: %s" },
+    { MSG_QL_ADD_REQ_BTNS,        "Add|Customize Quick Dial...|Cancel" },
+    { MSG_CTX_HDR_LINK,           "Link: %.50s" },
+    { MSG_CTX_HDR_MEDIA,          "Image / Media" },
+    { MSG_CTX_OPEN_MEDIA,         "View Image / Media" },
+    { MSG_CTX_FAV_PAGE,           "Add Current Page to Bookmarks (+Fav)" },
+    { MSG_CTX_DL_PAGE,            "Download Current Address (ASL)..." },
+    { MSG_CTX_DARK_ON,            "Dark Theme" },
+    { MSG_CTX_LIGHT_ON,           "Light Theme" },
+    { MSG_CTX_DARK_MODE_FULL,     "Dark Theme (Dark Mode)" },
+    { MSG_CTX_LIGHT_MODE_FULL,    "Light Theme (Light Mode)" },
+    { MSG_CTX_REQ_TITLE,          "VortexBrowser Context Menu" },
+    { MSG_CTX_REQ_LINK_TEXT,      "Link: %s" },
+    { MSG_CTX_REQ_LINK_BTNS,      "Open Link|New Tab|Close Tab|Download (ASL)|Copy URL|Main Menu|Back|Cancel" },
+    { MSG_CTX_REQ_PAGE_TEXT,      "Choose page action:" },
+    { MSG_CTX_REQ_PAGE_BTNS,      "Back|Forward|Reload|Home|New Tab|Close Tab|Main Menu|Cancel" },
+    { MSG_SRV_DLG_TITLE,          "Configure Server" },
+    { MSG_SRV_DLG_SCRTITLE,       "VortexBrowser Settings" },
+    { MSG_SRV_DLG_PROMPT,         "Enter VortexBrowser server address (IP:Port):" },
+    { MSG_SRV_DLG_HINT,           "Server IP and port (e.g. 127.0.0.1:7788)" },
+    { MSG_SRV_DLG_CONNECT,        "Connect" },
+
+    { MSG_ABOUT_CONNECTED,        "Connected" },
+    { MSG_ABOUT_DISCONNECTED,     "Disconnected" },
+    { MSG_ABOUT_YUV_HW,           "Planar YUV420p 12bpp (Hardware DMA+CompositeTags)" },
+    { MSG_ABOUT_YUV_SW,           "Planar YUV420p 12bpp (Software RGB565)" },
+    { MSG_ABOUT_SCR_CUSTOM,       "Custom RTG Screen" },
+    { MSG_ABOUT_SCR_WB,           "Workbench Screen" },
+    { MSG_ABOUT_ALTIVEC_YES,      "AltiVec 128-Bit SIMD (Enabled - X1000/G4)" },
+    { MSG_ABOUT_ALTIVEC_NO,       "Scalar Baseline (Safe for X5000/A1222+/Sam460/G3)" },
+    { MSG_ABOUT_SEC_SERVER,       "VortexBrowser for AmigaOS 4\nVersion 0.99 RC3\n\n=== SERVER INFORMATION ===\nServer Address: %s:%u\nConnection Status: %s\nServer Engine: Chromium (Linux Headless Streaming)\n\n" },
+    { MSG_ABOUT_SEC_GRAPHICS,     "=== RESOLUTION & GRAPHICS ===\nScreen: %ux%u (%u-bit, %s)\nWindow Size: %ux%u (Pos: %d,%d)\nBrowser Viewport: %ux%u px (1:1 Auto-Sync)\nServer Stream: %ux%u (%s)\nDecoded Frames: %u\nActive Language: %s\n\n" },
+    { MSG_ABOUT_SEC_AUDIO,        "=== AUDIO & OPTIMIZATION ===\nAudio Engine: AHI 16-Bit Stereo (44100 Hz CD Quality PCM Low-Latency)\nCPU Target: PowerPC Universal (Dynamic CPU Detection)\nVector SIMD: %s\nCompression: LZ4 Realtime Stream Decompressor" },
+    { MSG_ABOUT_TITLE,            "About VortexBrowser" },
+    { MSG_CPU_INCOMPAT_TITLE,     "VortexBrowser - Incompatible CPU" },
+    { MSG_CPU_INCOMPAT_BODY,      "This build ('VortexBrowser-AltiVec') requires a CPU with an AltiVec/VMX SIMD unit (e.g. AmigaOne X1000 or G4).\n\nOn systems such as AmigaOne X5000, A1222+, Sam460 or G3, please launch the standard 'VortexBrowser' build!" },
+
+    { MSG_STATUS_READY_STREAM,       "Ready - Stream System: %s | %u kbps" },
+    { MSG_STATUS_CONNECTED_STREAM,   "Connected to %s:%u - Stream: %s | %u kbps" },
+    { MSG_STATUS_CONN_SYNC,          "Connected to %s:%u - Synchronizing viewport..." },
+    { MSG_STATUS_CONN_FMT,           "Connected (%ux%u %s %s) | %s" },
+    { MSG_STATUS_CONN_H264,          "Connected (%ux%u H.264 VA-API Hardware) | %s" },
+    { MSG_STATUS_CONN_LZ4,           "Connected (%ux%u LZ4 2D Dirty-Rect) | %s" },
+    { MSG_STATUS_NO_BSDSOCKET,       "Error: bsdsocket.library not available!" },
+    { MSG_STATUS_NOT_CONNECTED,      "Not connected. Please configure server (Amiga+1)." },
+    { MSG_STATUS_HOST_RESOLVE_ERR,   "Could not resolve host: %s" },
+    { MSG_STATUS_SOCKET_ERR,         "Socket creation failed!" },
+    { MSG_STATUS_CONN_FAILED,        "Connection to %s:%u failed!" },
+    { MSG_STATUS_PAGE_LOADED,        "Page loaded: %s" },
+    { MSG_STATUS_LOADING_PAGE,       "Loading page: %s ..." },
+    { MSG_STATUS_LOADING_STOPPED,    "Loading stopped." },
+    { MSG_STATUS_CREDENTIALS_FILLED, "Credentials filled for '%s'." },
+    { MSG_STATUS_CLIPBOARD_COPIED,   "Text copied to clipboard (%u chars)" },
+    { MSG_STATUS_SEARCH_ENGINE_SEL,  "Search engine selected: %s" },
+    { MSG_STATUS_BOOKMARK_ADDED,     "Added to bookmarks: %s" },
+    { MSG_STATUS_BOOKMARK_SAVED,     "Added to bookmarks (ENVARC:): %s" },
+    { MSG_STATUS_SETTINGS_SAVED,     "Settings permanently saved (ENVARC:)." },
+    { MSG_STATUS_STREAM_RES_NATIVE,  "Stream Resolution: 1:1 Native (Window Size)" },
+    { MSG_STATUS_STREAM_RES_720P,    "Stream Resolution: 1280x720 (720p HD - 30-50 FPS)" },
+    { MSG_STATUS_STREAM_RES_540P,    "Stream Resolution: 960x540 (540p qHD - Turbo)" },
+    { MSG_STATUS_STREAM_RES_1080P,   "Stream Resolution: 1920x1080 (1080p Full HD)" },
+    { MSG_STATUS_FPS_SET,            "Frame rate set: %u FPS" },
+    { MSG_STATUS_THEME_SET,          "Color theme: %s" },
+    { MSG_STATUS_THEME_DARK,         "Dark (Dark Mode)" },
+    { MSG_STATUS_THEME_LIGHT,        "Light (Default)" },
+    { MSG_STATUS_STREAM_AUTO,        "Streaming: Auto (H.264 on video via va.library, else LZ4)" },
+    { MSG_STATUS_STREAM_LZ4,         "Streaming: Dirty-Rect / LZ4 Only (Classic)" },
+    { MSG_STATUS_STREAM_H264,        "Streaming: H.264 Only (Continuous Video Stream)" },
+    { MSG_STATUS_FONT_SIZE,          "Browser font size: %u px" },
+    { MSG_STATUS_FONT_RESET,         "Browser font size reset to default (16 px / 100%%)." },
+    { MSG_STATUS_RES_CUSTOM,         "Resolution: %s" },
+    { MSG_STATUS_RES_AUTO,           "Resolution: Automatic" },
+    { MSG_STATUS_MAX_TABS,           "Maximum %d tabs allowed." },
+    { MSG_STATUS_TAB_SWITCH,         "Tab %d: %s" },
+    { MSG_STATUS_SCREEN_ACTIVE,      "Screen activated: %s (%ux%u)" },
+    { MSG_STATUS_SCREEN_CUSTOM,      "Custom Screen" },
+    { MSG_STATUS_QL_STARTED,         "Quick Dial: %s" },
+    { MSG_STATUS_QL_COPIED,          "URL copied: %s" },
+    { MSG_STATUS_QL_ADDED,           "Quick Dial added: %s" },
+    { MSG_STATUS_QL_FULL,            "Quick Dial bar full (max %d)!" },
+    { MSG_STATUS_QL_NONE,            "No Quick Dial button to remove." },
+    { MSG_STATUS_QL_REMOVED_HOME,    "Quick Dial removed: %s (Home loaded)" },
+    { MSG_STATUS_QL_REMOVED,         "Quick Dial removed: %s" },
+    { MSG_STATUS_CTX_OPENING,        "Opening context menu (%d, %d)..." },
+    { MSG_STATUS_OPENING_NEW_TAB,    "Opening new tab: %s" },
+    { MSG_STATUS_START_ASL_DL,       "Starting ASL download: %s" },
+    { MSG_STATUS_LINK_COPIED,        "Link copied to clipboard: %s" },
+    { MSG_STATUS_LINK_BOOKMARKED,    "Link added to bookmarks: %s" },
+    { MSG_STATUS_START_MEDIA_DL,     "Starting media download: %s" },
+    { MSG_STATUS_PAGE_BOOKMARKED,    "Page added to bookmarks: %s" },
+    { MSG_STATUS_START_DL,           "Starting download: %s" },
+    { MSG_STATUS_READY_SHORT,        "Ready" },
+
+    { MSG_NET_UPLOAD_TITLE,      "VortexBrowser: Select file to upload..." },
+    { MSG_NET_UPLOAD_POS,        "Select" },
+    { MSG_NET_UPLOAD_CANCELLED,  "File upload cancelled." },
+    { MSG_NET_UPLOAD_OPEN_ERR,   "Error opening file: %s" },
+    { MSG_NET_UPLOADING,         "Uploading: %s (%u KB)..." },
+    { MSG_NET_UPLOADED,          "File uploaded: %s (%u KB)" },
+    { MSG_NET_SAVE_PW_TITLE,     "Save Password" },
+    { MSG_NET_SAVE_PW_BODY,      "Do you want to save the password for\n'%s' (User: %s)\nin the secure Password Manager?" },
+    { MSG_NET_SAVE_PW_BTNS,      "Save|Not now" },
+    { MSG_NET_PW_SAVED,          "Password saved for '%s'." },
+    { MSG_DL_SAVE_TITLE,         "VortexBrowser: Save download as..." },
+    { MSG_DL_SAVE_POS,           "Save" },
+    { MSG_DL_STATUS_RUNNING,     "Running" },
+    { MSG_DL_STATUS_DONE,        "Done" },
+    { MSG_DL_STATUS_CANCELLED,   "Cancelled" },
+    { MSG_DL_STATUS_ERROR,       "Error" },
+    { MSG_DL_ETA_CANCELLED,      "Canc." },
+    { MSG_FAV_DEFAULT_PORTAL,    "VortexBrowser Portal (Home)" },
+    { MSG_FAV_GOOGLE_SEARCH,     "Google Search" },
+    { MSG_WEB_PAGE_FALLBACK,     "Website" },
+
+    { MSG_PW_NO_ENTRIES,         "(No saved passwords)" },
+    { MSG_PW_BTN_COPY,           "Copy" },
+    { MSG_PW_CHK_REVEAL,         "Show password in plain text" },
+    { MSG_PW_BTN_AUTOLOGIN,      "Log in on page (Auto-Login)" },
+    { MSG_PW_HINT_AUTOLOGIN,     "Automatically fill and submit credentials in the current web form" },
+    { MSG_PW_BTN_SAVE,           "Save / New" },
+    { MSG_PW_HINT_SAVE,          "Save the above credentials encrypted" },
+    { MSG_PW_BTN_DELETE,         "Delete" },
+    { MSG_PW_HINT_DELETE,        "Remove selected credentials" },
+    { MSG_PW_BTN_CLOSE,          "Close" },
+    { MSG_PW_LBL_SAVED,          "Saved Logins:" },
+    { MSG_PW_LBL_DOMAIN,         "Website / Domain:" },
+    { MSG_PW_LBL_USER,           "Username / E-Mail:" },
+    { MSG_PW_LBL_PASS,           "Password:" },
+    { MSG_PW_STATUS_SENT,        "Auto-Login sent: %s (%s)" },
+    { MSG_PW_STATUS_USER_COPIED, "Username copied to clipboard!" },
+    { MSG_PW_STATUS_PASS_COPIED, "Password copied to clipboard!" },
+    { MSG_PW_STATUS_SAVED,       "Password saved: %s (%s)" },
+    { MSG_PW_STATUS_DELETED,     "Credentials deleted." },
+    { MSG_PW_STATUS_NO_PAGE,     "No active website for Auto-Login." },
+    { MSG_PW_STATUS_AUTOLOGIN,   "Auto-Login executed for '%s' (%s)..." },
+    { MSG_PW_STATUS_NOT_FOUND,   "No login found for domain. Password Manager opened." },
+
+    { MSG_PREFS_PTAB_SERVER,      "Server & Streaming" },
+    { MSG_PREFS_PTAB_QUICKDIAL,   "Quick Dial" },
+    { MSG_PREFS_PTAB_DISPLAY,     "Display & Resolution" },
+    { MSG_PREFS_PTAB_FONT,        "Font & Charset" },
+    { MSG_PREFS_PTAB_BOOKMARKS,   "Bookmarks" },
+    { MSG_PREFS_PTAB_DOWNLOADS,   "Downloads" },
+    { MSG_PREFS_SRV_PRESET_0,     "Secondary Server (127.0.0.1:9757)" },
+    { MSG_PREFS_SRV_PRESET_1,     "Default Server (127.0.0.1:7788)" },
+    { MSG_PREFS_SRV_PRESET_2,     "Custom (Manual Address)" },
+    { MSG_PREFS_SMODE_AUTO,       "Auto (Adaptive Video Optimization: 25-30 FPS YUV420P)" },
+    { MSG_PREFS_SMODE_LZ4,        "Dirty-Rect / LZ4 Only (Classic, Minimal Bandwidth)" },
+    { MSG_PREFS_SMODE_H264,       "H.264 (Experimental Bitstream)" },
+    { MSG_PREFS_SRES_NATIVE,      "1:1 Window Size (Default / Native)" },
+    { MSG_PREFS_SRES_720P,        "720p HD (1280x720) [30-50 FPS / Video-Boost]" },
+    { MSG_PREFS_SRES_540P,        "540p qHD (960x540) [Turbo]" },
+    { MSG_PREFS_SRES_1080P,       "1080p Full HD (1920x1080)" },
+    { MSG_PREFS_FPS_15,           "15 FPS (Power Saving / Slow CPU)" },
+    { MSG_PREFS_FPS_25,           "25 FPS (Standard / PAL Smooth)" },
+    { MSG_PREFS_FPS_30,           "30 FPS (Recommended for YouTube / NTSC)" },
+    { MSG_PREFS_FPS_50,           "50 FPS (PAL High-Speed)" },
+    { MSG_PREFS_FPS_60,           "60 FPS (Maximum / Gaming / PiStorm)" },
+    { MSG_PREFS_SRV_GROUP,        "Streaming Server & Connection Options" },
+    { MSG_PREFS_HINT_SRV_PRESET,  "Choose preconfigured server or customize manually" },
+    { MSG_PREFS_HINT_SRV_HOST,    "IP address or hostname of the streaming server" },
+    { MSG_PREFS_HINT_SRV_PORT,    "TCP port of the streaming server (e.g. 9757 or 7788)" },
+    { MSG_PREFS_HINT_STREAM_RES,  "Choose server resolution (scaled via GPU/Composite)" },
+    { MSG_PREFS_HINT_FPS,         "Set streaming frame rate (FPS)" },
+    { MSG_PREFS_HINT_JPEG_Q,      "JPEG stream quality (Default: 100% = maximum sharpness)" },
+    { MSG_PREFS_HINT_STREAM_MODE, "Streaming mode: 'Auto' switches to H.264 via va.library on video" },
+    { MSG_PREFS_HINT_BITRATE,     "H.264 video stream bitrate (1000 to 10000 kbps / 10 Mbps, Default: 4000)" },
+    { MSG_PREFS_CHK_VIDBOOST,     "Dynamic JPEG quality on video (Video-Boost)" },
+    { MSG_PREFS_HINT_VIDBOOST,    "Temporarily adjust quality to 60% during video playback for 30-50 FPS" },
+    { MSG_PREFS_CHK_AUTOSAVE_SRV, "Automatically save current server on exit" },
+    { MSG_PREFS_HINT_AUTOSAVE_SRV,"Remember last used server for next startup" },
+    { MSG_PREFS_LBL_SRV_SELECT,   "Server Selection:" },
+    { MSG_PREFS_LBL_SRV_HOST,     "Server IP / Host:" },
+    { MSG_PREFS_LBL_SRV_PORT,     "Port:" },
+    { MSG_PREFS_LBL_STREAM_RES,   "Stream Resolution:" },
+    { MSG_PREFS_LBL_FPS,          "Frame Rate (FPS):" },
+    { MSG_PREFS_LBL_JPEG_Q,       "JPEG Quality:" },
+    { MSG_PREFS_LBL_VID_STREAM,   "Video Streaming:" },
+    { MSG_PREFS_LBL_VID_BITRATE,  "Video Bitrate:" },
+    { MSG_PREFS_LBL_VID_OPT,      "Video Optimization:" },
+    { MSG_PREFS_LBL_ON_EXIT,      "On Exit:" },
+    { MSG_PREFS_SRV_NOTE,         "Default quality is 100% (lossless). 720p/540p increases FPS significantly." },
+    { MSG_PREFS_QL_GROUP,         "Quick Dial Bar (Variable Buttons with Icons)" },
+    { MSG_PREFS_QL_COL_TITLE,     "Title / Name" },
+    { MSG_PREFS_QL_COL_URL,       "Address (URL)" },
+    { MSG_PREFS_QL_COL_ICON,      "Icon" },
+    { MSG_PREFS_QL_BTN_ADD,       "New / Add" },
+    { MSG_PREFS_QL_LBL_TITLE,     "Title / Name:" },
+    { MSG_PREFS_QL_LBL_URL,       "Address (URL):" },
+    { MSG_PREFS_QL_LBL_ICON,      "AISS Icon Name:" },
+    { MSG_PREFS_QL_TIP1,          "Tip: Buttons in the bar have icons and expand automatically." },
+    { MSG_PREFS_QL_TIP2,          "New buttons can also be added directly with the [+] toolbar button." },
+    { MSG_PREFS_RES_0,            "1024 x 768 (Standard XGA)" },
+    { MSG_PREFS_RES_1,            "1280 x 720 (HD 720p)" },
+    { MSG_PREFS_RES_2,            "1920 x 1080 (Full HD)" },
+    { MSG_PREFS_RES_3,            "800 x 600 (SVGA)" },
+    { MSG_PREFS_RES_4,            "1280 x 1024 (SXGA)" },
+    { MSG_PREFS_RES_5,            "Fit Automatically (Window Size)" },
+    { MSG_PREFS_RES_6,            "Custom (Manual W x H)" },
+    { MSG_PREFS_THEME_0,          "Light (Default)" },
+    { MSG_PREFS_THEME_1,          "Dark (Dark Mode)" },
+    { MSG_PREFS_THEME_2,          "Automatic (System)" },
+    { MSG_PREFS_SCR_0,            "Workbench (Window Mode)" },
+    { MSG_PREFS_SCR_1,            "Custom Public Screen (Manual Resolution / Fullscreen)" },
+    { MSG_PREFS_SCR_2,            "Clone Workbench (Custom Screen like Workbench)" },
+    { MSG_PREFS_DISP_GROUP,       "Central Resolution & Screen Mode" },
+    { MSG_PREFS_DISP_INTRO,       "One resolution for Screen, Amiga Window and Web Browser:" },
+    { MSG_PREFS_LBL_SCR_MODE,     "Screen Mode:" },
+    { MSG_PREFS_LBL_RTG_MODE,     "RTG ScreenMode:" },
+    { MSG_PREFS_BTN_SCR_ASL,      "Choose Screen Mode (ASL)..." },
+    { MSG_PREFS_LBL_RESOLUTION,   "Resolution:" },
+    { MSG_PREFS_LBL_CUSTOM_W,     "Custom W:" },
+    { MSG_PREFS_LBL_CUSTOM_H,     "H:" },
+    { MSG_PREFS_LBL_SCROLL,       "Mouse Wheel & Scrolling:" },
+    { MSG_PREFS_CHK_SOFTSCROLL,   "Smooth Scrolling (Softscrolling)" },
+    { MSG_PREFS_LBL_STATUSBAR,    "Status Bar:" },
+    { MSG_PREFS_CHK_STATUSBAR,    "Show Status Bar (Bottom)" },
+    { MSG_PREFS_LBL_THEME,        "Color Scheme (Theme):" },
+    { MSG_PREFS_LBL_TAB_MEDIA,    "Tab Media:" },
+    { MSG_PREFS_CHK_PAUSE_MEDIA,  "Pause video/audio when switching tabs" },
+    { MSG_PREFS_DISP_HINT,        "Note: Toggle between Screen and Workbench anytime with Amiga+M." },
+    { MSG_PREFS_GCHAR_0,          "ISO-8859-1 (Western European / Amiga Standard)" },
+    { MSG_PREFS_GCHAR_1,          "UTF-8 (Unicode)" },
+    { MSG_PREFS_GCHAR_2,          "Windows-1252 (ANSI)" },
+    { MSG_PREFS_GCHAR_3,          "ISO-8859-15 (Western Europe with Euro)" },
+    { MSG_PREFS_GSIZE_0,          "Default (Workbench System Font)" },
+    { MSG_PREFS_GSIZE_1,          "Small (8 pt)" },
+    { MSG_PREFS_GSIZE_2,          "Medium (10 pt)" },
+    { MSG_PREFS_GSIZE_3,          "Large (12 pt)" },
+    { MSG_PREFS_GSIZE_4,          "Very Large (14 pt)" },
+    { MSG_PREFS_WCHAR_0,          "UTF-8 (International Standard)" },
+    { MSG_PREFS_WCHAR_1,          "ISO-8859-1 (Western European)" },
+    { MSG_PREFS_WCHAR_2,          "Windows-1252 (Western Europe / Windows)" },
+    { MSG_PREFS_WCHAR_3,          "Auto-Detect" },
+    { MSG_PREFS_WSIZE_0,          "16 px (Default)" },
+    { MSG_PREFS_WSIZE_1,          "18 px (Large)" },
+    { MSG_PREFS_WSIZE_2,          "20 px (Very Large)" },
+    { MSG_PREFS_WSIZE_3,          "22 px (Extra Large)" },
+    { MSG_PREFS_WSIZE_4,          "24 px (Huge)" },
+    { MSG_PREFS_WSIZE_5,          "14 px (Compact)" },
+    { MSG_PREFS_WSIZE_6,          "12 px (Small)" },
+    { MSG_PREFS_WZOOM_0,          "100% (Normal)" },
+    { MSG_PREFS_WZOOM_1,          "110% (Slightly Enlarged)" },
+    { MSG_PREFS_WZOOM_2,          "125% (Large - recommended for 1024x768 / HD)" },
+    { MSG_PREFS_WZOOM_3,          "150% (Very Large)" },
+    { MSG_PREFS_WZOOM_4,          "175% (Extra Large)" },
+    { MSG_PREFS_WZOOM_5,          "200% (Maximum)" },
+    { MSG_PREFS_WZOOM_6,          "90% (Compact)" },
+    { MSG_PREFS_WZOOM_7,          "75% (Very Small)" },
+    { MSG_PREFS_WFAM_0,           "Sans-Serif (Default / Grotesk)" },
+    { MSG_PREFS_WFAM_1,           "Serif (Antiqua / Book Font)" },
+    { MSG_PREFS_WFAM_2,           "Monospace (Fixed Width)" },
+    { MSG_PREFS_SE_DDG,           "DuckDuckGo (Default)" },
+    { MSG_PREFS_FONT_GROUP,       "Font, Character Set & Search Engine" },
+    { MSG_PREFS_HDR_WEB,          "Headless Web Browser (Remote Rendering & Websites):" },
+    { MSG_PREFS_LBL_WEB_SIZE,     "Browser Font Size:" },
+    { MSG_PREFS_LBL_WEB_ZOOM,     "Web Zoom & Scaling:" },
+    { MSG_PREFS_LBL_WEB_FAM,      "Web Font Family:" },
+    { MSG_PREFS_LBL_WEB_CHAR,     "Web Charset:" },
+    { MSG_PREFS_LBL_SEARCH,       "Default Search Engine:" },
+    { MSG_PREFS_HDR_GUI,          "Application / AmigaOS Interface (GUI):" },
+    { MSG_PREFS_LBL_GUI_CHAR,     "GUI Charset:" },
+    { MSG_PREFS_LBL_GUI_SIZE,     "GUI Font Size:" },
+    { MSG_PREFS_FAV_GROUP,        "Bookmark Management" },
+    { MSG_PREFS_FAV_LBL_TITLE,    "Title:" },
+    { MSG_PREFS_DL_GROUP,         "Download Settings" },
+    { MSG_PREFS_DL_HINT_DIR,      "Choose download directory via file requester" },
+    { MSG_PREFS_DL_ASK_CHK,       "Always ask for destination drawer (ASL Requester)" },
+    { MSG_PREFS_DL_OPEN_BTN,      "Open Download Manager now..." },
+    { MSG_PREFS_DL_OPEN_HINT,     "Opens the Download Manager window" },
+    { MSG_PREFS_DL_LBL_DIR,       "Default Drawer:" },
+    { MSG_PREFS_DL_LBL_ASK,       "File Requester:" },
+    { MSG_PREFS_DL_LBL_MGR,       "Download Manager:" },
+    { MSG_PREFS_DL_NOTE,          "When prompting is disabled, files are saved directly to the default drawer." },
+    { MSG_PREFS_HINT_SAVE,        "Save settings permanently to ENVARC: and ENV: and apply" },
+    { MSG_PREFS_HINT_USE,         "Apply settings temporarily for this session" },
+    { MSG_PREFS_HINT_CANCEL,      "Discard changes and close window" },
+    { MSG_PREFS_ASL_DL_TITLE,     "Select Download Directory" },
+    { MSG_PREFS_ASL_DL_POS,       "Select" },
+    { MSG_PREFS_ASL_SCR_TITLE,    "Select Screen Mode" },
+    { MSG_PREFS_QL_NEW_LINK,      "New Link" },
+    { MSG_TAB_FALLBACK_LINK,      "Link" },
 };
 
 #define NUM_BUILTINS (sizeof(s_builtins) / sizeof(s_builtins[0]))
@@ -277,8 +603,204 @@ void vb_local_to_utf8(const char *local_str, char *dst, size_t dst_size)
     dst[d] = '\0';
 }
 
+static char ascii_tolower(char c)
+{
+    return (c >= 'A' && c <= 'Z') ? (char)(c + ('a' - 'A')) : c;
+}
+
+static BOOL ascii_eq_ci(const char *a, const char *b)
+{
+    size_t i;
+    if (!a || !b) return FALSE;
+    for (i = 0; a[i] != '\0' && b[i] != '\0'; i++) {
+        if (ascii_tolower(a[i]) != ascii_tolower(b[i])) return FALSE;
+    }
+    return a[i] == b[i];
+}
+
+/* Normalize a locale language name (e.g. "German_ISO-8859-15", "français", "de_DE")
+ * into a lowercase ASCII base name for matching catalog aliases. */
+static void normalize_lang_token(const char *src, char *dst, size_t dst_sz)
+{
+    size_t out = 0;
+    const unsigned char *p = (const unsigned char *)src;
+    if (!dst || dst_sz == 0) return;
+    dst[0] = '\0';
+    if (!src) return;
+
+    while (*p && (*p == ' ' || *p == '\t')) p++;
+
+    while (*p && out + 1 < dst_sz) {
+        unsigned char c = *p;
+        if (c == '.' || c == '@' || c == '/' || c == ',' || c == '\r' || c == '\n' || c == ' ') {
+            break;
+        }
+        /* Handle UTF-8 sequences for ç (C3 A7) and ñ (C3 B1) and other Latin accents */
+        if (c == 0xC3 && p[1] != '\0') {
+            unsigned char n = p[1];
+            if (n == 0xA7 || n == 0x87) {
+                dst[out++] = 'c';
+                p += 2;
+                continue;
+            }
+            if (n == 0xB1 || n == 0x91) {
+                dst[out++] = 'n';
+                p += 2;
+                continue;
+            }
+            if (n >= 0xA0 && n <= 0xA5) { dst[out++] = 'a'; p += 2; continue; }
+            if (n >= 0xA8 && n <= 0xAB) { dst[out++] = 'e'; p += 2; continue; }
+            if (n >= 0xAC && n <= 0xAF) { dst[out++] = 'i'; p += 2; continue; }
+            if (n >= 0xB2 && n <= 0xB6) { dst[out++] = 'o'; p += 2; continue; }
+            if (n >= 0xB9 && n <= 0xBC) { dst[out++] = 'u'; p += 2; continue; }
+        }
+        /* Handle ISO-8859-1 accented bytes directly */
+        if (c == 0xE7 || c == 0xC7) {
+            dst[out++] = 'c';
+            p++;
+            continue;
+        }
+        if (c == 0xF1 || c == 0xD1) {
+            dst[out++] = 'n';
+            p++;
+            continue;
+        }
+        if (c == '_' || c == '-') {
+            if (ascii_eq_ci(dst, "de") || ascii_eq_ci(dst, "en") ||
+                ascii_eq_ci(dst, "fr") || ascii_eq_ci(dst, "it") ||
+                ascii_eq_ci(dst, "es") ||
+                ascii_eq_ci(dst, "german") || ascii_eq_ci(dst, "deutsch") ||
+                ascii_eq_ci(dst, "english") || ascii_eq_ci(dst, "french") ||
+                ascii_eq_ci(dst, "francais") || ascii_eq_ci(dst, "italian") ||
+                ascii_eq_ci(dst, "italiano") || ascii_eq_ci(dst, "spanish") ||
+                ascii_eq_ci(dst, "espanol")) {
+                break;
+            }
+        }
+        dst[out++] = ascii_tolower((char)c);
+        p++;
+    }
+    dst[out] = '\0';
+}
+
+static struct Catalog *try_open_catalog_name(const char *lang_name)
+{
+    struct Catalog *cat = NULL;
+    char path[256];
+    const char *prefixes[] = {
+        "PROGDIR:catalogs/%s/VortexBrowser.catalog",
+        "PROGDIR:Catalogs/%s/VortexBrowser.catalog",
+        "LOCALE:Catalogs/%s/VortexBrowser.catalog",
+        "LOCALE:catalogs/%s/VortexBrowser.catalog"
+    };
+    size_t i;
+
+    if (!ILocale || !lang_name || !lang_name[0]) return NULL;
+
+    /* Standard OS4 search across PROGDIR:Catalogs/<lang> and LOCALE:Catalogs/<lang> */
+    cat = ILocale->OpenCatalog(s_locale, "VortexBrowser.catalog",
+        OC_BuiltInLanguage, (Tag)"english",
+        OC_BuiltInCodeSet,  4,
+        OC_Language,        (Tag)lang_name,
+        TAG_DONE);
+    if (cat) return cat;
+
+    /* Fallback explicit paths handle lowercase 'catalogs/' on case-sensitive filesystems */
+    for (i = 0; i < sizeof(prefixes) / sizeof(prefixes[0]); i++) {
+        snprintf(path, sizeof(path), prefixes[i], lang_name);
+        cat = ILocale->OpenCatalog(s_locale, path,
+            OC_BuiltInLanguage, (Tag)"english",
+            OC_BuiltInCodeSet,  4,
+            OC_Language,        (Tag)lang_name,
+            TAG_DONE);
+        if (cat) return cat;
+    }
+
+    return NULL;
+}
+
+/* Try resolving one preferred language entry (including OS4 standard vs legacy names).
+ * Returns TRUE if resolved (either a catalog was opened or built-in English matched). */
+static BOOL try_resolve_language(const char *raw_lang)
+{
+    char norm[64];
+    const char *aliases[3] = { NULL, NULL, NULL };
+    size_t a_count = 0;
+    size_t i;
+
+    if (!raw_lang || !raw_lang[0]) return FALSE;
+
+    normalize_lang_token(raw_lang, norm, sizeof(norm));
+    if (!norm[0]) return FALSE;
+
+    if (ascii_eq_ci(norm, "english") || ascii_eq_ci(norm, "en")) {
+        snprintf(s_active_language, sizeof(s_active_language), "english (built-in)");
+        return TRUE;
+    }
+
+    if (ascii_eq_ci(norm, "german") || ascii_eq_ci(norm, "deutsch") || ascii_eq_ci(norm, "de")) {
+        aliases[0] = "german";
+        aliases[1] = "deutsch";
+        a_count = 2;
+    } else if (ascii_eq_ci(norm, "french") || ascii_eq_ci(norm, "francais") || ascii_eq_ci(norm, "fr")) {
+        aliases[0] = "french";
+        aliases[1] = "francais";
+        a_count = 2;
+    } else if (ascii_eq_ci(norm, "italian") || ascii_eq_ci(norm, "italiano") || ascii_eq_ci(norm, "it")) {
+        aliases[0] = "italian";
+        aliases[1] = "italiano";
+        a_count = 2;
+    } else if (ascii_eq_ci(norm, "spanish") || ascii_eq_ci(norm, "espanol") || ascii_eq_ci(norm, "es")) {
+        aliases[0] = "spanish";
+        aliases[1] = "espanol";
+        a_count = 2;
+    }
+
+    /* Try the exact preferred string first (supports third-party catalogs verbatim) */
+    s_catalog = try_open_catalog_name(raw_lang);
+    if (s_catalog) {
+        const char *cat_lang = (const char *)s_catalog->cat_Language;
+        snprintf(s_active_language, sizeof(s_active_language), "%s",
+                 (cat_lang && cat_lang[0]) ? cat_lang : raw_lang);
+        return TRUE;
+    }
+
+    /* Try normalized string if different */
+    if (!ascii_eq_ci(norm, raw_lang)) {
+        s_catalog = try_open_catalog_name(norm);
+        if (s_catalog) {
+            const char *cat_lang = (const char *)s_catalog->cat_Language;
+            snprintf(s_active_language, sizeof(s_active_language), "%s",
+                     (cat_lang && cat_lang[0]) ? cat_lang : norm);
+            return TRUE;
+        }
+    }
+
+    /* Try canonical OS4 + legacy alias names */
+    for (i = 0; i < a_count; i++) {
+        if (!aliases[i]) continue;
+        s_catalog = try_open_catalog_name(aliases[i]);
+        if (s_catalog) {
+            const char *cat_lang = (const char *)s_catalog->cat_Language;
+            snprintf(s_active_language, sizeof(s_active_language), "%s",
+                     (cat_lang && cat_lang[0]) ? cat_lang : aliases[i]);
+            return TRUE;
+        }
+    }
+
+    (void)0;
+    return FALSE;
+}
+
 void locale_init_catalog(void)
 {
+    APTR old_win = NULL;
+    char env_lang[64];
+    int32 env_len = -1;
+    BOOL resolved = FALSE;
+
+    snprintf(s_active_language, sizeof(s_active_language), "english (built-in)");
+
     if (!LocaleBase) {
         LocaleBase = IExec->OpenLibrary("locale.library", 50);
         if (!LocaleBase) {
@@ -291,18 +813,51 @@ void locale_init_catalog(void)
 
     if (ILocale) {
         s_locale = ILocale->OpenLocale(NULL);
-        /* Try opening VortexBrowser.catalog */
-        s_catalog = ILocale->OpenCatalog(s_locale, "VortexBrowser.catalog",
-            OC_BuiltInLanguage, (Tag)"english",
-            OC_BuiltInCodeSet,  4,
-            TAG_DONE);
-        if (!s_catalog) {
-            /* Try PROGDIR:catalogs/ if not in system LOCALE: path */
-            s_catalog = ILocale->OpenCatalog(s_locale, "PROGDIR:catalogs/VortexBrowser.catalog",
+
+        if (IDOS) old_win = IDOS->SetProcWindow((APTR)-1);
+
+        /* Optional user override via ENV:VortexBrowser/language */
+        if (IDOS) {
+            env_len = IDOS->GetVar("VortexBrowser/language", env_lang, sizeof(env_lang), 0);
+            if (env_len > 0) {
+                while (env_len > 0 && (env_lang[env_len - 1] == '\n' ||
+                       env_lang[env_len - 1] == '\r' || env_lang[env_len - 1] == ' ')) {
+                    env_lang[--env_len] = '\0';
+                }
+                if (env_lang[0] != '\0') {
+                    resolved = try_resolve_language(env_lang);
+                }
+            }
+        }
+
+        /* Standard OpenCatalog lookup using system locale preferences */
+        if (!resolved && (!s_locale || !s_locale->loc_PrefLanguages[0])) {
+            s_catalog = ILocale->OpenCatalog(s_locale, "VortexBrowser.catalog",
                 OC_BuiltInLanguage, (Tag)"english",
                 OC_BuiltInCodeSet,  4,
                 TAG_DONE);
+            if (s_catalog) {
+                const char *cat_lang = (const char *)s_catalog->cat_Language;
+                snprintf(s_active_language, sizeof(s_active_language), "%s",
+                         (cat_lang && cat_lang[0]) ? cat_lang : "catalog");
+                resolved = TRUE;
+            }
         }
+
+        /* Walk s_locale->loc_PrefLanguages in exact OS4 preference order */
+        if (!resolved && s_locale) {
+            int i;
+            for (i = 0; i < 10 && s_locale->loc_PrefLanguages[i]; i++) {
+                const char *pref = (const char *)s_locale->loc_PrefLanguages[i];
+                if (!pref[0]) continue;
+                if (try_resolve_language(pref)) {
+                    resolved = TRUE;
+                    break;
+                }
+            }
+        }
+
+        if (IDOS) IDOS->SetProcWindow(old_win);
     }
 
     if (!CodesetsBase) {
@@ -314,6 +869,11 @@ void locale_init_catalog(void)
     if (CodesetsBase && !ICodesets) {
         ICodesets = (struct CodesetsIFace *)IExec->GetInterface(CodesetsBase, "main", 1, NULL);
     }
+}
+
+const char *locale_get_active_language(void)
+{
+    return s_active_language;
 }
 
 void locale_close_catalog(void)

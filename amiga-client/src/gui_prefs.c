@@ -97,150 +97,137 @@ enum {
     GID_P_DL_OPEN_MGR
 };
 
-static const char *const s_tab_labels[] = {
-    "Server & Streaming",
-    "Schnellwahl",
-    "Bildschirm & Auflösung",
-    "Schrift & Zeichensatz",
-    "Lesezeichen",
-    "Downloads",
-    NULL
-};
-
-static const char *const s_server_preset_labels[] = {
-    "Sekundärer Server (127.0.0.1:9757)",
-    "Standard Server (127.0.0.1:7788)",
-    "Benutzerdefiniert (Manuelle Adresse)",
-    NULL
-};
-
-static const char *const s_stream_mode_labels[] = {
-    "Auto (Adaptive Video-Optimierung: 25-30 FPS YUV420P)",
-    "Nur Dirty-Rect / LZ4 (Klassisch, minimale Bandbreite)",
-    "H.264 (Experimenteller Bitstream)",
-    NULL
-};
-
+static const char *s_tab_labels[7];
+static const char *s_server_preset_labels[4];
+static const char *s_stream_mode_labels[4];
 /* Unified resolution choices */
-static const char *const s_res_labels[] = {
-    "1024 x 768 (Standard XGA)",
-    "1280 x 720 (HD 720p)",
-    "1920 x 1080 (Full HD)",
-    "800 x 600 (SVGA)",
-    "1280 x 1024 (SXGA)",
-    "Automatisch anpassen (Fenstergröße)",
-    "Benutzerdefiniert (Eigene B x H)",
-    NULL
-};
-
+static const char *s_res_labels[8];
 /* Stream Resolution (Server stream resolution scaled by GPU) */
-static const char *const s_stream_res_labels[] = {
-    "1:1 Fenster-Größe (Standard / Nativ)",
-    "720p HD (1280x720) [30-50 FPS / Video-Boost]",
-    "540p qHD (960x540) [Turbo]",
-    "1080p Full HD (1920x1080)",
-    NULL
-};
-
+static const char *s_stream_res_labels[5];
 /* Target FPS Presets */
-static const char *const s_fps_labels[] = {
-    "15 FPS (Energiesparend / Langsame CPU)",
-    "25 FPS (Standard / PAL flüssig)",
-    "30 FPS (Empfohlen für YouTube / NTSC)",
-    "50 FPS (PAL High-Speed)",
-    "60 FPS (Maximal / Gaming / PiStorm)",
-    NULL
-};
+static const char *s_fps_labels[6];
 static const uint8_t s_fps_values[] = { 15, 25, 30, 50, 60 };
-
 /* Color Theme (Light, Dark, Auto) */
-static const char *const s_theme_labels[] = {
-    "Hell (Standard / Light)",
-    "Dunkel (Dark Mode)",
-    "Automatisch (System)",
-    NULL
-};
-
-static const char *const s_screen_mode_labels[] = {
-    "Workbench (Fenster-Modus)",
-    "Eigener Public Screen (Manuelle Auflösung / Vollbild)",
-    "Workbench klonen (Eigener Screen wie Workbench)",
-    NULL
-};
-
+static const char *s_theme_labels[4];
+static const char *s_screen_mode_labels[4];
 /* GUI Charset and Font sizes */
-static const char *const s_gui_charset_labels[] = {
-    "ISO-8859-1 (Westeuropäisch / Amiga Standard)",
-    "UTF-8 (Unicode)",
-    "Windows-1252 (ANSI)",
-    "ISO-8859-15 (Westeuropa mit Euro)",
-    NULL
-};
-
-static const char *const s_gui_fontsize_labels[] = {
-    "Standard (Workbench-Systemschrift)",
-    "Klein (8 pt)",
-    "Mittel (10 pt)",
-    "Groß (12 pt)",
-    "Sehr groß (14 pt)",
-    NULL
-};
-
+static const char *s_gui_charset_labels[5];
+static const char *s_gui_fontsize_labels[6];
 /* Web Charset, Zoom & Font */
-static const char *const s_web_charset_labels[] = {
-    "UTF-8 (Internationaler Standard)",
-    "ISO-8859-1 (Westeuropäisch)",
-    "Windows-1252 (Westeuropa / Windows)",
-    "Automatisch erkennen",
-    NULL
-};
-
-static const char *const s_web_fontsize_labels[] = {
-    "16 px (Standard)",
-    "18 px (Groß)",
-    "20 px (Sehr groß)",
-    "22 px (Extra groß)",
-    "24 px (Riesig)",
-    "14 px (Kompakt)",
-    "12 px (Klein)",
-    NULL
-};
-
+static const char *s_web_charset_labels[5];
+static const char *s_web_fontsize_labels[8];
 static const uint16 s_web_fontsize_values[] = { 16, 18, 20, 22, 24, 14, 12 };
-
-static const char *const s_web_zoom_labels[] = {
-    "100% (Normal)",
-    "110% (Leicht vergrößert)",
-    "125% (Groß - empfohlen für 1024x768 / HD)",
-    "150% (Sehr groß)",
-    "175% (Extra groß)",
-    "200% (Maximal)",
-    "90% (Kompakt)",
-    "75% (Sehr klein)",
-    NULL
-};
-
+static const char *s_web_zoom_labels[9];
 static const uint16 s_web_zoom_values[] = { 100, 110, 125, 150, 175, 200, 90, 75 };
+static const char *s_web_family_labels[4];
+static const char *s_search_engine_prefs_labels[10];
 
-static const char *const s_web_family_labels[] = {
-    "Sans-Serif (Standard / Grotesk)",
-    "Serif (Antiqua / Buchschrift)",
-    "Monospace (Feste Zeichenbreite)",
-    NULL
-};
+static void init_prefs_localized_arrays(void)
+{
+    s_tab_labels[0] = (const char *)GetVString(MSG_PREFS_PTAB_SERVER);
+    s_tab_labels[1] = (const char *)GetVString(MSG_PREFS_PTAB_QUICKDIAL);
+    s_tab_labels[2] = (const char *)GetVString(MSG_PREFS_PTAB_DISPLAY);
+    s_tab_labels[3] = (const char *)GetVString(MSG_PREFS_PTAB_FONT);
+    s_tab_labels[4] = (const char *)GetVString(MSG_PREFS_PTAB_BOOKMARKS);
+    s_tab_labels[5] = (const char *)GetVString(MSG_PREFS_PTAB_DOWNLOADS);
+    s_tab_labels[6] = NULL;
 
-static const char *const s_search_engine_prefs_labels[] = {
-    "DuckDuckGo (Standard)",
-    "Google",
-    "Bing",
-    "Startpage",
-    "Ecosia",
-    "Wikipedia (DE)",
-    "YouTube",
-    "Aminet",
-    "OS4Depot",
-    NULL
-};
+    s_server_preset_labels[0] = (const char *)GetVString(MSG_PREFS_SRV_PRESET_0);
+    s_server_preset_labels[1] = (const char *)GetVString(MSG_PREFS_SRV_PRESET_1);
+    s_server_preset_labels[2] = (const char *)GetVString(MSG_PREFS_SRV_PRESET_2);
+    s_server_preset_labels[3] = NULL;
+
+    s_stream_mode_labels[0] = (const char *)GetVString(MSG_PREFS_SMODE_AUTO);
+    s_stream_mode_labels[1] = (const char *)GetVString(MSG_PREFS_SMODE_LZ4);
+    s_stream_mode_labels[2] = (const char *)GetVString(MSG_PREFS_SMODE_H264);
+    s_stream_mode_labels[3] = NULL;
+
+    s_res_labels[0] = (const char *)GetVString(MSG_PREFS_RES_0);
+    s_res_labels[1] = (const char *)GetVString(MSG_PREFS_RES_1);
+    s_res_labels[2] = (const char *)GetVString(MSG_PREFS_RES_2);
+    s_res_labels[3] = (const char *)GetVString(MSG_PREFS_RES_3);
+    s_res_labels[4] = (const char *)GetVString(MSG_PREFS_RES_4);
+    s_res_labels[5] = (const char *)GetVString(MSG_PREFS_RES_5);
+    s_res_labels[6] = (const char *)GetVString(MSG_PREFS_RES_6);
+    s_res_labels[7] = NULL;
+
+    s_stream_res_labels[0] = (const char *)GetVString(MSG_PREFS_SRES_NATIVE);
+    s_stream_res_labels[1] = (const char *)GetVString(MSG_PREFS_SRES_720P);
+    s_stream_res_labels[2] = (const char *)GetVString(MSG_PREFS_SRES_540P);
+    s_stream_res_labels[3] = (const char *)GetVString(MSG_PREFS_SRES_1080P);
+    s_stream_res_labels[4] = NULL;
+
+    s_fps_labels[0] = (const char *)GetVString(MSG_PREFS_FPS_15);
+    s_fps_labels[1] = (const char *)GetVString(MSG_PREFS_FPS_25);
+    s_fps_labels[2] = (const char *)GetVString(MSG_PREFS_FPS_30);
+    s_fps_labels[3] = (const char *)GetVString(MSG_PREFS_FPS_50);
+    s_fps_labels[4] = (const char *)GetVString(MSG_PREFS_FPS_60);
+    s_fps_labels[5] = NULL;
+
+    s_theme_labels[0] = (const char *)GetVString(MSG_PREFS_THEME_0);
+    s_theme_labels[1] = (const char *)GetVString(MSG_PREFS_THEME_1);
+    s_theme_labels[2] = (const char *)GetVString(MSG_PREFS_THEME_2);
+    s_theme_labels[3] = NULL;
+
+    s_screen_mode_labels[0] = (const char *)GetVString(MSG_PREFS_SCR_0);
+    s_screen_mode_labels[1] = (const char *)GetVString(MSG_PREFS_SCR_1);
+    s_screen_mode_labels[2] = (const char *)GetVString(MSG_PREFS_SCR_2);
+    s_screen_mode_labels[3] = NULL;
+
+    s_gui_charset_labels[0] = (const char *)GetVString(MSG_PREFS_GCHAR_0);
+    s_gui_charset_labels[1] = (const char *)GetVString(MSG_PREFS_GCHAR_1);
+    s_gui_charset_labels[2] = (const char *)GetVString(MSG_PREFS_GCHAR_2);
+    s_gui_charset_labels[3] = (const char *)GetVString(MSG_PREFS_GCHAR_3);
+    s_gui_charset_labels[4] = NULL;
+
+    s_gui_fontsize_labels[0] = (const char *)GetVString(MSG_PREFS_GSIZE_0);
+    s_gui_fontsize_labels[1] = (const char *)GetVString(MSG_PREFS_GSIZE_1);
+    s_gui_fontsize_labels[2] = (const char *)GetVString(MSG_PREFS_GSIZE_2);
+    s_gui_fontsize_labels[3] = (const char *)GetVString(MSG_PREFS_GSIZE_3);
+    s_gui_fontsize_labels[4] = (const char *)GetVString(MSG_PREFS_GSIZE_4);
+    s_gui_fontsize_labels[5] = NULL;
+
+    s_web_charset_labels[0] = (const char *)GetVString(MSG_PREFS_WCHAR_0);
+    s_web_charset_labels[1] = (const char *)GetVString(MSG_PREFS_WCHAR_1);
+    s_web_charset_labels[2] = (const char *)GetVString(MSG_PREFS_WCHAR_2);
+    s_web_charset_labels[3] = (const char *)GetVString(MSG_PREFS_WCHAR_3);
+    s_web_charset_labels[4] = NULL;
+
+    s_web_fontsize_labels[0] = (const char *)GetVString(MSG_PREFS_WSIZE_0);
+    s_web_fontsize_labels[1] = (const char *)GetVString(MSG_PREFS_WSIZE_1);
+    s_web_fontsize_labels[2] = (const char *)GetVString(MSG_PREFS_WSIZE_2);
+    s_web_fontsize_labels[3] = (const char *)GetVString(MSG_PREFS_WSIZE_3);
+    s_web_fontsize_labels[4] = (const char *)GetVString(MSG_PREFS_WSIZE_4);
+    s_web_fontsize_labels[5] = (const char *)GetVString(MSG_PREFS_WSIZE_5);
+    s_web_fontsize_labels[6] = (const char *)GetVString(MSG_PREFS_WSIZE_6);
+    s_web_fontsize_labels[7] = NULL;
+
+    s_web_zoom_labels[0] = (const char *)GetVString(MSG_PREFS_WZOOM_0);
+    s_web_zoom_labels[1] = (const char *)GetVString(MSG_PREFS_WZOOM_1);
+    s_web_zoom_labels[2] = (const char *)GetVString(MSG_PREFS_WZOOM_2);
+    s_web_zoom_labels[3] = (const char *)GetVString(MSG_PREFS_WZOOM_3);
+    s_web_zoom_labels[4] = (const char *)GetVString(MSG_PREFS_WZOOM_4);
+    s_web_zoom_labels[5] = (const char *)GetVString(MSG_PREFS_WZOOM_5);
+    s_web_zoom_labels[6] = (const char *)GetVString(MSG_PREFS_WZOOM_6);
+    s_web_zoom_labels[7] = (const char *)GetVString(MSG_PREFS_WZOOM_7);
+    s_web_zoom_labels[8] = NULL;
+
+    s_web_family_labels[0] = (const char *)GetVString(MSG_PREFS_WFAM_0);
+    s_web_family_labels[1] = (const char *)GetVString(MSG_PREFS_WFAM_1);
+    s_web_family_labels[2] = (const char *)GetVString(MSG_PREFS_WFAM_2);
+    s_web_family_labels[3] = NULL;
+
+    s_search_engine_prefs_labels[0] = (const char *)GetVString(MSG_PREFS_SE_DDG);
+    s_search_engine_prefs_labels[1] = "Google";
+    s_search_engine_prefs_labels[2] = "Bing";
+    s_search_engine_prefs_labels[3] = "Startpage";
+    s_search_engine_prefs_labels[4] = "Ecosia";
+    s_search_engine_prefs_labels[5] = "Wikipedia";
+    s_search_engine_prefs_labels[6] = "YouTube";
+    s_search_engine_prefs_labels[7] = "Aminet";
+    s_search_engine_prefs_labels[8] = "OS4Depot";
+    s_search_engine_prefs_labels[9] = NULL;
+}
 
 static void get_string_text(Object *gad_obj, char *out_buf, size_t out_cap)
 {
@@ -271,7 +258,7 @@ static void invoke_screen_mode_requester(struct Window *win, uint32 *io_mode_id,
 
     struct ScreenModeRequester *sm_req = (struct ScreenModeRequester *)IAsl->AllocAslRequestTags(
         ASL_ScreenModeRequest,
-        ASLSM_TitleText,            (Tag)"VortexBrowser Bildschirm-Modus wählen",
+        ASLSM_TitleText,            (Tag)GetVString(MSG_PREFS_ASL_SCR_TITLE),
         ASLSM_Window,               (Tag)win,
         ASLSM_SleepWindow,          TRUE,
         ASLSM_InitialDisplayID,     (*io_mode_id ? *io_mode_id : INVALID_ID),
@@ -415,6 +402,8 @@ void gui_prefs_open(VortexApp *app)
 {
     if (!app) return;
 
+    init_prefs_localized_arrays();
+
     /* Local copy of quick links for non-destructive editing */
     QuickLinkItem temp_ql[VB_MAX_QUICKLINKS];
     int temp_num_ql = app->prefs.num_quick_links;
@@ -447,7 +436,7 @@ void gui_prefs_open(VortexApp *app)
         GA_RelVerify,       TRUE,
         CHOOSER_LabelArray, s_server_preset_labels,
         CHOOSER_Selected,   init_srv_preset,
-        GA_HintInfo,        "Vorkonfigurierten Server wählen oder manuell anpassen",
+        GA_HintInfo,        (Tag)GetVString(MSG_PREFS_HINT_SRV_PRESET),
         TAG_DONE);
 
     char host_str[128];
@@ -461,7 +450,7 @@ void gui_prefs_open(VortexApp *app)
         GA_TabCycle,      TRUE,
         STRINGA_MaxChars, sizeof(host_str) - 1,
         STRINGA_TextVal,  (Tag)host_str,
-        GA_HintInfo,      "IP-Adresse oder Hostname des Streaming-Servers",
+        GA_HintInfo,      (Tag)GetVString(MSG_PREFS_HINT_SRV_HOST),
         TAG_DONE);
 
     Object *gad_srv_port = IIntuition->NewObject(NULL, "string.gadget",
@@ -470,7 +459,7 @@ void gui_prefs_open(VortexApp *app)
         GA_TabCycle,      TRUE,
         STRINGA_MaxChars, sizeof(port_str) - 1,
         STRINGA_TextVal,  (Tag)port_str,
-        GA_HintInfo,      "TCP-Port des Streaming-Servers (z.B. 9757 oder 7788)",
+        GA_HintInfo,      (Tag)GetVString(MSG_PREFS_HINT_SRV_PORT),
         TAG_DONE);
 
     uint16 init_stream_sel = app->prefs.stream_res_mode;
@@ -480,7 +469,7 @@ void gui_prefs_open(VortexApp *app)
         GA_RelVerify,       TRUE,
         CHOOSER_LabelArray, s_stream_res_labels,
         CHOOSER_Selected,   init_stream_sel,
-        GA_HintInfo,        "Server-Auflösung wählen (wird per GPU/Composite skaliert)",
+        GA_HintInfo,        (Tag)GetVString(MSG_PREFS_HINT_STREAM_RES),
         TAG_DONE);
 
     uint16 init_fps_sel = 1; /* Default: 25 FPS */
@@ -496,7 +485,7 @@ void gui_prefs_open(VortexApp *app)
         GA_RelVerify,       TRUE,
         CHOOSER_LabelArray, s_fps_labels,
         CHOOSER_Selected,   init_fps_sel,
-        GA_HintInfo,        "Streaming-Bildrate (FPS) festlegen",
+        GA_HintInfo,        (Tag)GetVString(MSG_PREFS_HINT_FPS),
         TAG_DONE);
 
     uint32 cur_q = app->prefs.jpeg_quality ? app->prefs.jpeg_quality : 100;
@@ -514,7 +503,7 @@ void gui_prefs_open(VortexApp *app)
         SLIDER_LevelFormat, (Tag)"%ld %%",
         SLIDER_LevelPlace,  PLACETEXT_RIGHT,
         SLIDER_LevelDomain, (Tag)"100 %",
-        GA_HintInfo,        "JPEG-Stream-Qualität (Standard: 100%% = maximale Bildschärfe)",
+        GA_HintInfo,        (Tag)GetVString(MSG_PREFS_HINT_JPEG_Q),
         TAG_DONE);
 
     Object *gad_stream_mode = IIntuition->NewObject(NULL, "chooser.gadget",
@@ -522,7 +511,7 @@ void gui_prefs_open(VortexApp *app)
         GA_RelVerify,       TRUE,
         CHOOSER_LabelArray, s_stream_mode_labels,
         CHOOSER_Selected,   (app->prefs.video_stream_mode <= 2) ? app->prefs.video_stream_mode : 0,
-        GA_HintInfo,        "Streaming-Modus: 'Auto' schaltet bei Video automatisch auf H.264 via va.library um",
+        GA_HintInfo,        (Tag)GetVString(MSG_PREFS_HINT_STREAM_MODE),
         TAG_DONE);
 
     uint32 cur_br = (app->prefs.video_bitrate_k >= 1000 && app->prefs.video_bitrate_k <= 10000) ?
@@ -540,35 +529,35 @@ void gui_prefs_open(VortexApp *app)
         SLIDER_LevelFormat, (Tag)"%ld kbps",
         SLIDER_LevelPlace,  PLACETEXT_RIGHT,
         SLIDER_LevelDomain, (Tag)"10000 kbps",
-        GA_HintInfo,        "H.264 Video-Stream-Bitrate (1000 bis 10000 kbps / 10 Mbit/s, Standard: 4000)",
+        GA_HintInfo,        (Tag)GetVString(MSG_PREFS_HINT_BITRATE),
         TAG_DONE);
 
     Object *gad_dyn_video = IIntuition->NewObject(NULL, "checkbox.gadget",
         GA_ID,            GID_P_SERVER_DYN_VIDEO,
         GA_RelVerify,     TRUE,
-        GA_Text,          (Tag)"Dynamische JPEG-Qualität bei Video (Video-Boost)",
+        GA_Text,          (Tag)GetVString(MSG_PREFS_CHK_VIDBOOST),
         CHECKBOX_Checked, app->prefs.dynamic_video_quality,
-        GA_HintInfo,      "Bei Video-Wiedergabe Qualität temporär auf 60%% für 30-50 FPS anpassen",
+        GA_HintInfo,      (Tag)GetVString(MSG_PREFS_HINT_VIDBOOST),
         TAG_DONE);
 
     Object *gad_save_exit = IIntuition->NewObject(NULL, "checkbox.gadget",
         GA_ID,            GID_P_SERVER_SAVE_EXIT,
         GA_RelVerify,     TRUE,
-        GA_Text,          (Tag)"Aktuellen Server beim Beenden automatisch speichern",
+        GA_Text,          (Tag)GetVString(MSG_PREFS_CHK_AUTOSAVE_SRV),
         CHECKBOX_Checked, app->prefs.save_server_on_exit,
-        GA_HintInfo,      "Zuletzt genutzten Server für den nächsten Start merken",
+        GA_HintInfo,      (Tag)GetVString(MSG_PREFS_HINT_AUTOSAVE_SRV),
         TAG_DONE);
 
     Object *server_vlayout = IIntuition->NewObject(NULL, "layout.gadget",
         LAYOUT_Orientation,   LAYOUT_ORIENT_VERT,
         LAYOUT_BevelStyle,    BVS_GROUP,
-        LAYOUT_Label,         (Tag)"Streaming Server & Verbindungsoptionen",
+        LAYOUT_Label,         (Tag)GetVString(MSG_PREFS_SRV_GROUP),
         LAYOUT_SpaceOuter,    TRUE,
         LAYOUT_DeferLayout,   TRUE,
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"Server-Auswahl:",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_LBL_SRV_SELECT),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_RIGHT,
                                                             TAG_DONE),
@@ -580,7 +569,7 @@ void gui_prefs_open(VortexApp *app)
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"Server IP / Host:",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_LBL_SRV_HOST),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_RIGHT,
                                                             TAG_DONE),
@@ -588,7 +577,7 @@ void gui_prefs_open(VortexApp *app)
                                   LAYOUT_AddChild,      gad_srv_host,
                                   CHILD_WeightedWidth,  44,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"Port:",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_LBL_SRV_PORT),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_RIGHT,
                                                             TAG_DONE),
@@ -600,7 +589,7 @@ void gui_prefs_open(VortexApp *app)
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"Stream-Aufloesung:",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_LBL_STREAM_RES),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_RIGHT,
                                                             TAG_DONE),
@@ -612,7 +601,7 @@ void gui_prefs_open(VortexApp *app)
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"Bildrate (FPS):",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_LBL_FPS),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_RIGHT,
                                                             TAG_DONE),
@@ -624,7 +613,7 @@ void gui_prefs_open(VortexApp *app)
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"JPEG-Qualitaet:",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_LBL_JPEG_Q),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_RIGHT,
                                                             TAG_DONE),
@@ -636,7 +625,7 @@ void gui_prefs_open(VortexApp *app)
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"Video-Streaming:",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_LBL_VID_STREAM),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_RIGHT,
                                                             TAG_DONE),
@@ -648,7 +637,7 @@ void gui_prefs_open(VortexApp *app)
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"Video-Bitrate:",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_LBL_VID_BITRATE),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_RIGHT,
                                                             TAG_DONE),
@@ -660,7 +649,7 @@ void gui_prefs_open(VortexApp *app)
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"Video-Optimierung:",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_LBL_VID_OPT),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_RIGHT,
                                                             TAG_DONE),
@@ -672,7 +661,7 @@ void gui_prefs_open(VortexApp *app)
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"Beim Beenden:",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_LBL_ON_EXIT),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_RIGHT,
                                                             TAG_DONE),
@@ -682,7 +671,7 @@ void gui_prefs_open(VortexApp *app)
                                   TAG_DONE),
         CHILD_WeightedHeight, 0,
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                  GA_Text,              (Tag)"Standard-Qualitaet ist 100% (Verlustfrei). 720p/540p erhoeht FPS deutlich.",
+                                  GA_Text,              (Tag)GetVString(MSG_PREFS_SRV_NOTE),
                                   GA_ReadOnly,          TRUE,
                                   BUTTON_Justification, BCJ_LEFT,
                                   TAG_DONE),
@@ -704,15 +693,15 @@ void gui_prefs_open(VortexApp *app)
                 LBCIA_HorizJustify, LCJ_RIGHT,
                 LBCIA_DraggableSeparator, TRUE,
             LBCIA_Column, 1,
-                LBCIA_Title, "Titel / Name",
+                LBCIA_Title, GetVString(MSG_PREFS_QL_COL_TITLE),
                 LBCIA_Weight, 27,
                 LBCIA_DraggableSeparator, TRUE,
             LBCIA_Column, 2,
-                LBCIA_Title, "Adresse (URL)",
+                LBCIA_Title, GetVString(MSG_PREFS_QL_COL_URL),
                 LBCIA_Weight, 50,
                 LBCIA_DraggableSeparator, TRUE,
             LBCIA_Column, 3,
-                LBCIA_Title, "Icon",
+                LBCIA_Title, GetVString(MSG_PREFS_QL_COL_ICON),
                 LBCIA_Weight, 15,
                 LBCIA_DraggableSeparator, TRUE,
             TAG_DONE);
@@ -764,37 +753,37 @@ void gui_prefs_open(VortexApp *app)
     Object *btn_ql_add = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_P_QL_ADD,
         GA_RelVerify, TRUE,
-        GA_Text,      "Neu / Hinzufügen",
+        GA_Text,      GetVString(MSG_PREFS_QL_BTN_ADD),
         TAG_DONE);
 
     Object *btn_ql_update = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_P_QL_UPDATE,
         GA_RelVerify, TRUE,
-        GA_Text,      "Aktualisieren",
+        GA_Text,      GetVString(MSG_PREFS_UPDATE),
         TAG_DONE);
 
     Object *btn_ql_delete = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_P_QL_DELETE,
         GA_RelVerify, TRUE,
-        GA_Text,      "Entfernen",
+        GA_Text,      GetVString(MSG_PREFS_REMOVE),
         TAG_DONE);
 
     Object *btn_ql_up = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_P_QL_UP,
         GA_RelVerify, TRUE,
-        GA_Text,      "Nach oben",
+        GA_Text,      GetVString(MSG_PREFS_MOVE_UP),
         TAG_DONE);
 
     Object *btn_ql_down = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_P_QL_DOWN,
         GA_RelVerify, TRUE,
-        GA_Text,      "Nach unten",
+        GA_Text,      GetVString(MSG_PREFS_MOVE_DOWN),
         TAG_DONE);
 
     Object *ql_vlayout = IIntuition->NewObject(NULL, "layout.gadget",
         LAYOUT_Orientation,   LAYOUT_ORIENT_VERT,
         LAYOUT_BevelStyle,    BVS_GROUP,
-        LAYOUT_Label,         (Tag)"Schnellwahl-Leiste (Variable Buttons mit Icons)",
+        LAYOUT_Label,         (Tag)GetVString(MSG_PREFS_QL_GROUP),
         LAYOUT_SpaceOuter,    TRUE,
         LAYOUT_DeferLayout,   TRUE,
         LAYOUT_AddChild,      gad_ql_chooser,
@@ -803,7 +792,7 @@ void gui_prefs_open(VortexApp *app)
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"Titel / Name:",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_QL_LBL_TITLE),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_RIGHT,
                                                             TAG_DONE),
@@ -815,7 +804,7 @@ void gui_prefs_open(VortexApp *app)
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"Adresse (URL):",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_QL_LBL_URL),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_RIGHT,
                                                             TAG_DONE),
@@ -827,7 +816,7 @@ void gui_prefs_open(VortexApp *app)
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"AISS Icon-Name:",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_QL_LBL_ICON),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_RIGHT,
                                                             TAG_DONE),
@@ -851,13 +840,13 @@ void gui_prefs_open(VortexApp *app)
                                   TAG_DONE),
         CHILD_WeightedHeight, 0,
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                  GA_Text,              (Tag)"Tipp: Buttons in der Leiste haben Icons und erweitern sich automatisch.",
+                                  GA_Text,              (Tag)GetVString(MSG_PREFS_QL_TIP1),
                                   GA_ReadOnly,          TRUE,
                                   BUTTON_Justification, BCJ_LEFT,
                                   TAG_DONE),
         CHILD_WeightedHeight, 0,
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                  GA_Text,              (Tag)"Neue Buttons koennen auch direkt mit dem [+] Button in der Toolbar hinzugefuegt werden.",
+                                  GA_Text,              (Tag)GetVString(MSG_PREFS_QL_TIP2),
                                   GA_ReadOnly,          TRUE,
                                   BUTTON_Justification, BCJ_LEFT,
                                   TAG_DONE),
@@ -910,20 +899,20 @@ void gui_prefs_open(VortexApp *app)
     Object *btn_screen_mode_req = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_P_SCREEN_MODE_REQ,
         GA_RelVerify, TRUE,
-        GA_Text,      (Tag)"Bildschirm-Modus waehlen (ASL)...",
+        GA_Text,      (Tag)GetVString(MSG_PREFS_BTN_SCR_ASL),
         TAG_DONE);
 
     Object *gad_softscroll = IIntuition->NewObject(NULL, "checkbox.gadget",
         GA_ID,            GID_P_SOFTSCROLL,
         GA_RelVerify,     TRUE,
-        GA_Text,          (Tag)"Weiches Scrollen (Softscrolling)",
+        GA_Text,          (Tag)GetVString(MSG_PREFS_CHK_SOFTSCROLL),
         CHECKBOX_Checked, app->prefs.soft_scroll,
         TAG_DONE);
 
     Object *gad_show_status = IIntuition->NewObject(NULL, "checkbox.gadget",
         GA_ID,            GID_P_STATUS_BAR,
         GA_RelVerify,     TRUE,
-        GA_Text,          (Tag)"Statusleiste anzeigen (unten)",
+        GA_Text,          (Tag)GetVString(MSG_PREFS_CHK_STATUSBAR),
         CHECKBOX_Checked, app->prefs.show_status_bar,
         TAG_DONE);
 
@@ -939,18 +928,18 @@ void gui_prefs_open(VortexApp *app)
     Object *gad_pause_bg_media = IIntuition->NewObject(NULL, "checkbox.gadget",
         GA_ID,            GID_P_PAUSE_BG_MEDIA,
         GA_RelVerify,     TRUE,
-        GA_Text,          (Tag)"Video/Audio beim Tab-Wechsel pausieren",
+        GA_Text,          (Tag)GetVString(MSG_PREFS_CHK_PAUSE_MEDIA),
         CHECKBOX_Checked, app->prefs.pause_bg_media,
         TAG_DONE);
 
     Object *res_vlayout = IIntuition->NewObject(NULL, "layout.gadget",
         LAYOUT_Orientation,   LAYOUT_ORIENT_VERT,
         LAYOUT_BevelStyle,    BVS_GROUP,
-        LAYOUT_Label,         (Tag)"Zentrale Aufloesung & Bildschirm-Modus",
+        LAYOUT_Label,         (Tag)GetVString(MSG_PREFS_DISP_GROUP),
         LAYOUT_SpaceOuter,    TRUE,
         LAYOUT_DeferLayout,   TRUE,
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                  GA_Text,              (Tag)"Eine einzige Aufloesung fuer Bildschirm, Amiga-Fenster und Webbrowser:",
+                                  GA_Text,              (Tag)GetVString(MSG_PREFS_DISP_INTRO),
                                   GA_ReadOnly,          TRUE,
                                   BUTTON_Justification, BCJ_LEFT,
                                   TAG_DONE),
@@ -958,7 +947,7 @@ void gui_prefs_open(VortexApp *app)
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"Bildschirm-Modus:",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_LBL_SCR_MODE),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_LEFT,
                                                             TAG_DONE),
@@ -970,7 +959,7 @@ void gui_prefs_open(VortexApp *app)
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"RTG ScreenMode:",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_LBL_RTG_MODE),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_LEFT,
                                                             TAG_DONE),
@@ -982,7 +971,7 @@ void gui_prefs_open(VortexApp *app)
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"Aufloesung:",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_LBL_RESOLUTION),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_LEFT,
                                                             TAG_DONE),
@@ -994,7 +983,7 @@ void gui_prefs_open(VortexApp *app)
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"Benutzerdefiniert B:",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_LBL_CUSTOM_W),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_RIGHT,
                                                             TAG_DONE),
@@ -1002,7 +991,7 @@ void gui_prefs_open(VortexApp *app)
                                   LAYOUT_AddChild,      gad_res_w,
                                   CHILD_WeightedWidth,  25,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"H:",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_LBL_CUSTOM_H),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_RIGHT,
                                                             TAG_DONE),
@@ -1014,7 +1003,7 @@ void gui_prefs_open(VortexApp *app)
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"Mausrad & Scrollen:",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_LBL_SCROLL),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_LEFT,
                                                             TAG_DONE),
@@ -1026,7 +1015,7 @@ void gui_prefs_open(VortexApp *app)
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"Statusleiste:",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_LBL_STATUSBAR),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_LEFT,
                                                             TAG_DONE),
@@ -1038,7 +1027,7 @@ void gui_prefs_open(VortexApp *app)
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"Farbschema (Theme):",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_LBL_THEME),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_LEFT,
                                                             TAG_DONE),
@@ -1050,7 +1039,7 @@ void gui_prefs_open(VortexApp *app)
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"Tab-Medien:",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_LBL_TAB_MEDIA),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_LEFT,
                                                             TAG_DONE),
@@ -1060,7 +1049,7 @@ void gui_prefs_open(VortexApp *app)
                                   TAG_DONE),
         CHILD_WeightedHeight, 0,
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                  GA_Text,              (Tag)"Hinweis: Umschalten zwischen Screen und Workbench auch mit Amiga+M moeglich.",
+                                  GA_Text,              (Tag)GetVString(MSG_PREFS_DISP_HINT),
                                   GA_ReadOnly,          TRUE,
                                   BUTTON_Justification, BCJ_LEFT,
                                   TAG_DONE),
@@ -1154,11 +1143,11 @@ void gui_prefs_open(VortexApp *app)
     Object *font_vlayout = IIntuition->NewObject(NULL, "layout.gadget",
         LAYOUT_Orientation,   LAYOUT_ORIENT_VERT,
         LAYOUT_BevelStyle,    BVS_GROUP,
-        LAYOUT_Label,         (Tag)"Schriftart, Zeichensatz & Suchmaschine",
+        LAYOUT_Label,         (Tag)GetVString(MSG_PREFS_FONT_GROUP),
         LAYOUT_SpaceOuter,    TRUE,
         LAYOUT_DeferLayout,   TRUE,
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                  GA_Text,              (Tag)"Headless Webbrowser (Remote Rendering & Webseiten):",
+                                  GA_Text,              (Tag)GetVString(MSG_PREFS_HDR_WEB),
                                   GA_ReadOnly,          TRUE,
                                   BUTTON_Justification, BCJ_LEFT,
                                   TAG_DONE),
@@ -1166,7 +1155,7 @@ void gui_prefs_open(VortexApp *app)
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"Browser-Schriftgroesse:",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_LBL_WEB_SIZE),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_RIGHT,
                                                             TAG_DONE),
@@ -1178,7 +1167,7 @@ void gui_prefs_open(VortexApp *app)
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"Web-Zoom & Skalierung:",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_LBL_WEB_ZOOM),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_RIGHT,
                                                             TAG_DONE),
@@ -1190,7 +1179,7 @@ void gui_prefs_open(VortexApp *app)
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"Web-Schriftfamilie:",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_LBL_WEB_FAM),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_RIGHT,
                                                             TAG_DONE),
@@ -1202,7 +1191,7 @@ void gui_prefs_open(VortexApp *app)
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"Web-Zeichensatz:",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_LBL_WEB_CHAR),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_RIGHT,
                                                             TAG_DONE),
@@ -1214,7 +1203,7 @@ void gui_prefs_open(VortexApp *app)
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"Standard-Suchmaschine:",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_LBL_SEARCH),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_RIGHT,
                                                             TAG_DONE),
@@ -1224,7 +1213,7 @@ void gui_prefs_open(VortexApp *app)
                                   TAG_DONE),
         CHILD_WeightedHeight, 0,
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                  GA_Text,              (Tag)"Programm / AmigaOS-Oberflaeche (GUI):",
+                                  GA_Text,              (Tag)GetVString(MSG_PREFS_HDR_GUI),
                                   GA_ReadOnly,          TRUE,
                                   BUTTON_Justification, BCJ_LEFT,
                                   TAG_DONE),
@@ -1232,7 +1221,7 @@ void gui_prefs_open(VortexApp *app)
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"GUI-Zeichensatz:",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_LBL_GUI_CHAR),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_RIGHT,
                                                             TAG_DONE),
@@ -1244,7 +1233,7 @@ void gui_prefs_open(VortexApp *app)
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"GUI-Schriftgroesse:",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_LBL_GUI_SIZE),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_RIGHT,
                                                             TAG_DONE),
@@ -1290,25 +1279,25 @@ void gui_prefs_open(VortexApp *app)
     Object *btn_fav_add = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_P_FAV_ADD,
         GA_RelVerify, TRUE,
-        GA_Text,      "Hinzufügen",
+        GA_Text,      GetVString(MSG_PREFS_ADD),
         TAG_DONE);
 
     Object *btn_fav_update = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_P_FAV_UPDATE,
         GA_RelVerify, TRUE,
-        GA_Text,      "Aktualisieren",
+        GA_Text,      GetVString(MSG_PREFS_UPDATE),
         TAG_DONE);
 
     Object *btn_fav_delete = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_P_FAV_DELETE,
         GA_RelVerify, TRUE,
-        GA_Text,      "Löschen",
+        GA_Text,      GetVString(MSG_PREFS_REMOVE),
         TAG_DONE);
 
     Object *fav_vlayout = IIntuition->NewObject(NULL, "layout.gadget",
         LAYOUT_Orientation,   LAYOUT_ORIENT_VERT,
         LAYOUT_BevelStyle,    BVS_GROUP,
-        LAYOUT_Label,         (Tag)"Lesezeichen-Verwaltung",
+        LAYOUT_Label,         (Tag)GetVString(MSG_PREFS_FAV_GROUP),
         LAYOUT_SpaceOuter,    TRUE,
         LAYOUT_DeferLayout,   TRUE,
         LAYOUT_AddChild,      gad_fav_chooser,
@@ -1316,7 +1305,7 @@ void gui_prefs_open(VortexApp *app)
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"Titel:",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_FAV_LBL_TITLE),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_RIGHT,
                                                             TAG_DONE),
@@ -1328,7 +1317,7 @@ void gui_prefs_open(VortexApp *app)
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"Adresse (URL):",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_QL_LBL_URL),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_RIGHT,
                                                             TAG_DONE),
@@ -1365,34 +1354,34 @@ void gui_prefs_open(VortexApp *app)
     Object *btn_dl_dir_req = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_P_DL_DIR_REQ,
         GA_RelVerify, TRUE,
-        GA_Text,      "Ordner wählen...",
-        GA_HintInfo,  "Download-Verzeichnis über Dateidialog auswählen",
+        GA_Text,      GetVString(MSG_PREFS_CHOOSE_DIR),
+        GA_HintInfo,  (Tag)GetVString(MSG_PREFS_DL_HINT_DIR),
         TAG_DONE);
 
     Object *gad_dl_always_ask = IIntuition->NewObject(NULL, "checkbox.gadget",
         GA_ID,            GID_P_DL_ALWAYS_ASK,
         GA_RelVerify,     TRUE,
-        GA_Text,          "Immer nach Zielordner fragen (ASL-Requester)",
+        GA_Text,          (Tag)GetVString(MSG_PREFS_DL_ASK_CHK),
         CHECKBOX_Checked, app->prefs.always_ask_download,
         TAG_DONE);
 
     Object *btn_dl_open_mgr = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_P_DL_OPEN_MGR,
         GA_RelVerify, TRUE,
-        GA_Text,      "Download-Manager jetzt öffnen...",
-        GA_HintInfo,  "Öffnet das Download-Fenster",
+        GA_Text,      GetVString(MSG_PREFS_DL_OPEN_BTN),
+        GA_HintInfo,  (Tag)GetVString(MSG_PREFS_DL_OPEN_HINT),
         TAG_DONE);
 
     Object *dl_vlayout = IIntuition->NewObject(NULL, "layout.gadget",
         LAYOUT_Orientation,   LAYOUT_ORIENT_VERT,
         LAYOUT_BevelStyle,    BVS_GROUP,
-        LAYOUT_Label,         (Tag)"Download-Einstellungen",
+        LAYOUT_Label,         (Tag)GetVString(MSG_PREFS_DL_GROUP),
         LAYOUT_SpaceOuter,    TRUE,
         LAYOUT_DeferLayout,   TRUE,
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"Standard-Ordner:",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_DL_LBL_DIR),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_RIGHT,
                                                             TAG_DONE),
@@ -1406,7 +1395,7 @@ void gui_prefs_open(VortexApp *app)
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"Dateidialog:",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_DL_LBL_ASK),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_RIGHT,
                                                             TAG_DONE),
@@ -1418,7 +1407,7 @@ void gui_prefs_open(VortexApp *app)
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              (Tag)"Download-Manager:",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_DL_LBL_MGR),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_RIGHT,
                                                             TAG_DONE),
@@ -1428,7 +1417,7 @@ void gui_prefs_open(VortexApp *app)
                                   TAG_DONE),
         CHILD_WeightedHeight, 0,
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                  GA_Text,              (Tag)"Dateien werden bei deaktivierter Abfrage direkt in den Standard-Ordner geladen.",
+                                  GA_Text,              (Tag)GetVString(MSG_PREFS_DL_NOTE),
                                   GA_ReadOnly,          TRUE,
                                   BUTTON_Justification, BCJ_LEFT,
                                   TAG_DONE),
@@ -1462,21 +1451,21 @@ void gui_prefs_open(VortexApp *app)
         GA_ID,        GID_P_SAVE,
         GA_RelVerify, TRUE,
         GA_Text,      GetVString(MSG_PREFS_SAVE),
-        GA_HintInfo,  "Einstellungen dauerhaft in ENVARC: und ENV: speichern und anwenden",
+        GA_HintInfo,  (Tag)GetVString(MSG_PREFS_HINT_SAVE),
         TAG_DONE);
 
     Object *btn_use = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_P_USE,
         GA_RelVerify, TRUE,
         GA_Text,      GetVString(MSG_PREFS_USE),
-        GA_HintInfo,  "Einstellungen temporär für diese Sitzung anwenden",
+        GA_HintInfo,  (Tag)GetVString(MSG_PREFS_HINT_USE),
         TAG_DONE);
 
     Object *btn_cancel = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_P_CANCEL,
         GA_RelVerify, TRUE,
         GA_Text,      GetVString(MSG_PREFS_CANCEL),
-        GA_HintInfo,  "Änderungen verwerfen und Fenster schließen",
+        GA_HintInfo,  (Tag)GetVString(MSG_PREFS_HINT_CANCEL),
         TAG_DONE);
 
     Object *bottom_bar = IIntuition->NewObject(NULL, "layout.gadget",
@@ -1640,7 +1629,7 @@ void gui_prefs_open(VortexApp *app)
                             get_string_text(gad_ql_lbl,  buf_l, sizeof(buf_l));
                             get_string_text(gad_ql_url,  buf_u, sizeof(buf_u));
                             get_string_text(gad_ql_icon, buf_i, sizeof(buf_i));
-                            if (buf_l[0] == '\0') strncpy(buf_l, "Neuer Link", sizeof(buf_l) - 1);
+                            if (buf_l[0] == '\0') strncpy(buf_l, GetVString(MSG_PREFS_QL_NEW_LINK), sizeof(buf_l) - 1);
                             if (buf_u[0] == '\0') strncpy(buf_u, "https://", sizeof(buf_u) - 1);
                             if (buf_i[0] == '\0') strncpy(buf_i, "bookmark", sizeof(buf_i) - 1);
 
@@ -1763,8 +1752,8 @@ void gui_prefs_open(VortexApp *app)
                             ASL_FileRequest,
                             ASLFR_Window,        win,
                             ASLFR_SleepWindow,   TRUE,
-                            ASLFR_TitleText,     "Download-Verzeichnis wählen",
-                            ASLFR_PositiveText,  "Auswählen",
+                            ASLFR_TitleText,     (Tag)GetVString(MSG_PREFS_ASL_DL_TITLE),
+                            ASLFR_PositiveText,  (Tag)GetVString(MSG_PREFS_ASL_DL_POS),
                             ASLFR_DrawersOnly,   TRUE,
                             ASLFR_InitialDrawer, (Tag)(cur_dir[0] ? cur_dir : "RAM:"),
                             TAG_DONE);

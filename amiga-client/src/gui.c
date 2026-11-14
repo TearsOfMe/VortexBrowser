@@ -131,21 +131,26 @@ static struct NewMenu s_main_menu[] = {
 
 static void gui_localize_menu(void)
 {
+    static BOOL s_menu_localized = FALSE;
+    int title_idx = 0;
+    if (s_menu_localized) return;
+    s_menu_localized = TRUE;
+
     for (int i = 0; s_main_menu[i].nm_Type != NM_END; i++) {
         if (s_main_menu[i].nm_Type == NM_TITLE) {
-            if (strcmp(s_main_menu[i].nm_Label, "Projekt") == 0)
-                s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_PROJECT);
-            else if (strcmp(s_main_menu[i].nm_Label, "Bearbeiten") == 0)
-                s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_EDIT);
-            else if (strcmp(s_main_menu[i].nm_Label, "Ansicht") == 0)
-                s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_VIEW);
-            else if (strcmp(s_main_menu[i].nm_Label, "Navigation") == 0)
-                s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_NAVIGATION);
-            else if (strcmp(s_main_menu[i].nm_Label, "Lesezeichen") == 0)
-                s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_BOOKMARKS);
+            switch (title_idx++) {
+                case 0: s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_PROJECT); break;
+                case 1: s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_EDIT); break;
+                case 2: s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_VIEW); break;
+                case 3: s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_NAVIGATION); break;
+                case 4: s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_BOOKMARKS); break;
+                default: break;
+            }
         } else if (s_main_menu[i].nm_Type == NM_ITEM) {
             uint32 mid = (uint32)s_main_menu[i].nm_UserData;
             switch (mid) {
+                case MID_PROJ_NEW:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_NEW_HOME); break;
                 case MID_PROJ_OPEN:
                     s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_OPEN_URL); break;
                 case MID_TAB_NEW:
@@ -156,6 +161,12 @@ static void gui_localize_menu(void)
                     s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_PASSWORDS); break;
                 case MID_PROJ_DOWNLOADS:
                     s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_DOWNLOADS); break;
+                case MID_SET_SERVER_CUSTOM:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_SERVER_CFG); break;
+                case MID_PROJ_CONNECT:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_SERVER_CONNECT); break;
+                case MID_PROJ_DISCONNECT:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_SERVER_DISCONNECT); break;
                 case MID_SETTINGS:
                     s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_PREFERENCES); break;
                 case MID_PROJ_ABOUT:
@@ -168,6 +179,36 @@ static void gui_localize_menu(void)
                     s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_COPY); break;
                 case MID_EDIT_PASTE:
                     s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_PASTE); break;
+                case MID_STREAM_RES_NATIVE:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_STREAM_RES_NATIVE); break;
+                case MID_STREAM_RES_720P:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_STREAM_RES_720P); break;
+                case MID_STREAM_RES_540P:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_STREAM_RES_540P); break;
+                case MID_STREAM_RES_1080P:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_STREAM_RES_1080P); break;
+                case MID_FPS_15:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_FPS_15); break;
+                case MID_FPS_25:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_FPS_25); break;
+                case MID_FPS_30:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_FPS_30); break;
+                case MID_FPS_50:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_FPS_50); break;
+                case MID_FPS_60:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_FPS_60); break;
+                case MID_STREAM_VIDEO_AUTO:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_VIDEO_AUTO); break;
+                case MID_STREAM_VIDEO_LZ4:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_VIDEO_LZ4); break;
+                case MID_STREAM_VIDEO_H264:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_VIDEO_H264); break;
+                case MID_TOGGLE_DARK_THEME:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_TOGGLE_DARK); break;
+                case MID_TOGGLE_SCREEN:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_TOGGLE_SCREEN); break;
+                case MID_TOGGLE_STATUSBAR:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_TOGGLE_STATUSBAR); break;
                 case MID_FONT_LARGER:
                     s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_ZOOM_IN); break;
                 case MID_FONT_SMALLER:
@@ -921,7 +962,7 @@ static void dispatch_viewport_mouse_btn(VortexApp *app, int16_t win_x, int16_t w
         if ((btn == 3 || btn == 2) && is_down) {
             if (hit_ql >= 0) {
                 if (btn == 2) {
-                    gui_tab_add(app, (char *)(app->prefs.quick_links[hit_ql].label[0] ? app->prefs.quick_links[hit_ql].label : "Neuer Tab"),
+                    gui_tab_add(app, app->prefs.quick_links[hit_ql].label[0] ? app->prefs.quick_links[hit_ql].label : NULL,
                                 (char *)app->prefs.quick_links[hit_ql].url, TRUE);
                 } else {
                     open_quicklink_popup(app, hit_ql, win_x, win_y);
@@ -942,7 +983,7 @@ static void dispatch_viewport_mouse_btn(VortexApp *app, int16_t win_x, int16_t w
         if ((btn == 3 || btn == 2) && is_down) {
             if (hit_ql >= 0) {
                 if (btn == 2) {
-                    gui_tab_add(app, (char *)(app->prefs.quick_links[hit_ql].label[0] ? app->prefs.quick_links[hit_ql].label : "Neuer Tab"),
+                    gui_tab_add(app, app->prefs.quick_links[hit_ql].label[0] ? app->prefs.quick_links[hit_ql].label : NULL,
                                 (char *)app->prefs.quick_links[hit_ql].url, TRUE);
                 } else {
                     open_quicklink_popup(app, hit_ql, win_x, win_y);
@@ -972,7 +1013,7 @@ static void dispatch_viewport_mouse_btn(VortexApp *app, int16_t win_x, int16_t w
             memset(&app->ctx_menu, 0, sizeof(MsgContextMenu));
             app->ctx_menu_ready   = FALSE;
             app->ctx_menu_pending = TRUE;
-            app_set_status("Kontextmenue wird geoeffnet (%d, %d)...", (int)rx, (int)ry);
+            app_set_status(GetVString(MSG_STATUS_CTX_OPENING), (int)rx, (int)ry);
             net_send_click(app, rx, ry, 3);
         }
         return;
@@ -1262,7 +1303,7 @@ void prompt_server_address(VortexApp *app)
         GA_ID,            1,
         GA_RelVerify,     TRUE,
         GA_TabCycle,      FALSE,
-        GA_HintInfo,      "Server IP und Port (z.B. 127.0.0.1:7788)",
+        GA_HintInfo,      GetVString(MSG_SRV_DLG_HINT),
         STRINGA_MaxChars, 128,
         STRINGA_TextVal,  current_addr,
         TAG_DONE);
@@ -1270,13 +1311,13 @@ void prompt_server_address(VortexApp *app)
     Object *btn_ok = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        2,
         GA_RelVerify, TRUE,
-        GA_Text,      "Verbinden",
+        GA_Text,      GetVString(MSG_SRV_DLG_CONNECT),
         TAG_DONE);
 
     Object *btn_cancel = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        3,
         GA_RelVerify, TRUE,
-        GA_Text,      "Abbrechen",
+        GA_Text,      GetVString(MSG_GEN_CANCEL),
         TAG_DONE);
 
     Object *req_layout = IIntuition->NewObject(NULL, "layout.gadget",
@@ -1284,7 +1325,7 @@ void prompt_server_address(VortexApp *app)
         LAYOUT_SpaceOuter,    TRUE,
         LAYOUT_DeferLayout,   TRUE,
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                  GA_Text,              (Tag)"VortexBrowser Server-Adresse eingeben (IP:Port):",
+                                  GA_Text,              (Tag)GetVString(MSG_SRV_DLG_PROMPT),
                                   GA_ReadOnly,          TRUE,
                                   BUTTON_Justification, BCJ_LEFT,
                                   TAG_DONE),
@@ -1302,8 +1343,8 @@ void prompt_server_address(VortexApp *app)
         TAG_DONE);
 
     Object *req_win_obj = IIntuition->NewObject(NULL, "window.class",
-        WA_Title,             "Server konfigurieren",
-        WA_ScreenTitle,       "VortexBrowser Einstellungen",
+        WA_Title,             GetVString(MSG_SRV_DLG_TITLE),
+        WA_ScreenTitle,       GetVString(MSG_SRV_DLG_SCRTITLE),
         WA_CloseGadget,       TRUE,
         WA_DepthGadget,       TRUE,
         WA_DragBar,           TRUE,
@@ -1424,7 +1465,7 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
 
         case MID_PROJ_DISCONNECT:
             net_disconnect(app);
-            app_set_status("Verbindung getrennt.");
+            app_set_status(GetVString(MSG_STATUS_DISCONNECTED));
             break;
 
         case MID_SETTINGS:
@@ -1443,7 +1484,7 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
             app->renderer.reported_w = 0;
             app->renderer.reported_h = 0;
             renderer_sync_viewport_size(app);
-            app_set_status("Stream-Aufloesung: 1:1 Nativ (Fenster-Groesse)");
+            app_set_status(GetVString(MSG_STATUS_STREAM_RES_NATIVE));
             break;
 
         case MID_STREAM_RES_720P:
@@ -1452,7 +1493,7 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
             app->renderer.reported_w = 0;
             app->renderer.reported_h = 0;
             renderer_sync_viewport_size(app);
-            app_set_status("Stream-Aufloesung: 1280x720 (720p HD - 30-50 FPS)");
+            app_set_status(GetVString(MSG_STATUS_STREAM_RES_720P));
             break;
 
         case MID_STREAM_RES_540P:
@@ -1461,7 +1502,7 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
             app->renderer.reported_w = 0;
             app->renderer.reported_h = 0;
             renderer_sync_viewport_size(app);
-            app_set_status("Stream-Aufloesung: 960x540 (540p qHD - Turbo)");
+            app_set_status(GetVString(MSG_STATUS_STREAM_RES_540P));
             break;
 
         case MID_STREAM_RES_1080P:
@@ -1470,7 +1511,7 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
             app->renderer.reported_w = 0;
             app->renderer.reported_h = 0;
             renderer_sync_viewport_size(app);
-            app_set_status("Stream-Aufloesung: 1920x1080 (1080p Full HD)");
+            app_set_status(GetVString(MSG_STATUS_STREAM_RES_1080P));
             break;
 
         case MID_FPS_15:
@@ -1492,7 +1533,7 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
                     snprintf(fcmd, sizeof(fcmd), "@FPS:%u", (unsigned)fps_val);
                     net_send_url(app, fcmd);
                 }
-                app_set_status("Framerate gesetzt: %u FPS", (unsigned)fps_val);
+                app_set_status(GetVString(MSG_STATUS_FPS_SET), (unsigned)fps_val);
             }
             break;
 
@@ -1531,7 +1572,8 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
             } else {
                 app->reopen_gui_needed = TRUE;
             }
-            app_set_status("Farbschema: %s", (app->prefs.dark_theme == 1) ? "Dunkel (Dark Mode)" : "Hell (Standard)");
+            app_set_status(GetVString(MSG_STATUS_THEME_SET),
+                           (app->prefs.dark_theme == 1) ? GetVString(MSG_STATUS_THEME_DARK) : GetVString(MSG_STATUS_THEME_LIGHT));
             break;
 
         case MID_TOGGLE_STATUSBAR:
@@ -1545,10 +1587,10 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
             break;
 
         case MID_PROJ_ABOUT: {
-            char about_buf[1024];
-            const char *conn_str = app->connected ? "Verbunden" : "Getrennt";
+            char about_buf[1280];
+            const char *conn_str = app->connected ? GetVString(MSG_ABOUT_CONNECTED) : GetVString(MSG_ABOUT_DISCONNECTED);
             const char *fmt_str = (app->renderer.src_format == FMT_YUV420P)
-                ? (app->renderer.src_bm_is_yuv ? "Planar YUV420p 12bpp (Hardware DMA+CompositeTags)" : "Planar YUV420p 12bpp (Software RGB565)")
+                ? (app->renderer.src_bm_is_yuv ? GetVString(MSG_ABOUT_YUV_HW) : GetVString(MSG_ABOUT_YUV_SW))
                 : ((app->renderer.src_format == FMT_RGB565) ? "RGB565 16bpp (Direct BltBitMap)" : "ARGB32 32bpp");
 
             uint16 sw = 0, sh = 0, sd = 0;
@@ -1565,42 +1607,38 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
             uint16 vp_w = area ? (uint16)area->Width : (app->win ? (uint16)(app->win->Width - 8) : 0);
             uint16 vp_h = area ? (uint16)area->Height : (app->win ? (uint16)(app->win->Height - 110) : 0);
 
-            const char *scr_type = app->custom_screen ? "Eigener RTG-Bildschirm" : "Workbench-Bildschirm";
+            const char *scr_type = app->custom_screen ? GetVString(MSG_ABOUT_SCR_CUSTOM) : GetVString(MSG_ABOUT_SCR_WB);
 
-            snprintf(about_buf, sizeof(about_buf),
-                "VortexBrowser fuer AmigaOS 4\n"
-                "Version 0.99 RC3\n\n"
-                "=== SERVER-INFORMATIONEN ===\n"
-                "Server-Adresse: %s:%u\n"
-                "Verbindungsstatus: %s\n"
-                "Server-Engine: Chromium (Linux Headless Streaming)\n\n"
-                "=== AUFLOESUNG & GRAFIK ===\n"
-                "Bildschirm: %ux%u (%u-Bit, %s)\n"
-                "Fenstergroesse: %ux%u (Pos: %d,%d)\n"
-                "Browser-Viewport: %ux%u Pixel (1:1 Auto-Sync)\n"
-                "Server-Stream: %ux%u (%s)\n"
-                "Dekodierte Frames: %u\n\n"
-                "=== AUDIO & OPTIMIERUNG ===\n"
-                "Audio-Engine: AHI 16-Bit Stereo (44100 Hz CD-Qualitaet PCM Low-Latency)\n"
-                "CPU-Ziel: PowerPC Universal (Dynamische CPU-Erkennung)\n"
-                "Vector-SIMD: %s\n"
-                "Kompression: LZ4 Realtime Stream Decompressor",
+            int len = 0;
+            len += snprintf(about_buf + len, sizeof(about_buf) - (size_t)len,
+                GetVString(MSG_ABOUT_SEC_SERVER),
                 app->server_host, (unsigned)app->server_port,
-                conn_str,
-                (unsigned)sw, (unsigned)sh, (unsigned)sd, scr_type,
-                app->win ? (unsigned)app->win->Width : 0, app->win ? (unsigned)app->win->Height : 0,
-                app->win ? (int)app->win->LeftEdge : 0, app->win ? (int)app->win->TopEdge : 0,
-                (unsigned)vp_w, (unsigned)vp_h,
-                (unsigned)app->renderer.src_width, (unsigned)app->renderer.src_height, fmt_str,
-                (unsigned)app->renderer.frames_decoded,
-                app->renderer.has_altivec ? "AltiVec 128-Bit SIMD (Aktiviert - X1000/G4)" : "Scalar Baseline (Sicher fuer X5000/A1222+/Sam460/G3)");
+                conn_str);
+            if (len < 0) len = 0;
+            if ((size_t)len < sizeof(about_buf)) {
+                int n = snprintf(about_buf + len, sizeof(about_buf) - (size_t)len,
+                    GetVString(MSG_ABOUT_SEC_GRAPHICS),
+                    (unsigned)sw, (unsigned)sh, (unsigned)sd, scr_type,
+                    app->win ? (unsigned)app->win->Width : 0, app->win ? (unsigned)app->win->Height : 0,
+                    app->win ? (int)app->win->LeftEdge : 0, app->win ? (int)app->win->TopEdge : 0,
+                    (unsigned)vp_w, (unsigned)vp_h,
+                    (unsigned)app->renderer.src_width, (unsigned)app->renderer.src_height, fmt_str,
+                    (unsigned)app->renderer.frames_decoded,
+                    locale_get_active_language());
+                if (n > 0) len += n;
+            }
+            if ((size_t)len < sizeof(about_buf)) {
+                snprintf(about_buf + len, sizeof(about_buf) - (size_t)len,
+                    GetVString(MSG_ABOUT_SEC_AUDIO),
+                    app->renderer.has_altivec ? GetVString(MSG_ABOUT_ALTIVEC_YES) : GetVString(MSG_ABOUT_ALTIVEC_NO));
+            }
 
             struct EasyStruct es;
             memset(&es, 0, sizeof(es));
             es.es_StructSize   = sizeof(struct EasyStruct);
-            es.es_Title        = (STRPTR)"Ueber VortexBrowser";
+            es.es_Title        = (STRPTR)GetVString(MSG_ABOUT_TITLE);
             es.es_TextFormat   = (STRPTR)"%s";
-            es.es_GadgetFormat = (STRPTR)"OK";
+            es.es_GadgetFormat = (STRPTR)GetVString(MSG_GEN_OK);
             IIntuition->EasyRequest(app->win, &es, NULL, about_buf);
             break;
         }
@@ -1614,7 +1652,7 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
             break;
 
         case MID_TAB_NEW:
-            gui_tab_add(app, "Neuer Tab", "", TRUE);
+            gui_tab_add(app, NULL, "", TRUE);
             break;
 
         case MID_TAB_CLOSE:
@@ -1631,7 +1669,7 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
             app->prefs.video_stream_mode = STREAM_VIDEO_AUTO;
             prefs_save(app, FALSE);
             if (app->connected) net_send_url(app, "@STREAM_MODE:auto");
-            app_set_status("Streaming: Auto (H.264 bei Video via va.library, sonst LZ4)");
+            app_set_status(GetVString(MSG_STATUS_STREAM_AUTO));
             break;
         }
 
@@ -1639,7 +1677,7 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
             app->prefs.video_stream_mode = STREAM_VIDEO_DIRTYRECT;
             prefs_save(app, FALSE);
             if (app->connected) net_send_url(app, "@STREAM_MODE:lz4");
-            app_set_status("Streaming: Nur Dirty-Rect / LZ4 (Klassisch)");
+            app_set_status(GetVString(MSG_STATUS_STREAM_LZ4));
             break;
         }
 
@@ -1647,7 +1685,7 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
             app->prefs.video_stream_mode = STREAM_VIDEO_H264;
             prefs_save(app, FALSE);
             if (app->connected) net_send_url(app, "@STREAM_MODE:h264");
-            app_set_status("Streaming: Nur H.264 (Dauerhafter Videostream)");
+            app_set_status(GetVString(MSG_STATUS_STREAM_H264));
             break;
         }
 
@@ -1682,7 +1720,7 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
 
         case MID_NAV_STOP:
             net_send_url(app, "@STOP");
-            app_set_status("Ladevorgang angehalten.");
+            app_set_status(GetVString(MSG_STATUS_LOADING_STOPPED));
             break;
 
         case MID_FONT_LARGER: {
@@ -1695,7 +1733,7 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
                 snprintf(cmd, sizeof(cmd), "@FONTSIZE:%u", (unsigned)fs);
                 net_send_url(app, cmd);
             }
-            app_set_status("Browser-Schriftgroesse: %u px", (unsigned)fs);
+            app_set_status(GetVString(MSG_STATUS_FONT_SIZE), (unsigned)fs);
             break;
         }
 
@@ -1709,7 +1747,7 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
                 snprintf(cmd, sizeof(cmd), "@FONTSIZE:%u", (unsigned)fs);
                 net_send_url(app, cmd);
             }
-            app_set_status("Browser-Schriftgroesse: %u px", (unsigned)fs);
+            app_set_status(GetVString(MSG_STATUS_FONT_SIZE), (unsigned)fs);
             break;
         }
 
@@ -1721,7 +1759,7 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
                 net_send_url(app, "@ZOOM:100");
                 net_send_url(app, "@FONTSIZE:16");
             }
-            app_set_status("Browser-Schriftgroesse auf Standard (16 px / 100%%) zurueckgesetzt.");
+            app_set_status(GetVString(MSG_STATUS_FONT_RESET));
             break;
         }
 
@@ -1733,7 +1771,7 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
                 if (favorites_add(app, u, u)) {
                     favorites_save(app);
                     favorites_rebuild_chooser_list(app);
-                    app_set_status("Zu Lesezeichen hinzugefuegt: %s", u);
+                    app_set_status(GetVString(MSG_STATUS_BOOKMARK_ADDED), u);
                 }
             }
             break;
@@ -1776,44 +1814,44 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
             snprintf(port_str, sizeof(port_str), "%u", (unsigned)app->server_port);
             IDOS->SetVar("VortexBrowser/server_host", app->server_host, -1, GVF_GLOBAL_ONLY | GVF_SAVE_VAR);
             IDOS->SetVar("VortexBrowser/server_port", port_str, -1, GVF_GLOBAL_ONLY | GVF_SAVE_VAR);
-            app_set_status("Einstellungen dauerhaft gespeichert (ENVARC:).");
+            app_set_status(GetVString(MSG_STATUS_SETTINGS_SAVED));
             break;
         }
 
         case MID_RES_1024_768:
             prefs_set_resolution(app, 0, 0, 0);
             prefs_save(app, TRUE);
-            app_set_status("Aufloesung: 1024 x 768");
+            app_set_status(GetVString(MSG_STATUS_RES_CUSTOM), "1024 x 768");
             break;
 
         case MID_RES_1280_720:
             prefs_set_resolution(app, 1, 0, 0);
             prefs_save(app, TRUE);
-            app_set_status("Aufloesung: 1280 x 720");
+            app_set_status(GetVString(MSG_STATUS_RES_CUSTOM), "1280 x 720");
             break;
 
         case MID_RES_1920_1080:
             prefs_set_resolution(app, 2, 0, 0);
             prefs_save(app, TRUE);
-            app_set_status("Aufloesung: 1920 x 1080");
+            app_set_status(GetVString(MSG_STATUS_RES_CUSTOM), "1920 x 1080");
             break;
 
         case MID_RES_800_600:
             prefs_set_resolution(app, 3, 0, 0);
             prefs_save(app, TRUE);
-            app_set_status("Aufloesung: 800 x 600");
+            app_set_status(GetVString(MSG_STATUS_RES_CUSTOM), "800 x 600");
             break;
 
         case MID_RES_1280_1024:
             prefs_set_resolution(app, 4, 0, 0);
             prefs_save(app, TRUE);
-            app_set_status("Aufloesung: 1280 x 1024");
+            app_set_status(GetVString(MSG_STATUS_RES_CUSTOM), "1280 x 1024");
             break;
 
         case MID_RES_AUTO:
             prefs_set_resolution(app, 5, 0, 0);
             prefs_save(app, TRUE);
-            app_set_status("Aufloesung: Automatisch");
+            app_set_status(GetVString(MSG_STATUS_RES_AUTO));
             break;
 
         default:
@@ -1834,39 +1872,39 @@ static void open_main_menu_popup(VortexApp *app, int16_t mx, int16_t my)
         pm_hook.h_Entry = (HOOKFUNC)ctx_menu_hook_func;
         pm_hook.h_Data  = &selected_id;
 
-        Object *menu_obj = PMMENU("VortexBrowser Menue"),
+        Object *menu_obj = PMMENU(GetVString(MSG_POPUP_MAIN_TITLE)),
             PMA_MenuHandler, &pm_hook,
-            PMITEM("Startseite / Neu"),               PMIA_ID, MID_PROJ_NEW, PMEND,
-            PMITEM("URL oeffnen..."),                 PMIA_ID, MID_PROJ_OPEN, PMEND,
-            PMITEM("Neuen Tab oeffnen"),              PMIA_ID, MID_TAB_NEW, PMEND,
-            PMITEM("Aktuellen Tab schliessen"),       PMIA_ID, MID_TAB_CLOSE, PMEND,
+            PMITEM(GetVString(MSG_MENU_NEW_HOME)),          PMIA_ID, MID_PROJ_NEW, PMEND,
+            PMITEM(GetVString(MSG_MENU_OPEN_URL)),          PMIA_ID, MID_PROJ_OPEN, PMEND,
+            PMITEM(GetVString(MSG_MENU_TAB_NEW)),           PMIA_ID, MID_TAB_NEW, PMEND,
+            PMITEM(GetVString(MSG_MENU_TAB_CLOSE)),         PMIA_ID, MID_TAB_CLOSE, PMEND,
             PMBAR(), PMEND,
-            PMITEM("Passwort-Manager..."),            PMIA_ID, MID_PROJ_PASSWORDS, PMEND,
-            PMITEM("Download-Manager..."),            PMIA_ID, MID_PROJ_DOWNLOADS, PMEND,
+            PMITEM(GetVString(MSG_MENU_PASSWORDS)),         PMIA_ID, MID_PROJ_PASSWORDS, PMEND,
+            PMITEM(GetVString(MSG_MENU_DOWNLOADS)),         PMIA_ID, MID_PROJ_DOWNLOADS, PMEND,
             PMBAR(), PMEND,
-            PMITEM("Server konfigurieren..."),        PMIA_ID, MID_SET_SERVER_CUSTOM, PMEND,
-            PMITEM("Mit Server verbinden"),           PMIA_ID, MID_PROJ_CONNECT, PMEND,
-            PMITEM("Verbindung trennen"),             PMIA_ID, MID_PROJ_DISCONNECT, PMEND,
+            PMITEM(GetVString(MSG_MENU_SERVER_CFG)),        PMIA_ID, MID_SET_SERVER_CUSTOM, PMEND,
+            PMITEM(GetVString(MSG_MENU_SERVER_CONNECT)),    PMIA_ID, MID_PROJ_CONNECT, PMEND,
+            PMITEM(GetVString(MSG_MENU_SERVER_DISCONNECT)), PMIA_ID, MID_PROJ_DISCONNECT, PMEND,
             PMBAR(), PMEND,
-            PMITEM("Zurueck"),                        PMIA_ID, MID_NAV_BACK, PMEND,
-            PMITEM("Vorwaerts"),                      PMIA_ID, MID_NAV_FORWARD, PMEND,
-            PMITEM("Neu laden"),                      PMIA_ID, MID_NAV_RELOAD, PMEND,
-            PMITEM("Stopp"),                          PMIA_ID, MID_NAV_STOP, PMEND,
+            PMITEM(GetVString(MSG_MENU_BACK)),              PMIA_ID, MID_NAV_BACK, PMEND,
+            PMITEM(GetVString(MSG_MENU_FORWARD)),           PMIA_ID, MID_NAV_FORWARD, PMEND,
+            PMITEM(GetVString(MSG_MENU_RELOAD)),            PMIA_ID, MID_NAV_RELOAD, PMEND,
+            PMITEM(GetVString(MSG_MENU_STOP)),              PMIA_ID, MID_NAV_STOP, PMEND,
             PMBAR(), PMEND,
-            PMITEM("Lesezeichen hinzufuegen"),        PMIA_ID, MID_FAV_ADD, PMEND,
-            PMITEM("Zu Schnellwahl hinzufuegen"),     PMIA_ID, MID_QUICK_ADD_CURRENT, PMEND,
-            PMITEM("Amiga-News.de"),                  PMIA_ID, MID_FAV_AMIGANEWS, PMEND,
-            PMITEM("OS4Depot.net"),                   PMIA_ID, MID_FAV_OS4DEPOT, PMEND,
-            PMITEM("Amigans.net"),                    PMIA_ID, MID_FAV_AMIGANS, PMEND,
-            PMITEM("Aminet.net"),                     PMIA_ID, MID_FAV_AMINET, PMEND,
-            PMITEM("YouTube"),                        PMIA_ID, MID_FAV_YOUTUBE, PMEND,
-            PMITEM("Wikipedia"),                      PMIA_ID, MID_FAV_WIKIPEDIA, PMEND,
+            PMITEM(GetVString(MSG_MENU_ADD_BOOKMARK)),      PMIA_ID, MID_FAV_ADD, PMEND,
+            PMITEM(GetVString(MSG_MENU_ADD_QUICKLINK)),     PMIA_ID, MID_QUICK_ADD_CURRENT, PMEND,
+            PMITEM("Amiga-News.de"),                        PMIA_ID, MID_FAV_AMIGANEWS, PMEND,
+            PMITEM("OS4Depot.net"),                         PMIA_ID, MID_FAV_OS4DEPOT, PMEND,
+            PMITEM("Amigans.net"),                          PMIA_ID, MID_FAV_AMIGANS, PMEND,
+            PMITEM("Aminet.net"),                           PMIA_ID, MID_FAV_AMINET, PMEND,
+            PMITEM("YouTube"),                              PMIA_ID, MID_FAV_YOUTUBE, PMEND,
+            PMITEM("Wikipedia"),                            PMIA_ID, MID_FAV_WIKIPEDIA, PMEND,
             PMBAR(), PMEND,
-            PMITEM(app->prefs.dark_theme ? "Helles Theme (Standard)" : "Dunkles Theme (Dark Mode)"), PMIA_ID, MID_TOGGLE_DARK_THEME, PMEND,
-            PMITEM("Voreinstellungen..."),            PMIA_ID, MID_SETTINGS, PMEND,
-            PMITEM("Einstellungen speichern"),        PMIA_ID, MID_SET_SAVE, PMEND,
-            PMITEM("Ueber VortexBrowser..."),         PMIA_ID, MID_PROJ_ABOUT, PMEND,
-            PMITEM("Beenden"),                        PMIA_ID, MID_PROJ_QUIT, PMEND,
+            PMITEM(app->prefs.dark_theme ? GetVString(MSG_CTX_LIGHT_MODE_FULL) : GetVString(MSG_CTX_DARK_MODE_FULL)), PMIA_ID, MID_TOGGLE_DARK_THEME, PMEND,
+            PMITEM(GetVString(MSG_MENU_PREFERENCES)),       PMIA_ID, MID_SETTINGS, PMEND,
+            PMITEM(GetVString(MSG_POPUP_SAVE_SETTINGS)),    PMIA_ID, MID_SET_SAVE, PMEND,
+            PMITEM(GetVString(MSG_MENU_ABOUT)),             PMIA_ID, MID_PROJ_ABOUT, PMEND,
+            PMITEM(GetVString(MSG_MENU_QUIT)),              PMIA_ID, MID_PROJ_QUIT, PMEND,
         PMEND;
 
         if (menu_obj) {
@@ -1884,9 +1922,9 @@ static void open_main_menu_popup(VortexApp *app, int16_t mx, int16_t my)
         struct EasyStruct es;
         memset(&es, 0, sizeof(es));
         es.es_StructSize   = sizeof(struct EasyStruct);
-        es.es_Title        = (STRPTR)"VortexBrowser Optionen";
-        es.es_TextFormat   = (STRPTR)"Aktion waehlen:";
-        es.es_GadgetFormat = (STRPTR)"Server konfigurieren|Verbinden|Trennen|Startseite|Lesez.+|Ueber|Abbrechen";
+        es.es_Title        = (STRPTR)GetVString(MSG_POPUP_OPT_TITLE);
+        es.es_TextFormat   = (STRPTR)GetVString(MSG_POPUP_OPT_PROMPT);
+        es.es_GadgetFormat = (STRPTR)GetVString(MSG_POPUP_OPT_BUTTONS);
         LONG c = IIntuition->EasyRequest(app->win, &es, NULL);
         if (c == 1) selected_id = MID_SET_SERVER_CUSTOM;
         else if (c == 2) selected_id = MID_PROJ_CONNECT;
@@ -1922,7 +1960,7 @@ static void open_quicklink_popup(VortexApp *app, int qidx, int16_t mx, int16_t m
 
     uint32 selected_id = QL_POPUP_NONE;
     char title_buf[96];
-    snprintf(title_buf, sizeof(title_buf), "Schnellwahl: %.40s", (lbl && lbl[0]) ? lbl : url);
+    snprintf(title_buf, sizeof(title_buf), GetVString(MSG_QL_POPUP_TITLE_FMT), (lbl && lbl[0]) ? lbl : url);
 
     if (IPopupMenu) {
         struct Hook pm_hook;
@@ -1932,13 +1970,13 @@ static void open_quicklink_popup(VortexApp *app, int qidx, int16_t mx, int16_t m
 
         Object *menu_obj = PMMENU(title_buf),
             PMA_MenuHandler, &pm_hook,
-            PMITEM("In aktuellem Tab oeffnen"),        PMIA_ID, QL_POPUP_OPEN_CURRENT, PMEND,
-            PMITEM("In neuem Tab oeffnen"),            PMIA_ID, QL_POPUP_OPEN_NEW_TAB, PMEND,
+            PMITEM(GetVString(MSG_QL_POPUP_OPEN_CUR)),  PMIA_ID, QL_POPUP_OPEN_CURRENT, PMEND,
+            PMITEM(GetVString(MSG_QL_POPUP_OPEN_NEW)),  PMIA_ID, QL_POPUP_OPEN_NEW_TAB, PMEND,
             PMBAR(), PMEND,
-            PMITEM("URL in Zwischenablage kopieren"),   PMIA_ID, QL_POPUP_COPY_URL,     PMEND,
-            PMITEM("Schnellwahl anpassen (Prefs)..."), PMIA_ID, QL_POPUP_EDIT_PREFS,   PMEND,
+            PMITEM(GetVString(MSG_QL_POPUP_COPY_URL)),  PMIA_ID, QL_POPUP_COPY_URL,     PMEND,
+            PMITEM(GetVString(MSG_QL_POPUP_EDIT)),      PMIA_ID, QL_POPUP_EDIT_PREFS,   PMEND,
             PMBAR(), PMEND,
-            PMITEM("Diesen Button entfernen"),         PMIA_ID, QL_POPUP_REMOVE,       PMEND,
+            PMITEM(GetVString(MSG_QL_POPUP_REMOVE)),    PMIA_ID, QL_POPUP_REMOVE,       PMEND,
         PMEND;
 
         if (menu_obj) {
@@ -1957,8 +1995,8 @@ static void open_quicklink_popup(VortexApp *app, int qidx, int16_t mx, int16_t m
         memset(&es, 0, sizeof(es));
         es.es_StructSize   = sizeof(struct EasyStruct);
         es.es_Title        = (STRPTR)title_buf;
-        es.es_TextFormat   = (STRPTR)"Aktion fuer Schnellwahl-Button waehlen:\n%s";
-        es.es_GadgetFormat = (STRPTR)"Im Tab oeffnen|Neuer Tab|URL kopieren|Entfernen|Abbrechen";
+        es.es_TextFormat   = (STRPTR)GetVString(MSG_QL_POPUP_REQ_TEXT);
+        es.es_GadgetFormat = (STRPTR)GetVString(MSG_QL_POPUP_REQ_BTNS);
         LONG c = IIntuition->EasyRequest(app->win, &es, NULL, (Tag)url);
         if (c == 1) selected_id = QL_POPUP_OPEN_CURRENT;
         else if (c == 2) selected_id = QL_POPUP_OPEN_NEW_TAB;
@@ -1970,16 +2008,16 @@ static void open_quicklink_popup(VortexApp *app, int qidx, int16_t mx, int16_t m
         case QL_POPUP_OPEN_CURRENT:
             gui_update_url_bar(app, url);
             net_send_url(app, url);
-            app_set_status("Schnellstart: %s", (lbl && lbl[0]) ? lbl : url);
+            app_set_status(GetVString(MSG_STATUS_QL_STARTED), (lbl && lbl[0]) ? lbl : url);
             break;
 
         case QL_POPUP_OPEN_NEW_TAB:
-            gui_tab_add(app, (char *)((lbl && lbl[0]) ? lbl : "Neuer Tab"), (char *)url, TRUE);
+            gui_tab_add(app, (lbl && lbl[0]) ? lbl : NULL, (char *)url, TRUE);
             break;
 
         case QL_POPUP_COPY_URL:
             clipboard_write_text(url);
-            app_set_status("URL kopiert: %s", url);
+            app_set_status(GetVString(MSG_STATUS_QL_COPIED), url);
             break;
 
         case QL_POPUP_EDIT_PREFS:
@@ -1991,7 +2029,7 @@ static void open_quicklink_popup(VortexApp *app, int qidx, int16_t mx, int16_t m
             snprintf(rem_name, sizeof(rem_name), "%s", (lbl && lbl[0]) ? lbl : url);
             prefs_quicklink_remove(app, qidx);
             prefs_save(app, TRUE);
-            app_set_status("Schnellwahl entfernt: %s", rem_name);
+            app_set_status(GetVString(MSG_STATUS_QL_REMOVED), rem_name);
             app->reopen_gui_needed = TRUE;
             break;
         }
@@ -2278,7 +2316,7 @@ void gui_tab_add(VortexApp *app, const char *title, const char *url, BOOL switch
 {
     if (!app) return;
     if (app->num_tabs >= VB_MAX_TABS) {
-        app_set_status("Maximal %d Tabs moeglich.", VB_MAX_TABS);
+        app_set_status(GetVString(MSG_STATUS_MAX_TABS), VB_MAX_TABS);
         return;
     }
 
@@ -2314,7 +2352,7 @@ void gui_tab_switch(VortexApp *app, uint16 idx)
     char cmd[32];
     snprintf(cmd, sizeof(cmd), "@SWITCHTAB:%u", (unsigned)idx);
     net_send_url(app, cmd);
-    app_set_status("Tab %d: %s", (int)idx + 1, app->tabs[idx].title);
+    app_set_status(GetVString(MSG_STATUS_TAB_SWITCH), (int)idx + 1, app->tabs[idx].title);
 
     if (app->gad_clicktab && app->win) {
         IIntuition->SetGadgetAttrs((struct Gadget *)app->gad_clicktab, app->win, NULL,
@@ -2818,14 +2856,14 @@ BOOL gui_init(VortexApp *app)
         BUTTON_BevelStyle, BVS_NONE,
         BUTTON_Transparent,TRUE,
         fav_img ? GA_Image : TAG_IGNORE, (Tag)fav_img,
-        GA_HintInfo,       "Webseiten-Favicon (Klick für Passwort-Manager)",
+        GA_HintInfo,       GetVString(MSG_HINT_FAVICON),
         TAG_DONE);
 
     app->gad_url = IIntuition->NewObject(NULL, "string.gadget",
         GA_ID,            GID_URL,
         GA_RelVerify,     TRUE,
         GA_TabCycle,      FALSE,
-        GA_HintInfo,      "Webadresse (URL) eingeben und Enter drücken",
+        GA_HintInfo,      GetVString(MSG_HINT_URL),
         STRINGA_MaxChars, VB_MAX_URL_LEN - 1,
         STRINGA_TextVal,  app->current_url[0] ? app->current_url : "",
         s_dark_pens.allocated ? STRINGA_Pens : TAG_IGNORE,
@@ -2860,14 +2898,14 @@ BOOL gui_init(VortexApp *app)
         CHOOSER_LabelArray, s_search_engine_labels,
         CHOOSER_Selected,   init_se_sel,
         CHOOSER_MaxLabels,  NUM_SEARCH_ENGINES,
-        GA_HintInfo,        "Suchmaschine wählen (Standard: DuckDuckGo)",
+        GA_HintInfo,        GetVString(MSG_HINT_SEARCH_CHOOSER),
         TAG_DONE);
 
     app->gad_search = IIntuition->NewObject(NULL, "string.gadget",
         GA_ID,            GID_SEARCH,
         GA_RelVerify,     TRUE,
         GA_TabCycle,      FALSE,
-        GA_HintInfo,      "Suchbegriff eingeben und Enter drücken",
+        GA_HintInfo,      GetVString(MSG_HINT_SEARCH_INPUT),
         STRINGA_MaxChars, 255,
         s_dark_pens.allocated ? STRINGA_Pens : TAG_IGNORE,
             (uint32)((s_dark_pens.inp_bg_pen << 16) | (s_dark_pens.txt_pen & 0xFFFF)),
@@ -2875,7 +2913,7 @@ BOOL gui_init(VortexApp *app)
             (uint32)((s_dark_pens.inp_bg_pen << 16) | (s_dark_pens.txt_pen & 0xFFFF)),
         TAG_DONE);
 
-    Object *btn_search = create_toolbar_button(GID_SEARCH_GO, c_search, 4, "Suche", "Suche ausführen", pub_scr);
+    Object *btn_search = create_toolbar_button(GID_SEARCH_GO, c_search, 4, GetVString(MSG_BTN_SEARCH), GetVString(MSG_HINT_SEARCH_GO), pub_scr);
 
     app->gad_fav_chooser = IIntuition->NewObject(NULL, "chooser.gadget",
         GA_ID,             GID_FAV_CHOOSER,
@@ -3548,8 +3586,8 @@ void gui_reopen_screen(VortexApp *app)
         }
     }
 
-    app_set_status("Bildschirm aktiviert: %s (%ux%u)",
-                   app->prefs.resolution.use_custom_screen ? "Eigener Screen" : "Workbench",
+    app_set_status(GetVString(MSG_STATUS_SCREEN_ACTIVE),
+                   app->prefs.resolution.use_custom_screen ? GetVString(MSG_STATUS_SCREEN_CUSTOM) : "Workbench",
                    (unsigned)app->prefs.resolution.width,
                    (unsigned)app->prefs.resolution.height);
 }
@@ -3597,24 +3635,24 @@ void prompt_add_quicklink(VortexApp *app)
     label[sizeof(label) - 1] = '\0';
     char *slash = strchr(label, '/');
     if (slash) *slash = '\0';
-    if (label[0] == '\0') strncpy(label, "Link", sizeof(label) - 1);
+    if (label[0] == '\0') strncpy(label, GetVString(MSG_TAB_FALLBACK_LINK), sizeof(label) - 1);
 
     struct EasyStruct es = {
         sizeof(struct EasyStruct),
         0,
-        "Schnellwahl hinzufuegen",
-        "Moechten Sie diese Seite zur Schnellwahl hinzufuegen?\n\nTitel: %s\nURL: %s",
-        "Hinzufuegen|Schnellwahl anpassen...|Abbrechen"
+        (STRPTR)GetVString(MSG_QL_ADD_REQ_TITLE),
+        (STRPTR)GetVString(MSG_QL_ADD_REQ_TEXT),
+        (STRPTR)GetVString(MSG_QL_ADD_REQ_BTNS)
     };
 
     LONG res = IIntuition->EasyRequest(app->win, &es, NULL, label, u);
     if (res == 1) {
         if (prefs_quicklink_add(app, label, u, "bookmark")) {
             prefs_save(app, TRUE);
-            app_set_status("Schnellwahl hinzugefuegt: %s", label);
+            app_set_status(GetVString(MSG_STATUS_QL_ADDED), label);
             app->reopen_gui_needed = TRUE;
         } else {
-            app_set_status("Schnellwahl-Leiste voll (max. %d)!", VB_MAX_QUICKLINKS);
+            app_set_status(GetVString(MSG_STATUS_QL_FULL), VB_MAX_QUICKLINKS);
         }
     } else if (res == 2) {
         gui_prefs_open(app);
@@ -3624,7 +3662,7 @@ void prompt_add_quicklink(VortexApp *app)
 static void remove_current_quicklink(VortexApp *app)
 {
     if (!app || app->prefs.num_quick_links <= 0) {
-        app_set_status("Keine Schnellwahl zum Entfernen vorhanden.");
+        app_set_status(GetVString(MSG_STATUS_QL_NONE));
         return;
     }
 
@@ -3665,9 +3703,9 @@ static void remove_current_quicklink(VortexApp *app)
         /* Wenn es der einzigste war, die Startseite laden */
         gui_update_url_bar(app, "@HOME");
         net_send_url(app, "@HOME");
-        app_set_status("Schnellwahl entfernt: %s (Startseite geladen)", rem_name);
+        app_set_status(GetVString(MSG_STATUS_QL_REMOVED_HOME), rem_name);
     } else {
-        app_set_status("Schnellwahl entfernt: %s", rem_name);
+        app_set_status(GetVString(MSG_STATUS_QL_REMOVED), rem_name);
     }
 
     gui_rebuild_window(app);
@@ -3830,7 +3868,7 @@ void gui_handle_events(VortexApp *app)
 
                     case GID_STOP:
                         net_send_url(app, "@STOP");
-                        app_set_status("Ladevorgang angehalten.");
+                        app_set_status(GetVString(MSG_STATUS_LOADING_STOPPED));
                         break;
 
                     case GID_HOME:
@@ -3904,7 +3942,7 @@ void gui_handle_events(VortexApp *app)
                                 gui_update_url_bar(app, search_url);
                                 net_send_url(app, search_url);
                                 uint8_t se = (app->prefs.search_engine < NUM_SEARCH_ENGINES) ? app->prefs.search_engine : 0;
-                                app_set_status("Suche (%s): %s", g_search_engines[se].name, url_buf);
+                                app_set_status(GetVString(MSG_SEARCH_PROMPT), g_search_engines[se].name, url_buf);
                             }
                         }
                         break;
@@ -3917,7 +3955,7 @@ void gui_handle_events(VortexApp *app)
                             if (sel < NUM_SEARCH_ENGINES) {
                                 app->prefs.search_engine = (uint8_t)sel;
                                 prefs_save(app, TRUE);
-                                app_set_status("Suchmaschine gewaehlt: %s", g_search_engines[sel].name);
+                                app_set_status(GetVString(MSG_STATUS_SEARCH_ENGINE_SEL), g_search_engines[sel].name);
                             }
                         }
                         /* If a query is entered in Omnibar URL bar, execute search */
@@ -3951,7 +3989,7 @@ void gui_handle_events(VortexApp *app)
                             gui_update_url_bar(app, search_url);
                             net_send_url(app, search_url);
                             uint8_t se = (app->prefs.search_engine < NUM_SEARCH_ENGINES) ? app->prefs.search_engine : 0;
-                            app_set_status("Suche (%s): %s", g_search_engines[se].name, s_buf);
+                            app_set_status(GetVString(MSG_SEARCH_PROMPT), g_search_engines[se].name, s_buf);
                         }
                         break;
                     }
@@ -3979,7 +4017,7 @@ void gui_handle_events(VortexApp *app)
                             if (favorites_add(app, u, u)) {
                                 favorites_save(app);
                                 favorites_rebuild_chooser_list(app);
-                                app_set_status("Zu Lesezeichen hinzugefuegt (ENVARC:): %s", u);
+                                app_set_status(GetVString(MSG_STATUS_BOOKMARK_SAVED), u);
                             }
                         }
                         break;
@@ -4019,7 +4057,7 @@ void gui_handle_events(VortexApp *app)
                     }
 
                     case GID_TAB_NEW:
-                        gui_tab_add(app, "Neuer Tab", "", TRUE);
+                        gui_tab_add(app, NULL, "", TRUE);
                         break;
 
                     case GID_TAB_CLOSE:
@@ -4035,7 +4073,7 @@ void gui_handle_events(VortexApp *app)
                                 app->active_quicklink_idx = qidx;
                                 gui_update_url_bar(app, u);
                                 net_send_url(app, u);
-                                app_set_status("Schnellstart: %s", app->prefs.quick_links[qidx].label);
+                                app_set_status(GetVString(MSG_STATUS_QL_STARTED), app->prefs.quick_links[qidx].label);
                             }
                         } else if (gid >= GID_QUICK_DEL_BASE && gid < GID_QUICK_DEL_BASE + app->prefs.num_quick_links) {
                             int qidx = (int)(gid - GID_QUICK_DEL_BASE);
@@ -4044,7 +4082,7 @@ void gui_handle_events(VortexApp *app)
                             DBG_LOG("[GUI] QuickLink %d delete clicked -> removing %s\n", qidx, rem_name);
                             prefs_quicklink_remove(app, qidx);
                             prefs_save(app, TRUE);
-                            app_set_status("Schnellwahl entfernt: %s", rem_name);
+                            app_set_status(GetVString(MSG_STATUS_QL_REMOVED), rem_name);
                             app->reopen_gui_needed = TRUE;
                         }
                         break;
@@ -4144,9 +4182,9 @@ void gui_handle_events(VortexApp *app)
             char hdr_buf[96];
             if (has_link) {
                 const char *lbl = app->ctx_menu.link_text[0] ? app->ctx_menu.link_text : app->ctx_menu.link_url;
-                snprintf(hdr_buf, sizeof(hdr_buf), "Link: %.50s", lbl);
+                snprintf(hdr_buf, sizeof(hdr_buf), GetVString(MSG_CTX_HDR_LINK), lbl);
             } else if (has_media) {
-                snprintf(hdr_buf, sizeof(hdr_buf), "Bild / Medium");
+                snprintf(hdr_buf, sizeof(hdr_buf), "%s", GetVString(MSG_CTX_HDR_MEDIA));
             } else {
                 snprintf(hdr_buf, sizeof(hdr_buf), "VortexBrowser");
             }
@@ -4176,13 +4214,13 @@ void gui_handle_events(VortexApp *app)
                         PMITEM(GetVString(MSG_MENU_RELOAD)), PMIA_ID, CTX_RELOAD, PMEND,
                         PMITEM(GetVString(MSG_MENU_HOME)), PMIA_ID, CTX_HOME, PMEND,
                         PMBAR(), PMEND,
-                        PMITEM(app->prefs.dark_theme ? "Helles Theme" : "Dunkles Theme"), PMIA_ID, CTX_TOGGLE_DARK_THEME, PMEND,
+                        PMITEM(app->prefs.dark_theme ? GetVString(MSG_CTX_LIGHT_ON) : GetVString(MSG_CTX_DARK_ON)), PMIA_ID, CTX_TOGGLE_DARK_THEME, PMEND,
                         PMITEM(GetVString(MSG_CTX_MAIN_MENU)), PMIA_ID, CTX_MAIN_MENU, PMEND,
                     PMEND;
                 } else if (has_media) {
                     menu_obj = PMMENU(hdr_buf),
                         PMA_MenuHandler, &pm_hook,
-                        PMITEM("Bild / Medium anzeigen"), PMIA_ID, CTX_OPEN_MEDIA, PMEND,
+                        PMITEM(GetVString(MSG_CTX_OPEN_MEDIA)), PMIA_ID, CTX_OPEN_MEDIA, PMEND,
                         PMITEM(GetVString(MSG_CTX_DOWNLOAD_IMAGE)), PMIA_ID, CTX_DOWNLOAD_MEDIA, PMEND,
                         PMBAR(), PMEND,
                         PMITEM(GetVString(MSG_MENU_TAB_NEW)), PMIA_ID, CTX_NEW_TAB, PMEND,
@@ -4193,7 +4231,7 @@ void gui_handle_events(VortexApp *app)
                         PMITEM(GetVString(MSG_MENU_RELOAD)), PMIA_ID, CTX_RELOAD, PMEND,
                         PMITEM(GetVString(MSG_MENU_HOME)), PMIA_ID, CTX_HOME, PMEND,
                         PMBAR(), PMEND,
-                        PMITEM(app->prefs.dark_theme ? "Helles Theme" : "Dunkles Theme"), PMIA_ID, CTX_TOGGLE_DARK_THEME, PMEND,
+                        PMITEM(app->prefs.dark_theme ? GetVString(MSG_CTX_LIGHT_ON) : GetVString(MSG_CTX_DARK_ON)), PMIA_ID, CTX_TOGGLE_DARK_THEME, PMEND,
                         PMITEM(GetVString(MSG_CTX_MAIN_MENU)), PMIA_ID, CTX_MAIN_MENU, PMEND,
                     PMEND;
                 } else {
@@ -4207,10 +4245,10 @@ void gui_handle_events(VortexApp *app)
                         PMITEM(GetVString(MSG_MENU_TAB_NEW)), PMIA_ID, CTX_NEW_TAB, PMEND,
                         PMITEM(GetVString(MSG_MENU_TAB_CLOSE)), PMIA_ID, CTX_CLOSE_TAB, PMEND,
                         PMBAR(), PMEND,
-                        PMITEM("Aktuelle Seite zu Lesezeichen (+Fav)"), PMIA_ID, CTX_FAV_PAGE, PMEND,
-                        PMITEM("Aktuelle Adresse herunterladen (ASL)..."), PMIA_ID, CTX_DOWNLOAD_PAGE, PMEND,
+                        PMITEM(GetVString(MSG_CTX_FAV_PAGE)), PMIA_ID, CTX_FAV_PAGE, PMEND,
+                        PMITEM(GetVString(MSG_CTX_DL_PAGE)), PMIA_ID, CTX_DOWNLOAD_PAGE, PMEND,
                         PMBAR(), PMEND,
-                        PMITEM(app->prefs.dark_theme ? "Helles Theme (Light Mode)" : "Dunkles Theme (Dark Mode)"), PMIA_ID, CTX_TOGGLE_DARK_THEME, PMEND,
+                        PMITEM(app->prefs.dark_theme ? GetVString(MSG_CTX_LIGHT_MODE_FULL) : GetVString(MSG_CTX_DARK_MODE_FULL)), PMIA_ID, CTX_TOGGLE_DARK_THEME, PMEND,
                         PMITEM(GetVString(MSG_CTX_MAIN_MENU)), PMIA_ID, CTX_MAIN_MENU, PMEND,
                     PMEND;
                 }
@@ -4232,10 +4270,10 @@ void gui_handle_events(VortexApp *app)
                 struct EasyStruct es;
                 memset(&es, 0, sizeof(es));
                 es.es_StructSize   = sizeof(struct EasyStruct);
-                es.es_Title        = (STRPTR)"VortexBrowser Kontextmenü";
+                es.es_Title        = (STRPTR)GetVString(MSG_CTX_REQ_TITLE);
                 if (has_link) {
-                    es.es_TextFormat   = (STRPTR)"Link: %s";
-                    es.es_GadgetFormat = (STRPTR)"Link öffnen|Neuer Tab|Tab schließen|Herunterladen (ASL)|In URL kopieren|Hauptmenü|Zurück|Abbrechen";
+                    es.es_TextFormat   = (STRPTR)GetVString(MSG_CTX_REQ_LINK_TEXT);
+                    es.es_GadgetFormat = (STRPTR)GetVString(MSG_CTX_REQ_LINK_BTNS);
                     LONG choice = IIntuition->EasyRequest(app->win, &es, NULL, app->ctx_menu.link_url);
                     if (choice == 1) selected_id = CTX_OPEN_LINK;
                     else if (choice == 2) selected_id = CTX_OPEN_NEW_WIN;
@@ -4245,8 +4283,8 @@ void gui_handle_events(VortexApp *app)
                     else if (choice == 6) selected_id = CTX_MAIN_MENU;
                     else if (choice == 7) selected_id = CTX_BACK;
                 } else {
-                    es.es_TextFormat   = (STRPTR)"Seiten-Aktion wählen:";
-                    es.es_GadgetFormat = (STRPTR)"Zurück|Vorwärts|Neu laden|Startseite|Neuer Tab|Tab schließen|Hauptmenü|Abbrechen";
+                    es.es_TextFormat   = (STRPTR)GetVString(MSG_CTX_REQ_PAGE_TEXT);
+                    es.es_GadgetFormat = (STRPTR)GetVString(MSG_CTX_REQ_PAGE_BTNS);
                     LONG choice = IIntuition->EasyRequest(app->win, &es, NULL);
                     if (choice == 1) selected_id = CTX_BACK;
                     else if (choice == 2) selected_id = CTX_FORWARD;
@@ -4268,7 +4306,7 @@ void gui_handle_events(VortexApp *app)
                     break;
 
                 case CTX_NEW_TAB:
-                    gui_tab_add(app, "Neuer Tab", "", TRUE);
+                    gui_tab_add(app, NULL, "", TRUE);
                     break;
 
                 case CTX_CLOSE_TAB:
@@ -4283,14 +4321,14 @@ void gui_handle_events(VortexApp *app)
                     break;
 
                 case CTX_OPEN_NEW_WIN:
-                    gui_tab_add(app, app->ctx_menu.link_text[0] ? app->ctx_menu.link_text : "Neuer Tab", app->ctx_menu.link_url, TRUE);
-                    app_set_status("Oeffne neuen Tab: %s", app->ctx_menu.link_url);
+                    gui_tab_add(app, app->ctx_menu.link_text[0] ? app->ctx_menu.link_text : NULL, app->ctx_menu.link_url, TRUE);
+                    app_set_status(GetVString(MSG_STATUS_OPENING_NEW_TAB), app->ctx_menu.link_url);
                     break;
 
                 case CTX_DOWNLOAD_LINK: {
                     char dl_cmd[VB_MAX_URL_LEN + 16];
                     snprintf(dl_cmd, sizeof(dl_cmd), "@DOWNLOAD:%s", app->ctx_menu.link_url);
-                    app_set_status("Starte ASL-Download: %s", app->ctx_menu.link_url);
+                    app_set_status(GetVString(MSG_STATUS_START_ASL_DL), app->ctx_menu.link_url);
                     net_send_url(app, dl_cmd);
                     break;
                 }
@@ -4298,7 +4336,7 @@ void gui_handle_events(VortexApp *app)
                 case CTX_COPY_LINK_URL:
                     gui_update_url_bar(app, app->ctx_menu.link_url);
                     clipboard_write_text(app->ctx_menu.link_url);
-                    app_set_status("Link in Zwischenablage kopiert: %s", app->ctx_menu.link_url);
+                    app_set_status(GetVString(MSG_STATUS_LINK_COPIED), app->ctx_menu.link_url);
                     break;
 
                 case CTX_FAV_LINK: {
@@ -4306,7 +4344,7 @@ void gui_handle_events(VortexApp *app)
                     if (favorites_add(app, t, app->ctx_menu.link_url)) {
                         favorites_save(app);
                         favorites_rebuild_chooser_list(app);
-                        app_set_status("Link zu Lesezeichen hinzugefuegt: %s", t);
+                        app_set_status(GetVString(MSG_STATUS_LINK_BOOKMARKED), t);
                     }
                     break;
                 }
@@ -4319,7 +4357,7 @@ void gui_handle_events(VortexApp *app)
                 case CTX_DOWNLOAD_MEDIA: {
                     char dl_cmd[VB_MAX_URL_LEN + 16];
                     snprintf(dl_cmd, sizeof(dl_cmd), "@DOWNLOAD:%s", app->ctx_menu.media_url);
-                    app_set_status("Starte Medien-Download: %s", app->ctx_menu.media_url);
+                    app_set_status(GetVString(MSG_STATUS_START_MEDIA_DL), app->ctx_menu.media_url);
                     net_send_url(app, dl_cmd);
                     break;
                 }
@@ -4346,7 +4384,7 @@ void gui_handle_events(VortexApp *app)
                     if (favorites_add(app, u, u)) {
                         favorites_save(app);
                         favorites_rebuild_chooser_list(app);
-                        app_set_status("Seite zu Lesezeichen hinzugefuegt: %s", u);
+                        app_set_status(GetVString(MSG_STATUS_PAGE_BOOKMARKED), u);
                     }
                     break;
                 }
@@ -4355,14 +4393,14 @@ void gui_handle_events(VortexApp *app)
                     if (app->current_url[0] != '\0') {
                         char dl_cmd[VB_MAX_URL_LEN + 16];
                         snprintf(dl_cmd, sizeof(dl_cmd), "@DOWNLOAD:%s", app->current_url);
-                        app_set_status("Starte Download: %s", app->current_url);
+                        app_set_status(GetVString(MSG_STATUS_START_DL), app->current_url);
                         net_send_url(app, dl_cmd);
                     }
                     break;
                 }
 
                 default:
-                    app_set_status("Bereit.");
+                    app_set_status(GetVString(MSG_STATUS_READY));
                     break;
             }
         }
@@ -4423,7 +4461,7 @@ void gui_update_url_bar(VortexApp *app, const char *url)
             snprintf(app->win_title, sizeof(app->win_title), "VortexBrowser");
         }
     } else {
-        const char *st = app->status_text[0] ? app->status_text : "Bereit";
+        const char *st = app->status_text[0] ? app->status_text : GetVString(MSG_STATUS_READY_SHORT);
         if (disp[0] != '\0') {
             snprintf(app->win_title, sizeof(app->win_title), "VortexBrowser: %s [%s]", disp, st);
         } else {

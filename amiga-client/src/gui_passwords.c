@@ -15,6 +15,7 @@
 #include "app.h"
 #include "passwords.h"
 #include "gui_passwords.h"
+#include "locale_strings.h"
 #include "clipboard.h"
 #include "net.h"
 
@@ -59,7 +60,7 @@ static void rebuild_pw_chooser(VortexApp *app, int sel_idx)
 
     if (!app->password_store || app->password_store->count == 0) {
         struct Node *n = IChooser->AllocChooserNode(
-            CNA_Text, (Tag)"(Keine gespeicherten Passwoerter)",
+            CNA_Text, (Tag)GetVString(MSG_PW_NO_ENTRIES),
             TAG_DONE);
         if (n) IExec->AddTail(&app->pw_chooser_list, n);
     } else {
@@ -215,7 +216,7 @@ void gui_open_password_manager(VortexApp *app)
     Object *btn_copy_user = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_PW_COPY_USER,
         GA_RelVerify, TRUE,
-        GA_Text,      "Kopieren",
+        GA_Text,      GetVString(MSG_PW_BTN_COPY),
         TAG_DONE);
 
     app->pw_gad_pass = IIntuition->NewObject(NULL, "string.gadget",
@@ -227,41 +228,41 @@ void gui_open_password_manager(VortexApp *app)
     Object *btn_copy_pass = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_PW_COPY_PASS,
         GA_RelVerify, TRUE,
-        GA_Text,      "Kopieren",
+        GA_Text,      GetVString(MSG_PW_BTN_COPY),
         TAG_DONE);
 
     app->pw_gad_show_pass = IIntuition->NewObject(NULL, "checkbox.gadget",
         GA_ID,            GID_PW_SHOW_PASS,
         GA_RelVerify,     TRUE,
-        GA_Text,          "Passwort im Klartext anzeigen",
+        GA_Text,          GetVString(MSG_PW_CHK_REVEAL),
         CHECKBOX_Checked, FALSE,
         TAG_DONE);
 
     Object *btn_autologin = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_PW_AUTOLOGIN,
         GA_RelVerify, TRUE,
-        GA_Text,      "In Seite einloggen (Auto-Login)",
-        GA_HintInfo,  "Zugangsdaten automatisch im aktuellen Web-Formular ausfuellen und absenden",
+        GA_Text,      GetVString(MSG_PW_BTN_AUTOLOGIN),
+        GA_HintInfo,  GetVString(MSG_PW_HINT_AUTOLOGIN),
         TAG_DONE);
 
     Object *btn_add = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_PW_ADD,
         GA_RelVerify, TRUE,
-        GA_Text,      "Speichern / Neu",
-        GA_HintInfo,  "Obige Zugangsdaten verschluesselt speichern",
+        GA_Text,      GetVString(MSG_PW_BTN_SAVE),
+        GA_HintInfo,  GetVString(MSG_PW_HINT_SAVE),
         TAG_DONE);
 
     Object *btn_del = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_PW_DEL,
         GA_RelVerify, TRUE,
-        GA_Text,      "Loeschen",
-        GA_HintInfo,  "Ausgewaehlte Zugangsdaten entfernen",
+        GA_Text,      GetVString(MSG_PW_BTN_DELETE),
+        GA_HintInfo,  GetVString(MSG_PW_HINT_DELETE),
         TAG_DONE);
 
     Object *btn_close = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_PW_CLOSE,
         GA_RelVerify, TRUE,
-        GA_Text,      "Schliessen",
+        GA_Text,      GetVString(MSG_PW_BTN_CLOSE),
         TAG_DONE);
 
     Object *root_layout = IIntuition->NewObject(NULL, "layout.gadget",
@@ -273,7 +274,7 @@ void gui_open_password_manager(VortexApp *app)
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              "Gespeicherte Logins:",
+                                                            GA_Text,              GetVString(MSG_PW_LBL_SAVED),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_LEFT,
                                                             TAG_DONE),
@@ -287,7 +288,7 @@ void gui_open_password_manager(VortexApp *app)
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              "Webseite / Domaene:",
+                                                            GA_Text,              GetVString(MSG_PW_LBL_DOMAIN),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_LEFT,
                                                             TAG_DONE),
@@ -301,7 +302,7 @@ void gui_open_password_manager(VortexApp *app)
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              "Benutzername / E-Mail:",
+                                                            GA_Text,              GetVString(MSG_PW_LBL_USER),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_LEFT,
                                                             TAG_DONE),
@@ -317,7 +318,7 @@ void gui_open_password_manager(VortexApp *app)
         LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
                                   LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
                                   LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
-                                                            GA_Text,              "Passwort:",
+                                                            GA_Text,              GetVString(MSG_PW_LBL_PASS),
                                                             GA_ReadOnly,          TRUE,
                                                             BUTTON_Justification, BCJ_LEFT,
                                                             TAG_DONE),
@@ -353,7 +354,7 @@ void gui_open_password_manager(VortexApp *app)
     if (!root_layout) return;
 
     app->pw_win_obj = IIntuition->NewObject(NULL, "window.class",
-        WA_Title,             "VortexBrowser Passwort-Manager",
+        WA_Title,             GetVString(MSG_PW_WIN_TITLE),
         WA_ScreenTitle,       "VortexBrowser",
         target_scr ? WA_CustomScreen : TAG_IGNORE, (Tag)target_scr,
         WA_CloseGadget,       TRUE,
@@ -453,17 +454,17 @@ void gui_handle_password_manager_events(VortexApp *app)
                         char cmd[384];
                         snprintf(cmd, sizeof(cmd), "@AUTOLOGIN:%s\t%s", pe->username, pe->password);
                         net_send_url(app, cmd);
-                        app_set_status("Auto-Login gesendet: %s (%s)", pe->domain, pe->username);
+                        app_set_status(GetVString(MSG_PW_STATUS_SENT), pe->domain, pe->username);
                     }
                 } else if (gid == GID_PW_COPY_USER) {
                     if (app->password_store && app->pw_cur_sel >= 0 && app->pw_cur_sel < app->password_store->count) {
                         clipboard_write_text(app->password_store->entries[app->pw_cur_sel].username);
-                        app_set_status("Benutzername ins Clipboard kopiert!");
+                        app_set_status(GetVString(MSG_PW_STATUS_USER_COPIED));
                     }
                 } else if (gid == GID_PW_COPY_PASS) {
                     if (app->password_store && app->pw_cur_sel >= 0 && app->pw_cur_sel < app->password_store->count) {
                         clipboard_write_text(app->password_store->entries[app->pw_cur_sel].password);
-                        app_set_status("Passwort ins Clipboard kopiert!");
+                        app_set_status(GetVString(MSG_PW_STATUS_PASS_COPIED));
                     }
                 } else if (gid == GID_PW_ADD) {
                     STRPTR d_txt = NULL, u_txt = NULL, p_txt = NULL;
@@ -476,7 +477,7 @@ void gui_handle_password_manager_events(VortexApp *app)
                         int new_idx = app->password_store ? app->password_store->count - 1 : 0;
                         rebuild_pw_chooser(app, new_idx);
                         update_fields(app, new_idx);
-                        app_set_status("Passwort gespeichert: %s (%s)", d_txt, u_txt);
+                        app_set_status(GetVString(MSG_PW_STATUS_SAVED), d_txt, u_txt);
                     }
                 } else if (gid == GID_PW_DEL) {
                     if (app->password_store && app->pw_cur_sel >= 0 && app->pw_cur_sel < app->password_store->count) {
@@ -484,7 +485,7 @@ void gui_handle_password_manager_events(VortexApp *app)
                         int new_idx = (app->pw_cur_sel > 0) ? app->pw_cur_sel - 1 : 0;
                         rebuild_pw_chooser(app, new_idx);
                         update_fields(app, new_idx);
-                        app_set_status("Zugangsdaten geloescht.");
+                        app_set_status(GetVString(MSG_PW_STATUS_DELETED));
                     }
                 }
                 break;
@@ -504,7 +505,7 @@ void gui_do_autologin_current_domain(VortexApp *app)
     const char *url = app->current_url[0] ? app->current_url :
                       (app->num_tabs > 0 ? app->tabs[app->active_tab_idx].url : "");
     if (!url || url[0] == '\0' || url[0] == '@') {
-        app_set_status("Keine aktive Webseite fuer Auto-Login.");
+        app_set_status(GetVString(MSG_PW_STATUS_NO_PAGE));
         gui_open_password_manager(app);
         return;
     }
@@ -514,9 +515,9 @@ void gui_do_autologin_current_domain(VortexApp *app)
         char cmd[384];
         snprintf(cmd, sizeof(cmd), "@AUTOLOGIN:%s\t%s", pe->username, pe->password);
         net_send_url(app, cmd);
-        app_set_status("Auto-Login fuer '%s' ausgefuehrt (%s)...", pe->domain, pe->username);
+        app_set_status(GetVString(MSG_PW_STATUS_AUTOLOGIN), pe->domain, pe->username);
     } else {
-        app_set_status("Kein Login fuer Domaene gefunden. Passwort-Manager geoeffnet.");
+        app_set_status(GetVString(MSG_PW_STATUS_NOT_FOUND));
         gui_open_password_manager(app);
     }
 }

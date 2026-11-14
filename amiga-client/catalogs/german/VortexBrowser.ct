@@ -1,0 +1,1306 @@
+## version $VER: VortexBrowser.catalog 2.0 (14.11.2026)
+## language german
+## codeset 4
+;
+MSG_WIN_TITLE
+VortexBrowser
+;
+MSG_DL_WIN_TITLE
+Downloads - VortexBrowser
+;
+MSG_PW_WIN_TITLE
+Passwort-Manager - VortexBrowser
+;
+MSG_PREFS_WIN_TITLE
+Einstellungen - VortexBrowser
+;
+MSG_MENU_PROJECT
+Projekt
+;
+MSG_MENU_OPEN_URL
+URL öffnen...
+;
+MSG_MENU_OPEN_FILE
+Lokale Datei öffnen...
+;
+MSG_MENU_SAVE_SOURCE
+HTML-Quelltext speichern...
+;
+MSG_MENU_PRINT
+Seite drucken...
+;
+MSG_MENU_ABOUT
+Über VortexBrowser...
+;
+MSG_MENU_QUIT
+Beenden
+;
+MSG_MENU_NAVIGATION
+Navigation
+;
+MSG_MENU_BACK
+Zurück
+;
+MSG_MENU_FORWARD
+Vorwärts
+;
+MSG_MENU_RELOAD
+Neu laden
+;
+MSG_MENU_STOP
+Laden stoppen
+;
+MSG_MENU_HOME
+Startseite
+;
+MSG_MENU_TAB_NEW
+Neuen Tab öffnen
+;
+MSG_MENU_TAB_CLOSE
+Aktuellen Tab schließen
+;
+MSG_MENU_BOOKMARKS
+Lesezeichen
+;
+MSG_MENU_BOOKMARKS_BAR
+Lesezeichen-Leiste
+;
+MSG_MENU_ADD_BOOKMARK
+Lesezeichen hinzufügen
+;
+MSG_MENU_ADD_QUICKLINK
+Zu Schnellwahl hinzufügen
+;
+MSG_MENU_VIEW
+Ansicht
+;
+MSG_MENU_ZOOM_IN
+Schrift vergrößern (+)
+;
+MSG_MENU_ZOOM_OUT
+Schrift verkleinern (-)
+;
+MSG_MENU_ZOOM_RESET
+Standard-Schriftgröße (100%)
+;
+MSG_MENU_FULLSCREEN
+Vollbild umschalten
+;
+MSG_MENU_DARK_MODE
+Dunkler Modus
+;
+MSG_MENU_SETTINGS
+Einstellungen
+;
+MSG_MENU_PREFERENCES
+Voreinstellungen...
+;
+MSG_MENU_PASSWORDS
+Passwort-Manager...
+;
+MSG_MENU_DOWNLOADS
+Download-Manager...
+;
+MSG_MENU_EDIT
+Bearbeiten
+;
+MSG_MENU_CUT
+Ausschneiden
+;
+MSG_MENU_COPY
+Kopieren
+;
+MSG_MENU_PASTE
+Einfügen
+;
+MSG_BTN_BACK
+Zurück
+;
+MSG_BTN_FORWARD
+Vorwärts
+;
+MSG_BTN_RELOAD
+Neu laden
+;
+MSG_BTN_STOP
+Stopp
+;
+MSG_BTN_HOME
+Startseite
+;
+MSG_BTN_GO
+Los
+;
+MSG_BTN_DOWNLOADS
+Downloads
+;
+MSG_BTN_CONNECT
+Verbinden
+;
+MSG_BTN_DISCONNECT
+Trennen
+;
+MSG_BTN_CLEAR
+Leeren
+;
+MSG_CHOOSER_BOOKMARKS
+Lesezeichen
+;
+MSG_HINT_BACK
+Zurück (Amiga+Links)
+;
+MSG_HINT_FORWARD
+Vorwärts (Amiga+Rechts)
+;
+MSG_HINT_RELOAD
+Seite neu laden (Amiga+R)
+;
+MSG_HINT_STOP
+Laden anhalten (Esc)
+;
+MSG_HINT_HOME
+Startseite öffnen (Amiga+H)
+;
+MSG_HINT_CLEAR_URL
+Adressleiste leeren
+;
+MSG_HINT_GO
+Adresse aufrufen oder Suche starten
+;
+MSG_HINT_DOWNLOADS
+Download-Manager öffnen (Amiga+J)
+;
+MSG_HINT_CONNECT
+Mit Server verbinden
+;
+MSG_HINT_ADD_QL
+Aktuelle Seite zu Schnellwahl hinzufügen
+;
+MSG_HINT_REM_QL
+Aus Schnellwahl entfernen
+;
+MSG_HINT_NEW_TAB
+Neuen Tab öffnen (Amiga+T)
+;
+MSG_HINT_CLOSE_TAB
+Aktuellen Tab schließen (Amiga+W)
+;
+MSG_DL_COL_FILE
+Datei
+;
+MSG_DL_COL_STATUS
+Status
+;
+MSG_DL_COL_SIZE
+Größe
+;
+MSG_DL_COL_PERCENT
+%
+;
+MSG_DL_COL_SPEED
+Geschwindigkeit
+;
+MSG_DL_COL_ETA
+Restzeit
+;
+MSG_DL_COL_TARGET
+Zielpfad
+;
+MSG_DL_STATUS_NONE
+Keine aktiven Downloads
+;
+MSG_DL_STATUS_ACTIVE
+%d aktiver Download%s (%s) | %d abgeschlossen
+;
+MSG_DL_STATUS_ALL_DONE
+Alle Downloads abgeschlossen (%d Dateien)
+;
+MSG_DL_BTN_OPEN_FILE
+Datei öffnen
+;
+MSG_DL_HINT_OPEN_FILE
+Heruntergeladene Datei mit Standard-Programm ausführen (oder Doppelklick)
+;
+MSG_DL_BTN_OPEN_DIR
+Ordner öffnen
+;
+MSG_DL_HINT_OPEN_DIR
+Zielordner der Datei auf der Workbench öffnen
+;
+MSG_DL_BTN_CANCEL
+Abbrechen
+;
+MSG_DL_HINT_CANCEL
+Laufenden Download stoppen und abbrechen
+;
+MSG_DL_BTN_REMOVE
+Eintrag löschen
+;
+MSG_DL_HINT_REMOVE
+Ausgewählten Eintrag aus der Liste entfernen
+;
+MSG_DL_BTN_CLEANUP
+Aufräumen
+;
+MSG_DL_HINT_CLEANUP
+Alle abgeschlossenen und abgebrochenen Downloads aus der Liste entfernen
+;
+MSG_DL_BTN_CLOSE
+Schließen
+;
+MSG_DL_HINT_CLOSE
+Download-Manager schließen (Downloads laufen im Hintergrund weiter)
+;
+MSG_STATUS_READY
+Bereit.
+;
+MSG_STATUS_CONNECTING
+Verbinde mit Server %s:%u...
+;
+MSG_STATUS_CONNECTED
+Verbunden mit %s:%u
+;
+MSG_STATUS_DISCONNECTED
+Verbindung zum Server getrennt
+;
+MSG_STATUS_LOADING
+Lade: %s
+;
+MSG_SEARCH_PROMPT
+Suche (%s): %s
+;
+MSG_CTX_OPEN_LINK
+Link öffnen
+;
+MSG_CTX_OPEN_NEW_TAB
+Link in neuem Tab öffnen
+;
+MSG_CTX_FAV_LINK
+Link zu Lesezeichen hinzufügen
+;
+MSG_CTX_DOWNLOAD_LINK
+Link-Ziel herunterladen...
+;
+MSG_CTX_COPY_LINK
+Link-Adresse kopieren
+;
+MSG_CTX_COPY_IMAGE_URL
+Bild-Adresse kopieren
+;
+MSG_CTX_DOWNLOAD_IMAGE
+Bild herunterladen...
+;
+MSG_CTX_MAIN_MENU
+Hauptmenü...
+;
+MSG_GEN_YES
+Ja
+;
+MSG_GEN_NO
+Nein
+;
+MSG_GEN_OK
+OK
+;
+MSG_GEN_CANCEL
+Abbrechen
+;
+MSG_PREFS_SAVE
+Speichern
+;
+MSG_PREFS_USE
+Benutzen
+;
+MSG_PREFS_CANCEL
+Abbrechen
+;
+MSG_PREFS_TAB_SERVER
+Server
+;
+MSG_PREFS_TAB_DISPLAY
+Anzeige
+;
+MSG_PREFS_TAB_BROWSER
+Browser
+;
+MSG_PREFS_TAB_QUICKDIAL
+Schnellwahl
+;
+MSG_PREFS_TAB_BOOKMARKS
+Lesezeichen
+;
+MSG_PREFS_TAB_DOWNLOADS
+Downloads
+;
+MSG_PREFS_TAB_SYSTEM
+System
+;
+MSG_PREFS_TAB_ABOUT
+Über
+;
+MSG_PREFS_ADD
+Hinzufügen
+;
+MSG_PREFS_UPDATE
+Aktualisieren
+;
+MSG_PREFS_REMOVE
+Löschen
+;
+MSG_PREFS_MOVE_UP
+Nach oben
+;
+MSG_PREFS_MOVE_DOWN
+Nach unten
+;
+MSG_PREFS_CHOOSE_DIR
+Ordner wählen...
+;
+MSG_MENU_NEW_HOME
+Home / Startseite
+;
+MSG_MENU_SERVER_CFG
+Server konfigurieren...
+;
+MSG_MENU_SERVER_CONNECT
+Mit Server verbinden
+;
+MSG_MENU_SERVER_DISCONNECT
+Trennen
+;
+MSG_MENU_STREAM_RES_NATIVE
+Stream: 1:1 Nativ (Fenstergröße)
+;
+MSG_MENU_STREAM_RES_720P
+Stream: 720p HD (1280x720) [30-50 FPS]
+;
+MSG_MENU_STREAM_RES_540P
+Stream: 540p qHD (960x540) [Turbo]
+;
+MSG_MENU_STREAM_RES_1080P
+Stream: 1080p FHD (1920x1080)
+;
+MSG_MENU_FPS_15
+FPS: 15 FPS (Energiesparend / Langsame CPU)
+;
+MSG_MENU_FPS_25
+FPS: 25 FPS (Standard / PAL Flüssig)
+;
+MSG_MENU_FPS_30
+FPS: 30 FPS (Empfohlen für YouTube / NTSC)
+;
+MSG_MENU_FPS_50
+FPS: 50 FPS (PAL High-Speed)
+;
+MSG_MENU_FPS_60
+FPS: 60 FPS (Maximum / Gaming / PiStorm)
+;
+MSG_MENU_VIDEO_AUTO
+Videostream: Auto (H.264 über va.library)
+;
+MSG_MENU_VIDEO_LZ4
+Videostream: Nur Dirty-Rect (LZ4)
+;
+MSG_MENU_VIDEO_H264
+Videostream: Nur H.264 (Immer)
+;
+MSG_MENU_TOGGLE_DARK
+Dunklen Modus umschalten
+;
+MSG_MENU_TOGGLE_SCREEN
+Vollbild / Screen umschalten (F11)
+;
+MSG_MENU_TOGGLE_STATUSBAR
+Statusleiste umschalten
+;
+MSG_POPUP_MAIN_TITLE
+VortexBrowser-Menü
+;
+MSG_POPUP_SAVE_SETTINGS
+Einstellungen speichern
+;
+MSG_POPUP_OPT_TITLE
+VortexBrowser-Optionen
+;
+MSG_POPUP_OPT_PROMPT
+Aktion wählen:
+;
+MSG_POPUP_OPT_BUTTONS
+Server konfigurieren|Verbinden|Trennen|Startseite|Lesezeichen +|Über|Abbrechen
+;
+MSG_BTN_SEARCH
+Suche
+;
+MSG_HINT_FAVICON
+Website-Favicon (Klick für Passwort-Manager)
+;
+MSG_HINT_URL
+Webadresse (URL) eingeben und Enter drücken
+;
+MSG_HINT_SEARCH_CHOOSER
+Suchmaschine wählen (Standard: DuckDuckGo)
+;
+MSG_HINT_SEARCH_INPUT
+Suchbegriff eingeben und Enter drücken
+;
+MSG_HINT_SEARCH_GO
+Suche ausführen
+;
+MSG_QL_POPUP_TITLE_FMT
+Schnellwahl: %.40s
+;
+MSG_QL_POPUP_OPEN_CUR
+Im aktuellen Tab öffnen
+;
+MSG_QL_POPUP_OPEN_NEW
+In neuem Tab öffnen
+;
+MSG_QL_POPUP_COPY_URL
+URL in Zwischenablage kopieren
+;
+MSG_QL_POPUP_EDIT
+Schnellwahl anpassen (Einstellungen)...
+;
+MSG_QL_POPUP_REMOVE
+Diese Schaltfläche entfernen
+;
+MSG_QL_POPUP_REQ_TEXT
+Aktion für Schnellwahl-Schaltfläche wählen:\n%s
+;
+MSG_QL_POPUP_REQ_BTNS
+Im Tab öffnen|Neuer Tab|URL kopieren|Entfernen|Abbrechen
+;
+MSG_QL_ADD_REQ_TITLE
+Zur Schnellwahl hinzufügen
+;
+MSG_QL_ADD_REQ_TEXT
+Möchten Sie diese Seite zur Schnellwahl hinzufügen?\n\nTitel: %s\nURL: %s
+;
+MSG_QL_ADD_REQ_BTNS
+Hinzufügen|Schnellwahl anpassen...|Abbrechen
+;
+MSG_CTX_HDR_LINK
+Link: %.50s
+;
+MSG_CTX_HDR_MEDIA
+Bild / Medien
+;
+MSG_CTX_OPEN_MEDIA
+Bild / Medien anzeigen
+;
+MSG_CTX_FAV_PAGE
+Aktuelle Seite zu Lesezeichen (+Fav)
+;
+MSG_CTX_DL_PAGE
+Aktuelle Adresse herunterladen (ASL)...
+;
+MSG_CTX_DARK_ON
+Dunkles Design
+;
+MSG_CTX_LIGHT_ON
+Helles Design
+;
+MSG_CTX_DARK_MODE_FULL
+Dunkles Design (Dark Mode)
+;
+MSG_CTX_LIGHT_MODE_FULL
+Helles Design (Light Mode)
+;
+MSG_CTX_REQ_TITLE
+VortexBrowser-Kontextmenü
+;
+MSG_CTX_REQ_LINK_TEXT
+Link: %s
+;
+MSG_CTX_REQ_LINK_BTNS
+Link öffnen|Neuer Tab|Tab schließen|Download (ASL)|URL kopieren|Hauptmenü|Zurück|Abbrechen
+;
+MSG_CTX_REQ_PAGE_TEXT
+Seitenaktion wählen:
+;
+MSG_CTX_REQ_PAGE_BTNS
+Zurück|Vorwärts|Neu laden|Startseite|Neuer Tab|Tab schließen|Hauptmenü|Abbrechen
+;
+MSG_SRV_DLG_TITLE
+Server konfigurieren
+;
+MSG_SRV_DLG_SCRTITLE
+VortexBrowser-Einstellungen
+;
+MSG_SRV_DLG_PROMPT
+VortexBrowser-Serveradresse eingeben (IP:Port):
+;
+MSG_SRV_DLG_HINT
+Server-IP und Port (z.B. 127.0.0.1:7788)
+;
+MSG_SRV_DLG_CONNECT
+Verbinden
+;
+MSG_ABOUT_CONNECTED
+Verbunden
+;
+MSG_ABOUT_DISCONNECTED
+Getrennt
+;
+MSG_ABOUT_YUV_HW
+Planar YUV420p 12bpp (Hardware DMA+CompositeTags)
+;
+MSG_ABOUT_YUV_SW
+Planar YUV420p 12bpp (Software RGB565)
+;
+MSG_ABOUT_SCR_CUSTOM
+Eigener RTG-Screen
+;
+MSG_ABOUT_SCR_WB
+Workbench-Screen
+;
+MSG_ABOUT_ALTIVEC_YES
+AltiVec 128-Bit SIMD (Aktiviert - X1000/G4)
+;
+MSG_ABOUT_ALTIVEC_NO
+Skalar-Basis (Sicher für X5000/A1222+/Sam460/G3)
+;
+MSG_ABOUT_SEC_SERVER
+VortexBrowser für AmigaOS 4\nVersion 0.99 RC3\n\n=== SERVER-INFORMATIONEN ===\nServer-Adresse: %s:%u\nVerbindungsstatus: %s\nServer-Engine: Chromium (Linux Headless-Streaming)\n\n
+;
+MSG_ABOUT_SEC_GRAPHICS
+=== AUFLÖSUNG & GRAFIK ===\nScreen: %ux%u (%u-Bit, %s)\nFenstergröße: %ux%u (Pos: %d,%d)\nBrowser-Viewport: %ux%u px (1:1 Auto-Sync)\nServer-Stream: %ux%u (%s)\nDekodierte Frames: %u\nAktive Sprache: %s\n\n
+;
+MSG_ABOUT_SEC_AUDIO
+=== AUDIO & OPTIMIERUNG ===\nAudio-Engine: AHI 16-Bit Stereo (44100 Hz CD-Qualität PCM Low-Latency)\nCPU-Ziel: PowerPC Universal (Dynamische CPU-Erkennung)\nVektor-SIMD: %s\nKompression: LZ4 Echtzeit-Stream-Dekompression
+;
+MSG_ABOUT_TITLE
+Über VortexBrowser
+;
+MSG_CPU_INCOMPAT_TITLE
+VortexBrowser - Inkompatible CPU
+;
+MSG_CPU_INCOMPAT_BODY
+Diese Version ('VortexBrowser-AltiVec') benötigt eine CPU mit AltiVec/VMX-SIMD-Einheit (z.B. AmigaOne X1000 oder G4).\n\nAuf Systemen wie AmigaOne X5000, A1222+, Sam460 oder G3 starten Sie bitte das normale Programm 'VortexBrowser'!
+;
+MSG_STATUS_READY_STREAM
+Bereit - Stream-System: %s | %u kbps
+;
+MSG_STATUS_CONNECTED_STREAM
+Verbunden mit %s:%u - Stream: %s | %u kbps
+;
+MSG_STATUS_CONN_SYNC
+Verbunden mit %s:%u - Synchronisiere Viewport...
+;
+MSG_STATUS_CONN_FMT
+Verbunden (%ux%u %s %s) | %s
+;
+MSG_STATUS_CONN_H264
+Verbunden (%ux%u H.264 VA-API Hardware) | %s
+;
+MSG_STATUS_CONN_LZ4
+Verbunden (%ux%u LZ4 2D Dirty-Rect) | %s
+;
+MSG_STATUS_NO_BSDSOCKET
+Fehler: bsdsocket.library nicht verfügbar!
+;
+MSG_STATUS_NOT_CONNECTED
+Nicht verbunden. Bitte Server konfigurieren (Amiga+1).
+;
+MSG_STATUS_HOST_RESOLVE_ERR
+Host konnte nicht aufgelöst werden: %s
+;
+MSG_STATUS_SOCKET_ERR
+Socket-Erstellung fehlgeschlagen!
+;
+MSG_STATUS_CONN_FAILED
+Verbindung zu %s:%u fehlgeschlagen!
+;
+MSG_STATUS_PAGE_LOADED
+Seite geladen: %s
+;
+MSG_STATUS_LOADING_PAGE
+Lade Seite: %s ...
+;
+MSG_STATUS_LOADING_STOPPED
+Laden abgebrochen.
+;
+MSG_STATUS_CREDENTIALS_FILLED
+Zugangsdaten für '%s' ausgefüllt.
+;
+MSG_STATUS_CLIPBOARD_COPIED
+Text in Zwischenablage kopiert (%u Zeichen)
+;
+MSG_STATUS_SEARCH_ENGINE_SEL
+Suchmaschine gewählt: %s
+;
+MSG_STATUS_BOOKMARK_ADDED
+Zu Lesezeichen hinzugefügt: %s
+;
+MSG_STATUS_BOOKMARK_SAVED
+Zu Lesezeichen hinzugefügt (ENVARC:): %s
+;
+MSG_STATUS_SETTINGS_SAVED
+Einstellungen dauerhaft gespeichert (ENVARC:).
+;
+MSG_STATUS_STREAM_RES_NATIVE
+Stream-Auflösung: 1:1 Nativ (Fenstergröße)
+;
+MSG_STATUS_STREAM_RES_720P
+Stream-Auflösung: 1280x720 (720p HD - 30-50 FPS)
+;
+MSG_STATUS_STREAM_RES_540P
+Stream-Auflösung: 960x540 (540p qHD - Turbo)
+;
+MSG_STATUS_STREAM_RES_1080P
+Stream-Auflösung: 1920x1080 (1080p Full HD)
+;
+MSG_STATUS_FPS_SET
+Bildrate eingestellt: %u FPS
+;
+MSG_STATUS_THEME_SET
+Farbschema: %s
+;
+MSG_STATUS_THEME_DARK
+Dunkel (Dark Mode)
+;
+MSG_STATUS_THEME_LIGHT
+Hell (Standard)
+;
+MSG_STATUS_STREAM_AUTO
+Streaming: Auto (H.264 bei Video über va.library, sonst LZ4)
+;
+MSG_STATUS_STREAM_LZ4
+Streaming: Nur Dirty-Rect / LZ4 (Klassisch)
+;
+MSG_STATUS_STREAM_H264
+Streaming: Nur H.264 (Dauerhafter Videostream)
+;
+MSG_STATUS_FONT_SIZE
+Browser-Schriftgröße: %u px
+;
+MSG_STATUS_FONT_RESET
+Browser-Schriftgröße zurückgesetzt (16 px / 100%%).
+;
+MSG_STATUS_RES_CUSTOM
+Auflösung: %s
+;
+MSG_STATUS_RES_AUTO
+Auflösung: Automatisch
+;
+MSG_STATUS_MAX_TABS
+Maximal %d Tabs erlaubt.
+;
+MSG_STATUS_TAB_SWITCH
+Tab %d: %s
+;
+MSG_STATUS_SCREEN_ACTIVE
+Screen aktiviert: %s (%ux%u)
+;
+MSG_STATUS_SCREEN_CUSTOM
+Eigener Screen
+;
+MSG_STATUS_QL_STARTED
+Schnellwahl: %s
+;
+MSG_STATUS_QL_COPIED
+URL kopiert: %s
+;
+MSG_STATUS_QL_ADDED
+Schnellwahl hinzugefügt: %s
+;
+MSG_STATUS_QL_FULL
+Schnellwahl-Leiste voll (max. %d)!
+;
+MSG_STATUS_QL_NONE
+Keine Schnellwahl-Schaltfläche zum Entfernen.
+;
+MSG_STATUS_QL_REMOVED_HOME
+Schnellwahl entfernt: %s (Startseite geladen)
+;
+MSG_STATUS_QL_REMOVED
+Schnellwahl entfernt: %s
+;
+MSG_STATUS_CTX_OPENING
+Öffne Kontextmenü (%d, %d)...
+;
+MSG_STATUS_OPENING_NEW_TAB
+Öffne neuen Tab: %s
+;
+MSG_STATUS_START_ASL_DL
+Starte ASL-Download: %s
+;
+MSG_STATUS_LINK_COPIED
+Link in Zwischenablage kopiert: %s
+;
+MSG_STATUS_LINK_BOOKMARKED
+Link zu Lesezeichen hinzugefügt: %s
+;
+MSG_STATUS_START_MEDIA_DL
+Starte Medien-Download: %s
+;
+MSG_STATUS_PAGE_BOOKMARKED
+Seite zu Lesezeichen hinzugefügt: %s
+;
+MSG_STATUS_START_DL
+Starte Download: %s
+;
+MSG_STATUS_READY_SHORT
+Bereit
+;
+MSG_NET_UPLOAD_TITLE
+VortexBrowser: Datei zum Hochladen wählen...
+;
+MSG_NET_UPLOAD_POS
+Auswählen
+;
+MSG_NET_UPLOAD_CANCELLED
+Datei-Upload abgebrochen.
+;
+MSG_NET_UPLOAD_OPEN_ERR
+Fehler beim Öffnen der Datei: %s
+;
+MSG_NET_UPLOADING
+Lade hoch: %s (%u KB)...
+;
+MSG_NET_UPLOADED
+Datei hochgeladen: %s (%u KB)
+;
+MSG_NET_SAVE_PW_TITLE
+Passwort speichern
+;
+MSG_NET_SAVE_PW_BODY
+Möchten Sie das Passwort für\n'%s' (Benutzer: %s)\nim sicheren Passwort-Manager speichern?
+;
+MSG_NET_SAVE_PW_BTNS
+Speichern|Nicht jetzt
+;
+MSG_NET_PW_SAVED
+Passwort für '%s' gespeichert.
+;
+MSG_DL_SAVE_TITLE
+VortexBrowser: Download speichern unter...
+;
+MSG_DL_SAVE_POS
+Speichern
+;
+MSG_DL_STATUS_RUNNING
+Laufend
+;
+MSG_DL_STATUS_DONE
+Fertig
+;
+MSG_DL_STATUS_CANCELLED
+Abgebrochen
+;
+MSG_DL_STATUS_ERROR
+Fehler
+;
+MSG_DL_ETA_CANCELLED
+Abgebr.
+;
+MSG_FAV_DEFAULT_PORTAL
+VortexBrowser Portal (Startseite)
+;
+MSG_FAV_GOOGLE_SEARCH
+Google-Suche
+;
+MSG_WEB_PAGE_FALLBACK
+Webseite
+;
+MSG_PW_NO_ENTRIES
+(Keine Passwörter gespeichert)
+;
+MSG_PW_BTN_COPY
+Kopieren
+;
+MSG_PW_CHK_REVEAL
+Passwort im Klartext anzeigen
+;
+MSG_PW_BTN_AUTOLOGIN
+Auf Seite einloggen (Auto-Login)
+;
+MSG_PW_HINT_AUTOLOGIN
+Füllt die Zugangsdaten automatisch im aktuellen Webformular aus und sendet ab
+;
+MSG_PW_BTN_SAVE
+Speichern / Neu
+;
+MSG_PW_HINT_SAVE
+Speichert die oben stehenden Zugangsdaten verschlüsselt ab
+;
+MSG_PW_BTN_DELETE
+Löschen
+;
+MSG_PW_HINT_DELETE
+Entfernt die ausgewählten Zugangsdaten
+;
+MSG_PW_BTN_CLOSE
+Schließen
+;
+MSG_PW_LBL_SAVED
+Gespeicherte Logins:
+;
+MSG_PW_LBL_DOMAIN
+Webseite / Domain:
+;
+MSG_PW_LBL_USER
+Benutzername / E-Mail:
+;
+MSG_PW_LBL_PASS
+Passwort:
+;
+MSG_PW_STATUS_SENT
+Auto-Login gesendet: %s (%s)
+;
+MSG_PW_STATUS_USER_COPIED
+Benutzername in die Zwischenablage kopiert!
+;
+MSG_PW_STATUS_PASS_COPIED
+Passwort in die Zwischenablage kopiert!
+;
+MSG_PW_STATUS_SAVED
+Passwort gespeichert: %s (%s)
+;
+MSG_PW_STATUS_DELETED
+Zugangsdaten gelöscht.
+;
+MSG_PW_STATUS_NO_PAGE
+Keine aktive Webseite für Auto-Login vorhanden.
+;
+MSG_PW_STATUS_AUTOLOGIN
+Auto-Login für '%s' (%s) ausgeführt...
+;
+MSG_PW_STATUS_NOT_FOUND
+Kein Login für Domain gefunden. Passwort-Manager geöffnet.
+;
+MSG_PREFS_PTAB_SERVER
+Server & Streaming
+;
+MSG_PREFS_PTAB_QUICKDIAL
+Schnellwahl
+;
+MSG_PREFS_PTAB_DISPLAY
+Anzeige & Auflösung
+;
+MSG_PREFS_PTAB_FONT
+Schrift & Zeichensatz
+;
+MSG_PREFS_PTAB_BOOKMARKS
+Lesezeichen
+;
+MSG_PREFS_PTAB_DOWNLOADS
+Downloads
+;
+MSG_PREFS_SRV_PRESET_0
+Zweit-Server (127.0.0.1:9757)
+;
+MSG_PREFS_SRV_PRESET_1
+Standard-Server (127.0.0.1:7788)
+;
+MSG_PREFS_SRV_PRESET_2
+Benutzerdefiniert (Manuelle Adresse)
+;
+MSG_PREFS_SMODE_AUTO
+Auto (Adaptive Video-Optimierung: 25-30 FPS YUV420P)
+;
+MSG_PREFS_SMODE_LZ4
+Nur Dirty-Rect / LZ4 (Klassisch, minimale Bandbreite)
+;
+MSG_PREFS_SMODE_H264
+H.264 (Experimenteller Bitstream)
+;
+MSG_PREFS_SRES_NATIVE
+1:1 Fenstergröße (Standard / Nativ)
+;
+MSG_PREFS_SRES_720P
+720p HD (1280x720) [30-50 FPS / Video-Boost]
+;
+MSG_PREFS_SRES_540P
+540p qHD (960x540) [Turbo]
+;
+MSG_PREFS_SRES_1080P
+1080p Full HD (1920x1080)
+;
+MSG_PREFS_FPS_15
+15 FPS (Energiesparend / Langsame CPU)
+;
+MSG_PREFS_FPS_25
+25 FPS (Standard / PAL Flüssig)
+;
+MSG_PREFS_FPS_30
+30 FPS (Empfohlen für YouTube / NTSC)
+;
+MSG_PREFS_FPS_50
+50 FPS (PAL High-Speed)
+;
+MSG_PREFS_FPS_60
+60 FPS (Maximum / Gaming / PiStorm)
+;
+MSG_PREFS_SRV_GROUP
+Streaming-Server & Verbindungsoptionen
+;
+MSG_PREFS_HINT_SRV_PRESET
+Vordefinierten Server wählen oder manuell anpassen
+;
+MSG_PREFS_HINT_SRV_HOST
+IP-Adresse oder Hostname des Streaming-Servers
+;
+MSG_PREFS_HINT_SRV_PORT
+TCP-Port des Streaming-Servers (z.B. 9757 oder 7788)
+;
+MSG_PREFS_HINT_STREAM_RES
+Server-Auflösung wählen (Skalierung über GPU/Composite)
+;
+MSG_PREFS_HINT_FPS
+Bildwiederholrate (FPS) des Streams festlegen
+;
+MSG_PREFS_HINT_JPEG_Q
+JPEG-Stream-Qualität (Standard: 100% = maximale Schärfe)
+;
+MSG_PREFS_HINT_STREAM_MODE
+Streaming-Modus: 'Auto' schaltet bei Videos auf H.264 via va.library um
+;
+MSG_PREFS_HINT_BITRATE
+Bitrate des H.264-Videostreams (1000 bis 10000 kbps / 10 Mbps, Standard: 4000)
+;
+MSG_PREFS_CHK_VIDBOOST
+Dynamische JPEG-Qualität bei Video (Video-Boost)
+;
+MSG_PREFS_HINT_VIDBOOST
+Senkt Qualität bei Videowiedergabe kurzzeitig auf 60% für 30-50 FPS
+;
+MSG_PREFS_CHK_AUTOSAVE_SRV
+Aktuellen Server beim Beenden automatisch speichern
+;
+MSG_PREFS_HINT_AUTOSAVE_SRV
+Zuletzt verwendeten Server für nächsten Start merken
+;
+MSG_PREFS_LBL_SRV_SELECT
+Server-Auswahl:
+;
+MSG_PREFS_LBL_SRV_HOST
+Server IP / Host:
+;
+MSG_PREFS_LBL_SRV_PORT
+Port:
+;
+MSG_PREFS_LBL_STREAM_RES
+Stream-Auflösung:
+;
+MSG_PREFS_LBL_FPS
+Bildrate (FPS):
+;
+MSG_PREFS_LBL_JPEG_Q
+JPEG-Qualität:
+;
+MSG_PREFS_LBL_VID_STREAM
+Video-Streaming:
+;
+MSG_PREFS_LBL_VID_BITRATE
+Video-Bitrate:
+;
+MSG_PREFS_LBL_VID_OPT
+Video-Optimierung:
+;
+MSG_PREFS_LBL_ON_EXIT
+Beim Beenden:
+;
+MSG_PREFS_SRV_NOTE
+Standard-Qualität ist 100% (verlustfrei). 720p/540p erhöht die FPS deutlich.
+;
+MSG_PREFS_QL_GROUP
+Schnellwahl-Leiste (Variable Buttons mit Icons)
+;
+MSG_PREFS_QL_COL_TITLE
+Titel / Name
+;
+MSG_PREFS_QL_COL_URL
+Adresse (URL)
+;
+MSG_PREFS_QL_COL_ICON
+Icon
+;
+MSG_PREFS_QL_BTN_ADD
+Neu / Hinzufügen
+;
+MSG_PREFS_QL_LBL_TITLE
+Titel / Name:
+;
+MSG_PREFS_QL_LBL_URL
+Adresse (URL):
+;
+MSG_PREFS_QL_LBL_ICON
+AISS Icon-Name:
+;
+MSG_PREFS_QL_TIP1
+Tipp: Schaltflächen in der Leiste erhalten Icons und dehnen sich automatisch.
+;
+MSG_PREFS_QL_TIP2
+Neue Schaltflächen können auch direkt mit dem [+]-Toolbar-Button hinzugefügt werden.
+;
+MSG_PREFS_RES_0
+1024 x 768 (Standard XGA)
+;
+MSG_PREFS_RES_1
+1280 x 720 (HD 720p)
+;
+MSG_PREFS_RES_2
+1920 x 1080 (Full HD)
+;
+MSG_PREFS_RES_3
+800 x 600 (SVGA)
+;
+MSG_PREFS_RES_4
+1280 x 1024 (SXGA)
+;
+MSG_PREFS_RES_5
+Automatisch anpassen (Fenstergröße)
+;
+MSG_PREFS_RES_6
+Benutzerdefiniert (Manuell B x H)
+;
+MSG_PREFS_THEME_0
+Hell (Standard)
+;
+MSG_PREFS_THEME_1
+Dunkel (Dark Mode)
+;
+MSG_PREFS_THEME_2
+Automatisch (System)
+;
+MSG_PREFS_SCR_0
+Workbench (Fenstermodus)
+;
+MSG_PREFS_SCR_1
+Eigener Public Screen (Manuelle Auflösung / Vollbild)
+;
+MSG_PREFS_SCR_2
+Workbench klonen (Eigener Screen wie Workbench)
+;
+MSG_PREFS_DISP_GROUP
+Zentrale Auflösung & Bildschirmmodus
+;
+MSG_PREFS_DISP_INTRO
+Eine Auflösung für Screen, Amiga-Fenster und Web-Browser:
+;
+MSG_PREFS_LBL_SCR_MODE
+Bildschirm-Modus:
+;
+MSG_PREFS_LBL_RTG_MODE
+RTG ScreenMode:
+;
+MSG_PREFS_BTN_SCR_ASL
+Bildschirmmodus wählen (ASL)...
+;
+MSG_PREFS_LBL_RESOLUTION
+Auflösung:
+;
+MSG_PREFS_LBL_CUSTOM_W
+Eigene B:
+;
+MSG_PREFS_LBL_CUSTOM_H
+H:
+;
+MSG_PREFS_LBL_SCROLL
+Mausrad & Scrollen:
+;
+MSG_PREFS_CHK_SOFTSCROLL
+Weiches Scrollen (Softscrolling)
+;
+MSG_PREFS_LBL_STATUSBAR
+Statusleiste:
+;
+MSG_PREFS_CHK_STATUSBAR
+Statusleiste anzeigen (Unten)
+;
+MSG_PREFS_LBL_THEME
+Farbschema (Theme):
+;
+MSG_PREFS_LBL_TAB_MEDIA
+Tab-Medien:
+;
+MSG_PREFS_CHK_PAUSE_MEDIA
+Video/Audio beim Tabwechsel pausieren
+;
+MSG_PREFS_DISP_HINT
+Hinweis: Mit Amiga+M jederzeit zwischen Screen und Workbench wechseln.
+;
+MSG_PREFS_GCHAR_0
+ISO-8859-1 (Westeuropäisch / Amiga Standard)
+;
+MSG_PREFS_GCHAR_1
+UTF-8 (Unicode)
+;
+MSG_PREFS_GCHAR_2
+Windows-1252 (ANSI)
+;
+MSG_PREFS_GCHAR_3
+ISO-8859-15 (Westeuropa mit Euro)
+;
+MSG_PREFS_GSIZE_0
+Standard (Workbench-Systemschrift)
+;
+MSG_PREFS_GSIZE_1
+Klein (8 pt)
+;
+MSG_PREFS_GSIZE_2
+Mittel (10 pt)
+;
+MSG_PREFS_GSIZE_3
+Groß (12 pt)
+;
+MSG_PREFS_GSIZE_4
+Sehr Groß (14 pt)
+;
+MSG_PREFS_WCHAR_0
+UTF-8 (Internationaler Standard)
+;
+MSG_PREFS_WCHAR_1
+ISO-8859-1 (Westeuropäisch)
+;
+MSG_PREFS_WCHAR_2
+Windows-1252 (Westeuropa / Windows)
+;
+MSG_PREFS_WCHAR_3
+Automatisch erkennen
+;
+MSG_PREFS_WSIZE_0
+16 px (Standard)
+;
+MSG_PREFS_WSIZE_1
+18 px (Groß)
+;
+MSG_PREFS_WSIZE_2
+20 px (Sehr Groß)
+;
+MSG_PREFS_WSIZE_3
+22 px (Extra Groß)
+;
+MSG_PREFS_WSIZE_4
+24 px (Riesig)
+;
+MSG_PREFS_WSIZE_5
+14 px (Kompakt)
+;
+MSG_PREFS_WSIZE_6
+12 px (Klein)
+;
+MSG_PREFS_WZOOM_0
+100% (Normal)
+;
+MSG_PREFS_WZOOM_1
+110% (Leicht vergrößert)
+;
+MSG_PREFS_WZOOM_2
+125% (Groß - empfohlen für 1024x768 / HD)
+;
+MSG_PREFS_WZOOM_3
+150% (Sehr Groß)
+;
+MSG_PREFS_WZOOM_4
+175% (Extra Groß)
+;
+MSG_PREFS_WZOOM_5
+200% (Maximum)
+;
+MSG_PREFS_WZOOM_6
+90% (Kompakt)
+;
+MSG_PREFS_WZOOM_7
+75% (Sehr Klein)
+;
+MSG_PREFS_WFAM_0
+Sans-Serif (Standard / Grotesk)
+;
+MSG_PREFS_WFAM_1
+Serif (Antiqua / Buchschrift)
+;
+MSG_PREFS_WFAM_2
+Monospace (Feste Breite)
+;
+MSG_PREFS_SE_DDG
+DuckDuckGo (Standard)
+;
+MSG_PREFS_FONT_GROUP
+Schriftart, Zeichensatz & Suchmaschine
+;
+MSG_PREFS_HDR_WEB
+Headless Web-Browser (Remote-Rendering & Webseiten):
+;
+MSG_PREFS_LBL_WEB_SIZE
+Browser-Schriftgröße:
+;
+MSG_PREFS_LBL_WEB_ZOOM
+Web-Zoom & Skalierung:
+;
+MSG_PREFS_LBL_WEB_FAM
+Web-Schriftfamilie:
+;
+MSG_PREFS_LBL_WEB_CHAR
+Web-Zeichensatz:
+;
+MSG_PREFS_LBL_SEARCH
+Standard-Suchmaschine:
+;
+MSG_PREFS_HDR_GUI
+Anwendung / AmigaOS-Oberfläche (GUI):
+;
+MSG_PREFS_LBL_GUI_CHAR
+GUI-Zeichensatz:
+;
+MSG_PREFS_LBL_GUI_SIZE
+GUI-Schriftgröße:
+;
+MSG_PREFS_FAV_GROUP
+Lesezeichen-Verwaltung
+;
+MSG_PREFS_FAV_LBL_TITLE
+Titel:
+;
+MSG_PREFS_DL_GROUP
+Download-Einstellungen
+;
+MSG_PREFS_DL_HINT_DIR
+Download-Verzeichnis per Dateiauswahl wählen
+;
+MSG_PREFS_DL_ASK_CHK
+Immer nach Zielordner fragen (ASL-Requester)
+;
+MSG_PREFS_DL_OPEN_BTN
+Download-Manager jetzt öffnen...
+;
+MSG_PREFS_DL_OPEN_HINT
+Öffnet das Download-Manager-Fenster
+;
+MSG_PREFS_DL_LBL_DIR
+Standard-Ordner:
+;
+MSG_PREFS_DL_LBL_ASK
+Dateiauswahl:
+;
+MSG_PREFS_DL_LBL_MGR
+Download-Manager:
+;
+MSG_PREFS_DL_NOTE
+Wenn Nachfragen aus ist, werden Dateien direkt im Standard-Ordner gespeichert.
+;
+MSG_PREFS_HINT_SAVE
+Speichert Einstellungen dauerhaft in ENVARC: und ENV: und übernimmt sie
+;
+MSG_PREFS_HINT_USE
+Übernimmt Einstellungen vorübergehend für diese Sitzung
+;
+MSG_PREFS_HINT_CANCEL
+Änderungen verwerfen und Fenster schließen
+;
+MSG_PREFS_ASL_DL_TITLE
+Download-Verzeichnis wählen
+;
+MSG_PREFS_ASL_DL_POS
+Auswählen
+;
+MSG_PREFS_ASL_SCR_TITLE
+Bildschirmmodus wählen
+;
+MSG_PREFS_QL_NEW_LINK
+Neuer Link
+;
+MSG_TAB_FALLBACK_LINK
+Link
+;

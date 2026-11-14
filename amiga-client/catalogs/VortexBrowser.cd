@@ -358,3 +358,951 @@ Move Down
 MSG_PREFS_CHOOSE_DIR (535//)
 Choose Drawer...
 ;
+MSG_MENU_NEW_HOME (600//)
+Home / Startpage
+;
+MSG_MENU_SERVER_CFG (601//)
+Configure Server...
+;
+MSG_MENU_SERVER_CONNECT (602//)
+Connect to Server
+;
+MSG_MENU_SERVER_DISCONNECT (603//)
+Disconnect
+;
+MSG_MENU_STREAM_RES_NATIVE (604//)
+Stream: 1:1 Native (Window Size)
+;
+MSG_MENU_STREAM_RES_720P (605//)
+Stream: 720p HD (1280x720) [30-50 FPS]
+;
+MSG_MENU_STREAM_RES_540P (606//)
+Stream: 540p qHD (960x540) [Turbo]
+;
+MSG_MENU_STREAM_RES_1080P (607//)
+Stream: 1080p FHD (1920x1080)
+;
+MSG_MENU_FPS_15 (608//)
+FPS: 15 FPS (Power Saving / Slow CPU)
+;
+MSG_MENU_FPS_25 (609//)
+FPS: 25 FPS (Standard / PAL Smooth)
+;
+MSG_MENU_FPS_30 (610//)
+FPS: 30 FPS (Recommended for YouTube / NTSC)
+;
+MSG_MENU_FPS_50 (611//)
+FPS: 50 FPS (PAL High-Speed)
+;
+MSG_MENU_FPS_60 (612//)
+FPS: 60 FPS (Maximum / Gaming / PiStorm)
+;
+MSG_MENU_VIDEO_AUTO (613//)
+Video Stream: Auto (H.264 via va.library)
+;
+MSG_MENU_VIDEO_LZ4 (614//)
+Video Stream: Dirty-Rect Only (LZ4)
+;
+MSG_MENU_VIDEO_H264 (615//)
+Video Stream: H.264 Only (Always)
+;
+MSG_MENU_TOGGLE_DARK (616//)
+Toggle Dark Mode
+;
+MSG_MENU_TOGGLE_SCREEN (617//)
+Toggle Fullscreen / Screen (F11)
+;
+MSG_MENU_TOGGLE_STATUSBAR (618//)
+Toggle Status Bar
+;
+MSG_POPUP_MAIN_TITLE (619//)
+VortexBrowser Menu
+;
+MSG_POPUP_SAVE_SETTINGS (620//)
+Save Settings
+;
+MSG_POPUP_OPT_TITLE (621//)
+VortexBrowser Options
+;
+MSG_POPUP_OPT_PROMPT (622//)
+Choose action:
+;
+MSG_POPUP_OPT_BUTTONS (623//)
+Configure Server|Connect|Disconnect|Home|Add Bookmark|About|Cancel
+;
+MSG_BTN_SEARCH (624//)
+Search
+;
+MSG_HINT_FAVICON (625//)
+Website Favicon (Click for Password Manager)
+;
+MSG_HINT_URL (626//)
+Enter web address (URL) and press Enter
+;
+MSG_HINT_SEARCH_CHOOSER (627//)
+Choose search engine (Default: DuckDuckGo)
+;
+MSG_HINT_SEARCH_INPUT (628//)
+Enter search terms and press Enter
+;
+MSG_HINT_SEARCH_GO (629//)
+Execute Search
+;
+MSG_QL_POPUP_TITLE_FMT (630//)
+Quick Dial: %.40s
+;
+MSG_QL_POPUP_OPEN_CUR (631//)
+Open in Current Tab
+;
+MSG_QL_POPUP_OPEN_NEW (632//)
+Open in New Tab
+;
+MSG_QL_POPUP_COPY_URL (633//)
+Copy URL to Clipboard
+;
+MSG_QL_POPUP_EDIT (634//)
+Customize Quick Dial (Prefs)...
+;
+MSG_QL_POPUP_REMOVE (635//)
+Remove This Button
+;
+MSG_QL_POPUP_REQ_TEXT (636//)
+Choose action for Quick Dial button:\n%s
+;
+MSG_QL_POPUP_REQ_BTNS (637//)
+Open in Tab|New Tab|Copy URL|Remove|Cancel
+;
+MSG_QL_ADD_REQ_TITLE (638//)
+Add to Quick Dial
+;
+MSG_QL_ADD_REQ_TEXT (639//)
+Do you want to add this page to Quick Dial?\n\nTitle: %s\nURL: %s
+;
+MSG_QL_ADD_REQ_BTNS (640//)
+Add|Customize Quick Dial...|Cancel
+;
+MSG_CTX_HDR_LINK (641//)
+Link: %.50s
+;
+MSG_CTX_HDR_MEDIA (642//)
+Image / Media
+;
+MSG_CTX_OPEN_MEDIA (643//)
+View Image / Media
+;
+MSG_CTX_FAV_PAGE (644//)
+Add Current Page to Bookmarks (+Fav)
+;
+MSG_CTX_DL_PAGE (645//)
+Download Current Address (ASL)...
+;
+MSG_CTX_DARK_ON (646//)
+Dark Theme
+;
+MSG_CTX_LIGHT_ON (647//)
+Light Theme
+;
+MSG_CTX_DARK_MODE_FULL (648//)
+Dark Theme (Dark Mode)
+;
+MSG_CTX_LIGHT_MODE_FULL (649//)
+Light Theme (Light Mode)
+;
+MSG_CTX_REQ_TITLE (650//)
+VortexBrowser Context Menu
+;
+MSG_CTX_REQ_LINK_TEXT (651//)
+Link: %s
+;
+MSG_CTX_REQ_LINK_BTNS (652//)
+Open Link|New Tab|Close Tab|Download (ASL)|Copy URL|Main Menu|Back|Cancel
+;
+MSG_CTX_REQ_PAGE_TEXT (653//)
+Choose page action:
+;
+MSG_CTX_REQ_PAGE_BTNS (654//)
+Back|Forward|Reload|Home|New Tab|Close Tab|Main Menu|Cancel
+;
+MSG_SRV_DLG_TITLE (655//)
+Configure Server
+;
+MSG_SRV_DLG_SCRTITLE (656//)
+VortexBrowser Settings
+;
+MSG_SRV_DLG_PROMPT (657//)
+Enter VortexBrowser server address (IP:Port):
+;
+MSG_SRV_DLG_HINT (658//)
+Server IP and port (e.g. 127.0.0.1:7788)
+;
+MSG_SRV_DLG_CONNECT (659//)
+Connect
+;
+MSG_ABOUT_CONNECTED (660//)
+Connected
+;
+MSG_ABOUT_DISCONNECTED (661//)
+Disconnected
+;
+MSG_ABOUT_YUV_HW (662//)
+Planar YUV420p 12bpp (Hardware DMA+CompositeTags)
+;
+MSG_ABOUT_YUV_SW (663//)
+Planar YUV420p 12bpp (Software RGB565)
+;
+MSG_ABOUT_SCR_CUSTOM (664//)
+Custom RTG Screen
+;
+MSG_ABOUT_SCR_WB (665//)
+Workbench Screen
+;
+MSG_ABOUT_ALTIVEC_YES (666//)
+AltiVec 128-Bit SIMD (Enabled - X1000/G4)
+;
+MSG_ABOUT_ALTIVEC_NO (667//)
+Scalar Baseline (Safe for X5000/A1222+/Sam460/G3)
+;
+MSG_ABOUT_SEC_SERVER (668//)
+VortexBrowser for AmigaOS 4\nVersion 0.99 RC3\n\n=== SERVER INFORMATION ===\nServer Address: %s:%u\nConnection Status: %s\nServer Engine: Chromium (Linux Headless Streaming)\n\n
+;
+MSG_ABOUT_SEC_GRAPHICS (669//)
+=== RESOLUTION & GRAPHICS ===\nScreen: %ux%u (%u-bit, %s)\nWindow Size: %ux%u (Pos: %d,%d)\nBrowser Viewport: %ux%u px (1:1 Auto-Sync)\nServer Stream: %ux%u (%s)\nDecoded Frames: %u\nActive Language: %s\n\n
+;
+MSG_ABOUT_SEC_AUDIO (670//)
+=== AUDIO & OPTIMIZATION ===\nAudio Engine: AHI 16-Bit Stereo (44100 Hz CD Quality PCM Low-Latency)\nCPU Target: PowerPC Universal (Dynamic CPU Detection)\nVector SIMD: %s\nCompression: LZ4 Realtime Stream Decompressor
+;
+MSG_ABOUT_TITLE (671//)
+About VortexBrowser
+;
+MSG_CPU_INCOMPAT_TITLE (672//)
+VortexBrowser - Incompatible CPU
+;
+MSG_CPU_INCOMPAT_BODY (673//)
+This build ('VortexBrowser-AltiVec') requires a CPU with an AltiVec/VMX SIMD unit (e.g. AmigaOne X1000 or G4).\n\nOn systems such as AmigaOne X5000, A1222+, Sam460 or G3, please launch the standard 'VortexBrowser' build!
+;
+MSG_STATUS_READY_STREAM (685//)
+Ready - Stream System: %s | %u kbps
+;
+MSG_STATUS_CONNECTED_STREAM (686//)
+Connected to %s:%u - Stream: %s | %u kbps
+;
+MSG_STATUS_CONN_SYNC (687//)
+Connected to %s:%u - Synchronizing viewport...
+;
+MSG_STATUS_CONN_FMT (688//)
+Connected (%ux%u %s %s) | %s
+;
+MSG_STATUS_CONN_H264 (689//)
+Connected (%ux%u H.264 VA-API Hardware) | %s
+;
+MSG_STATUS_CONN_LZ4 (690//)
+Connected (%ux%u LZ4 2D Dirty-Rect) | %s
+;
+MSG_STATUS_NO_BSDSOCKET (691//)
+Error: bsdsocket.library not available!
+;
+MSG_STATUS_NOT_CONNECTED (692//)
+Not connected. Please configure server (Amiga+1).
+;
+MSG_STATUS_HOST_RESOLVE_ERR (693//)
+Could not resolve host: %s
+;
+MSG_STATUS_SOCKET_ERR (694//)
+Socket creation failed!
+;
+MSG_STATUS_CONN_FAILED (695//)
+Connection to %s:%u failed!
+;
+MSG_STATUS_PAGE_LOADED (696//)
+Page loaded: %s
+;
+MSG_STATUS_LOADING_PAGE (697//)
+Loading page: %s ...
+;
+MSG_STATUS_LOADING_STOPPED (698//)
+Loading stopped.
+;
+MSG_STATUS_CREDENTIALS_FILLED (699//)
+Credentials filled for '%s'.
+;
+MSG_STATUS_CLIPBOARD_COPIED (700//)
+Text copied to clipboard (%u chars)
+;
+MSG_STATUS_SEARCH_ENGINE_SEL (701//)
+Search engine selected: %s
+;
+MSG_STATUS_BOOKMARK_ADDED (702//)
+Added to bookmarks: %s
+;
+MSG_STATUS_BOOKMARK_SAVED (703//)
+Added to bookmarks (ENVARC:): %s
+;
+MSG_STATUS_SETTINGS_SAVED (704//)
+Settings permanently saved (ENVARC:).
+;
+MSG_STATUS_STREAM_RES_NATIVE (705//)
+Stream Resolution: 1:1 Native (Window Size)
+;
+MSG_STATUS_STREAM_RES_720P (706//)
+Stream Resolution: 1280x720 (720p HD - 30-50 FPS)
+;
+MSG_STATUS_STREAM_RES_540P (707//)
+Stream Resolution: 960x540 (540p qHD - Turbo)
+;
+MSG_STATUS_STREAM_RES_1080P (708//)
+Stream Resolution: 1920x1080 (1080p Full HD)
+;
+MSG_STATUS_FPS_SET (709//)
+Frame rate set: %u FPS
+;
+MSG_STATUS_THEME_SET (710//)
+Color theme: %s
+;
+MSG_STATUS_THEME_DARK (711//)
+Dark (Dark Mode)
+;
+MSG_STATUS_THEME_LIGHT (712//)
+Light (Default)
+;
+MSG_STATUS_STREAM_AUTO (713//)
+Streaming: Auto (H.264 on video via va.library, else LZ4)
+;
+MSG_STATUS_STREAM_LZ4 (714//)
+Streaming: Dirty-Rect / LZ4 Only (Classic)
+;
+MSG_STATUS_STREAM_H264 (715//)
+Streaming: H.264 Only (Continuous Video Stream)
+;
+MSG_STATUS_FONT_SIZE (716//)
+Browser font size: %u px
+;
+MSG_STATUS_FONT_RESET (717//)
+Browser font size reset to default (16 px / 100%%).
+;
+MSG_STATUS_RES_CUSTOM (718//)
+Resolution: %s
+;
+MSG_STATUS_RES_AUTO (719//)
+Resolution: Automatic
+;
+MSG_STATUS_MAX_TABS (720//)
+Maximum %d tabs allowed.
+;
+MSG_STATUS_TAB_SWITCH (721//)
+Tab %d: %s
+;
+MSG_STATUS_SCREEN_ACTIVE (722//)
+Screen activated: %s (%ux%u)
+;
+MSG_STATUS_SCREEN_CUSTOM (723//)
+Custom Screen
+;
+MSG_STATUS_QL_STARTED (724//)
+Quick Dial: %s
+;
+MSG_STATUS_QL_COPIED (725//)
+URL copied: %s
+;
+MSG_STATUS_QL_ADDED (726//)
+Quick Dial added: %s
+;
+MSG_STATUS_QL_FULL (727//)
+Quick Dial bar full (max %d)!
+;
+MSG_STATUS_QL_NONE (728//)
+No Quick Dial button to remove.
+;
+MSG_STATUS_QL_REMOVED_HOME (729//)
+Quick Dial removed: %s (Home loaded)
+;
+MSG_STATUS_QL_REMOVED (730//)
+Quick Dial removed: %s
+;
+MSG_STATUS_CTX_OPENING (731//)
+Opening context menu (%d, %d)...
+;
+MSG_STATUS_OPENING_NEW_TAB (732//)
+Opening new tab: %s
+;
+MSG_STATUS_START_ASL_DL (733//)
+Starting ASL download: %s
+;
+MSG_STATUS_LINK_COPIED (734//)
+Link copied to clipboard: %s
+;
+MSG_STATUS_LINK_BOOKMARKED (735//)
+Link added to bookmarks: %s
+;
+MSG_STATUS_START_MEDIA_DL (736//)
+Starting media download: %s
+;
+MSG_STATUS_PAGE_BOOKMARKED (737//)
+Page added to bookmarks: %s
+;
+MSG_STATUS_START_DL (738//)
+Starting download: %s
+;
+MSG_STATUS_READY_SHORT (739//)
+Ready
+;
+MSG_NET_UPLOAD_TITLE (740//)
+VortexBrowser: Select file to upload...
+;
+MSG_NET_UPLOAD_POS (741//)
+Select
+;
+MSG_NET_UPLOAD_CANCELLED (742//)
+File upload cancelled.
+;
+MSG_NET_UPLOAD_OPEN_ERR (743//)
+Error opening file: %s
+;
+MSG_NET_UPLOADING (744//)
+Uploading: %s (%u KB)...
+;
+MSG_NET_UPLOADED (745//)
+File uploaded: %s (%u KB)
+;
+MSG_NET_SAVE_PW_TITLE (746//)
+Save Password
+;
+MSG_NET_SAVE_PW_BODY (747//)
+Do you want to save the password for\n'%s' (User: %s)\nin the secure Password Manager?
+;
+MSG_NET_SAVE_PW_BTNS (748//)
+Save|Not now
+;
+MSG_NET_PW_SAVED (749//)
+Password saved for '%s'.
+;
+MSG_DL_SAVE_TITLE (750//)
+VortexBrowser: Save download as...
+;
+MSG_DL_SAVE_POS (751//)
+Save
+;
+MSG_DL_STATUS_RUNNING (752//)
+Running
+;
+MSG_DL_STATUS_DONE (753//)
+Done
+;
+MSG_DL_STATUS_CANCELLED (754//)
+Cancelled
+;
+MSG_DL_STATUS_ERROR (755//)
+Error
+;
+MSG_DL_ETA_CANCELLED (756//)
+Canc.
+;
+MSG_FAV_DEFAULT_PORTAL (757//)
+VortexBrowser Portal (Home)
+;
+MSG_FAV_GOOGLE_SEARCH (758//)
+Google Search
+;
+MSG_WEB_PAGE_FALLBACK (759//)
+Website
+;
+MSG_PW_NO_ENTRIES (770//)
+(No saved passwords)
+;
+MSG_PW_BTN_COPY (771//)
+Copy
+;
+MSG_PW_CHK_REVEAL (772//)
+Show password in plain text
+;
+MSG_PW_BTN_AUTOLOGIN (773//)
+Log in on page (Auto-Login)
+;
+MSG_PW_HINT_AUTOLOGIN (774//)
+Automatically fill and submit credentials in the current web form
+;
+MSG_PW_BTN_SAVE (775//)
+Save / New
+;
+MSG_PW_HINT_SAVE (776//)
+Save the above credentials encrypted
+;
+MSG_PW_BTN_DELETE (777//)
+Delete
+;
+MSG_PW_HINT_DELETE (778//)
+Remove selected credentials
+;
+MSG_PW_BTN_CLOSE (779//)
+Close
+;
+MSG_PW_LBL_SAVED (780//)
+Saved Logins:
+;
+MSG_PW_LBL_DOMAIN (781//)
+Website / Domain:
+;
+MSG_PW_LBL_USER (782//)
+Username / E-Mail:
+;
+MSG_PW_LBL_PASS (783//)
+Password:
+;
+MSG_PW_STATUS_SENT (784//)
+Auto-Login sent: %s (%s)
+;
+MSG_PW_STATUS_USER_COPIED (785//)
+Username copied to clipboard!
+;
+MSG_PW_STATUS_PASS_COPIED (786//)
+Password copied to clipboard!
+;
+MSG_PW_STATUS_SAVED (787//)
+Password saved: %s (%s)
+;
+MSG_PW_STATUS_DELETED (788//)
+Credentials deleted.
+;
+MSG_PW_STATUS_NO_PAGE (789//)
+No active website for Auto-Login.
+;
+MSG_PW_STATUS_AUTOLOGIN (790//)
+Auto-Login executed for '%s' (%s)...
+;
+MSG_PW_STATUS_NOT_FOUND (791//)
+No login found for domain. Password Manager opened.
+;
+MSG_PREFS_PTAB_SERVER (800//)
+Server & Streaming
+;
+MSG_PREFS_PTAB_QUICKDIAL (801//)
+Quick Dial
+;
+MSG_PREFS_PTAB_DISPLAY (802//)
+Display & Resolution
+;
+MSG_PREFS_PTAB_FONT (803//)
+Font & Charset
+;
+MSG_PREFS_PTAB_BOOKMARKS (804//)
+Bookmarks
+;
+MSG_PREFS_PTAB_DOWNLOADS (805//)
+Downloads
+;
+MSG_PREFS_SRV_PRESET_0 (806//)
+Secondary Server (127.0.0.1:9757)
+;
+MSG_PREFS_SRV_PRESET_1 (807//)
+Default Server (127.0.0.1:7788)
+;
+MSG_PREFS_SRV_PRESET_2 (808//)
+Custom (Manual Address)
+;
+MSG_PREFS_SMODE_AUTO (809//)
+Auto (Adaptive Video Optimization: 25-30 FPS YUV420P)
+;
+MSG_PREFS_SMODE_LZ4 (810//)
+Dirty-Rect / LZ4 Only (Classic, Minimal Bandwidth)
+;
+MSG_PREFS_SMODE_H264 (811//)
+H.264 (Experimental Bitstream)
+;
+MSG_PREFS_SRES_NATIVE (812//)
+1:1 Window Size (Default / Native)
+;
+MSG_PREFS_SRES_720P (813//)
+720p HD (1280x720) [30-50 FPS / Video-Boost]
+;
+MSG_PREFS_SRES_540P (814//)
+540p qHD (960x540) [Turbo]
+;
+MSG_PREFS_SRES_1080P (815//)
+1080p Full HD (1920x1080)
+;
+MSG_PREFS_FPS_15 (816//)
+15 FPS (Power Saving / Slow CPU)
+;
+MSG_PREFS_FPS_25 (817//)
+25 FPS (Standard / PAL Smooth)
+;
+MSG_PREFS_FPS_30 (818//)
+30 FPS (Recommended for YouTube / NTSC)
+;
+MSG_PREFS_FPS_50 (819//)
+50 FPS (PAL High-Speed)
+;
+MSG_PREFS_FPS_60 (820//)
+60 FPS (Maximum / Gaming / PiStorm)
+;
+MSG_PREFS_SRV_GROUP (821//)
+Streaming Server & Connection Options
+;
+MSG_PREFS_HINT_SRV_PRESET (822//)
+Choose preconfigured server or customize manually
+;
+MSG_PREFS_HINT_SRV_HOST (823//)
+IP address or hostname of the streaming server
+;
+MSG_PREFS_HINT_SRV_PORT (824//)
+TCP port of the streaming server (e.g. 9757 or 7788)
+;
+MSG_PREFS_HINT_STREAM_RES (825//)
+Choose server resolution (scaled via GPU/Composite)
+;
+MSG_PREFS_HINT_FPS (826//)
+Set streaming frame rate (FPS)
+;
+MSG_PREFS_HINT_JPEG_Q (827//)
+JPEG stream quality (Default: 100% = maximum sharpness)
+;
+MSG_PREFS_HINT_STREAM_MODE (828//)
+Streaming mode: 'Auto' switches to H.264 via va.library on video
+;
+MSG_PREFS_HINT_BITRATE (829//)
+H.264 video stream bitrate (1000 to 10000 kbps / 10 Mbps, Default: 4000)
+;
+MSG_PREFS_CHK_VIDBOOST (830//)
+Dynamic JPEG quality on video (Video-Boost)
+;
+MSG_PREFS_HINT_VIDBOOST (831//)
+Temporarily adjust quality to 60% during video playback for 30-50 FPS
+;
+MSG_PREFS_CHK_AUTOSAVE_SRV (832//)
+Automatically save current server on exit
+;
+MSG_PREFS_HINT_AUTOSAVE_SRV (833//)
+Remember last used server for next startup
+;
+MSG_PREFS_LBL_SRV_SELECT (834//)
+Server Selection:
+;
+MSG_PREFS_LBL_SRV_HOST (835//)
+Server IP / Host:
+;
+MSG_PREFS_LBL_SRV_PORT (836//)
+Port:
+;
+MSG_PREFS_LBL_STREAM_RES (837//)
+Stream Resolution:
+;
+MSG_PREFS_LBL_FPS (838//)
+Frame Rate (FPS):
+;
+MSG_PREFS_LBL_JPEG_Q (839//)
+JPEG Quality:
+;
+MSG_PREFS_LBL_VID_STREAM (840//)
+Video Streaming:
+;
+MSG_PREFS_LBL_VID_BITRATE (841//)
+Video Bitrate:
+;
+MSG_PREFS_LBL_VID_OPT (842//)
+Video Optimization:
+;
+MSG_PREFS_LBL_ON_EXIT (843//)
+On Exit:
+;
+MSG_PREFS_SRV_NOTE (844//)
+Default quality is 100% (lossless). 720p/540p increases FPS significantly.
+;
+MSG_PREFS_QL_GROUP (845//)
+Quick Dial Bar (Variable Buttons with Icons)
+;
+MSG_PREFS_QL_COL_TITLE (846//)
+Title / Name
+;
+MSG_PREFS_QL_COL_URL (847//)
+Address (URL)
+;
+MSG_PREFS_QL_COL_ICON (848//)
+Icon
+;
+MSG_PREFS_QL_BTN_ADD (849//)
+New / Add
+;
+MSG_PREFS_QL_LBL_TITLE (850//)
+Title / Name:
+;
+MSG_PREFS_QL_LBL_URL (851//)
+Address (URL):
+;
+MSG_PREFS_QL_LBL_ICON (852//)
+AISS Icon Name:
+;
+MSG_PREFS_QL_TIP1 (853//)
+Tip: Buttons in the bar have icons and expand automatically.
+;
+MSG_PREFS_QL_TIP2 (854//)
+New buttons can also be added directly with the [+] toolbar button.
+;
+MSG_PREFS_RES_0 (860//)
+1024 x 768 (Standard XGA)
+;
+MSG_PREFS_RES_1 (861//)
+1280 x 720 (HD 720p)
+;
+MSG_PREFS_RES_2 (862//)
+1920 x 1080 (Full HD)
+;
+MSG_PREFS_RES_3 (863//)
+800 x 600 (SVGA)
+;
+MSG_PREFS_RES_4 (864//)
+1280 x 1024 (SXGA)
+;
+MSG_PREFS_RES_5 (865//)
+Fit Automatically (Window Size)
+;
+MSG_PREFS_RES_6 (866//)
+Custom (Manual W x H)
+;
+MSG_PREFS_THEME_0 (867//)
+Light (Default)
+;
+MSG_PREFS_THEME_1 (868//)
+Dark (Dark Mode)
+;
+MSG_PREFS_THEME_2 (869//)
+Automatic (System)
+;
+MSG_PREFS_SCR_0 (870//)
+Workbench (Window Mode)
+;
+MSG_PREFS_SCR_1 (871//)
+Custom Public Screen (Manual Resolution / Fullscreen)
+;
+MSG_PREFS_SCR_2 (872//)
+Clone Workbench (Custom Screen like Workbench)
+;
+MSG_PREFS_DISP_GROUP (873//)
+Central Resolution & Screen Mode
+;
+MSG_PREFS_DISP_INTRO (874//)
+One resolution for Screen, Amiga Window and Web Browser:
+;
+MSG_PREFS_LBL_SCR_MODE (875//)
+Screen Mode:
+;
+MSG_PREFS_LBL_RTG_MODE (876//)
+RTG ScreenMode:
+;
+MSG_PREFS_BTN_SCR_ASL (877//)
+Choose Screen Mode (ASL)...
+;
+MSG_PREFS_LBL_RESOLUTION (878//)
+Resolution:
+;
+MSG_PREFS_LBL_CUSTOM_W (879//)
+Custom W:
+;
+MSG_PREFS_LBL_CUSTOM_H (880//)
+H:
+;
+MSG_PREFS_LBL_SCROLL (881//)
+Mouse Wheel & Scrolling:
+;
+MSG_PREFS_CHK_SOFTSCROLL (882//)
+Smooth Scrolling (Softscrolling)
+;
+MSG_PREFS_LBL_STATUSBAR (883//)
+Status Bar:
+;
+MSG_PREFS_CHK_STATUSBAR (884//)
+Show Status Bar (Bottom)
+;
+MSG_PREFS_LBL_THEME (885//)
+Color Scheme (Theme):
+;
+MSG_PREFS_LBL_TAB_MEDIA (886//)
+Tab Media:
+;
+MSG_PREFS_CHK_PAUSE_MEDIA (887//)
+Pause video/audio when switching tabs
+;
+MSG_PREFS_DISP_HINT (888//)
+Note: Toggle between Screen and Workbench anytime with Amiga+M.
+;
+MSG_PREFS_GCHAR_0 (890//)
+ISO-8859-1 (Western European / Amiga Standard)
+;
+MSG_PREFS_GCHAR_1 (891//)
+UTF-8 (Unicode)
+;
+MSG_PREFS_GCHAR_2 (892//)
+Windows-1252 (ANSI)
+;
+MSG_PREFS_GCHAR_3 (893//)
+ISO-8859-15 (Western Europe with Euro)
+;
+MSG_PREFS_GSIZE_0 (894//)
+Default (Workbench System Font)
+;
+MSG_PREFS_GSIZE_1 (895//)
+Small (8 pt)
+;
+MSG_PREFS_GSIZE_2 (896//)
+Medium (10 pt)
+;
+MSG_PREFS_GSIZE_3 (897//)
+Large (12 pt)
+;
+MSG_PREFS_GSIZE_4 (898//)
+Very Large (14 pt)
+;
+MSG_PREFS_WCHAR_0 (899//)
+UTF-8 (International Standard)
+;
+MSG_PREFS_WCHAR_1 (900//)
+ISO-8859-1 (Western European)
+;
+MSG_PREFS_WCHAR_2 (901//)
+Windows-1252 (Western Europe / Windows)
+;
+MSG_PREFS_WCHAR_3 (902//)
+Auto-Detect
+;
+MSG_PREFS_WSIZE_0 (903//)
+16 px (Default)
+;
+MSG_PREFS_WSIZE_1 (904//)
+18 px (Large)
+;
+MSG_PREFS_WSIZE_2 (905//)
+20 px (Very Large)
+;
+MSG_PREFS_WSIZE_3 (906//)
+22 px (Extra Large)
+;
+MSG_PREFS_WSIZE_4 (907//)
+24 px (Huge)
+;
+MSG_PREFS_WSIZE_5 (908//)
+14 px (Compact)
+;
+MSG_PREFS_WSIZE_6 (909//)
+12 px (Small)
+;
+MSG_PREFS_WZOOM_0 (910//)
+100% (Normal)
+;
+MSG_PREFS_WZOOM_1 (911//)
+110% (Slightly Enlarged)
+;
+MSG_PREFS_WZOOM_2 (912//)
+125% (Large - recommended for 1024x768 / HD)
+;
+MSG_PREFS_WZOOM_3 (913//)
+150% (Very Large)
+;
+MSG_PREFS_WZOOM_4 (914//)
+175% (Extra Large)
+;
+MSG_PREFS_WZOOM_5 (915//)
+200% (Maximum)
+;
+MSG_PREFS_WZOOM_6 (916//)
+90% (Compact)
+;
+MSG_PREFS_WZOOM_7 (917//)
+75% (Very Small)
+;
+MSG_PREFS_WFAM_0 (918//)
+Sans-Serif (Default / Grotesk)
+;
+MSG_PREFS_WFAM_1 (919//)
+Serif (Antiqua / Book Font)
+;
+MSG_PREFS_WFAM_2 (920//)
+Monospace (Fixed Width)
+;
+MSG_PREFS_SE_DDG (921//)
+DuckDuckGo (Default)
+;
+MSG_PREFS_FONT_GROUP (922//)
+Font, Character Set & Search Engine
+;
+MSG_PREFS_HDR_WEB (923//)
+Headless Web Browser (Remote Rendering & Websites):
+;
+MSG_PREFS_LBL_WEB_SIZE (924//)
+Browser Font Size:
+;
+MSG_PREFS_LBL_WEB_ZOOM (925//)
+Web Zoom & Scaling:
+;
+MSG_PREFS_LBL_WEB_FAM (926//)
+Web Font Family:
+;
+MSG_PREFS_LBL_WEB_CHAR (927//)
+Web Charset:
+;
+MSG_PREFS_LBL_SEARCH (928//)
+Default Search Engine:
+;
+MSG_PREFS_HDR_GUI (929//)
+Application / AmigaOS Interface (GUI):
+;
+MSG_PREFS_LBL_GUI_CHAR (930//)
+GUI Charset:
+;
+MSG_PREFS_LBL_GUI_SIZE (931//)
+GUI Font Size:
+;
+MSG_PREFS_FAV_GROUP (932//)
+Bookmark Management
+;
+MSG_PREFS_FAV_LBL_TITLE (933//)
+Title:
+;
+MSG_PREFS_DL_GROUP (934//)
+Download Settings
+;
+MSG_PREFS_DL_HINT_DIR (935//)
+Choose download directory via file requester
+;
+MSG_PREFS_DL_ASK_CHK (936//)
+Always ask for destination drawer (ASL Requester)
+;
+MSG_PREFS_DL_OPEN_BTN (937//)
+Open Download Manager now...
+;
+MSG_PREFS_DL_OPEN_HINT (938//)
+Opens the Download Manager window
+;
+MSG_PREFS_DL_LBL_DIR (939//)
+Default Drawer:
+;
+MSG_PREFS_DL_LBL_ASK (940//)
+File Requester:
+;
+MSG_PREFS_DL_LBL_MGR (941//)
+Download Manager:
+;
+MSG_PREFS_DL_NOTE (942//)
+When prompting is disabled, files are saved directly to the default drawer.
+;
+MSG_PREFS_HINT_SAVE (943//)
+Save settings permanently to ENVARC: and ENV: and apply
+;
+MSG_PREFS_HINT_USE (944//)
+Apply settings temporarily for this session
+;
+MSG_PREFS_HINT_CANCEL (945//)
+Discard changes and close window
+;
+MSG_PREFS_ASL_DL_TITLE (946//)
+Select Download Directory
+;
+MSG_PREFS_ASL_DL_POS (947//)
+Select
+;
+MSG_PREFS_ASL_SCR_TITLE (948//)
+Select Screen Mode
+;
+MSG_PREFS_QL_NEW_LINK (949//)
+New Link
+;
+MSG_TAB_FALLBACK_LINK (950//)
+Link
+;

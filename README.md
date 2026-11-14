@@ -28,7 +28,7 @@ VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwrigh
 
 2. **Native AmigaOS 4 ReAction Benutzeroberfläche:**
    - **Klassisches AmigaOS 4 Look-and-Feel (`VortexBrowser` & `VortexBrowser-AltiVec`):** Nahtlose Integration mit Tabs (`clicktab.gadget`), Font-Zoom, Screen-Cloning und GPU-Composite-Skalierung.
-   - **Mehrsprachige Benutzeroberfläche (Locale):** Native AmigaOS-Kataloge für Deutsch, Englisch, Französisch und Italienisch (`catalogs/`).
+   - **Mehrsprachige Benutzeroberfläche (Locale):** Vollständige Lokalisierung über `locale.library` mit nativen AmigaOS-Katalogen für Deutsch (`german`/`deutsch`), Englisch (`english`), Französisch (`french`/`francais`), Italienisch (`italian`/`italiano`) und Spanisch (`spanish`/`espanol`) in `catalogs/` (optional per `ENV:VortexBrowser/language` überschreibbar).
    - **Dynamische Breitenanpassung der Schnellwahl-Buttons:** Die Schnellwahl-Leiste nutzt automatisch die gesamte verfügbare Fensterbreite.
    - **Favoriten:** In den Einstellungen (`Amiga+E`) können Lesezeichen und Schnellwahl-Seiten gepflegt werden.
 
@@ -140,7 +140,7 @@ VortexBrowser renders modern websites via headless Chromium (Playwright / Rustwr
 
 2. **Native AmigaOS 4 ReAction GUI:**
    - **Classic AmigaOS 4 Look-and-Feel (`VortexBrowser` & `VortexBrowser-AltiVec`):** ReAction tabs (`clicktab.gadget`), font zooming, screen cloning, and GPU composite scaling.
-   - **Multilingual Support (Locale):** Native AmigaOS catalogs for English, German, French, and Italian in `catalogs/`.
+   - **Multilingual Support (Locale):** Complete localization via `locale.library` with native AmigaOS catalogs for English (`english`), German (`german`/`deutsch`), French (`french`/`francais`), Italian (`italian`/`italiano`), and Spanish (`spanish`/`espanol`) in `catalogs/` (optionally overridable via `ENV:VortexBrowser/language`).
    - **Dynamic Quick Link Layout:** Toolbar buttons scale to use available window width.
    - **Bookmarks & Quick Links:** Managed in preferences (`Amiga+E`).
 
