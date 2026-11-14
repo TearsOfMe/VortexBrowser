@@ -190,9 +190,14 @@ fi
 
 # 1. Check if local LibreWolf/Firefox has active cookies to upload
 echo "[*] Checking local browser profiles for fresh Twitch cookies..."
-python3 -c "
+TMP_COOKIES="$(mktemp)"
+chmod 600 "$TMP_COOKIES"
+trap 'rm -f "$TMP_COOKIES"' EXIT
+
+TMP_COOKIES="$TMP_COOKIES" python3 -c "
 import glob, os, sqlite3, json
 
+out_path = os.environ['TMP_COOKIES']
 globs = [
     os.path.expanduser('~/.config/librewolf/librewolf/*/cookies.sqlite'),
     os.path.expanduser('~/.librewolf/*/cookies.sqlite'),
@@ -216,7 +221,7 @@ for c in candidates:
         if rows and any(r[0] == 'auth-token' for r in rows):
             same_site_map = {0: 'None', 1: 'Lax', 2: 'Strict'}
             cookies = [{'name': r[0], 'value': r[1], 'domain': r[2], 'path': r[3] or '/', 'expires': float(r[4]) if r[4] else None, 'secure': bool(r[5]), 'httpOnly': bool(r[6]), 'sameSite': same_site_map.get(r[7], 'None')} for r in rows]
-            with open('/tmp/fresh_twitch_cookies.json', 'w', encoding='utf-8') as f:
+            with open(out_path, 'w', encoding='utf-8') as f:
                 json.dump(cookies, f, indent=2)
             print(f'[+] Frische Cookies aus lokalem Profil gefunden: {c} ({len(cookies)} Cookies)')
             found = True
@@ -225,6 +230,10 @@ for c in candidates:
         pass
 
 if not found:
+    try:
+        os.unlink(out_path)
+    except Exception:
+        pass
     print('[-] Keine aktiven Cookies im lokalen Browser gefunden (nutze Server-Cache oder --token).')
 "
 
@@ -266,12 +275,27 @@ fi
 echo "[+] Remote server directory : ${REMOTE_DIR}"
 echo "[+] Remote Python binary    : ${REMOTE_PY}"
 
-# Upload fresh cookies if extracted
-if [ -f "/tmp/fresh_twitch_cookies.json" ]; then
-    echo "[*] Uploading fresh Twitch cookies to ${SERVER_IP}..."
-    scp /tmp/fresh_twitch_cookies.json "root@${SERVER_IP}:/tmp/twitch_cookies.json" >/dev/null 2>&1 || true
-    scp /tmp/fresh_twitch_cookies.json "root@${SERVER_IP}:${REMOTE_DIR}/twitch_cookies.json" >/dev/null 2>&1 || true
-    rm -f /tmp/fresh_twitch_cookies.json
+# Upload fresh cookies strictly into the user config dir (~/.config/vortexbrowse, 0600)
+REMOTE_COOKIES_ARG=""
+if [ -s "$TMP_COOKIES" ]; then
+    echo "[*] Uploading fresh Twitch cookies to secure user config on ${SERVER_IP}..."
+    REMOTE_CFG=$(ssh "root@${SERVER_IP}" "
+        SVC_USER=\$(stat -c '%U' '${REMOTE_DIR}/server.py' 2>/dev/null || echo 'root')
+        SVC_HOME=\$(getent passwd \"\$SVC_USER\" | cut -d: -f6)
+        [ -n \"\$SVC_HOME\" ] || SVC_HOME='/root'
+        CFG=\"\${SVC_HOME}/.config/vortexbrowse\"
+        mkdir -p \"\$CFG\"
+        chown \"\$SVC_USER:\$SVC_USER\" \"\${SVC_HOME}/.config\" \"\$CFG\" 2>/dev/null || true
+        chmod 700 \"\$CFG\"
+        rm -f /tmp/twitch_cookies.json '${REMOTE_DIR}/twitch_cookies.json' 2>/dev/null || true
+        echo \"\${CFG}|\${SVC_USER}\"
+    ")
+    REMOTE_CFG_DIR="${REMOTE_CFG%%|*}"
+    REMOTE_SVC_USER="${REMOTE_CFG##*|}"
+    scp "$TMP_COOKIES" "root@${SERVER_IP}:${REMOTE_CFG_DIR}/twitch_cookies.json" >/dev/null 2>&1 || true
+    ssh "root@${SERVER_IP}" "chmod 600 '${REMOTE_CFG_DIR}/twitch_cookies.json' && chown '${REMOTE_SVC_USER}:${REMOTE_SVC_USER}' '${REMOTE_CFG_DIR}/twitch_cookies.json'" 2>/dev/null || true
+    rm -f "$TMP_COOKIES"
+    REMOTE_COOKIES_ARG="--cookies '${REMOTE_CFG_DIR}/twitch_cookies.json'"
 fi
 
 # 3. Synchronize sync_twitch_login.py to server
@@ -281,6 +305,9 @@ scp "$LOCAL_PY_SCRIPT" "root@${SERVER_IP}:${REMOTE_DIR}/sync_twitch_login.py" >/
 # 4. Execute login synchronization on server
 echo "[*] Executing login synchronization on server..."
 REMOTE_CMD="${REMOTE_PY} '${REMOTE_DIR}/sync_twitch_login.py'"
+if [ -n "$REMOTE_COOKIES_ARG" ]; then
+    REMOTE_CMD="${REMOTE_CMD} ${REMOTE_COOKIES_ARG}"
+fi
 if [ -n "$TOKEN" ]; then
     REMOTE_CMD="${REMOTE_CMD} --token '${TOKEN}'"
 fi

@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import fnmatch
 import os
-import sys
+import re
 import shutil
 import subprocess
+import sys
 import zipfile
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -902,6 +904,8 @@ After=network.target sound.target pipewire.service pulseaudio.service
 Type=simple
 WorkingDirectory=%h/VortexBrowser/Server
 ExecStart=%h/VortexBrowser/Server/run_server.sh
+KillMode=mixed
+TimeoutStopSec=15
 Restart=always
 RestartSec=3
 Environment=PYTHONUNBUFFERED=1
@@ -917,6 +921,103 @@ shutil.copy2("server/server.py", os.path.join(SERVER_LINUX_DRAWER, "server.py"))
 shutil.copy2("server/fast_pixconv.c", os.path.join(SERVER_LINUX_DRAWER, "fast_pixconv.c"))
 if os.path.exists("server/fast_pixconv.so"):
     shutil.copy2("server/fast_pixconv.so", os.path.join(SERVER_LINUX_DRAWER, "fast_pixconv.so"))
+SENSITIVE_PATH_PATTERNS = (
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".git",
+    ".pytest_cache",
+    "chromium_profile",
+    "firefox_profile",
+    "*chromium_profile*",
+    "*firefox_profile*",
+    "local storage",
+    "session storage",
+    "indexeddb",
+    "cookies",
+    "cookies-journal",
+    "login data",
+    "web data",
+    "*twitch_token*",
+    "*twitch_cookie*",
+    "*storage_state*",
+    "*_cookies.json",
+    "cookies.json",
+    "*ftp_auth*",
+    "*ssh_auth*",
+    "deploy_remote*",
+    ".env",
+    ".env.*",
+    "*.env",
+    "*.sqlite",
+    "*.sqlite3",
+    "*.sqlite-wal",
+    "*.sqlite-shm",
+    "*.ldb",
+    "*.pem",
+    "*.key",
+    "*.p12",
+    "*.pfx",
+    "*.kdbx",
+    ".netrc",
+    "id_rsa*",
+    "id_ed25519*",
+    "*.pid",
+    "server.pid",
+    "browser_bin.txt",
+    "*.pyc",
+    "*.pyo",
+    ".ds_store",
+)
+
+SECRET_CONTENT_PATTERNS = (
+    ("Private Key Material", re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----")),
+    ("GitHub Token", re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b")),
+    ("AWS Access Key", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
+    ("Google API Key", re.compile(r"\bAIza[0-9A-Za-z\-_]{30,}\b")),
+    ("Hardcoded SSH/FTP Password", re.compile(r"""\b(?:pw|ssh_password|ftp_password)\s*=\s*['"][^'"$\{\}\s]{4,}['"]""")),
+)
+
+
+def is_sensitive_relpath(rel_path: str) -> bool:
+    norm = rel_path.replace("\\", "/").strip("/")
+    for seg in norm.split("/"):
+        low = seg.lower()
+        if not low:
+            continue
+        for pat in SENSITIVE_PATH_PATTERNS:
+            if fnmatch.fnmatch(low, pat):
+                return True
+    return False
+
+
+def assert_tree_clean(root_dir: str, label: str) -> None:
+    violations = []
+    for root, dirs, files in os.walk(root_dir):
+        for name in dirs + files:
+            full_path = os.path.join(root, name)
+            rel_path = os.path.relpath(full_path, root_dir)
+            if is_sensitive_relpath(rel_path):
+                violations.append(f"sensitive path in {label}: {rel_path}")
+        for name in files:
+            if not name.lower().endswith((".sh", ".py", ".yml", ".yaml", ".txt", ".md", ".service", ".guide", ".json", ".c", ".h")):
+                continue
+            full_path = os.path.join(root, name)
+            rel_path = os.path.relpath(full_path, root_dir)
+            try:
+                with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
+                    content = f.read()
+                for desc, rx in SECRET_CONTENT_PATTERNS:
+                    if rx.search(content):
+                        violations.append(f"{desc} detected in {label}/{rel_path}")
+            except Exception:
+                pass
+    if violations:
+        for v in violations:
+            print(f"[SECURITY ERROR] {v}", file=sys.stderr)
+        sys.exit(1)
+
+
 shutil.copy2("server/darkreader.js", os.path.join(SERVER_LINUX_DRAWER, "darkreader.js"))
 shutil.copy2("server/requirements.txt", os.path.join(SERVER_LINUX_DRAWER, "requirements.txt"))
 shutil.copy2("server/sync_twitch_login.py", os.path.join(SERVER_LINUX_DRAWER, "sync_twitch_login.py"))
@@ -924,15 +1025,21 @@ if os.path.exists("server/sync_twitch_login.sh"):
     shutil.copy2("server/sync_twitch_login.sh", os.path.join(SERVER_LINUX_DRAWER, "sync_twitch_login.sh"))
     os.chmod(os.path.join(SERVER_LINUX_DRAWER, "sync_twitch_login.sh"), 0o755)
 if os.path.exists("server/extensions"):
-    shutil.copytree("server/extensions", os.path.join(SERVER_LINUX_DRAWER, "extensions"), dirs_exist_ok=True)
+    shutil.copytree(
+        "server/extensions",
+        os.path.join(SERVER_LINUX_DRAWER, "extensions"),
+        dirs_exist_ok=True,
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo", "*.log", ".DS_Store", "*.sqlite*", "*.ldb"),
+    )
 shutil.copy2("server/install_server.sh", os.path.join(SERVER_LINUX_DRAWER, "install_server.sh"))
 os.chmod(os.path.join(SERVER_LINUX_DRAWER, "install_server.sh"), 0o755)
 shutil.copy2("server/run_server.sh", os.path.join(SERVER_LINUX_DRAWER, "run_server.sh"))
 os.chmod(os.path.join(SERVER_LINUX_DRAWER, "run_server.sh"), 0o755)
-if os.path.exists("server/vortexbrowser.service"):
-    shutil.copy2("server/vortexbrowser.service", os.path.join(SERVER_LINUX_DRAWER, "vortexbrowser.service"))
 if os.path.exists("server/README.md"):
     shutil.copy2("server/README.md", os.path.join(SERVER_LINUX_DRAWER, "README.txt"))
+
+assert_tree_clean(AMIGA_DRAWER, "Amiga drawer")
+assert_tree_clean(SERVER_LINUX_DRAWER, "Server-Linux drawer")
 
 # -------------------------------------------------------------
 # Overall German and English Readmes for Complete Archive
@@ -996,9 +1103,13 @@ print(f"=== [5/6] Creating Universal Linux Server & Complete Archives ===")
 LINUX_ZIP = os.path.join(DIST_DIR, f"{APP_NAME}-{VER_STR}-Server-Linux.zip")
 with zipfile.ZipFile(LINUX_ZIP, "w", zipfile.ZIP_DEFLATED) as zf:
     for root, dirs, files in os.walk(SERVER_LINUX_DRAWER):
+        dirs[:] = [d for d in dirs if not is_sensitive_relpath(os.path.relpath(os.path.join(root, d), SERVER_LINUX_DRAWER))]
         for file in files:
             full_path = os.path.join(root, file)
-            rel_path = os.path.join("Server-Linux", os.path.relpath(full_path, SERVER_LINUX_DRAWER))
+            rel_sub = os.path.relpath(full_path, SERVER_LINUX_DRAWER)
+            if is_sensitive_relpath(rel_sub):
+                continue
+            rel_path = os.path.join("Server-Linux", rel_sub)
             zf.write(full_path, rel_path)
 print(f"[+] Created Universal Linux Server Zip: {LINUX_ZIP} ({os.path.getsize(LINUX_ZIP)} bytes)")
 
@@ -1008,14 +1119,39 @@ print(f"[+] Created Universal Linux Server Zip: {LINUX_ZIP} ({os.path.getsize(LI
 COMPLETE_ZIP = os.path.join(DIST_DIR, f"{APP_NAME}-{VER_STR}-Complete.zip")
 with zipfile.ZipFile(COMPLETE_ZIP, "w", zipfile.ZIP_DEFLATED) as zf:
     for root, dirs, files in os.walk(STAGING_DIR):
+        dirs[:] = [d for d in dirs if not is_sensitive_relpath(os.path.relpath(os.path.join(root, d), STAGING_DIR))]
         for file in files:
             full_path = os.path.join(root, file)
             rel_path = os.path.relpath(full_path, STAGING_DIR)
+            if is_sensitive_relpath(rel_path):
+                continue
             zf.write(full_path, rel_path)
 print(f"[+] Created Complete Zip: {COMPLETE_ZIP} ({os.path.getsize(COMPLETE_ZIP)} bytes)")
 
-print(f"=== [6/6] Verifying Archives ===")
+print(f"=== [6/6] Verifying Archives & Security Audit ===")
 res = subprocess.run(["lha", "v", LHA_ARCHIVE], capture_output=True, text=True)
 print(res.stdout)
 
+audit_errors = []
+for zpath in (LINUX_ZIP, COMPLETE_ZIP):
+    with zipfile.ZipFile(zpath, "r") as zf:
+        for entry in zf.namelist():
+            if is_sensitive_relpath(entry):
+                audit_errors.append(f"Sensitive entry inside {os.path.basename(zpath)}: {entry}")
+
+lha_q = subprocess.run(["lha", "lq", LHA_ARCHIVE], capture_output=True, text=True)
+for raw_line in lha_q.stdout.splitlines():
+    entry_name = raw_line.strip().split()[-1] if raw_line.strip() else ""
+    if entry_name and not entry_name.startswith("-") and is_sensitive_relpath(entry_name):
+        audit_errors.append(f"Sensitive entry inside {os.path.basename(LHA_ARCHIVE)}: {entry_name}")
+
+if audit_errors:
+    for err in audit_errors:
+        print(f"[SECURITY AUDIT FAILED] {err}", file=sys.stderr)
+    for bad in (LHA_ARCHIVE, LINUX_ZIP, COMPLETE_ZIP):
+        if os.path.exists(bad):
+            os.unlink(bad)
+    sys.exit(1)
+
+print("[+] Security audit passed: zero credentials, tokens, cookies, or browser profiles in archives.")
 print("\nRelease packaging successfully completed for AmigaOS 4 and Universal Linux Server!")

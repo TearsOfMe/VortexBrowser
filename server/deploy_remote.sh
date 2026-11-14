@@ -1,19 +1,32 @@
 #!/usr/bin/env bash
 set -e
 
-export HOST="192.168.178.2"
-export TARGET_DIR="/home/tears/Server-Linux"
+export HOST="${VORTEX_DEPLOY_HOST:-192.168.178.2}"
+export TARGET_USER="${VORTEX_DEPLOY_USER:-root}"
+export TARGET_DIR="${VORTEX_DEPLOY_DIR:-/home/tears/Server-Linux}"
 export SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "[1/3] Copying files to remote host ${HOST}..."
 python3 -c "
-import pty, os, select
+import getpass, os, pty, select, subprocess, sys
 
 host = os.environ['HOST']
+user = os.environ['TARGET_USER']
 target_dir = os.environ['TARGET_DIR']
 src_dir = os.environ['SRC_DIR']
+pw = os.environ.get('VORTEX_DEPLOY_PASSWORD', '')
 
 def run_ssh(cmd, password):
+    if not password:
+        res = subprocess.run([cmd[0], '-o', 'BatchMode=yes'] + cmd[1:], check=False)
+        if res.returncode == 0:
+            return ''
+        if sys.stdin.isatty():
+            password = getpass.getpass(f'SSH password for {user}@{host}: ')
+        else:
+            raise SystemExit(
+                'SSH key authentication failed and VORTEX_DEPLOY_PASSWORD is not set.'
+            )
     pid, fd = pty.fork()
     if pid == 0:
         os.execvp(cmd[0], cmd)
@@ -32,13 +45,14 @@ def run_ssh(cmd, password):
             elif b'are you sure you want to continue' in output.lower():
                 os.write(fd, b'yes\n')
                 output = b''
-        os.waitpid(pid, 0)
+        _, status = os.waitpid(pid, 0)
+        if os.WIFEXITED(status) and os.WEXITSTATUS(status) != 0:
+            raise SystemExit(f'Command failed with exit code {os.WEXITSTATUS(status)}: {cmd}')
         return output.decode('utf-8', errors='ignore')
 
-pw = '***REMOVED***'
 for f in ['fast_pixconv.c', 'server.py', 'run_server.sh', 'install_server.sh', 'README.md']:
     print(f'Uploading {f}...')
-    run_ssh(['scp', '-o', 'StrictHostKeyChecking=no', f'{src_dir}/{f}', f'root@{host}:/tmp/{f}'], pw)
+    run_ssh(['scp', '-o', 'StrictHostKeyChecking=no', f'{src_dir}/{f}', f'{user}@{host}:/tmp/{f}'], pw)
 
 print('Executing remote update commands...')
 cmds = f'''
@@ -56,5 +70,5 @@ chown tears:tears fast_pixconv.so
 systemctl restart vortexbrowser.service
 systemctl status vortexbrowser.service --no-pager
 '''
-print(run_ssh(['ssh', '-o', 'StrictHostKeyChecking=no', f'root@{host}', cmds], pw))
+print(run_ssh(['ssh', '-o', 'StrictHostKeyChecking=no', f'{user}@{host}', cmds], pw))
 "

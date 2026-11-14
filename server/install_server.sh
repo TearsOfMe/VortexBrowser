@@ -344,6 +344,8 @@ Environment=PYTHONUNBUFFERED=1
 Environment=OMP_NUM_THREADS=4
 Environment=XDG_RUNTIME_DIR=/run/user/\$(id -u "$CURRENT_USER" 2>/dev/null || echo 1000)
 ExecStart=$SCRIPT_DIR/run_server.sh
+KillMode=mixed
+TimeoutStopSec=15
 Restart=always
 RestartSec=2
 Nice=-5

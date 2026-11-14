@@ -31,14 +31,36 @@ dist/
 amiga-client/VortexBrowse.clib4
 *.lha
 
-# Secrets & local credentials
-*twitch_token*.txt
-*twitch_cookie*.txt
-*twitch_cookies*.json
-*storage_state*.json
+# Secrets, browser profiles & local credentials
+*twitch_token*
+*twitch_cookie*
+*storage_state*
+cookies.json
+*_cookies.json
+*chromium_profile*
+*firefox_profile*
+*profile_backup*
 *.sqlite
+*.sqlite-*
+*.ldb
 /tmp/
 *ftp_auth*
 *.ftp_auth*
+*ssh_auth*
+*.ssh_auth*
+*deploy_remote*.env
+.env
+.env.*
+*.env
+*.pem
+*.key
+*.p12
+*.pfx
+*.kdbx
+.netrc
+id_rsa*
+id_ed25519*
+server.pid
+*.pid
 *browser_bin.txt
 

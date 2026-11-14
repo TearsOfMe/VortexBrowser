@@ -25,6 +25,7 @@ import os
 import platform
 import re
 import select
+import signal
 import socket
 import subprocess
 import struct
@@ -32,7 +33,7 @@ import sys
 import tempfile
 import time
 import urllib.request
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.parse import parse_qs, quote_plus, unquote, urlencode, urlparse
 
 import json
@@ -46,23 +47,27 @@ except ImportError:
     websockets = None  # type: ignore
     _HAS_WEBSOCKETS = False
 
+from playwright.async_api import (
+    async_playwright as _playwright_async,
+    Browser,
+    BrowserContext,
+    Page,
+    Download,
+    CDPSession,
+    Frame,
+)
+
 try:
     from rustwright.async_api import (
         async_playwright as _rustwright_async,
-        Browser,
-        BrowserContext,
-        Page,
-        Download,
-        CDPSession,
-        Frame,
+        BrowserContext as _RustwrightBrowserContext,
     )
     _HAS_RUSTWRIGHT = True
+    _PERSISTENT_CONTEXT_TYPES = (BrowserContext, _RustwrightBrowserContext)
 except ImportError:
     _rustwright_async = None
     _HAS_RUSTWRIGHT = False
-    from playwright.async_api import Browser, BrowserContext, Page, Download, CDPSession, Frame
-
-from playwright.async_api import async_playwright as _playwright_async
+    _PERSISTENT_CONTEXT_TYPES = (BrowserContext,)
 
 # ============================================================================
 # Protocol Constants (matching common/protocol.h with #pragma pack(push, 2))
@@ -1741,6 +1746,311 @@ class H264LiveStreamEncoder:
 
 
 # ============================================================================
+# Persistent Profile, Session Storage & Security Helpers
+# ============================================================================
+def get_vortex_config_dir() -> str:
+    """Returns the user config/profile directory (~/.config/vortexbrowse or $VORTEX_PROFILE_DIR)."""
+    env_dir = os.environ.get("VORTEX_PROFILE_DIR", "").strip()
+    cfg_dir = os.path.expanduser(env_dir) if env_dir else os.path.expanduser("~/.config/vortexbrowse")
+    os.makedirs(cfg_dir, mode=0o700, exist_ok=True)
+    return cfg_dir
+
+
+def get_vortex_profile_dir(engine: str) -> str:
+    subdir = "firefox_profile" if engine == "firefox" else "chromium_profile"
+    return os.path.join(get_vortex_config_dir(), subdir)
+
+
+def get_vortex_storage_state_path(engine: str) -> str:
+    return os.path.join(get_vortex_config_dir(), f"{engine}_storage_state.json")
+
+
+def check_profile_needs_recovery(profile_dir: str, state_file: str, engine: str, is_fallback: bool) -> bool:
+    """Checks whether backup storage_state recovery is needed (crash, missing DB, or temp fallback)."""
+    if not os.path.isfile(state_file):
+        return False
+    if is_fallback:
+        return True
+    try:
+        state_mtime = os.path.getmtime(state_file)
+        if engine == "firefox":
+            cookies_db = os.path.join(profile_dir, "cookies.sqlite")
+            if not os.path.isfile(cookies_db) or os.path.getsize(cookies_db) < 4096:
+                return True
+            return state_mtime > (os.path.getmtime(cookies_db) + 2.0)
+
+        cookies_db = os.path.join(profile_dir, "Default", "Cookies")
+        if not os.path.isfile(cookies_db) or os.path.getsize(cookies_db) < 4096:
+            return True
+        prefs_file = os.path.join(profile_dir, "Default", "Preferences")
+        if os.path.isfile(prefs_file):
+            try:
+                with open(prefs_file, "r", encoding="utf-8", errors="ignore") as f:
+                    prefs = json.load(f)
+                exit_type = (prefs.get("profile") or {}).get("exit_type")
+                if exit_type and exit_type != "Normal":
+                    return True
+            except Exception:
+                return True
+        return state_mtime > (os.path.getmtime(cookies_db) + 2.0)
+    except Exception:
+        return False
+
+
+def _collect_open_origins(context: BrowserContext) -> set[str]:
+    origins: set[str] = set()
+    try:
+        pages = list(getattr(context, "pages", []) or [])
+    except Exception:
+        pages = []
+    for p in pages:
+        try:
+            if p.is_closed():
+                continue
+            parsed = urlparse((p.url or "").strip())
+            if parsed.scheme in ("http", "https") and parsed.netloc:
+                origins.add(f"{parsed.scheme}://{parsed.netloc}")
+        except Exception:
+            pass
+    return origins
+
+
+async def export_merged_storage_state(context: BrowserContext, state_file: str) -> bool:
+    """Exports cookies, localStorage, and IndexedDB cleanly without losing closed-tab origins."""
+    if not context:
+        return False
+    try:
+        try:
+            new_state = await context.storage_state(indexed_db=True)
+        except TypeError:
+            new_state = await context.storage_state()
+        if not isinstance(new_state, dict):
+            return False
+
+        prev_state: dict = {}
+        if os.path.isfile(state_file):
+            try:
+                with open(state_file, "r", encoding="utf-8") as f:
+                    loaded = json.load(f)
+                if isinstance(loaded, dict):
+                    prev_state = loaded
+            except Exception:
+                prev_state = {}
+
+        open_origins = _collect_open_origins(context)
+        merged_origins: dict = {}
+        for item in prev_state.get("origins") or []:
+            if isinstance(item, dict) and isinstance(item.get("origin"), str):
+                orig = item["origin"]
+                if orig not in open_origins:
+                    merged_origins[orig] = item
+
+        for item in new_state.get("origins") or []:
+            if isinstance(item, dict) and isinstance(item.get("origin"), str):
+                orig = item["origin"]
+                has_ls = bool(item.get("localStorage"))
+                has_idb = bool(item.get("indexedDB"))
+                if has_ls or has_idb:
+                    merged_origins[orig] = item
+                else:
+                    merged_origins.pop(orig, None)
+
+        payload = {
+            "cookies": new_state.get("cookies") if isinstance(new_state.get("cookies"), list) else (prev_state.get("cookies") or []),
+            "origins": [merged_origins[k] for k in sorted(merged_origins)],
+        }
+
+        parent_dir = os.path.dirname(state_file)
+        os.makedirs(parent_dir, mode=0o700, exist_ok=True)
+        tmp_path = f"{state_file}.tmp.{os.getpid()}"
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(payload, f)
+        try:
+            os.chmod(tmp_path, 0o600)
+        except Exception:
+            pass
+        os.replace(tmp_path, state_file)
+        return True
+    except Exception as exc:
+        logger.debug("export_merged_storage_state warning: %s", exc)
+        return False
+
+
+def _build_local_storage_recovery_script(origins: list) -> str:
+    """Builds an origin-scoped init script to recover missing localStorage keys after crashes."""
+    origin_map: Dict[str, Dict[str, str]] = {}
+    total_bytes = 0
+    for item in origins:
+        if not isinstance(item, dict):
+            continue
+        origin = item.get("origin")
+        ls_items = item.get("localStorage") or []
+        if not isinstance(origin, str) or not (origin.startswith("http://") or origin.startswith("https://")):
+            continue
+        if origin.startswith("http://127.0.0.1") or origin.startswith("http://localhost"):
+            continue
+        kv: Dict[str, str] = {}
+        for entry in ls_items:
+            if not isinstance(entry, dict):
+                continue
+            k = entry.get("name")
+            v = entry.get("value")
+            if isinstance(k, str) and isinstance(v, str):
+                pair_bytes = len(k) + len(v)
+                if total_bytes + pair_bytes > 262144:
+                    continue
+                kv[k] = v
+                total_bytes += pair_bytes
+        if kv:
+            origin_map[origin] = kv
+            if len(origin_map) >= 64:
+                break
+    if not origin_map:
+        return ""
+    encoded_map = json.dumps(origin_map)
+    return f"""(() => {{
+        if (window.__vortexLsRecovered) return;
+        window.__vortexLsRecovered = true;
+        try {{
+            if (window.sessionStorage && window.sessionStorage.getItem('__vortex_ls_rec_done') === '1') return;
+        }} catch (e) {{}}
+        try {{
+            const recoveryMap = {encoded_map};
+            const entries = recoveryMap[window.location.origin];
+            if (!entries) return;
+            for (const [k, v] of Object.entries(entries)) {{
+                try {{
+                    if (window.localStorage.getItem(k) === null) {{
+                        window.localStorage.setItem(k, v);
+                    }}
+                }} catch (e) {{}}
+            }}
+            try {{
+                if (window.sessionStorage) window.sessionStorage.setItem('__vortex_ls_rec_done', '1');
+            }} catch (e) {{}}
+        }} catch (e) {{}}
+    }})();"""
+
+
+async def recover_profile_storage_state(context: BrowserContext, state_file: str) -> None:
+    """Restores missing non-expired cookies and backup localStorage after crash or temp fallback."""
+    if not context or not os.path.isfile(state_file):
+        return
+    try:
+        with open(state_file, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        if not isinstance(payload, dict):
+            return
+    except Exception as exc:
+        logger.debug("recover_profile_storage_state read warning: %s", exc)
+        return
+
+    try:
+        existing_cookies = await context.cookies()
+        existing_keys = {
+            (c.get("name"), c.get("domain"), c.get("path", "/"))
+            for c in existing_cookies
+            if isinstance(c, dict)
+        }
+    except Exception:
+        existing_keys = set()
+
+    now_ts = time.time()
+    to_restore = []
+    for raw in payload.get("cookies") or []:
+        if not isinstance(raw, dict):
+            continue
+        name = raw.get("name")
+        value = raw.get("value")
+        domain = raw.get("domain")
+        path = raw.get("path", "/")
+        if not name or value is None or not domain:
+            continue
+        if (name, domain, path) in existing_keys:
+            continue
+        exp = raw.get("expires")
+        if isinstance(exp, (int, float)) and exp > 0 and exp <= now_ts:
+            continue
+        ck: Dict[str, Any] = {
+            "name": name,
+            "value": value,
+            "domain": domain,
+            "path": path,
+            "secure": bool(raw.get("secure", False)),
+            "httpOnly": bool(raw.get("httpOnly", False)),
+        }
+        if isinstance(exp, (int, float)) and exp > 0:
+            ck["expires"] = float(exp)
+        same_site = raw.get("sameSite")
+        if same_site in ("Strict", "Lax", "None"):
+            ck["sameSite"] = same_site
+        to_restore.append(ck)
+
+    if to_restore:
+        try:
+            await context.add_cookies(to_restore)
+            logger.info("Recovered %d missing persistent cookie(s) from %s", len(to_restore), state_file)
+        except Exception as exc:
+            logger.debug("recover_profile_storage_state add_cookies warning: %s", exc)
+
+    recovery_js = _build_local_storage_recovery_script(payload.get("origins") or [])
+    if recovery_js:
+        try:
+            await context.add_init_script(recovery_js)
+            logger.info("Installed localStorage crash-recovery fallback from %s", state_file)
+        except Exception as exc:
+            logger.debug("recover_profile_storage_state init script warning: %s", exc)
+
+
+def _detect_chromium_ua(executable_path: Optional[str]) -> Optional[str]:
+    """Detects installed Chromium major version for a consistent Linux Desktop User-Agent."""
+    if not executable_path:
+        return None
+    try:
+        out = subprocess.check_output(
+            [executable_path, "--version"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+            timeout=2,
+        )
+        m = re.search(r"\b(\d+)\.\d+\.\d+\.\d+\b", out)
+        if m:
+            major = m.group(1)
+            return (
+                f"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                f"(KHTML, like Gecko) Chrome/{major}.0.0.0 Safari/537.36"
+            )
+    except Exception:
+        pass
+    return None
+
+
+def _merge_chromium_feature_flags(args_list: List[str]) -> List[str]:
+    """Merges repeated --enable-features / --disable-features flags so none overwrite earlier ones."""
+    enable_vals: List[str] = []
+    disable_vals: List[str] = []
+    other_args: List[str] = []
+    for arg in args_list:
+        if arg.startswith("--enable-features="):
+            for feat in arg.split("=", 1)[1].split(","):
+                feat = feat.strip()
+                if feat and feat not in enable_vals:
+                    enable_vals.append(feat)
+        elif arg.startswith("--disable-features="):
+            for feat in arg.split("=", 1)[1].split(","):
+                feat = feat.strip()
+                if feat and feat not in disable_vals:
+                    disable_vals.append(feat)
+        else:
+            other_args.append(arg)
+    if enable_vals:
+        other_args.append(f"--enable-features={','.join(enable_vals)}")
+    if disable_vals:
+        other_args.append(f"--disable-features={','.join(disable_vals)}")
+    return other_args
+
+
+# ============================================================================
 # Client Session Handler
 # ============================================================================
 class AmigaClientSession:
@@ -1763,12 +2073,16 @@ class AmigaClientSession:
         engine: str = "chromium",
         stream_mode: str = "auto",
         video_bitrate: int = 4000,
+        storage_state_file: str = "",
+        context_state: Optional[Dict[str, Any]] = None,
     ):
         self.reader = reader
         self.writer = writer
         self.browser = browser
-        self.is_persistent_context: bool = isinstance(browser, BrowserContext)
+        self.is_persistent_context: bool = isinstance(browser, _PERSISTENT_CONTEXT_TYPES)
         self.engine: str = engine.lower()
+        self.storage_state_file: str = storage_state_file or get_vortex_storage_state_path(self.engine)
+        self._context_state: Dict[str, Any] = context_state if context_state is not None else {}
         self.width = width
         self.height = height
         self.pixel_format = pixel_format
@@ -1826,6 +2140,9 @@ class AmigaClientSession:
         self.next_upload_id: int = 1
         self.pending_uploads: Dict[int, Tuple[FileChooser, asyncio.Future]] = {}
         self.background_tasks: set = set()
+        self._storage_save_lock = asyncio.Lock()
+        self._last_storage_save_time: float = 0.0
+        self._pending_storage_save_task: Optional[asyncio.Task] = None
 
         self.web_zoom_pct: int = 100
         self.web_font_size: int = 16
@@ -2037,6 +2354,7 @@ class AmigaClientSession:
         self._last_pw_save_time = now
         logger.info("Captured submitted login credentials: domain=%s user=%s", domain, username)
         self._send_password_save(domain, username, password)
+        self._schedule_storage_save(delay=1.5)
 
     def _setup_page_listeners(self, page: Page) -> None:
         page.on("filechooser", self._on_filechooser_event)
@@ -2052,9 +2370,7 @@ class AmigaClientSession:
         self._on_page_updated()
         if self.page and self.page.url:
             self._send_nav_update(self.page.url)
-        t = asyncio.create_task(self.save_storage_state())
-        self.background_tasks.add(t)
-        t.add_done_callback(self.background_tasks.discard)
+        self._schedule_storage_save(delay=2.0)
 
     def _on_dom_content_loaded(self, *args) -> None:
         if not self.running:
@@ -2077,6 +2393,7 @@ class AmigaClientSession:
         self.force_frame_event.set()
         self._schedule_delayed_frames()
         self._send_nav_update(url)
+        self._schedule_storage_save(delay=3.0)
 
         if self._in_history_jump:
             if 0 <= self.nav_idx < len(self.nav_history):
@@ -2179,10 +2496,6 @@ class AmigaClientSession:
                     viewport={"width": self.width, "height": self.height},
                     accept_downloads=True,
                     locale="de-DE",
-                    user_agent=(
-                        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-                        "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-                    ),
                 )
             # Pre-set Google & YouTube Cookie Consent (SOCS / CONSENT) so cookie walls never block browsing
             try:
@@ -2197,10 +2510,15 @@ class AmigaClientSession:
             except Exception:
                 pass
 
-            # Pre-load Twitch auth / full session cookies if configured (bypasses bot blocks entirely)
+            # Pre-load Twitch auth / full session cookies if configured in user profile dir (never from repo CWD)
             try:
+                cfg_dir = get_vortex_config_dir()
+                cookie_candidates = list(dict.fromkeys([
+                    os.path.join(cfg_dir, "twitch_cookies.json"),
+                    os.path.expanduser("~/.config/vortexbrowse/twitch_cookies.json"),
+                ]))
                 loaded_twitch = False
-                for j_path in ["twitch_cookies.json", os.path.expanduser("~/.config/vortexbrowse/twitch_cookies.json"), "/tmp/twitch_cookies.json"]:
+                for j_path in cookie_candidates:
                     if os.path.exists(j_path):
                         try:
                             with open(j_path, "r", encoding="utf-8") as f:
@@ -2227,7 +2545,11 @@ class AmigaClientSession:
                             logger.debug("Twitch json cookie load error: %s", _je)
 
                 if not loaded_twitch:
-                    for t_path in ["twitch_token.txt", "twitch_cookie.txt", os.path.expanduser("~/.config/vortexbrowse/twitch_token.txt")]:
+                    token_candidates = list(dict.fromkeys([
+                        os.path.join(cfg_dir, "twitch_token.txt"),
+                        os.path.expanduser("~/.config/vortexbrowse/twitch_token.txt"),
+                    ]))
+                    for t_path in token_candidates:
                         if os.path.exists(t_path):
                             with open(t_path, "r", encoding="utf-8") as f:
                                 t_val = f.read().strip()
@@ -2610,14 +2932,24 @@ class AmigaClientSession:
                     }
                 }, true);
             })()"""
-            try:
-                await self.context.expose_binding("__vortex_save_password", self._on_password_submitted)
-            except Exception as _pe:
-                logger.debug("expose_binding warning: %s", _pe)
-            try:
-                await self.context.add_init_script(self._init_turbo_js)
-            except Exception:
-                pass
+            self._context_state["active_session"] = self
+            if not self._context_state.get("scripts_initialized"):
+                ctx_state = self._context_state
+
+                async def _dispatch_pw_save(source, domain: str, username: str, password: str) -> None:
+                    sess = ctx_state.get("active_session")
+                    if sess is not None:
+                        await sess._on_password_submitted(source, domain, username, password)
+
+                try:
+                    await self.context.expose_binding("__vortex_save_password", _dispatch_pw_save)
+                except Exception as _pe:
+                    logger.debug("expose_binding warning: %s", _pe)
+                try:
+                    await self.context.add_init_script(self._init_turbo_js)
+                except Exception:
+                    pass
+                self._context_state["scripts_initialized"] = True
 
             if self.is_persistent_context and self.context.pages:
                 self.page = self.context.pages[0]
@@ -2660,6 +2992,8 @@ class AmigaClientSession:
                 asyncio.create_task(self._frame_stream_loop()),
                 asyncio.create_task(self._input_read_loop()),
             ]
+            if self.is_persistent_context:
+                tasks.append(asyncio.create_task(self._periodic_storage_sync_loop()))
             if self.audio_enabled:
                 tasks.append(asyncio.create_task(self._audio_stream_loop()))
 
@@ -2726,11 +3060,15 @@ class AmigaClientSession:
             for fut in self.pending_downloads.values():
                 if not fut.done():
                     fut.cancel()
+            if self._pending_storage_save_task and not self._pending_storage_save_task.done():
+                self._pending_storage_save_task.cancel()
             for t in list(self.background_tasks):
                 t.cancel()
+            if self._context_state.get("active_session") is self:
+                self._context_state["active_session"] = None
             if self.is_persistent_context:
                 try:
-                    await self.save_storage_state()
+                    await self.save_storage_state(force=True)
                 except Exception:
                     pass
                 for tab in self.tabs[1:]:
@@ -2896,15 +3234,52 @@ class AmigaClientSession:
             logger.warning("Error sending clipboard to Amiga: %s", e)
             return False
 
-    async def save_storage_state(self) -> None:
-        if self.context:
+    async def save_storage_state(self, force: bool = False) -> None:
+        if not self.context:
+            return
+        now = time.monotonic()
+        if not force and (now - self._last_storage_save_time) < 2.0:
+            return
+        async with self._storage_save_lock:
+            now2 = time.monotonic()
+            if not force and (now2 - self._last_storage_save_time) < 2.0:
+                return
+            saved = await export_merged_storage_state(self.context, self.storage_state_file)
+            if saved:
+                self._last_storage_save_time = time.monotonic()
+                logger.info("Saved persistent website cookies and storage state to %s", self.storage_state_file)
+
+    def _schedule_storage_save(self, delay: float = 3.0) -> None:
+        if not self.running or not self.is_persistent_context or not self.context:
+            return
+        if self._pending_storage_save_task and not self._pending_storage_save_task.done():
+            return
+
+        async def _delayed_save() -> None:
             try:
-                state_file = os.path.expanduser(f"~/.config/vortexbrowse/{self.engine}_storage_state.json")
-                os.makedirs(os.path.dirname(state_file), exist_ok=True)
-                await self.context.storage_state(path=state_file)
-                logger.info("Saved persistent website cookies and storage state to %s", state_file)
+                await asyncio.sleep(delay)
+                await self.save_storage_state(force=True)
+            except asyncio.CancelledError:
+                pass
             except Exception as e:
-                logger.debug("save_storage_state warning: %s", e)
+                logger.debug("_delayed_save warning: %s", e)
+
+        task = asyncio.create_task(_delayed_save())
+        self._pending_storage_save_task = task
+        self.background_tasks.add(task)
+        task.add_done_callback(self.background_tasks.discard)
+
+    async def _periodic_storage_sync_loop(self) -> None:
+        while self.running:
+            try:
+                await asyncio.sleep(30.0)
+                if not self.running:
+                    break
+                await self.save_storage_state(force=False)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.debug("Periodic storage sync warning: %s", e)
 
     # ------------------------------------------------------------------------
     # Real-Time Audio Capture & Streaming Loop (PipeWire -> Amiga AHI)
@@ -3839,6 +4214,8 @@ class AmigaClientSession:
                     )
                 else:
                     await self.page.mouse.click(cx, cy, button=btn)
+                    if btn == "left":
+                        self._schedule_storage_save(delay=3.5)
                 self._trigger_full_refresh(True)
                 self._schedule_delayed_frames()
 
@@ -4005,6 +4382,7 @@ class AmigaClientSession:
                                     await self.send_clipboard_to_amiga(sel)
                             except Exception:
                                 pass
+                        self._schedule_storage_save(delay=3.5)
                 self._trigger_full_refresh(True)
                 self._schedule_delayed_frames()
 
@@ -4131,6 +4509,8 @@ class AmigaClientSession:
 
             elif event_type == INPUT_KEY_DOWN:
                 await self._handle_key_down(key_code, text_or_url)
+                if text_or_url in ("Enter", "Return") or key_code in (13, 0x44):
+                    self._schedule_storage_save(delay=3.5)
                 self.force_frame_event.set()
                 self.active_until = time.monotonic() + 1.5
 
@@ -4139,6 +4519,7 @@ class AmigaClientSession:
 
             elif event_type == INPUT_GOTO_URL:
                 await self._handle_navigation(text_or_url)
+                self._schedule_storage_save(delay=3.0)
                 self._trigger_full_refresh(True)
         except Exception as exc:
             logger.warning("Input execution warning (type=%d): %s", event_type, exc)
@@ -4884,9 +5265,17 @@ class AmigaClientSession:
                         "domain": ".twitch.tv",
                         "path": "/"
                     }])
-                    with open("twitch_token.txt", "w", encoding="utf-8") as f:
+                    token_path = os.path.join(get_vortex_config_dir(), "twitch_token.txt")
+                    tmp_tok = f"{token_path}.tmp.{os.getpid()}"
+                    with open(tmp_tok, "w", encoding="utf-8") as f:
                         f.write(token)
-                    logger.info("Saved Twitch auth-token to twitch_token.txt and active cookie jar")
+                    try:
+                        os.chmod(tmp_tok, 0o600)
+                    except Exception:
+                        pass
+                    os.replace(tmp_tok, token_path)
+                    logger.info("Saved Twitch auth-token to %s and active cookie jar", token_path)
+                    self._schedule_storage_save(delay=0.5)
                     t = asyncio.create_task(self.page.goto("https://www.twitch.tv", wait_until="commit", timeout=15000))
                     self.background_tasks.add(t)
                     t.add_done_callback(self.background_tasks.discard)
@@ -5595,47 +5984,139 @@ def get_gpu_launch_flags(disable_gpu: bool = False, hw_profile: Optional[dict] =
     return gpu_flags, has_dri
 
 
-def _cleanup_existing_server_and_locks(port: int, profile_dir: str) -> None:
-    """Stops any older server.py instance or orphaned Chromium holding the TCP port or profile lock."""
-    my_pid = os.getpid()
-    try:
-        out = subprocess.check_output(["pgrep", "-f", "server.py"], text=True, timeout=2)
-        other_pids = [int(p) for p in out.split() if p.strip().isdigit() and int(p) != my_pid]
-        if other_pids:
-            logger.info("Stopping previous VortexBrowser server instance(s) %s...", other_pids)
-            for pid in other_pids:
-                try:
-                    os.kill(pid, 15)
-                except Exception:
-                    pass
-            time.sleep(0.6)
-            for pid in other_pids:
-                try:
-                    os.kill(pid, 9)
-                except Exception:
-                    pass
-    except Exception:
-        pass
+def _wait_pids_exit(pids: List[int], timeout: float) -> List[int]:
+    """Polls /proc until all PIDs exit or timeout elapses; returns remaining alive PIDs."""
+    deadline = time.monotonic() + timeout
+    remaining = list(pids)
+    while remaining and time.monotonic() < deadline:
+        still_alive = []
+        for pid in remaining:
+            if os.path.exists(f"/proc/{pid}"):
+                still_alive.append(pid)
+        remaining = still_alive
+        if not remaining:
+            break
+        time.sleep(0.1)
+    return [pid for pid in remaining if os.path.exists(f"/proc/{pid}")]
 
-    # Also terminate any orphaned Chromium processes still holding the profile directory
+
+def _find_proc_pids_matching(predicate) -> List[int]:
+    my_pid = os.getpid()
+    parent_pid = os.getppid()
+    matches: List[int] = []
     try:
-        out = subprocess.check_output(["pgrep", "-f", profile_dir], text=True, timeout=2)
-        chrome_pids = [int(p) for p in out.split() if p.strip().isdigit() and int(p) != my_pid]
-        if chrome_pids:
-            logger.info("Cleaning up orphaned Chromium process(es) %s for profile %s...", chrome_pids, profile_dir)
-            for pid in chrome_pids:
-                try:
-                    os.kill(pid, 15)
-                except Exception:
-                    pass
-            time.sleep(0.4)
-            for pid in chrome_pids:
-                try:
-                    os.kill(pid, 9)
-                except Exception:
-                    pass
+        entries = os.listdir("/proc")
     except Exception:
-        pass
+        return matches
+    for entry in entries:
+        if not entry.isdigit():
+            continue
+        pid = int(entry)
+        if pid in (my_pid, parent_pid):
+            continue
+        try:
+            with open(f"/proc/{pid}/cmdline", "rb") as f:
+                raw = f.read()
+            if not raw:
+                continue
+            argv = [part.decode("utf-8", errors="ignore") for part in raw.split(b"\x00") if part]
+            if argv and predicate(pid, argv):
+                matches.append(pid)
+        except Exception:
+            continue
+    return matches
+
+
+def _extract_cli_port(argv: List[str], default_port: int = 7788) -> int:
+    for idx, arg in enumerate(argv):
+        if arg == "--port" and idx + 1 < len(argv):
+            if argv[idx + 1].isdigit():
+                return int(argv[idx + 1])
+        elif arg.startswith("--port="):
+            val = arg.split("=", 1)[1]
+            if val.isdigit():
+                return int(val)
+    return default_port
+
+
+def _cleanup_existing_server_and_locks(port: int, profile_dir: str, config_dir: str) -> None:
+    """Gracefully stops older matching server.py or orphaned browser locks without corrupting SQLite."""
+    pid_file = os.path.join(config_dir, "server.pid")
+    other_pids: List[int] = []
+
+    if os.path.isfile(pid_file):
+        try:
+            with open(pid_file, "r", encoding="utf-8") as f:
+                recorded_pid = int(f.read().strip())
+            if recorded_pid != os.getpid() and os.path.exists(f"/proc/{recorded_pid}"):
+                with open(f"/proc/{recorded_pid}/cmdline", "rb") as cf:
+                    argv = [p.decode("utf-8", errors="ignore") for p in cf.read().split(b"\x00") if p]
+                if any(os.path.basename(a) == "server.py" for a in argv):
+                    other_pids.append(recorded_pid)
+        except Exception:
+            pass
+
+    proc_matches = _find_proc_pids_matching(
+        lambda pid, argv: any(os.path.basename(a) == "server.py" for a in argv)
+        and _extract_cli_port(argv) == port
+    )
+    for pid in proc_matches:
+        if pid not in other_pids:
+            other_pids.append(pid)
+
+    if other_pids:
+        logger.info("Gracefully stopping previous VortexBrowser server instance(s) %s...", other_pids)
+        for pid in other_pids:
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except Exception:
+                pass
+        remaining = _wait_pids_exit(other_pids, timeout=5.0)
+        for pid in remaining:
+            logger.warning("Previous server PID %d did not exit after SIGTERM timeout; sending SIGKILL", pid)
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except Exception:
+                pass
+        if remaining:
+            _wait_pids_exit(remaining, timeout=1.0)
+
+    # Clean up any orphaned Chromium processes still holding --user-data-dir={profile_dir}
+    real_profile = os.path.realpath(profile_dir)
+    user_data_flags = {f"--user-data-dir={profile_dir}", f"--user-data-dir={real_profile}"}
+
+    def _is_orphaned_chrome(pid: int, argv: List[str], main_only: bool) -> bool:
+        if not any(a in user_data_flags for a in argv):
+            return False
+        if main_only and any(a.startswith("--type=") for a in argv):
+            return False
+        return True
+
+    main_chrome_pids = _find_proc_pids_matching(lambda pid, argv: _is_orphaned_chrome(pid, argv, True))
+    if main_chrome_pids:
+        logger.info("Gracefully stopping orphaned browser process(es) %s for %s...", main_chrome_pids, profile_dir)
+        for pid in main_chrome_pids:
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except Exception:
+                pass
+        _wait_pids_exit(main_chrome_pids, timeout=3.0)
+
+    stray_pids = _find_proc_pids_matching(lambda pid, argv: _is_orphaned_chrome(pid, argv, False))
+    if stray_pids:
+        for pid in stray_pids:
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except Exception:
+                pass
+        remaining_chrome = _wait_pids_exit(stray_pids, timeout=2.0)
+        for pid in remaining_chrome:
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except Exception:
+                pass
+        if remaining_chrome:
+            _wait_pids_exit(remaining_chrome, timeout=0.5)
 
     # Clean stale Chromium SingletonLock
     for lock_name in ("SingletonLock", "SingletonCookie", "SingletonSocket"):
@@ -5647,6 +6128,54 @@ def _cleanup_existing_server_and_locks(port: int, profile_dir: str) -> None:
                 pass
 
 
+def _write_server_pid(pid_file: str) -> None:
+    try:
+        tmp_pid = f"{pid_file}.tmp.{os.getpid()}"
+        with open(tmp_pid, "w", encoding="utf-8") as f:
+            f.write(str(os.getpid()))
+        try:
+            os.chmod(tmp_pid, 0o600)
+        except Exception:
+            pass
+        os.replace(tmp_pid, pid_file)
+    except Exception:
+        pass
+
+
+def _remove_server_pid(pid_file: str) -> None:
+    try:
+        if os.path.isfile(pid_file):
+            with open(pid_file, "r", encoding="utf-8") as f:
+                if f.read().strip() == str(os.getpid()):
+                    os.unlink(pid_file)
+    except Exception:
+        pass
+
+
+async def _close_browser_gracefully(browser: BrowserContext, use_rustwright: bool) -> None:
+    """Sends CDP Browser.close when needed and waits cleanly so SQLite/LevelDB flush to disk."""
+    if not browser:
+        return
+    if use_rustwright and _HAS_WEBSOCKETS and websockets is not None:
+        try:
+            def _fetch_ws_url() -> Optional[str]:
+                with urllib.request.urlopen("http://127.0.0.1:9222/json/version", timeout=1.5) as resp:
+                    info = json.loads(resp.read().decode("utf-8", errors="ignore"))
+                    return info.get("webSocketDebuggerUrl")
+
+            ws_url = await asyncio.get_running_loop().run_in_executor(None, _fetch_ws_url)
+            if ws_url:
+                async with websockets.connect(ws_url, open_timeout=1.5, close_timeout=1.5) as ws:
+                    await ws.send(json.dumps({"id": 1, "method": "Browser.close"}))
+                    await asyncio.sleep(0.5)
+        except Exception as exc:
+            logger.debug("Rustwright CDP Browser.close notice: %s", exc)
+    try:
+        await asyncio.wait_for(browser.close(), timeout=8.0)
+    except Exception as exc:
+        logger.debug("browser.close notice: %s", exc)
+
+
 # ============================================================================
 # Main Server Entrypoint
 # ============================================================================
@@ -5656,11 +6185,37 @@ async def run_server(args: argparse.Namespace) -> None:
         logger.setLevel(lvl)
         logging.getLogger().setLevel(lvl)
     engine = getattr(args, "engine", "chromium").lower()
-    profile_dir = os.path.expanduser(
-        "~/.config/vortexbrowse/firefox_profile" if engine == "firefox" else "~/.config/vortexbrowse/chromium_profile"
-    )
-    os.makedirs(profile_dir, exist_ok=True)
-    _cleanup_existing_server_and_locks(args.port, profile_dir)
+    config_dir = get_vortex_config_dir()
+    pid_file = os.path.join(config_dir, "server.pid")
+    profile_dir = get_vortex_profile_dir(engine)
+    state_file = get_vortex_storage_state_path(engine)
+    is_fallback_profile = False
+    try:
+        os.makedirs(profile_dir, mode=0o700, exist_ok=True)
+        test_file = os.path.join(profile_dir, ".write_test")
+        with open(test_file, "w") as f:
+            f.write("ok")
+        os.unlink(test_file)
+    except Exception as e:
+        fallback_dir = os.path.join(tempfile.gettempdir(), f"vortexbrowse_{engine}_profile_{os.getuid()}")
+        logger.warning("Profile directory '%s' is not writable (%s). Falling back to temporary directory '%s'", profile_dir, e, fallback_dir)
+        profile_dir = fallback_dir
+        is_fallback_profile = True
+        os.makedirs(profile_dir, mode=0o700, exist_ok=True)
+
+    _cleanup_existing_server_and_locks(args.port, profile_dir, config_dir)
+    _write_server_pid(pid_file)
+    needs_recovery = check_profile_needs_recovery(profile_dir, state_file, engine, is_fallback_profile)
+
+    loop = asyncio.get_running_loop()
+    stop_event = asyncio.Event()
+    registered_signals = []
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            loop.add_signal_handler(sig, stop_event.set)
+            registered_signals.append(sig)
+        except NotImplementedError:
+            pass
 
     audio_ready = ensure_audio_sink()
     portal = LocalPortalHTTPServer(host="127.0.0.1", port=args.portal_port)
@@ -5683,29 +6238,11 @@ async def run_server(args: argparse.Namespace) -> None:
     if audio_ready:
         browser_env["PULSE_SINK"] = AUDIO_SINK_NAME
 
-    engine = getattr(args, "engine", "chromium").lower()
-
-    if engine == "firefox":
-        profile_dir = os.path.expanduser("~/.config/vortexbrowse/firefox_profile")
-        os.makedirs(profile_dir, exist_ok=True)
-    else:
+    if engine == "chromium":
         custom_bin = getattr(args, "browser_bin", None)
         full_chrome = find_full_chromium_executable(custom_bin)
         enable_exts = getattr(args, "enable_extensions", False)
         all_exts = find_all_extension_paths() if enable_exts else []
-
-        profile_dir = os.path.expanduser("~/.config/vortexbrowse/chromium_profile")
-        try:
-            os.makedirs(profile_dir, exist_ok=True)
-            test_file = os.path.join(profile_dir, ".write_test")
-            with open(test_file, "w") as f:
-                f.write("ok")
-            os.unlink(test_file)
-        except Exception as e:
-            fallback_dir = os.path.join(tempfile.gettempdir(), f"vortexbrowse_chromium_profile_{os.getuid()}")
-            logger.warning("Profile directory '%s' is not writable (%s). Falling back to temporary directory '%s'", profile_dir, e, fallback_dir)
-            profile_dir = fallback_dir
-            os.makedirs(profile_dir, exist_ok=True)
 
         # Clean up stale SingletonLock/Socket/Cookie from prior crashes or killed processes
         for lock_file in ("SingletonLock", "SingletonCookie", "SingletonSocket"):
@@ -5769,7 +6306,7 @@ async def run_server(args: argparse.Namespace) -> None:
         else:
             raster_threads = 4
 
-        launch_args = [
+        launch_args = _merge_chromium_feature_flags([
             "--ozone-platform=headless",
             "--remote-debugging-port=9222",
             "--remote-allow-origins=*",
@@ -5785,7 +6322,7 @@ async def run_server(args: argparse.Namespace) -> None:
             "--disable-background-timer-throttling",
             "--disable-renderer-backgrounding",
             "--disable-features=Translate,OptimizationHints,MediaRouter,DialMediaRouteProvider",
-        ] + gpu_flags
+        ] + gpu_flags)
         if all_exts:
             ext_list = ",".join(all_exts)
             logger.info("Enabling unpacked Chrome extensions (%d): %s", len(all_exts), ext_list)
@@ -5795,188 +6332,237 @@ async def run_server(args: argparse.Namespace) -> None:
             logger.info("Browser extensions (uBlock Origin, h264ify): DISABLED as requested")
             launch_args.append("--disable-extensions")
 
-    use_rustwright = (_HAS_RUSTWRIGHT and _rustwright_async is not None and engine == "chromium")
+    use_rustwright = (
+        _HAS_RUSTWRIGHT
+        and _rustwright_async is not None
+        and engine == "chromium"
+        and os.environ.get("VORTEX_USE_RUSTWRIGHT", "0") == "1"
+    )
     pw_factory = _rustwright_async if use_rustwright else _playwright_async
     if use_rustwright:
-        logger.info("Browser Automation Core: Rustwright (native Rust PyO3 + DirectCDP, zero Node.js driver overhead)")
+        logger.info("Browser Automation Core: Rustwright (native Rust PyO3 + DirectCDP, opt-in via VORTEX_USE_RUSTWRIGHT=1)")
     else:
-        logger.info("Browser Automation Core: Playwright (%s)", engine)
+        logger.info("Browser Automation Core: Playwright (%s — graceful CDP shutdown & full cookie/localStorage/IDB persistence)", engine)
 
-    async with pw_factory() as pw:
-        if engine == "firefox":
-            logger.info("Launching Playwright Firefox persistent context at %s...", profile_dir)
-            firefox_user_agent = (
-                "Mozilla/5.0 (X11; Linux x86_64; rv:134.0) Gecko/20100101 Firefox/134.0"
-            )
-            browser = await pw.firefox.launch_persistent_context(
-                user_data_dir=profile_dir,
-                headless=True,
-                ignore_default_args=["--mute-audio"],
-                env=browser_env,
-                viewport={"width": args.width, "height": args.height},
-                accept_downloads=True,
-                locale="de-DE",
-                user_agent=firefox_user_agent,
-                firefox_user_prefs={
-                    "browser.startup.page": 0,
-                    "browser.sessionstore.resume_from_crash": False,
-                    "browser.sessionstore.max_tabs_undo": 0,
-                    "browser.sessionstore.max_resumed_crashes": 0,
-                    "browser.tabs.warnOnClose": False,
-                    "media.autoplay.default": 0,
-                    "media.autoplay.blocking_policy": 0,
-                    "media.ffmpeg.vaapi.enabled": True,
-                },
-            )
-        elif full_chrome:
-            browser_name = "Ungoogled-Chromium" if "ungoogled" in full_chrome.lower() else "Chromium"
-            logger.info("Launching %s (%s) persistent context at %s...", browser_name, full_chrome, profile_dir)
-            browser = await pw.chromium.launch_persistent_context(
-                user_data_dir=profile_dir,
-                executable_path=full_chrome,
-                headless=False,
-                ignore_default_args=["--mute-audio", "--enable-automation"],
-                env=browser_env,
-                args=launch_args,
-                viewport={"width": args.width, "height": args.height},
-                accept_downloads=True,
-                locale="de-DE",
-                user_agent=(
-                    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-                    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-                ),
-            )
-        else:
-            logger.info("Launching Headless Chromium fallback persistent context at %s...", profile_dir)
-            fallback_args = [
-                "--remote-debugging-port=9222",
-                "--remote-allow-origins=*",
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-                "--font-render-hinting=medium",
-                "--enable-font-antialiasing",
-                "--enable-smooth-scrolling",
-                "--autoplay-policy=no-user-gesture-required",
-                "--disable-blink-features=AutomationControlled",
-                f"--num-raster-threads={raster_threads}",
-                "--enable-low-res-tiling",
-                "--disable-background-timer-throttling",
-                "--disable-renderer-backgrounding",
-                "--disable-features=Translate,OptimizationHints,MediaRouter,DialMediaRouteProvider",
-            ] + gpu_flags
-            if all_exts:
-                ext_list = ",".join(all_exts)
-                fallback_args.append(f"--disable-extensions-except={ext_list}")
-                fallback_args.append(f"--load-extension={ext_list}")
+    try:
+        async with pw_factory() as pw:
+            if engine == "firefox":
+                logger.info("Launching Playwright Firefox persistent context at %s...", profile_dir)
+                firefox_user_agent = (
+                    "Mozilla/5.0 (X11; Linux x86_64; rv:134.0) Gecko/20100101 Firefox/134.0"
+                )
+                browser = await pw.firefox.launch_persistent_context(
+                    user_data_dir=profile_dir,
+                    headless=True,
+                    ignore_default_args=["--mute-audio"],
+                    env=browser_env,
+                    viewport={"width": args.width, "height": args.height},
+                    accept_downloads=True,
+                    locale="de-DE",
+                    user_agent=firefox_user_agent,
+                    firefox_user_prefs={
+                        "browser.startup.page": 0,
+                        "browser.sessionstore.resume_from_crash": False,
+                        "browser.sessionstore.max_tabs_undo": 0,
+                        "browser.sessionstore.max_resumed_crashes": 0,
+                        "browser.tabs.warnOnClose": False,
+                        "media.autoplay.default": 0,
+                        "media.autoplay.blocking_policy": 0,
+                        "media.ffmpeg.vaapi.enabled": True,
+                    },
+                )
+            elif full_chrome:
+                browser_name = "Ungoogled-Chromium" if "ungoogled" in full_chrome.lower() else "Chromium"
+                logger.info("Launching %s (%s) persistent context at %s...", browser_name, full_chrome, profile_dir)
+                launch_kwargs: Dict[str, Any] = {
+                    "user_data_dir": profile_dir,
+                    "executable_path": full_chrome,
+                    "headless": False,
+                    "ignore_default_args": ["--mute-audio", "--enable-automation"],
+                    "env": browser_env,
+                    "args": launch_args,
+                    "viewport": {"width": args.width, "height": args.height},
+                    "accept_downloads": True,
+                    "locale": "de-DE",
+                }
+                detected_ua = _detect_chromium_ua(full_chrome)
+                if detected_ua:
+                    launch_kwargs["user_agent"] = detected_ua
+                browser = await pw.chromium.launch_persistent_context(**launch_kwargs)
             else:
-                fallback_args.append("--disable-extensions")
-            browser = await pw.chromium.launch_persistent_context(
-                user_data_dir=profile_dir,
-                headless=True,
-                ignore_default_args=["--mute-audio", "--enable-automation"],
-                env=browser_env,
-                args=fallback_args,
-                viewport={"width": args.width, "height": args.height},
-                accept_downloads=True,
-                locale="de-DE",
-                user_agent=(
-                    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-                    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-                ),
+                logger.info("Launching Headless Chromium fallback persistent context at %s...", profile_dir)
+                fallback_args = _merge_chromium_feature_flags([
+                    "--remote-debugging-port=9222",
+                    "--remote-allow-origins=*",
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--font-render-hinting=medium",
+                    "--enable-font-antialiasing",
+                    "--enable-smooth-scrolling",
+                    "--autoplay-policy=no-user-gesture-required",
+                    "--disable-blink-features=AutomationControlled",
+                    f"--num-raster-threads={raster_threads}",
+                    "--enable-low-res-tiling",
+                    "--disable-background-timer-throttling",
+                    "--disable-renderer-backgrounding",
+                    "--disable-features=Translate,OptimizationHints,MediaRouter,DialMediaRouteProvider",
+                ] + gpu_flags)
+                if all_exts:
+                    ext_list = ",".join(all_exts)
+                    fallback_args.append(f"--disable-extensions-except={ext_list}")
+                    fallback_args.append(f"--load-extension={ext_list}")
+                else:
+                    fallback_args.append("--disable-extensions")
+                fallback_kwargs: Dict[str, Any] = {
+                    "user_data_dir": profile_dir,
+                    "headless": True,
+                    "ignore_default_args": ["--mute-audio", "--enable-automation"],
+                    "env": browser_env,
+                    "args": fallback_args,
+                    "viewport": {"width": args.width, "height": args.height},
+                    "accept_downloads": True,
+                    "locale": "de-DE",
+                }
+                detected_ua = _detect_chromium_ua(getattr(pw.chromium, "executable_path", None))
+                if detected_ua:
+                    fallback_kwargs["user_agent"] = detected_ua
+                browser = await pw.chromium.launch_persistent_context(**fallback_kwargs)
+
+            if needs_recovery:
+                await recover_profile_storage_state(browser, state_file)
+
+            context_state: Dict[str, Any] = {
+                "scripts_initialized": False,
+                "active_session": None,
+            }
+
+            global cpu_gov_global
+            cpu_gov = CPUGovernorManager(enabled=not getattr(args, "no_cpu_governor", False))
+            cpu_gov_global = cpu_gov
+
+            active_session: Optional[AmigaClientSession] = None
+            active_session_lock = asyncio.Lock()
+
+            async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+                nonlocal active_session
+                await cpu_gov.client_connected()
+                session = None
+                try:
+                    async with active_session_lock:
+                        if active_session is not None and active_session.running:
+                            logger.info("New client connected: terminating previous active session")
+                            active_session.running = False
+                            try:
+                                active_session.writer.close()
+                                await asyncio.wait_for(active_session.writer.wait_closed(), timeout=0.5)
+                            except Exception:
+                                pass
+                            for _ in range(15):
+                                if not active_session or not active_session.running:
+                                    break
+                                await asyncio.sleep(0.05)
+
+                        session = AmigaClientSession(
+                            reader=reader,
+                            writer=writer,
+                            browser=browser,
+                            width=args.width,
+                            height=args.height,
+                            pixel_format=pixel_fmt,
+                            target_fps=args.fps,
+                            start_url=args.url,
+                            portal_url=portal_url,
+                            audio_enabled=audio_ready,
+                            jpeg_quality=getattr(args, "jpeg_quality", 100),
+                            codec_mode=getattr(args, "codec", "auto"),
+                            engine=engine,
+                            stream_mode=getattr(args, "stream_mode", "auto"),
+                            video_bitrate=getattr(args, "video_bitrate", 8000),
+                            storage_state_file=state_file,
+                            context_state=context_state,
+                        )
+                        active_session = session
+
+                    try:
+                        await session.run()
+                    finally:
+                        async with active_session_lock:
+                            if active_session is session:
+                                active_session = None
+                finally:
+                    await cpu_gov.client_disconnected()
+
+            server = await asyncio.start_server(handle_client, args.host, args.port)
+            extra_servers = []
+            if args.port != 9757:
+                try:
+                    srv_lan = await asyncio.start_server(handle_client, args.host, 9757)
+                    extra_servers.append(srv_lan)
+                except OSError as exc:
+                    logger.warning("Could not bind secondary LAN port 9757: %s", exc)
+
+            all_socks = list(server.sockets or [])
+            for s in extra_servers:
+                all_socks.extend(s.sockets or [])
+            addrs = ", ".join(str(sock.getsockname()) for sock in all_socks)
+            logger.info(
+                "VortexBrowse Server ready on %s | Engine: %s | Viewport: %dx%d (1:1 Auto-Sync) | Format: %s | Codec: LZ4+DirtySlice | Audio: %s",
+                addrs,
+                engine.upper(),
+                args.width,
+                args.height,
+                "YUV420P" if pixel_fmt == FMT_YUV420P else ("RGB565" if pixel_fmt == FMT_RGB565 else "ARGB32"),
+                "ON (Full Browser -> PipeWire -> AHI)" if audio_ready else "OFF",
             )
 
-        global cpu_gov_global
-        cpu_gov = CPUGovernorManager(enabled=not getattr(args, "no_cpu_governor", False))
-        cpu_gov_global = cpu_gov
-
-        active_session: Optional[AmigaClientSession] = None
-        active_session_lock = asyncio.Lock()
-
-        async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-            nonlocal active_session
-            await cpu_gov.client_connected()
-            session = None
             try:
-                async with active_session_lock:
-                    if active_session is not None and active_session.running:
-                        logger.info("New client connected: terminating previous active session")
-                        active_session.running = False
+                async with server:
+                    if not stop_event.is_set():
+                        serve_task = asyncio.create_task(server.serve_forever())
+                        stop_wait_task = asyncio.create_task(stop_event.wait())
                         try:
-                            active_session.writer.close()
-                            await asyncio.wait_for(active_session.writer.wait_closed(), timeout=0.5)
-                        except Exception:
-                            pass
-                        for _ in range(15):
-                            if not active_session or not active_session.running:
-                                break
-                            await asyncio.sleep(0.05)
-
-                    session = AmigaClientSession(
-                        reader=reader,
-                        writer=writer,
-                        browser=browser,
-                        width=args.width,
-                        height=args.height,
-                        pixel_format=pixel_fmt,
-                        target_fps=args.fps,
-                        start_url=args.url,
-                        portal_url=portal_url,
-                        audio_enabled=audio_ready,
-                        jpeg_quality=getattr(args, "jpeg_quality", 100),
-                        codec_mode=getattr(args, "codec", "auto"),
-                        engine=engine,
-                        stream_mode=getattr(args, "stream_mode", "auto"),
-                        video_bitrate=getattr(args, "video_bitrate", 8000),
-                    )
-                    active_session = session
-
-                try:
-                    await session.run()
-                finally:
-                    async with active_session_lock:
-                        if active_session is session:
-                            active_session = None
+                            await asyncio.wait(
+                                {serve_task, stop_wait_task},
+                                return_when=asyncio.FIRST_COMPLETED,
+                            )
+                        finally:
+                            for t in (serve_task, stop_wait_task):
+                                if not t.done():
+                                    t.cancel()
+                                    try:
+                                        await t
+                                    except asyncio.CancelledError:
+                                        pass
             finally:
-                await cpu_gov.client_disconnected()
-
-        server = await asyncio.start_server(handle_client, args.host, args.port)
-        extra_servers = []
-        if args.port != 9757:
+                logger.info("Shutting down VortexBrowse Server cleanly...")
+                sess = active_session
+                if sess is not None and sess.running:
+                    sess.running = False
+                    try:
+                        sess.writer.close()
+                    except Exception:
+                        pass
+                    try:
+                        await asyncio.wait_for(sess.save_storage_state(force=True), timeout=3.0)
+                    except Exception:
+                        pass
+                cpu_gov.restore()
+                for s in extra_servers:
+                    s.close()
+                    await s.wait_closed()
+                try:
+                    await asyncio.wait_for(export_merged_storage_state(browser, state_file), timeout=5.0)
+                except Exception:
+                    pass
+                await _close_browser_gracefully(browser, use_rustwright)
+    finally:
+        for sig in registered_signals:
             try:
-                srv_lan = await asyncio.start_server(handle_client, args.host, 9757)
-                extra_servers.append(srv_lan)
-            except OSError as exc:
-                logger.warning("Could not bind secondary LAN port 9757: %s", exc)
-
-        all_socks = list(server.sockets or [])
-        for s in extra_servers:
-            all_socks.extend(s.sockets or [])
-        addrs = ", ".join(str(sock.getsockname()) for sock in all_socks)
-        logger.info(
-            "VortexBrowse Server ready on %s | Engine: %s | Viewport: %dx%d (1:1 Auto-Sync) | Format: %s | Codec: LZ4+DirtySlice | Audio: %s",
-            addrs,
-            engine.upper(),
-            args.width,
-            args.height,
-            "YUV420P" if pixel_fmt == FMT_YUV420P else ("RGB565" if pixel_fmt == FMT_RGB565 else "ARGB32"),
-            "ON (Full Browser -> PipeWire -> AHI)" if audio_ready else "OFF",
-        )
-
-        try:
-            async with server:
-                await server.serve_forever()
-        finally:
-            cpu_gov.restore()
-            for s in extra_servers:
-                s.close()
-                await s.wait_closed()
-            try:
-                state_file = os.path.expanduser(f"~/.config/vortexbrowse/{engine}_storage_state.json")
-                await browser.storage_state(path=state_file)
+                loop.remove_signal_handler(sig)
             except Exception:
                 pass
-            await browser.close()
-            await portal.stop()
+        await portal.stop()
+        _remove_server_pid(pid_file)
 
 
 def parse_args() -> argparse.Namespace:

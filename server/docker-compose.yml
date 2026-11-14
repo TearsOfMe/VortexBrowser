@@ -7,6 +7,7 @@ services:
     image: vortexbrowser-server:linux-amd64
     container_name: vortexbrowser-server
     restart: unless-stopped
+    stop_grace_period: 15s
     shm_size: "2gb"
     ports:
       - "7788:7788"
@@ -15,6 +16,8 @@ services:
       # Optional GPU hardware acceleration (Intel/AMD VA-API).
       # Comment out if running on a headless VM without /dev/dri.
       - /dev/dri:/dev/dri
+    volumes:
+      - vortex_profile_data:/root/.config/vortexbrowse
     environment:
       - VORTEX_WIDTH=1920
       - VORTEX_HEIGHT=1080
@@ -33,12 +36,15 @@ services:
     image: vortexbrowser-server:rpi-arm64
     container_name: vortexbrowser-rpi
     restart: unless-stopped
+    stop_grace_period: 15s
     shm_size: "1gb"
     ports:
       - "7788:7788"
       - "9757:9757"
     devices:
       - /dev/dri:/dev/dri
+    volumes:
+      - vortex_profile_data:/root/.config/vortexbrowse
     environment:
       - VORTEX_WIDTH=1280
       - VORTEX_HEIGHT=720
@@ -59,10 +65,13 @@ services:
     image: vortexbrowser-server:macos-arm64
     container_name: vortexbrowser-macos
     restart: unless-stopped
+    stop_grace_period: 15s
     shm_size: "2gb"
     ports:
       - "7788:7788"
       - "9757:9757"
+    volumes:
+      - vortex_profile_data:/root/.config/vortexbrowse
     environment:
       - VORTEX_PLATFORM=macos
       - VORTEX_WIDTH=1920
@@ -74,3 +83,6 @@ services:
       - OMP_NUM_THREADS=6
     profiles:
       - macos
+
+volumes:
+  vortex_profile_data: {}

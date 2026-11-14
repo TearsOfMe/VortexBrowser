@@ -176,18 +176,13 @@ def _format_sqlite_rows(rows):
 
 
 def load_cached_cookies(search_paths=None):
-    """Loads saved Twitch cookies from JSON backup files using dynamic system paths."""
+    """Loads saved Twitch cookies from JSON backup files in the user profile directory."""
     if search_paths is None:
-        script_dir = os.path.dirname(os.path.abspath(__file__))
         _, _, user_home = get_target_user_and_home()
         search_paths = [
-            os.path.join(script_dir, "twitch_cookies.json"),
             os.path.join(user_home, ".config", "vortexbrowse", "twitch_cookies.json"),
             os.path.expanduser("~/.config/vortexbrowse/twitch_cookies.json"),
-            "/tmp/twitch_cookies.json",
         ]
-        # Also check all /home/*/Server-*/twitch_cookies.json
-        search_paths.extend(glob.glob("/home/*/Server-*/twitch_cookies.json"))
         # De-duplicate while preserving order
         seen = set()
         search_paths = [p for p in search_paths if not (p in seen or seen.add(p))]
@@ -206,16 +201,12 @@ def load_cached_cookies(search_paths=None):
 
 
 def load_token_text():
-    """Loads plain auth-token string using dynamic system paths."""
-    script_dir = os.path.dirname(os.path.abspath(__file__))
+    """Loads plain auth-token string from the user profile directory."""
     _, _, user_home = get_target_user_and_home()
     search_paths = [
-        os.path.join(script_dir, "twitch_token.txt"),
         os.path.join(user_home, ".config", "vortexbrowse", "twitch_token.txt"),
         os.path.expanduser("~/.config/vortexbrowse/twitch_token.txt"),
-        "/tmp/twitch_token.txt",
     ]
-    search_paths.extend(glob.glob("/home/*/Server-*/twitch_token.txt"))
     seen = set()
     search_paths = [p for p in search_paths if not (p in seen or seen.add(p))]
 
@@ -355,27 +346,26 @@ async def sync_twitch(cookies_to_inject, token_val=None, login_user=None, cdp_ur
                 print(f"   Profilbild: {user_avatar[:70]}...")
             print("==================================================================")
 
-            # Persist full storage state to disk across dynamically discovered locations
-            script_dir = os.path.dirname(os.path.abspath(__file__))
+            # Persist full storage state strictly inside the user config directory (never repo/script dir)
             target_uid, target_gid, user_home = get_target_user_and_home()
 
             target_dirs = []
             c1 = os.path.join(user_home, ".config", "vortexbrowse")
-            c2 = script_dir
             c3 = os.path.expanduser("~/.config/vortexbrowse")
-            for d in [c1, c2, c3]:
+            for d in [c1, c3]:
                 if d and d not in target_dirs:
                     target_dirs.append(d)
 
             for cfg_dir in target_dirs:
                 try:
-                    os.makedirs(cfg_dir, exist_ok=True)
+                    os.makedirs(cfg_dir, mode=0o700, exist_ok=True)
                 except Exception:
                     continue
 
                 storage_path = os.path.join(cfg_dir, "chromium_storage_state.json")
                 try:
                     await ctx.storage_state(path=storage_path)
+                    os.chmod(storage_path, 0o600)
                     print(f"[+] Browser-Status dauerhaft gesichert in: {storage_path}")
                 except Exception:
                     pass
@@ -384,6 +374,7 @@ async def sync_twitch(cookies_to_inject, token_val=None, login_user=None, cdp_ur
                 try:
                     with open(cookie_backup, "w", encoding="utf-8") as f:
                         json.dump(clean_cookies, f, indent=2)
+                    os.chmod(cookie_backup, 0o600)
                     print(f"[+] Cookies-Backup gesichert in: {cookie_backup}")
                 except Exception:
                     pass
@@ -393,16 +384,22 @@ async def sync_twitch(cookies_to_inject, token_val=None, login_user=None, cdp_ur
                     try:
                         with open(token_backup, "w", encoding="utf-8") as f:
                             f.write(token_val + "\n")
+                        os.chmod(token_backup, 0o600)
                     except Exception:
                         pass
 
                 # Fix file ownership dynamically for non-root target user
                 if os.getuid() == 0 and target_uid != 0:
+                    try:
+                        os.chown(cfg_dir, target_uid, target_gid)
+                    except Exception:
+                        pass
                     for fn in ["chromium_storage_state.json", "twitch_cookies.json", "twitch_token.txt"]:
                         fp = os.path.join(cfg_dir, fn)
                         if os.path.exists(fp):
                             try:
                                 os.chown(fp, target_uid, target_gid)
+                                os.chmod(fp, 0o600)
                             except Exception:
                                 pass
 
