@@ -1,0 +1,50 @@
+services:
+  # Standard Linux Server (x86_64: Intel QuickSync / AMD Ryzen VA-API)
+  vortex-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: vortexbrowser-server:linux-amd64
+    container_name: vortexbrowser-server
+    restart: unless-stopped
+    shm_size: "2gb"
+    ports:
+      - "7788:7788"
+      - "9757:9757"
+    devices:
+      # Optional GPU hardware acceleration (Intel/AMD VA-API).
+      # Comment out if running on a headless VM without /dev/dri.
+      - /dev/dri:/dev/dri
+    environment:
+      - VORTEX_WIDTH=1920
+      - VORTEX_HEIGHT=1080
+      - VORTEX_FPS=25
+      - VORTEX_VIDEO_BITRATE=8000
+      - VORTEX_JPEG_QUALITY=82
+      - VORTEX_LOG_LEVEL=INFO
+
+  # Raspberry Pi 4 / 5 (ARM64 64-bit Raspberry Pi OS)
+  vortex-rpi:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      platforms:
+        - linux/arm64
+    image: vortexbrowser-server:rpi-arm64
+    container_name: vortexbrowser-rpi
+    restart: unless-stopped
+    shm_size: "1gb"
+    ports:
+      - "7788:7788"
+      - "9757:9757"
+    devices:
+      - /dev/dri:/dev/dri
+    environment:
+      - VORTEX_WIDTH=1280
+      - VORTEX_HEIGHT=720
+      - VORTEX_FPS=25
+      - VORTEX_VIDEO_BITRATE=4000
+      - VORTEX_JPEG_QUALITY=80
+      - VORTEX_LOG_LEVEL=INFO
+    profiles:
+      - rpi
