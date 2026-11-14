@@ -4147,18 +4147,66 @@ class AmigaClientSession:
         except Exception:
             pass
 
-        is_twitch = "twitch.tv" in page_url.lower()
+        lower_url = page_url.lower()
+        is_twitch = "twitch.tv" in lower_url
+        is_kindle = ("read.amazon." in lower_url) or ("lesen.amazon." in lower_url)
 
         if self.cdp is not None and self.engine == "chromium":
             try:
-                # Do NOT force Chromium Emulation.setAutoDarkModeOverride on Twitch or YouTube
-                # because AutoDarkMode forcefully inverts video surfaces into solid white/blank boxes!
-                auto_dark = is_dark and not is_twitch
+                # Do NOT force Chromium Emulation.setAutoDarkModeOverride on Twitch or Kindle
+                # because AutoDarkMode forcefully inverts video/canvas book surfaces into unreadable boxes!
+                auto_dark = is_dark and not is_twitch and not is_kindle
                 await self.cdp.send("Emulation.setAutoDarkModeOverride", {"enabled": auto_dark})
             except Exception as exc:
                 logger.debug("Emulation.setAutoDarkModeOverride error: %s", exc)
 
-        if is_twitch:
+        if is_kindle:
+            # Kindle Cloud Reader renders book pages onto <canvas> / transparent bitmap tiles.
+            # DarkReader and forced background overrides turn the page dark while leaving bitmap/canvas
+            # text black (invisible). Disable DarkReader and use clean CSS hue-preserving inversion.
+            try:
+                if is_dark:
+                    kindle_dark_js = """
+                    (() => {
+                        try {
+                            if (typeof DarkReader !== 'undefined') DarkReader.disable();
+                            let f = document.getElementById('__vb_dark_flash');
+                            if (f) f.remove();
+                            let s = document.getElementById('__vb_kindle_dark_fix');
+                            if (!s && document.head) {
+                                s = document.createElement('style');
+                                s.id = '__vb_kindle_dark_fix';
+                                document.head.appendChild(s);
+                            }
+                            if (s) {
+                                s.textContent = `
+                                    html {
+                                        filter: invert(0.91) hue-rotate(180deg) !important;
+                                        background-color: #ffffff !important;
+                                    }
+                                    img[src*="images-amazon"], img[src*="media-amazon"], video {
+                                        filter: invert(1) hue-rotate(180deg) !important;
+                                    }
+                                `;
+                            }
+                        } catch(e) {}
+                    })();
+                    """
+                    await target_page.evaluate(kindle_dark_js)
+                else:
+                    kindle_light_js = """
+                    (() => {
+                        try {
+                            let s = document.getElementById('__vb_kindle_dark_fix');
+                            if (s) s.remove();
+                        } catch(e) {}
+                    })();
+                    """
+                    await target_page.evaluate(kindle_light_js)
+            except Exception as exc:
+                logger.debug("Kindle dark mode evaluate error: %s", exc)
+
+        elif is_twitch:
             # Native Twitch Dark Theme toggle (preserves video element, flawless dark UI)
             try:
                 if is_dark:
@@ -4272,11 +4320,19 @@ class AmigaClientSession:
                 except Exception:
                     pass
 
+            page_url = ""
+            try:
+                page_url = (target_page.url or "").lower()
+            except Exception:
+                pass
+            is_kindle = ("read.amazon." in page_url) or ("lesen.amazon." in page_url)
+
             dark_css = ""
-            if self.dark_mode == 1:
-                dark_css = ":root, html { color-scheme: dark !important; } html, body { background-color: #18181b !important; color: #f4f4f5 !important; }"
-            elif self.dark_mode == 0:
-                dark_css = ":root, html { color-scheme: light !important; }"
+            if not is_kindle:
+                if self.dark_mode == 1:
+                    dark_css = ":root, html { color-scheme: dark !important; } html, body { background-color: #18181b !important; color: #f4f4f5 !important; }"
+                elif self.dark_mode == 0:
+                    dark_css = ":root, html { color-scheme: light !important; }"
 
             js = f"""
             (() => {{
