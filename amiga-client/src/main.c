@@ -257,6 +257,8 @@ int main(int argc, char **argv)
      * verify that the host CPU actually possesses an active AltiVec/VMX vector unit.
      * Prevents illegal instruction exceptions on AmigaOne X5000, A1222+, Sam460, Sam440, G3.
      */
+    locale_init_catalog();
+
     uint32 vec_unit = VECTORTYPE_NONE;
     if (IExec) {
         IExec->GetCPUInfoTags(GCIT_VectorUnit, &vec_unit, TAG_DONE);
@@ -266,20 +268,19 @@ int main(int argc, char **argv)
 #if defined(__ALTIVEC__)
     if (!has_altivec) {
         if (IDOS) {
-            IDOS->Printf("\n[VortexBrowser] FEHLER: Dieses Programm ('VortexBrowser-AltiVec') wurde speziell fuer\n"
-                         "CPUs mit AltiVec/VMX SIMD (z.B. AmigaOne X1000 oder PowerPC G4) kompiliert.\n"
-                         "Auf diesem System (X5000 / A1222+ / Sam460 / G3) bitte die Standard-Version 'VortexBrowser' verwenden!\n\n");
+            IDOS->Printf("\n[VortexBrowser] ERROR: %s\n\n", GetVString(MSG_CPU_INCOMPAT_BODY));
         }
         if (IIntuition) {
             struct EasyStruct es = {
                 sizeof(struct EasyStruct),
                 0,
-                "VortexBrowser - CPU Inkompatibel",
-                "Diese Version ('VortexBrowser-AltiVec') benoetigt eine CPU mit AltiVec/VMX SIMD-Einheit (z.B. AmigaOne X1000 oder G4).\n\nAuf Systemen wie AmigaOne X5000, A1222+, Sam460 oder G3 starten Sie bitte die Standard-Version 'VortexBrowser'!",
-                "Abbrechen"
+                (STRPTR)GetVString(MSG_CPU_INCOMPAT_TITLE),
+                (STRPTR)GetVString(MSG_CPU_INCOMPAT_BODY),
+                (STRPTR)GetVString(MSG_GEN_CANCEL)
             };
             IIntuition->EasyRequestArgs(NULL, &es, NULL, NULL);
         }
+        locale_close_catalog();
         return 20;
     }
 #endif
@@ -289,17 +290,16 @@ int main(int argc, char **argv)
     g_app.server_port    = DEFAULT_SERVER_PORT;
     g_app.sock_fd     = -1;
     g_app.running     = TRUE;
-    strncpy(g_app.status_text, "Bereit.", sizeof(g_app.status_text) - 1);
+    strncpy(g_app.status_text, GetVString(MSG_STATUS_READY), sizeof(g_app.status_text) - 1);
     strncpy(g_app.autotest_dl_dir, "RAM:", sizeof(g_app.autotest_dl_dir) - 1);
 
     /* Shell banner suppressed per user request */
 
     if (!open_libs_and_classes()) {
         close_libs_and_classes();
+        locale_close_catalog();
         return 1;
     }
-
-    locale_init_catalog();
 
     prefs_init(&g_app);
     prefs_load(&g_app);
@@ -360,12 +360,12 @@ int main(int argc, char **argv)
     /* Set initial status bar message with active streaming system */
     const char *sm_label = (g_app.prefs.video_stream_mode == STREAM_VIDEO_H264) ? "H.264" :
                            (g_app.prefs.video_stream_mode == STREAM_VIDEO_DIRTYRECT) ? "LZ4 (2D)" : "Auto";
-    app_set_status("Bereit - Stream-System: %s | %u kbps", sm_label, (unsigned)g_app.prefs.video_bitrate_k);
+    app_set_status(GetVString(MSG_STATUS_READY_STREAM), sm_label, (unsigned)g_app.prefs.video_bitrate_k);
 
     /* Connect automatically on startup if a server address is configured */
     if (g_app.server_host[0] != '\0') {
         if (net_connect(&g_app, g_app.server_host, g_app.server_port)) {
-            app_set_status("Verbunden mit %s:%u - Stream: %s | %u kbps",
+            app_set_status(GetVString(MSG_STATUS_CONNECTED_STREAM),
                            g_app.server_host, (unsigned)g_app.server_port, sm_label, (unsigned)g_app.prefs.video_bitrate_k);
             renderer_sync_viewport_size(&g_app);
             net_send_url(&g_app, "@REFRESH");

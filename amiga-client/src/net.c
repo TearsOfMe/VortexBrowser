@@ -79,7 +79,7 @@ BOOL net_connect(VortexApp *app, const char *host, uint16_t port)
     net_disconnect(app);
 
     if (!ISocket) {
-        app_set_status("Fehler: bsdsocket.library nicht verfuegbar!");
+        app_set_status(GetVString(MSG_STATUS_NO_BSDSOCKET));
         return FALSE;
     }
 
@@ -92,11 +92,11 @@ BOOL net_connect(VortexApp *app, const char *host, uint16_t port)
     }
 
     if (!app->server_host[0]) {
-        app_set_status("Nicht verbunden. Bitte Server konfigurieren (Amiga+1).");
+        app_set_status(GetVString(MSG_STATUS_NOT_CONNECTED));
         return FALSE;
     }
 
-    app_set_status("Verbinde mit %s:%u ...", app->server_host, (unsigned)app->server_port);
+    app_set_status(GetVString(MSG_STATUS_CONNECTING), app->server_host, (unsigned)app->server_port);
 
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
@@ -107,7 +107,7 @@ BOOL net_connect(VortexApp *app, const char *host, uint16_t port)
     if (ip == INADDR_NONE) {
         struct hostent *he = ISocket->gethostbyname((STRPTR)app->server_host);
         if (!he || !he->h_addr_list || !he->h_addr_list[0]) {
-            app_set_status("Host konnte nicht aufgeloest werden: %s", app->server_host);
+            app_set_status(GetVString(MSG_STATUS_HOST_RESOLVE_ERR), app->server_host);
             return FALSE;
         }
         memcpy(&addr.sin_addr, he->h_addr_list[0], sizeof(struct in_addr));
@@ -117,7 +117,7 @@ BOOL net_connect(VortexApp *app, const char *host, uint16_t port)
 
     LONG sock = ISocket->socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) {
-        app_set_status("Socket-Erstellung fehlgeschlagen!");
+        app_set_status(GetVString(MSG_STATUS_SOCKET_ERR));
         return FALSE;
     }
 
@@ -160,7 +160,7 @@ BOOL net_connect(VortexApp *app, const char *host, uint16_t port)
 
     if (!conn_ok) {
         ISocket->CloseSocket(sock);
-        app_set_status("Verbindung zu %s:%u fehlgeschlagen!", app->server_host, (unsigned)app->server_port);
+        app_set_status(GetVString(MSG_STATUS_CONN_FAILED), app->server_host, (unsigned)app->server_port);
         return FALSE;
     }
 
@@ -171,7 +171,7 @@ BOOL net_connect(VortexApp *app, const char *host, uint16_t port)
     app->renderer.format_sent = FALSE;
     DBG_LOG("[Net] Connected to server at %s:%u (sock=%ld)\n",
            app->server_host, (unsigned)app->server_port, (long)sock);
-    app_set_status("Verbunden mit %s:%u - Synchronisiere Viewport...",
+    app_set_status(GetVString(MSG_STATUS_CONN_SYNC),
                    app->server_host, (unsigned)app->server_port);
 
     /* Immediately sync Amiga window's space.gadget size or fixed resolution to server */
@@ -201,7 +201,7 @@ BOOL net_handle_incoming(VortexApp *app)
     if (!recv_exact(app->sock_fd, &msg_type, 1)) {
         DBG_LOG("[Net] Server closed connection.\n");
         net_disconnect(app);
-        app_set_status("Verbindung getrennt.");
+        app_set_status(GetVString(MSG_STATUS_DISCONNECTED));
         return FALSE;
     }
 
@@ -247,7 +247,7 @@ BOOL net_handle_incoming(VortexApp *app)
                         : ((hdr.format == FMT_RGB565) ? "RGB565 16bpp" : "ARGB32");
                     const char *codec_name = (hdr.codec == CODEC_H264) ? "H.264 VA-API" :
                                              (hdr.codec == CODEC_JPEG) ? "MJPEG" : "LZ4";
-                    app_set_status("Verbunden (%ux%u %s %s) | %s",
+                    app_set_status(GetVString(MSG_STATUS_CONN_FMT),
                                    (unsigned)VB_BE16(hdr.width),
                                    (unsigned)VB_BE16(hdr.height),
                                    fmt_name,
@@ -255,13 +255,13 @@ BOOL net_handle_incoming(VortexApp *app)
                                    app->current_url[0] ? app->current_url : "Portal");
                 } else if (hdr.codec == CODEC_H264 && !r->is_h264_active) {
                     r->is_h264_active = TRUE;
-                    app_set_status("Verbunden (%ux%u H.264 VA-API Hardware) | %s",
+                    app_set_status(GetVString(MSG_STATUS_CONN_H264),
                                    (unsigned)VB_BE16(hdr.width),
                                    (unsigned)VB_BE16(hdr.height),
                                    app->current_url[0] ? app->current_url : "Portal");
                 } else if (hdr.codec != CODEC_H264 && r->is_h264_active) {
                     r->is_h264_active = FALSE;
-                    app_set_status("Verbunden (%ux%u LZ4 2D Dirty-Rect) | %s",
+                    app_set_status(GetVString(MSG_STATUS_CONN_LZ4),
                                    (unsigned)VB_BE16(hdr.width),
                                    (unsigned)VB_BE16(hdr.height),
                                    app->current_url[0] ? app->current_url : "Portal");
@@ -381,7 +381,7 @@ BOOL net_handle_incoming(VortexApp *app)
                 size_t hi = 0;
                 while (*p && *p != '/' && *p != ':' && hi < sizeof(host) - 1) host[hi++] = *p++;
                 host[hi] = '\0';
-                snprintf(clean_title, sizeof(clean_title), "%s", host[0] ? host : "Webseite");
+                snprintf(clean_title, sizeof(clean_title), "%s", host[0] ? host : GetVString(MSG_WEB_PAGE_FALLBACK));
             }
 
             /* Update specific tab URL & title so each tab stays completely in sync */
@@ -394,7 +394,7 @@ BOOL net_handle_incoming(VortexApp *app)
             if (tidx == app->active_tab_idx || tidx >= app->num_tabs) {
                 snprintf(app->current_url, sizeof(app->current_url), "%s", clean_url);
                 gui_update_url_bar(app, clean_url);
-                app_set_status("Seite geladen: %s", clean_title);
+                app_set_status(GetVString(MSG_STATUS_PAGE_LOADED), clean_title);
 
                 /* Standard Browser Auto-Fill:
                  * Check if we have saved credentials for this domain.
@@ -406,7 +406,7 @@ BOOL net_handle_incoming(VortexApp *app)
                         char fill_cmd[384];
                         snprintf(fill_cmd, sizeof(fill_cmd), "@AUTOLOGIN_FILL:%s\t%s", pe->username, pe->password);
                         net_send_url(app, fill_cmd);
-                        app_set_status("Zugangsdaten fuer '%s' eingefuellt.", pe->username);
+                        app_set_status(GetVString(MSG_STATUS_CREDENTIALS_FILLED), pe->username);
                     }
                 }
             }
@@ -467,7 +467,7 @@ BOOL net_handle_incoming(VortexApp *app)
                     if (recv_exact(app->sock_fd, clip_buf, tlen)) {
                         clip_buf[tlen] = '\0';
                         clipboard_write_text(clip_buf);
-                        app_set_status("Text in Zwischenablage kopiert (%u Zeichen)", (unsigned)tlen);
+                        app_set_status(GetVString(MSG_STATUS_CLIPBOARD_COPIED), (unsigned)tlen);
                     }
                     free(clip_buf);
                 }
@@ -513,9 +513,9 @@ BOOL net_handle_incoming(VortexApp *app)
                     ASL_FileRequest,
                     ASLFR_Window,        app->win,
                     ASLFR_SleepWindow,   TRUE,
-                    ASLFR_TitleText,     "VortexBrowser: Datei zum Hochladen waehlen...",
-                    ASLFR_PositiveText,  "Auswaehlen",
-                    ASLFR_NegativeText,  "Abbrechen",
+                    ASLFR_TitleText,     (Tag)GetVString(MSG_NET_UPLOAD_TITLE),
+                    ASLFR_PositiveText,  (Tag)GetVString(MSG_NET_UPLOAD_POS),
+                    ASLFR_NegativeText,  (Tag)GetVString(MSG_GEN_CANCEL),
                     ASLFR_DoSaveMode,    FALSE,
                     ASLFR_RejectIcons,   TRUE,
                     ASLFR_InitialDrawer, (Tag)init_drawer,
@@ -546,7 +546,7 @@ BOOL net_handle_incoming(VortexApp *app)
                 resp->file_size = 0;
                 resp->accepted  = 0;
                 send_all(app->sock_fd, resp_buf, sizeof(resp_buf));
-                app_set_status("Datei-Upload abgebrochen.");
+                app_set_status(GetVString(MSG_NET_UPLOAD_CANCELLED));
             } else {
                 BPTR fh = IDOS->Open(chosen_path, MODE_OLDFILE);
                 if (!fh) {
@@ -559,7 +559,7 @@ BOOL net_handle_incoming(VortexApp *app)
                     resp->file_size = 0;
                     resp->accepted  = 0;
                     send_all(app->sock_fd, resp_buf, sizeof(resp_buf));
-                    app_set_status("Fehler beim Oeffnen von: %s", chosen_file);
+                    app_set_status(GetVString(MSG_NET_UPLOAD_OPEN_ERR), chosen_file);
                 } else {
                     int64 fsize64 = IDOS->GetFileSize(fh);
                     uint32_t fsize = (uint32_t)fsize64;
@@ -579,7 +579,7 @@ BOOL net_handle_incoming(VortexApp *app)
                         return FALSE;
                     }
 
-                    app_set_status("Lade hoch: %s (%u KB)...", chosen_file, (unsigned)(fsize / 1024));
+                    app_set_status(GetVString(MSG_NET_UPLOADING), chosen_file, (unsigned)(fsize / 1024));
 
                     /* Stream chunks to server */
                     const uint32_t chunk_buf_size = 64 * 1024;
@@ -616,7 +616,7 @@ BOOL net_handle_incoming(VortexApp *app)
 
                     free(chunk_buf);
                     IDOS->Close(fh);
-                    app_set_status("Datei hochgeladen: %s (%u KB)", chosen_file, (unsigned)(sent_total / 1024));
+                    app_set_status(GetVString(MSG_NET_UPLOADED), chosen_file, (unsigned)(sent_total / 1024));
                 }
             }
             break;
@@ -644,15 +644,15 @@ BOOL net_handle_incoming(VortexApp *app)
                     struct EasyStruct es = {
                         sizeof(struct EasyStruct),
                         0,
-                        "Passwort speichern",
-                        "Moechten Sie das Passwort fuer\n'%s' (Benutzer: %s)\nim sicheren Passwort-Manager speichern?",
-                        "Speichern|Nicht jetzt"
+                        (STRPTR)GetVString(MSG_NET_SAVE_PW_TITLE),
+                        (STRPTR)GetVString(MSG_NET_SAVE_PW_BODY),
+                        (STRPTR)GetVString(MSG_NET_SAVE_PW_BTNS)
                     };
                     struct Window *target_win = app->win;
                     LONG res = IIntuition->EasyRequest(target_win, &es, NULL, pw_save.url, pw_save.username);
                     if (res == 1) {
                         if (passwords_add_or_update(app, pw_save.url, pw_save.username, pw_save.password, NULL)) {
-                            app_set_status("Passwort fuer '%s' gespeichert.", pw_save.username);
+                            app_set_status(GetVString(MSG_NET_PW_SAVED), pw_save.username);
                         }
                     }
                 }
@@ -741,12 +741,12 @@ BOOL net_send_url(VortexApp *app, const char *url)
             DBG_LOG("[Net] Not connected, auto-connecting to %s:%u before sending URL...\n",
                    app->server_host, (unsigned)app->server_port);
             if (!net_connect(app, app->server_host, app->server_port)) {
-                app_set_status("Verbindung zu %s:%u fehlgeschlagen!", app->server_host, (unsigned)app->server_port);
+                app_set_status(GetVString(MSG_STATUS_CONN_FAILED), app->server_host, (unsigned)app->server_port);
                 return FALSE;
             }
         }
     }
-    app_set_status("Lade Seite: %s ...", url);
+    app_set_status(GetVString(MSG_STATUS_LOADING_PAGE), url);
     return net_send_input(app, INPUT_GOTO_URL, 0, 0, 0, 0, url);
 }
 

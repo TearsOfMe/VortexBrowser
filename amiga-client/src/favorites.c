@@ -9,6 +9,7 @@
 #include <gadgets/chooser.h>
 
 #include "favorites.h"
+#include "locale_strings.h"
 
 static void ensure_dir_exists(const char *dir_path)
 {
@@ -26,13 +27,13 @@ static void ensure_dir_exists(const char *dir_path)
 static void populate_defaults(VortexApp *app)
 {
     app->num_favorites = 0;
-    favorites_add(app, "VortexBrowser Portal (Start)", "@HOME");
+    favorites_add(app, GetVString(MSG_FAV_DEFAULT_PORTAL), "@HOME");
     favorites_add(app, "amiga-news.de", "https://www.amiga-news.de");
     favorites_add(app, "OS4Depot", "https://os4depot.net");
     favorites_add(app, "Amigans.net", "https://www.amigans.net");
     favorites_add(app, "YouTube", "https://www.youtube.com");
     favorites_add(app, "Wikipedia AmigaOS", "https://de.wikipedia.org/wiki/AmigaOS");
-    favorites_add(app, "Google Suche", "https://www.google.de");
+    favorites_add(app, GetVString(MSG_FAV_GOOGLE_SEARCH), "https://www.google.de");
 }
 
 void favorites_init(VortexApp *app)

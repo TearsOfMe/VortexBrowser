@@ -12,6 +12,7 @@
 #include <libraries/asl.h>
 
 #include "download.h"
+#include "locale_strings.h"
 #include "gui_download.h"
 #include "net.h"
 
@@ -179,9 +180,9 @@ void download_handle_start(VortexApp *app, const MsgDownloadStart *msg)
             ASL_FileRequest,
             ASLFR_Window,        app->win,
             ASLFR_SleepWindow,   TRUE,
-            ASLFR_TitleText,     "VortexBrowser: Download speichern unter...",
-            ASLFR_PositiveText,  "Speichern",
-            ASLFR_NegativeText,  "Abbrechen",
+            ASLFR_TitleText,     (Tag)GetVString(MSG_DL_SAVE_TITLE),
+            ASLFR_PositiveText,  (Tag)GetVString(MSG_DL_SAVE_POS),
+            ASLFR_NegativeText,  (Tag)GetVString(MSG_GEN_CANCEL),
             ASLFR_DoSaveMode,    TRUE,
             ASLFR_RejectIcons,   TRUE,
             ASLFR_InitialDrawer, (Tag)init_drawer,
@@ -234,7 +235,7 @@ void download_handle_start(VortexApp *app, const MsgDownloadStart *msg)
     if (!accepted || chosen_path[0] == '\0') {
         DBG_LOG("[Download] Download id=%u cancelled by user.\n", (unsigned)dl_id);
         e->status = DL_STATUS_CANCELLED;
-        snprintf(e->eta_str, sizeof(e->eta_str), "Abgebr.");
+        snprintf(e->eta_str, sizeof(e->eta_str), "%s", GetVString(MSG_DL_ETA_CANCELLED));
         if (idx == app->download_mgr.count) app->download_mgr.count++;
         net_send_download_response(app, dl_id, 0);
     } else {
@@ -242,7 +243,7 @@ void download_handle_start(VortexApp *app, const MsgDownloadStart *msg)
         if (!fh) {
             DBG_LOG("[Download] ERROR: Could not open '%s' for writing!\n", chosen_path);
             e->status = DL_STATUS_ERROR;
-            snprintf(e->eta_str, sizeof(e->eta_str), "Fehler");
+            snprintf(e->eta_str, sizeof(e->eta_str), "%s", GetVString(MSG_DL_STATUS_ERROR));
             if (idx == app->download_mgr.count) app->download_mgr.count++;
             net_send_download_response(app, dl_id, 0);
         } else {
@@ -267,9 +268,9 @@ void download_handle_start(VortexApp *app, const MsgDownloadStart *msg)
     if (IListBrowser) {
         char tot_str[32];
         format_size(dl_total, tot_str, sizeof(tot_str));
-        const char *status_str = (e->status == DL_STATUS_DOWNLOADING) ? "Laufend" :
-                                 (e->status == DL_STATUS_COMPLETED)   ? "Fertig" :
-                                 (e->status == DL_STATUS_CANCELLED)   ? "Abgebrochen" : "Fehler";
+        const char *status_str = (e->status == DL_STATUS_DOWNLOADING) ? GetVString(MSG_DL_STATUS_RUNNING) :
+                                 (e->status == DL_STATUS_COMPLETED)   ? GetVString(MSG_DL_STATUS_DONE) :
+                                 (e->status == DL_STATUS_CANCELLED)   ? GetVString(MSG_DL_STATUS_CANCELLED) : GetVString(MSG_DL_STATUS_ERROR);
 
         struct Node *node = IListBrowser->AllocListBrowserNode(7,
             LBNA_UserData, (Tag)e,
@@ -390,7 +391,7 @@ void download_handle_complete(VortexApp *app, const MsgDownloadComplete *msg)
         e->file_handle = ZERO;
     }
     e->status = DL_STATUS_COMPLETED;
-    snprintf(e->eta_str, sizeof(e->eta_str), "Fertig");
+    snprintf(e->eta_str, sizeof(e->eta_str), "%s", GetVString(MSG_DL_STATUS_DONE));
 
     if (e->dest_path[0]) {
         char comment[160];
@@ -420,7 +421,7 @@ void download_cancel(VortexApp *app, uint32_t download_id)
             e->file_handle = ZERO;
         }
         e->status = DL_STATUS_CANCELLED;
-        snprintf(e->eta_str, sizeof(e->eta_str), "Abgebr.");
+        snprintf(e->eta_str, sizeof(e->eta_str), "%s", GetVString(MSG_DL_ETA_CANCELLED));
     }
 
     if (app->download.download_id == download_id) {

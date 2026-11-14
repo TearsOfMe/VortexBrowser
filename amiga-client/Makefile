@@ -49,13 +49,16 @@ TARGET_ALTIVEC   = VortexBrowser-AltiVec
 all: catalogs $(TARGET_UNIVERSAL) $(TARGET_ALTIVEC)
 
 catalogs:
-	@mkdir -p catalogs/deutsch catalogs/english catalogs/italian catalogs/italiano catalogs/french catalogs/francais
-	flexcat catalogs/VortexBrowser.cd catalogs/deutsch/VortexBrowser.ct CATALOG=catalogs/deutsch/VortexBrowser.catalog NOOPTIM
+	@mkdir -p catalogs/english catalogs/german catalogs/deutsch catalogs/french catalogs/francais catalogs/italian catalogs/italiano catalogs/spanish catalogs/espanol
 	flexcat catalogs/VortexBrowser.cd catalogs/english/VortexBrowser.ct CATALOG=catalogs/english/VortexBrowser.catalog NOOPTIM
-	flexcat catalogs/VortexBrowser.cd catalogs/italian/VortexBrowser.ct CATALOG=catalogs/italian/VortexBrowser.catalog NOOPTIM
-	flexcat catalogs/VortexBrowser.cd catalogs/italiano/VortexBrowser.ct CATALOG=catalogs/italiano/VortexBrowser.catalog NOOPTIM
+	flexcat catalogs/VortexBrowser.cd catalogs/german/VortexBrowser.ct CATALOG=catalogs/german/VortexBrowser.catalog NOOPTIM
+	flexcat catalogs/VortexBrowser.cd catalogs/deutsch/VortexBrowser.ct CATALOG=catalogs/deutsch/VortexBrowser.catalog NOOPTIM
 	flexcat catalogs/VortexBrowser.cd catalogs/french/VortexBrowser.ct CATALOG=catalogs/french/VortexBrowser.catalog NOOPTIM
 	flexcat catalogs/VortexBrowser.cd catalogs/francais/VortexBrowser.ct CATALOG=catalogs/francais/VortexBrowser.catalog NOOPTIM
+	flexcat catalogs/VortexBrowser.cd catalogs/italian/VortexBrowser.ct CATALOG=catalogs/italian/VortexBrowser.catalog NOOPTIM
+	flexcat catalogs/VortexBrowser.cd catalogs/italiano/VortexBrowser.ct CATALOG=catalogs/italiano/VortexBrowser.catalog NOOPTIM
+	flexcat catalogs/VortexBrowser.cd catalogs/spanish/VortexBrowser.ct CATALOG=catalogs/spanish/VortexBrowser.catalog NOOPTIM
+	flexcat catalogs/VortexBrowser.cd catalogs/espanol/VortexBrowser.ct CATALOG=catalogs/espanol/VortexBrowser.catalog NOOPTIM
 
 $(TARGET_UNIVERSAL): $(OBJS_UNIVERSAL)
 	$(CC) $(OBJS_UNIVERSAL) -o $(TARGET_UNIVERSAL) $(LDFLAGS)
@@ -80,4 +83,4 @@ $(TARGET_ALTIVEC): $(OBJS_PURE_ALTIVEC)
 clean:
 	rm -rf src/*.o $(OBJS_ALTIVEC_DIR) $(TARGET_UNIVERSAL) $(TARGET_UNIVERSAL).stripped $(TARGET_ALTIVEC) $(TARGET_ALTIVEC).stripped
 
-.PHONY: all clean
+.PHONY: all clean catalogs
