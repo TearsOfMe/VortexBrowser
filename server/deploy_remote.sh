@@ -2,7 +2,7 @@
 set -e
 
 export HOST="192.168.178.2"
-export TARGET_DIR="/home/tears/Server-CachyOS-EliteDesk"
+export TARGET_DIR="/home/tears/Server-Linux"
 export SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "[1/3] Copying files to remote host ${HOST}..."
