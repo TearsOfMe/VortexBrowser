@@ -11,6 +11,26 @@ VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwrigh
 
 ---
 
+### Systemanforderungen
+
+#### AmigaOS 4.1 Client
+* **Betriebssystem:** **AmigaOS 4.1 Final Edition** (Update 1 oder Update 2 empfohlen)
+* **Prozessor & Binary-Variante:**
+  * **`VortexBrowser` (Universal PowerPC):** Läuft auf **jedem** AmigaOS-4-System (AmigaOne X5000, A1222/A1222+ Tabor, Sam440ep/Flex, Sam460ex/cr, Pegasos II, AmigaOne XE/SE/µA1, Classic PPC sowie QEMU `pegasos2`/`sam460ex`), inklusive dynamischer AltiVec-Erkennung im Pixel-Renderer.
+  * **`VortexBrowser-AltiVec`:** Optimierte Recompile-Version für **PowerPC-CPUs mit AltiVec** (AmigaOne X1000, PowerMac G4/G5, AmigaOne XE G4).
+* **Arbeitsspeicher:** Mindestens **256 MB RAM** (**512 MB+ RAM** für HD-Streams empfohlen).
+* **Grafik:** RTG-Grafikkarte (`Picasso96`) mit **24/32-Bit TrueColor** (`Radeon HD` oder `Radeon RX` empfohlen für GPU-Scaling via `CompositeTags()`).
+* **Hardware-Videodekodierung (optional):** **`va.library`** (aus *Enhancer Software*) für Hardware-H.264-Dekodierung auf Radeon HD/RX (`UVD`/`VCN`). Ohne `va.library` schaltet der Client automatisch auf den schnellen YUV420p/LZ4-Pfad um.
+* **Netzwerk:** Konfiguriertes **Roadshow TCP/IP** (`bsdsocket.library` v4+), LAN (100 Mbit/Gigabit empfohlen) mit Verbindung zum Server (TCP-Port **7788** für Video/Steuerung, **9757** für Audio).
+* **Audio:** Konfiguriertes **AHI** (`ahi.device`, Unit 0) für synchrone 16-Bit-Stereo-Ausgabe.
+* **System-Bibliotheken:** Standard AmigaOS 4.1 ReAction-Klassen (`window.class`, `layout.gadget`, `clicktab.gadget`, `listbrowser.gadget`, `chooser.gadget`, `popupmenu.class`, `locale.library`, `icon.library`); optional `codesets.library` (v5/6) für erweiterte Zeichensatzkonvertierung. Alle Codecs (`libavcodec`, `liblz4`, `libjpeg`) sind statisch einkompiliert – keine externen `.so`-Bibliotheken nötig.
+
+#### Rendering-Server (Backend)
+* **Hardware:** Beliebiger x86_64/ARM64 Linux-PC, Mac (Apple Silicon / Intel) oder **Raspberry Pi 3 / 4 / 5** (min. **1 GB RAM** mit ZRAM auf Pi 3; **2–8 GB RAM** auf Pi 4/5 oder Desktop optimal).
+* **Software:** Linux/macOS mit Python 3.10+, **Rustwright** + Playwright, **Ungoogled-Chromium** (Standard) oder **Firefox**, `pulseaudio`/`pipewire-pulse` – oder fertig geflashtes [Raspberry-Pi-SD-Image](server/README_RASPI_IMAGE.md).
+
+---
+
 ### Highlights & Features
 
 1. **Hardware-beschleunigtes H.264 Video-Streaming & Dekodierung (va.library + VA-API):**
@@ -120,6 +140,46 @@ docker compose -f docker-compose.macos.yml up -d
 ## English Version
 
 VortexBrowser renders modern websites via headless Chromium (Playwright / Rustwright + DirectCDP WebSocket) on a **universal Linux / macOS server or Docker container** (with automatic hardware acceleration for AMD Ryzen Vulkan, Intel QuickSync VA-API, **Apple VideoToolbox**, and Raspberry Pi 4/5 V3D) and streams compressed video data using **Planar YUV420P + 2D Dirty-Rect + LZ4** to a native **AmigaOS 4.1 PowerPC ReAction client**.
+
+---
+
+### Systemanforderungen
+
+#### AmigaOS 4.1 Client
+* **Betriebssystem:** **AmigaOS 4.1 Final Edition** (Update 1 oder Update 2 empfohlen)
+* **Prozessor & Binary-Variante:**
+  * **`VortexBrowser` (Universal PowerPC):** Läuft auf **jedem** AmigaOS-4-System (AmigaOne X5000, A1222/A1222+ Tabor, Sam440ep/Flex, Sam460ex/cr, Pegasos II, AmigaOne XE/SE/µA1, Classic PPC sowie QEMU `pegasos2`/`sam460ex`), inklusive dynamischer AltiVec-Erkennung im Pixel-Renderer.
+  * **`VortexBrowser-AltiVec`:** Optimierte Recompile-Version für **PowerPC-CPUs mit AltiVec** (AmigaOne X1000, PowerMac G4/G5, AmigaOne XE G4).
+* **Arbeitsspeicher:** Mindestens **256 MB RAM** (**512 MB+ RAM** für HD-Streams empfohlen).
+* **Grafik:** RTG-Grafikkarte (`Picasso96`) mit **24/32-Bit TrueColor** (`Radeon HD` oder `Radeon RX` empfohlen für GPU-Scaling via `CompositeTags()`).
+* **Hardware-Videodekodierung (optional):** **`va.library`** (aus *Enhancer Software*) für Hardware-H.264-Dekodierung auf Radeon HD/RX (`UVD`/`VCN`). Ohne `va.library` schaltet der Client automatisch auf den schnellen YUV420p/LZ4-Pfad um.
+* **Netzwerk:** Konfiguriertes **Roadshow TCP/IP** (`bsdsocket.library` v4+), LAN (100 Mbit/Gigabit empfohlen) mit Verbindung zum Server (TCP-Port **7788** für Video/Steuerung, **9757** für Audio).
+* **Audio:** Konfiguriertes **AHI** (`ahi.device`, Unit 0) für synchrone 16-Bit-Stereo-Ausgabe.
+* **System-Bibliotheken:** Standard AmigaOS 4.1 ReAction-Klassen (`window.class`, `layout.gadget`, `clicktab.gadget`, `listbrowser.gadget`, `chooser.gadget`, `popupmenu.class`, `locale.library`, `icon.library`); optional `codesets.library` (v5/6) für erweiterte Zeichensatzkonvertierung. Alle Codecs (`libavcodec`, `liblz4`, `libjpeg`) sind statisch einkompiliert – keine externen `.so`-Bibliotheken nötig.
+
+#### Rendering-Server (Backend)
+* **Hardware:** Beliebiger x86_64/ARM64 Linux-PC, Mac (Apple Silicon / Intel) oder **Raspberry Pi 3 / 4 / 5** (min. **1 GB RAM** mit ZRAM auf Pi 3; **2–8 GB RAM** auf Pi 4/5 oder Desktop optimal).
+* **Software:** Linux/macOS mit Python 3.10+, **Rustwright** + Playwright, **Ungoogled-Chromium** (Standard) oder **Firefox**, `pulseaudio`/`pipewire-pulse` – oder fertig geflashtes [Raspberry-Pi-SD-Image](server/README_RASPI_IMAGE.md).
+
+---
+
+### System Requirements
+
+#### AmigaOS 4.1 Client
+* **Operating System:** **AmigaOS 4.1 Final Edition** (Update 1 or Update 2 recommended)
+* **CPU & Executable Selection:**
+  * **`VortexBrowser` (Universal PowerPC):** Runs on **every** AmigaOS 4 system (AmigaOne X5000, A1222/A1222+ Tabor, Sam440ep/Flex, Sam460ex/cr, Pegasos II, AmigaOne XE/SE/µA1, Classic PPC, and QEMU `pegasos2`/`sam460ex`), with runtime AltiVec detection for the pixel renderer.
+  * **`VortexBrowser-AltiVec`:** Dedicated AltiVec build for **G4 / G5 / AmigaOne X1000** systems.
+* **Memory:** Minimum **256 MB RAM** (**512 MB+ RAM** recommended for HD streams).
+* **Graphics:** RTG graphics card (`Picasso96`) with **24/32-bit TrueColor** (**Radeon HD** or **Radeon RX** recommended for hardware scaling via `CompositeTags()`).
+* **Hardware Video Decoding (optional):** **`va.library`** (*Enhancer Software*) for hardware H.264 decoding on Radeon HD/RX (`UVD`/`VCN`). Without `va.library`, the client automatically uses the fast YUV420p/LZ4 path.
+* **Network:** Configured **Roadshow TCP/IP** (`bsdsocket.library` v4+), Ethernet LAN recommended, reachable on TCP ports **7788** (Video/Control) and **9757** (Audio).
+* **Audio:** Configured **AHI** (`ahi.device`, Unit 0) for synchronized 16-bit stereo audio.
+* **System Libraries:** Standard AmigaOS 4.1 ReAction classes (`window.class`, `layout.gadget`, `clicktab.gadget`, `listbrowser.gadget`, `chooser.gadget`, `popupmenu.class`, `locale.library`, `icon.library`); optional `codesets.library` (v5/6) for extended charset conversion. All codecs (`libavcodec`, `liblz4`, `libjpeg`) are statically linked — no external `.so` files required.
+
+#### Rendering Server (Backend)
+* **Hardware:** Any x86_64/ARM64 Linux PC, Mac (Apple Silicon / Intel), or **Raspberry Pi 3 / 4 / 5** (1 GB RAM minimum with ZRAM on Pi 3; 2–8 GB RAM optimal).
+* **Software:** Linux/macOS with Python 3.10+, **Rustwright** + Playwright, **Ungoogled-Chromium** (default) or **Firefox**, `pulseaudio`/`pipewire-pulse` — or ready-to-flash [Raspberry Pi SD images](server/README_RASPI_IMAGE.md).
 
 ---
 

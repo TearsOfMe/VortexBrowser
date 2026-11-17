@@ -105,19 +105,27 @@ authentischen Look & Feel von AmigaOS 4!
 @node "Requirements" "Systemanforderungen"
 @{b}Systemanforderungen@{ub}
 
-@{b}AmigaOS 4 Client:@{ub}
-- AmigaOS 4.1 Final Edition (Update 1 oder Update 2 empfohlen)
-- PowerPC Prozessor (G4, G5, SAM440, SAM460, X1000, X5000 oder QEMU pegasos2/sam460ex)
-- Grafikkarte mit 24/32-Bit Farbtiefe (Radeon HD oder Radeon RX fuer Hardware-Scaling empfohlen)
-- Netzwerkkarte und aktiver Internet-/LAN-Zugang
-- AHI Audio-Treiber fuer Soundausgabe
+@{b}AmigaOS 4.1 Client:@{ub}
+- @{b}Betriebssystem:@{ub} AmigaOS 4.1 Final Edition (Update 1 oder Update 2 empfohlen)
+- @{b}Prozessor / Binary:@{ub}
+  * @{b}VortexBrowser@{ub} (Universal PowerPC): AmigaOne X5000, A1222/A1222+, Sam440, Sam460,
+    Pegasos II, AmigaOne XE/SE/uA1, Classic PPC oder QEMU (pegasos2/sam460ex)
+  * @{b}VortexBrowser-AltiVec@{ub}: PowerPC mit AltiVec (AmigaOne X1000, G4, G5)
+- @{b}Arbeitsspeicher:@{ub} Mindestens 256 MB RAM (512 MB+ RAM fuer HD-Streams empfohlen)
+- @{b}Grafikkarte:@{ub} RTG (Picasso96) mit 24/32-Bit TrueColor; Radeon HD oder Radeon RX
+  fuer Hardware-Composite-Scaling empfohlen
+- @{b}Hardware-H.264 (optional):@{ub} va.library (Enhancer Software) fuer Radeon UVD/VCN
+- @{b}Netzwerk:@{ub} Roadshow TCP/IP (bsdsocket.library v4+), Ports 7788 & 9757
+- @{b}Audio:@{ub} Konfiguriertes AHI (ahi.device, Unit 0) fuer 16-Bit Stereo-Audio
+- @{b}Bibliotheken:@{ub} Standard AmigaOS 4.1 ReAction-Klassen & locale.library
+  (optional codesets.library v5/6). Alle Codecs (libavcodec, lz4, jpeg) sind
+  statisch eingebunden - keine externen .so-Dateien erforderlich!
 
 @{b}Rendering-Server (Backend):@{ub}
-- Beliebiger Linux-PC, Raspberry Pi 4 / 5 oder Home-Server
-- Betriebssystem: Raspberry Pi OS, Debian, Ubuntu, Arch, CachyOS, Fedora, etc.
-- Python 3.10 oder neuer
-- Mindestens 2 GB RAM (Raspberry Pi 4 mit 4GB/8GB optimal)
-- Lokale Netzwerkverbindung zum Amiga (LAN Gigabit Ethernet oder 5GHz WLAN)
+- Linux-PC, Mac oder Raspberry Pi 3 / 4 / 5 (64-Bit, ab 1 GB RAM auf Pi 3 mit ZRAM;
+  2-8 GB RAM auf Pi 4/5 bzw. Desktop-Server optimal)
+- Python 3.10+, Rustwright + Playwright, Ungoogled-Chromium (Standard) oder Firefox
+- Lokale Netzwerkverbindung zum Amiga (LAN Ethernet empfohlen)
 
 @endnode
 
@@ -509,6 +517,16 @@ was die CPU-Auslastung auf 20-30% senkt!
 It renders modern web pages (HTML5, CSS3, ES2024 JavaScript, WebGL, YouTube, etc.)
 on a companion Linux PC, AMD Ryzen, Intel Core/Atom or Raspberry Pi 4/5 server, streaming ultra-smooth visuals
 and 16-bit 48kHz audio directly to AmigaOS with native Reaction GUI controls.
+
+@{b}AmigaOS 4.1 Client Requirements:@{ub}
+- AmigaOS 4.1 Final Edition (Update 1 or Update 2 recommended).
+- PowerPC CPU: @{b}VortexBrowser@{ub} works on all AmigaOS 4 PPC machines (X5000, A1222/+,
+  Sam440/460, Pegasos II, XE/SE/uA1, Classic PPC, QEMU); @{b}VortexBrowser-AltiVec@{ub} for
+  G4, G5 and AmigaOne X1000.
+- 256 MB RAM minimum (512 MB+ RAM recommended); 24/32-bit RTG screen (Radeon HD/RX
+  recommended; optional va.library for hardware H.264 decoding).
+- Roadshow TCP/IP (ports 7788 & 9757), AHI (ahi.device Unit 0), standard ReAction
+  classes (optional codesets.library). All codecs are statically linked.
 
 @{b}Quick Start:@{ub}
 1. On your Linux PC or Raspberry Pi:
