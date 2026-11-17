@@ -1,4 +1,5 @@
 playwright>=1.40.0
+rustwright>=0.3.0
 websockets>=12.0
 lz4>=4.3.0
 Pillow>=10.0.0

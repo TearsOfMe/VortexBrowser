@@ -147,7 +147,7 @@ apt-get install -y --no-install-recommends \
     libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
     libxrandr2 libgbm1 libasound2t64 libpango-1.0-0 libcairo2 \
     libglib2.0-0 libexpat1 libdbus-1-3 libxcb1 libx11-6 libxext6 \
-    libgl1-mesa-dri mesa-vulkan-drivers \
+    libgl1-mesa-dri libegl1 libegl-mesa0 libgles2 mesa-vulkan-drivers \
     fonts-liberation fonts-dejavu-core fonts-noto-color-emoji ca-certificates
 
 chown -R pi:pi /home/pi/vortexbrowse
@@ -278,20 +278,23 @@ mount --bind /dev /mnt/rpi/dev
 mount --bind /dev/pts /mnt/rpi/dev/pts
 
 chroot /mnt/rpi /bin/bash -e << CHROOT_EOF
-echo "vortexbrowser-${TARGET}" > /etc/hostname
-sed -i "s/^127\.0\.1\.1.*/127.0.1.1\tvortexbrowser-${TARGET}/" /etc/hosts
+RPI_HOST="vortexbrowser"
+[ "${TARGET}" != "rpi4" ] && RPI_HOST="vortexbrowser-${TARGET}"
+echo "\${RPI_HOST}" > /etc/hostname
+sed -i "s/^127\.0\.1\.1.*/127.0.1.1\t\${RPI_HOST}/" /etc/hosts
 
 su -s /bin/bash pi -c "
 set -e
 cd /home/pi/vortexbrowse/server
 gcc -O3 ${CPU_FLAG} -fopenmp -DHAVE_TURBOJPEG_LZ4 -shared -fPIC fast_pixconv.c -lturbojpeg -llz4 -o fast_pixconv.so
-.venv/bin/python -c \"import ctypes, playwright, websockets, lz4, PIL, turbojpeg; ctypes.CDLL('./fast_pixconv.so'); print('${TARGET}_PYTHON_PIXCONV_OK')\"
+.venv/bin/python -c \"import ctypes, playwright, rustwright, websockets, lz4, PIL, turbojpeg; ctypes.CDLL('./fast_pixconv.so'); print('${TARGET}_PYTHON_RUSTWRIGHT_PIXCONV_OK')\"
 "
 
 cat << ENV_EOF > /etc/default/vortexbrowser
 # VortexBrowser Server (${TARGET})
 # Engine: "chromium" (Ungoogled-Chromium, default) or "firefox" (Playwright Firefox)
 VORTEX_ENGINE=chromium
+VORTEX_USE_RUSTWRIGHT=1
 VORTEX_WIDTH=${DEF_W}
 VORTEX_HEIGHT=${DEF_H}
 VORTEX_FPS=${DEF_FPS}
@@ -330,12 +333,14 @@ rm -f /mnt/rpi/zero.fill
 sync
 cleanup
 trap - EXIT
-cp --sparse=auto "/work/${OUT_NAME}" "/out/${OUT_NAME}"
-rm -f "/work/${OUT_NAME}"
 TARGET_EOF
 
-    echo "[+] Compressing $OUT_DIR/${OUT_NAME} natively on host..."
-    xz -T0 -6 -f "$OUT_DIR/${OUT_NAME}"
+    echo "[+] Streaming & compressing $OUT_DIR/${OUT_NAME}.xz natively on host..."
+    rm -f "$OUT_DIR/${OUT_NAME}" "$OUT_DIR/${OUT_NAME}.xz.tmp"
+    docker run --rm -v "$DOCKER_VOL:/work:ro" debian:trixie-slim cat "/work/${OUT_NAME}" \
+        | xz -T0 -6 -c > "$OUT_DIR/${OUT_NAME}.xz.tmp"
+    mv "$OUT_DIR/${OUT_NAME}.xz.tmp" "$OUT_DIR/${OUT_NAME}.xz"
+    docker run --rm -v "$DOCKER_VOL:/work" debian:trixie-slim rm -f "/work/${OUT_NAME}"
     (cd "$OUT_DIR" && sha256sum "${OUT_NAME}.xz" > "${OUT_NAME}.xz.sha256")
     ls -lh "$OUT_DIR/${OUT_NAME}.xz" "$OUT_DIR/${OUT_NAME}.xz.sha256"
 done

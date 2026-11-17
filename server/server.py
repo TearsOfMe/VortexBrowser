@@ -5960,10 +5960,18 @@ def get_gpu_launch_flags(disable_gpu: bool = False, hw_profile: Optional[dict] =
         "--enable-zero-copy",
     ]
 
-    if hw_profile.get("has_intel_gpu") or (has_dri and hw_profile.get("cpu_vendor") == "Intel"):
-        # Intel GPU: EGL backend + VA-API decoder & encoder
+    if hw_profile.get("is_rpi"):
+        # Raspberry Pi (Broadcom VC4 / V3D GPU): ANGLE on OpenGL ES / EGL (no VA-API on Pi)
         gpu_flags.extend([
-            "--use-gl=egl",
+            "--use-gl=angle",
+            "--use-angle=gles-egl",
+            "--enable-features=CanvasOopRasterization",
+        ])
+    elif hw_profile.get("has_intel_gpu") or (has_dri and hw_profile.get("cpu_vendor") == "Intel"):
+        # Intel GPU: ANGLE GLES/EGL backend + VA-API decoder & encoder
+        gpu_flags.extend([
+            "--use-gl=angle",
+            "--use-angle=gles-egl",
             "--enable-features=CanvasOopRasterization,VaapiVideoDecoder,VaapiVideoEncoder,VaapiIgnoreDriverChecks",
             "--disable-features=UseChromeOSDirectVideoDecoder",
         ])
@@ -5975,9 +5983,10 @@ def get_gpu_launch_flags(disable_gpu: bool = False, hw_profile: Optional[dict] =
             "--enable-features=CanvasOopRasterization,VaapiVideoDecoder,VaapiVideoEncoder,VaapiIgnoreDriverChecks",
         ])
     else:
-        # Raspberry Pi / ARM / NVIDIA / Generic Mesa GPU: Native EGL
+        # Generic Mesa / NVIDIA / ARM GPU: ANGLE GLES/EGL
         gpu_flags.extend([
-            "--use-gl=egl",
+            "--use-gl=angle",
+            "--use-angle=gles-egl",
             "--enable-features=CanvasOopRasterization,VaapiVideoDecoder,VaapiVideoEncoder,VaapiIgnoreDriverChecks",
         ])
 
@@ -6291,8 +6300,10 @@ async def run_server(args: argparse.Namespace) -> None:
         )
         if getattr(args, "disable_gpu", False):
             logger.info("GPU Hardware Acceleration: DISABLED by user flag (--disable-gpu)")
+        elif hw.get("is_rpi"):
+            logger.info("GPU Hardware Acceleration: ENABLED (Raspberry Pi Broadcom V3D ANGLE GLES/EGL active)")
         elif hw.get("has_intel_gpu"):
-            logger.info("GPU Hardware Acceleration: ENABLED (Intel VA-API & EGL hardware rasterization active)")
+            logger.info("GPU Hardware Acceleration: ENABLED (Intel VA-API & ANGLE GLES/EGL hardware rasterization active)")
         elif has_dri:
             logger.info("GPU Hardware Acceleration: ENABLED (Vulkan / ANGLE / VA-API / /dev/dri render node detected)")
         else:
@@ -6336,13 +6347,12 @@ async def run_server(args: argparse.Namespace) -> None:
         _HAS_RUSTWRIGHT
         and _rustwright_async is not None
         and engine == "chromium"
-        and os.environ.get("VORTEX_USE_RUSTWRIGHT", "0") == "1"
     )
     pw_factory = _rustwright_async if use_rustwright else _playwright_async
     if use_rustwright:
-        logger.info("Browser Automation Core: Rustwright (native Rust PyO3 + DirectCDP, opt-in via VORTEX_USE_RUSTWRIGHT=1)")
+        logger.info("Browser Automation Core: Rustwright (native Rust PyO3 + DirectCDP)")
     else:
-        logger.info("Browser Automation Core: Playwright (%s — graceful CDP shutdown & full cookie/localStorage/IDB persistence)", engine)
+        logger.info("Browser Automation Core: Playwright (%s)", engine)
 
     try:
         async with pw_factory() as pw:
