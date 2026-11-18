@@ -20,8 +20,9 @@ AMIGA_DRAWER = os.path.join(STAGING_DIR, "VortexBrowser")
 SERVER_LINUX_DRAWER = os.path.join(STAGING_DIR, "Server-Linux")
 
 print(f"=== [1/6] Preparing Staging Directories for {APP_NAME} {VER_STR} ===")
-if os.path.exists(DIST_DIR):
-    shutil.rmtree(DIST_DIR)
+if os.path.exists(STAGING_DIR):
+    shutil.rmtree(STAGING_DIR)
+os.makedirs(DIST_DIR, exist_ok=True)
 os.makedirs(AMIGA_DRAWER, exist_ok=True)
 os.makedirs(os.path.join(AMIGA_DRAWER, "icons"), exist_ok=True)
 os.makedirs(SERVER_LINUX_DRAWER, exist_ok=True)
