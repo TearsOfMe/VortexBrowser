@@ -5283,6 +5283,25 @@ class AmigaClientSession:
                     logger.warning("Error applying twitch token: %s", exc)
             return
 
+        if cmd.upper().startswith("@AUTOLOGIN_FILL:"):
+            payload = cmd.split(":", 1)[1]
+            user, pwd = (payload.split("\t", 1) if "\t" in payload else (payload.split(" ", 1) if " " in payload else (payload, "")))
+            await self._perform_auto_login(user, pwd, submit=False)
+            return
+
+        if cmd.upper().startswith("@AUTOLOGIN:"):
+            payload = cmd.split(":", 1)[1]
+            user, pwd = (payload.split("\t", 1) if "\t" in payload else (payload.split(" ", 1) if " " in payload else (payload, "")))
+            await self._perform_auto_login(user, pwd, submit=True)
+            return
+
+        if cmd.startswith("@"):
+            upper_cmd = cmd.upper()
+            known_nav = ("@BACK", "@FORWARD", "@RELOAD", "@STOP", "@HOME")
+            if upper_cmd not in known_nav:
+                logger.warning("Ignoring unhandled internal '@' command: %s", cmd.split(":", 1)[0])
+                return
+
         logger.info("INPUT_GOTO_URL: %s (history idx=%d/%d)", cmd, self.nav_idx, len(self.nav_history))
         self._trigger_full_refresh()
         self._schedule_delayed_frames()
@@ -5361,6 +5380,140 @@ class AmigaClientSession:
         t = asyncio.create_task(_nav_bg())
         self.background_tasks.add(t)
         t.add_done_callback(self.background_tasks.discard)
+
+    async def _perform_auto_login(self, username: str, password: str, submit: bool = True) -> None:
+        if not self.page:
+            return
+        logger.info("Executing Auto-Login for user: %r (submit=%s)", username, submit)
+        if submit:
+            self._send_progress(50, f"Auto-Login fuer '{username}'...")
+        else:
+            self._send_progress(50, "Zugangsdaten einfuellen...")
+
+        js_script = """
+        ([user, pass, shouldSubmit]) => {
+            function isVisible(el) {
+                if (!el) return false;
+                const style = window.getComputedStyle(el);
+                if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+                const rect = el.getBoundingClientRect();
+                return rect.width > 0 && rect.height > 0;
+            }
+
+            function setVal(elem, val) {
+                if (!elem) return false;
+                elem.focus();
+                const valueSetter = Object.getOwnPropertyDescriptor(elem, 'value')?.set;
+                const prototype = Object.getPrototypeOf(elem);
+                const protoSetter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+                if (protoSetter && valueSetter !== protoSetter) {
+                    protoSetter.call(elem, val);
+                } else if (valueSetter) {
+                    valueSetter.call(elem, val);
+                } else {
+                    elem.value = val;
+                }
+                elem.dispatchEvent(new Event('focus', { bubbles: true }));
+                elem.dispatchEvent(new Event('input', { bubbles: true }));
+                elem.dispatchEvent(new Event('change', { bubbles: true }));
+                elem.dispatchEvent(new Event('blur', { bubbles: true }));
+                return true;
+            }
+
+            const doc = document;
+            let pwInputs = Array.from(doc.querySelectorAll('input[type="password"]')).filter(isVisible);
+            if (pwInputs.length === 0) {
+                pwInputs = Array.from(doc.querySelectorAll('input[name*="pass" i], input[id*="pass" i]')).filter(isVisible);
+            }
+            const pwInput = pwInputs[0] || null;
+
+            let userInputs = Array.from(doc.querySelectorAll(
+                'input[autocomplete="username"], input[autocomplete="email"], input[type="email"], ' +
+                'input[name*="user" i], input[name*="login" i], input[name*="email" i], input[name*="account" i], ' +
+                'input[id*="user" i], input[id*="login" i], input[id*="email" i], input[id*="account" i], ' +
+                'input[placeholder*="user" i], input[placeholder*="benutzer" i], input[placeholder*="login" i], ' +
+                'input[placeholder*="e-mail" i], input[placeholder*="email" i], ' +
+                'input[aria-label*="user" i], input[aria-label*="benutzer" i], input[aria-label*="login" i], input[aria-label*="email" i]'
+            )).filter(isVisible);
+
+            let userInput = userInputs[0] || null;
+            if (!userInput && pwInput) {
+                const form = pwInput.closest('form') || doc;
+                const textInputs = Array.from(form.querySelectorAll('input[type="text"], input:not([type])')).filter(isVisible);
+                if (textInputs.length > 0) {
+                    userInput = textInputs[0];
+                }
+            }
+
+            /* Never pre-fill non-login inputs (like search bars) when no login/password field exists */
+            if (!pwInput && (!shouldSubmit || !userInput)) {
+                return { userFilled: false, passFilled: false, submitted: false, foundUser: !!userInput, foundPass: false, foundSubmit: false };
+            }
+
+            let userFilled = false;
+            let passFilled = false;
+            if (userInput && user) {
+                userFilled = setVal(userInput, user);
+            }
+            if (pwInput && pass) {
+                passFilled = setVal(pwInput, pass);
+            }
+
+            let submitBtn = null;
+            const form = (pwInput && pwInput.closest('form')) || (userInput && userInput.closest('form'));
+            if (form) {
+                submitBtn = form.querySelector('button[type="submit"], input[type="submit"]');
+            }
+            if (!submitBtn && shouldSubmit) {
+                const allButtons = Array.from(doc.querySelectorAll('button, input[type="submit"], input[type="button"], a[role="button"]')).filter(isVisible);
+                for (const btn of allButtons) {
+                    const txt = (btn.innerText || btn.value || btn.getAttribute('aria-label') || '').trim().toLowerCase();
+                    if (txt.includes('login') || txt.includes('log in') || txt.includes('sign in') || txt.includes('signin') ||
+                        txt.includes('anmelden') || txt.includes('einloggen') || txt.includes('weiter') || txt.includes('next')) {
+                        submitBtn = btn;
+                        break;
+                    }
+                }
+            }
+
+            let submitted = false;
+            if (shouldSubmit) {
+                if (submitBtn) {
+                    try { submitBtn.click(); submitted = true; } catch (e) {}
+                } else if (form && (userFilled || passFilled)) {
+                    try { form.submit(); submitted = true; } catch (e) {}
+                }
+            }
+            return { userFilled, passFilled, submitted, foundUser: !!userInput, foundPass: !!pwInput, foundSubmit: !!submitBtn };
+        }
+        """
+        try:
+            frames = [self.page] + list(self.page.frames)
+            res = None
+            for frame in frames:
+                try:
+                    res = await frame.evaluate(js_script, [username, password, submit])
+                    if res and (res.get("userFilled") or res.get("passFilled")):
+                        break
+                except Exception:
+                    continue
+
+            if submit and res and not res.get("submitted") and (res.get("userFilled") or res.get("passFilled")):
+                try:
+                    await self.page.keyboard.press("Enter")
+                except Exception:
+                    pass
+
+            if res and (res.get("userFilled") or res.get("passFilled")):
+                self._send_progress(100, f"Auto-Login ausgefuehrt ({username})" if submit else f"Zugangsdaten eingefuellt ({username})")
+                self.active_until = time.monotonic() + 2.0
+                self._trigger_full_refresh(True)
+                self._schedule_delayed_frames()
+            else:
+                self._send_progress(100, "Kein Login-Feld gefunden" if submit else "Bereit")
+        except Exception as exc:
+            logger.warning("Auto-Login error: %s", exc)
+            self._send_progress(100, "Auto-Login Fehler")
 
     # ------------------------------------------------------------------------
     # Download Interceptor & Direct URL ASL Download Streamer (Server -> Amiga)
