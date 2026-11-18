@@ -1608,9 +1608,76 @@ class DirectCDPSession:
 # ============================================================================
 class H264LiveStreamEncoder:
     """Ultra-low latency H.264 live stream encoder using an asynchronous ffmpeg pipe.
-    Supports hardware VA-API on Linux (AMD/Intel VCN/VA-API) or ultrafast libx264 zerolatency.
-    Feeds YUV420P frames and yields Annex-B NAL packets.
+    Probes hardware VA-API render nodes (all /dev/dri/renderD* devices) or VideoToolbox
+    once per process and cleanly falls back to libx264 / libopenh264 without crash loops.
     """
+    _cached_backend: Optional[Tuple[str, Optional[str]]] = None
+
+    @classmethod
+    def _test_ffmpeg_cmd(cls, cmd: List[str], frame_bytes: bytes) -> bool:
+        try:
+            res = subprocess.run(
+                cmd,
+                input=frame_bytes,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                timeout=4,
+            )
+            return res.returncode == 0 and len(res.stdout) > 0
+        except Exception:
+            return False
+
+    @classmethod
+    def _probe_backend(cls) -> Tuple[str, Optional[str]]:
+        if cls._cached_backend is not None:
+            return cls._cached_backend
+
+        test_w, test_h = 128, 128
+        test_yuv = b"\x80" * (test_w * test_h * 3 // 2)
+
+        if platform.system() == "Darwin":
+            if cls._test_ffmpeg_cmd([
+                "ffmpeg", "-y", "-loglevel", "error",
+                "-f", "rawvideo", "-pix_fmt", "yuv420p", "-s", f"{test_w}x{test_h}", "-r", "25", "-i", "-",
+                "-frames:v", "1", "-c:v", "h264_videotoolbox", "-realtime", "true", "-allow_sw", "1", "-f", "h264", "-"
+            ], test_yuv):
+                cls._cached_backend = ("videotoolbox", None)
+                logger.info("H.264 Encoder Backend: h264_videotoolbox (Apple hardware)")
+                return cls._cached_backend
+        else:
+            for node in sorted(glob.glob("/dev/dri/renderD*")):
+                if cls._test_ffmpeg_cmd([
+                    "ffmpeg", "-y", "-loglevel", "error",
+                    "-init_hw_device", f"vaapi=va:{node}", "-filter_hw_device", "va",
+                    "-f", "rawvideo", "-pix_fmt", "yuv420p", "-s", f"{test_w}x{test_h}", "-r", "25", "-i", "-",
+                    "-frames:v", "1", "-vf", "format=nv12,hwupload", "-c:v", "h264_vaapi", "-f", "h264", "-"
+                ], test_yuv):
+                    cls._cached_backend = ("vaapi", node)
+                    logger.info("H.264 Encoder Backend: h264_vaapi (%s)", node)
+                    return cls._cached_backend
+
+        if cls._test_ffmpeg_cmd([
+            "ffmpeg", "-y", "-loglevel", "error",
+            "-f", "rawvideo", "-pix_fmt", "yuv420p", "-s", f"{test_w}x{test_h}", "-r", "25", "-i", "-",
+            "-frames:v", "1", "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency", "-f", "h264", "-"
+        ], test_yuv):
+            cls._cached_backend = ("libx264", None)
+            logger.info("H.264 Encoder Backend: libx264 (CPU ultrafast zerolatency; VA-API H.264 encode unavailable on GPU)")
+            return cls._cached_backend
+
+        if cls._test_ffmpeg_cmd([
+            "ffmpeg", "-y", "-loglevel", "error",
+            "-f", "rawvideo", "-pix_fmt", "yuv420p", "-s", f"{test_w}x{test_h}", "-r", "25", "-i", "-",
+            "-frames:v", "1", "-c:v", "libopenh264", "-f", "h264", "-"
+        ], test_yuv):
+            cls._cached_backend = ("libopenh264", None)
+            logger.info("H.264 Encoder Backend: libopenh264 (software fallback)")
+            return cls._cached_backend
+
+        cls._cached_backend = ("none", None)
+        logger.warning("No working H.264 encoder found in ffmpeg (check VA-API/libx264); using LZ4+DirtySlice.")
+        return cls._cached_backend
+
     def __init__(self, width: int, height: int, fps: int = 25, bitrate_k: int = 8000):
         self.width = width
         self.height = height
@@ -1618,15 +1685,14 @@ class H264LiveStreamEncoder:
         self.bitrate_k = bitrate_k
         self.proc: Optional[subprocess.Popen] = None
         self._fd: Optional[int] = None
+        self._backend: str = "none"
+        self._device: Optional[str] = None
+        self._consecutive_failures: int = 0
         self._start_encoder()
 
-    def _start_encoder(self) -> None:
-        self.stop()
-        use_videotoolbox = (platform.system() == "Darwin")
-        use_vaapi = (not use_videotoolbox) and os.path.exists("/dev/dri/renderD128")
-        cmd = None
-        if use_videotoolbox:
-            cmd = [
+    def _build_cmd(self, backend: str, device: Optional[str]) -> Optional[List[str]]:
+        if backend == "videotoolbox":
+            return [
                 "ffmpeg", "-y", "-loglevel", "error",
                 "-f", "rawvideo", "-pix_fmt", "yuv420p",
                 "-s", f"{self.width}x{self.height}",
@@ -1642,10 +1708,10 @@ class H264LiveStreamEncoder:
                 "-bf", "0",
                 "-f", "h264", "-"
             ]
-        elif use_vaapi:
-            cmd = [
+        if backend == "vaapi" and device:
+            return [
                 "ffmpeg", "-y", "-loglevel", "error",
-                "-init_hw_device", "vaapi=va:/dev/dri/renderD128",
+                "-init_hw_device", f"vaapi=va:{device}",
                 "-filter_hw_device", "va",
                 "-f", "rawvideo", "-pix_fmt", "yuv420p",
                 "-s", f"{self.width}x{self.height}",
@@ -1660,17 +1726,8 @@ class H264LiveStreamEncoder:
                 "-bf", "0",
                 "-f", "h264", "-"
             ]
-        try:
-            if cmd:
-                self.proc = subprocess.Popen(
-                    cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
-                )
-        except Exception:
-            self.proc = None
-
-        if self.proc is None or self.proc.poll() is not None:
-            # Fallback to libx264 ultrafast zerolatency
-            cmd_x264 = [
+        if backend == "libx264":
+            return [
                 "ffmpeg", "-y", "-loglevel", "error",
                 "-f", "rawvideo", "-pix_fmt", "yuv420p",
                 "-s", f"{self.width}x{self.height}",
@@ -1679,6 +1736,8 @@ class H264LiveStreamEncoder:
                 "-c:v", "libx264",
                 "-preset", "ultrafast",
                 "-tune", "zerolatency",
+                "-threads", "4",
+                "-pix_fmt", "yuv420p",
                 "-g", str(self.fps),
                 "-bf", "0",
                 "-x264-params", f"keyint={self.fps}:min-keyint={self.fps}:scenecut=0:repeat-headers=1",
@@ -1687,32 +1746,75 @@ class H264LiveStreamEncoder:
                 "-bufsize", f"{self.bitrate_k // 2}k",
                 "-f", "h264", "-"
             ]
-            try:
-                self.proc = subprocess.Popen(
-                    cmd_x264, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
-                )
-            except Exception as e:
-                logger.warning("Could not launch ffmpeg H.264 encoder: %s", e)
-                self.proc = None
-                return
+        if backend == "libopenh264":
+            return [
+                "ffmpeg", "-y", "-loglevel", "error",
+                "-f", "rawvideo", "-pix_fmt", "yuv420p",
+                "-s", f"{self.width}x{self.height}",
+                "-r", str(self.fps),
+                "-i", "-",
+                "-c:v", "libopenh264",
+                "-b:v", f"{self.bitrate_k}k",
+                "-g", str(self.fps),
+                "-f", "h264", "-"
+            ]
+        return None
+
+    def _start_encoder(self) -> None:
+        self.stop()
+        backend, device = self._probe_backend()
+        if backend == "none":
+            self._backend = "none"
+            return
+
+        cmd = self._build_cmd(backend, device)
+        if not cmd:
+            return
+        try:
+            self.proc = subprocess.Popen(
+                cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
+            )
+            self._backend = backend
+            self._device = device
+        except Exception as e:
+            logger.warning("Could not launch ffmpeg (%s): %s", backend, e)
+            self.proc = None
+            return
 
         if self.proc and self.proc.stdout:
             self._fd = self.proc.stdout.fileno()
             fl = fcntl.fcntl(self._fd, fcntl.F_GETFL)
             fcntl.fcntl(self._fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
 
+    def _handle_proc_failure(self) -> None:
+        self._consecutive_failures += 1
+        if self._backend == "vaapi":
+            logger.warning("VA-API H.264 encoder failed at runtime on %s; permanently switching to libx264.", self._device)
+            H264LiveStreamEncoder._cached_backend = ("libx264", None)
+            self._consecutive_failures = 0
+            self._start_encoder()
+        elif self._consecutive_failures >= 3:
+            logger.warning("H.264 encoder (%s) failed repeatedly; disabling H.264 pipe for session.", self._backend)
+            H264LiveStreamEncoder._cached_backend = ("none", None)
+            self.stop()
+            self._backend = "none"
+        else:
+            self._start_encoder()
+
     def encode_frame(self, yuv_bytes: bytes) -> Optional[bytes]:
+        if self._backend == "none":
+            return None
         if not self.proc or not self.proc.stdin or self._fd is None:
             return None
         if self.proc.poll() is not None:
-            self._start_encoder()
+            self._handle_proc_failure()
             if not self.proc or not self.proc.stdin or self._fd is None:
                 return None
         try:
             self.proc.stdin.write(yuv_bytes)
             self.proc.stdin.flush()
         except (BrokenPipeError, OSError):
-            self._start_encoder()
+            self._handle_proc_failure()
             return None
 
         # Wait up to 40ms for ffmpeg to output the encoded NAL frame
@@ -1727,7 +1829,10 @@ class H264LiveStreamEncoder:
                     chunks.append(chunk)
                 except (BlockingIOError, OSError):
                     break
-        return b"".join(chunks) if chunks else None
+        if chunks:
+            self._consecutive_failures = 0
+            return b"".join(chunks)
+        return None
 
     def stop(self) -> None:
         if self.proc:
@@ -6009,6 +6114,7 @@ def detect_hardware_profile() -> dict:
         "has_nvidia_gpu": False,
         "has_dri": False,
         "dri_render_nodes": [],
+        "drm_drivers": [],
         "recommended_driver": None,
     }
 
@@ -6075,6 +6181,17 @@ def detect_hardware_profile() -> dict:
             except Exception:
                 pass
 
+        # Detect active DRM kernel driver names (e.g. 'radeon' vs 'amdgpu', 'i915', 'vc4', 'v3d')
+        drm_drivers = []
+        for dpath in sorted(glob.glob("/sys/class/drm/card*/device/driver")):
+            try:
+                drv_name = os.path.basename(os.path.realpath(dpath))
+                if drv_name and drv_name not in drm_drivers:
+                    drm_drivers.append(drv_name)
+            except Exception:
+                pass
+        profile["drm_drivers"] = drm_drivers
+
     # Fallback vendor detection from cpu_vendor if integrated graphics
     if profile["has_dri"] and not (profile["has_intel_gpu"] or profile["has_amd_gpu"] or profile["has_nvidia_gpu"]):
         if profile["cpu_vendor"] == "Intel":
@@ -6129,12 +6246,22 @@ def get_gpu_launch_flags(disable_gpu: bool = False, hw_profile: Optional[dict] =
             "--disable-features=UseChromeOSDirectVideoDecoder",
         ])
     elif hw_profile.get("has_amd_gpu"):
-        # AMD / Mesa GPU: ANGLE with Vulkan backend
-        gpu_flags.extend([
-            "--use-gl=angle",
-            "--use-angle=vulkan",
-            "--enable-features=CanvasOopRasterization,VaapiVideoDecoder,VaapiVideoEncoder,VaapiIgnoreDriverChecks",
-        ])
+        drm_drivers = hw_profile.get("drm_drivers", [])
+        if "radeon" in drm_drivers and "amdgpu" not in drm_drivers:
+            # Legacy AMD radeon DRM (e.g. FirePro D500 / Tahiti GCN 1.0): RADV Vulkan does not
+            # support the legacy radeon kernel driver, so use Mesa radeonsi via ANGLE GLES/EGL.
+            gpu_flags.extend([
+                "--use-gl=angle",
+                "--use-angle=gles-egl",
+                "--enable-features=CanvasOopRasterization",
+            ])
+        else:
+            # Modern AMD amdgpu DRM: ANGLE with Vulkan backend + VA-API
+            gpu_flags.extend([
+                "--use-gl=angle",
+                "--use-angle=vulkan",
+                "--enable-features=CanvasOopRasterization,VaapiVideoDecoder,VaapiVideoEncoder,VaapiIgnoreDriverChecks",
+            ])
     else:
         # Generic Mesa / NVIDIA / ARM GPU: ANGLE GLES/EGL
         gpu_flags.extend([
