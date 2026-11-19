@@ -85,6 +85,29 @@ static inline int fast_memeq(const uint8_t *a, const uint8_t *b, size_t len)
         if (a[i] != b[i]) return 0;
     }
     return 1;
+#elif defined(__ARM_NEON) || defined(__aarch64__)
+    size_t i = 0;
+    for (; i + 32 <= len; i += 32) {
+        uint8x16_t va0 = vld1q_u8(a + i);
+        uint8x16_t vb0 = vld1q_u8(b + i);
+        uint8x16_t va1 = vld1q_u8(a + i + 16);
+        uint8x16_t vb1 = vld1q_u8(b + i + 16);
+        uint8x16_t comb = vorrq_u8(veorq_u8(va0, vb0), veorq_u8(va1, vb1));
+#if defined(__aarch64__)
+        if (vmaxvq_u32(vreinterpretq_u32_u8(comb)) != 0) {
+            return 0;
+        }
+#else
+        uint64x2_t c64 = vreinterpretq_u64_u8(comb);
+        if ((vgetq_lane_u64(c64, 0) | vgetq_lane_u64(c64, 1)) != 0) {
+            return 0;
+        }
+#endif
+    }
+    for (; i < len; i++) {
+        if (a[i] != b[i]) return 0;
+    }
+    return 1;
 #else
     return memcmp(a, b, len) == 0;
 #endif
@@ -660,6 +683,14 @@ static void filter_plane_for_lz4(
             _mm_storeu_si128((__m128i *)(plane + i), res);
 #endif
         }
+#elif defined(__ARM_NEON) || defined(__aarch64__)
+        uint8x16_t vt = vdupq_n_u8((uint8_t)thresh_t);
+        for (; i + 16 <= total; i += 16) {
+            uint8x16_t vc = vld1q_u8(plane + i);
+            uint8x16_t vp = vld1q_u8(prev_plane + i);
+            uint8x16_t mk = vcleq_u8(vabdq_u8(vc, vp), vt);
+            vst1q_u8(plane + i, vbslq_u8(mk, vp, vc));
+        }
 #endif
         for (; i < total; i++) {
             int diff = (int)plane[i] - (int)prev_plane[i];
@@ -687,6 +718,9 @@ static void filter_plane_for_lz4(
     __m128i vt = _mm_set1_epi8((char)thresh_t);
     __m128i vv = _mm_set1_epi8((char)thresh_v);
     __m128i vz = _mm_setzero_si128();
+#elif defined(__ARM_NEON) || defined(__aarch64__)
+    uint8x16_t vt = vdupq_n_u8((uint8_t)thresh_t);
+    uint8x16_t vv = vdupq_n_u8((uint8_t)thresh_v);
 #endif
     for (int y = 1; y < h; y++) {
         uint8_t       *cur_row   = plane + (size_t)y * (size_t)w;
@@ -742,6 +776,17 @@ static void filter_plane_for_lz4(
 #endif
             _mm_storeu_si128((__m128i *)(cur_row + x), res);
         }
+#elif defined(__ARM_NEON) || defined(__aarch64__)
+        for (; x + 16 <= w; x += 16) {
+            uint8x16_t vc  = vld1q_u8(cur_row + x);
+            uint8x16_t vp  = vld1q_u8(prev_row + x);
+            uint8x16_t va  = vld1q_u8(above_row + x);
+            uint8x16_t mkv = vcleq_u8(vabdq_u8(vc, va), vv);
+            uint8x16_t res = vbslq_u8(mkv, va, vc);
+            uint8x16_t mkt = vcleq_u8(vabdq_u8(vc, vp), vt);
+            res = vbslq_u8(mkt, vp, res);
+            vst1q_u8(cur_row + x, res);
+        }
 #endif
         for (; x < w; x++) {
             int c  = (int)cur_row[x];
@@ -793,6 +838,76 @@ static void filter_yuv420p_for_lz4(
         video_mode,
         1
     );
+}
+
+/*
+ * Zero-copy C-native JPEG -> Planar YUV420P decoder for H.264 encoder pipe.
+ * Returns:
+ *     0 : Success (width * height * 3 / 2 bytes written to out_yuv)
+ *   < 0 : Error / dimension mismatch
+ */
+int decode_jpeg_to_yuv420p(
+    const uint8_t *jpeg_buf,
+    size_t         jpeg_len,
+    int            width,
+    int            height,
+    uint8_t       *out_yuv
+)
+{
+    if (!jpeg_buf || jpeg_len == 0 || !out_yuv || width <= 0 || height <= 0 || (width & 1) || (height & 1)) {
+        return -1;
+    }
+
+    if (!s_tls_tjd) {
+        s_tls_tjd = tjInitDecompress();
+        if (!s_tls_tjd) return -2;
+    }
+
+    int jw = 0, jh = 0, subsamp = 0, colorspace = 0;
+    if (tjDecompressHeader3(s_tls_tjd, jpeg_buf, (unsigned long)jpeg_len, &jw, &jh, &subsamp, &colorspace) != 0) {
+        return -3;
+    }
+    if (jw != width || jh != height) {
+        return -4;
+    }
+
+    if (subsamp == TJSAMP_420) {
+        if (tjDecompressToYUV2(
+                s_tls_tjd,
+                jpeg_buf,
+                (unsigned long)jpeg_len,
+                out_yuv,
+                width,
+                1,
+                height,
+                TJFLAG_FASTDCT | TJFLAG_FASTUPSAMPLE) != 0) {
+            return -5;
+        }
+        return 0;
+    }
+
+    size_t num_pixels = (size_t)width * (size_t)height;
+    size_t needed_rgb = num_pixels * 3;
+    if (s_tls_rgb_cap < needed_rgb) {
+        uint8_t *nb = (uint8_t *)realloc(s_tls_rgb_scratch, needed_rgb);
+        if (!nb) return -6;
+        s_tls_rgb_scratch = nb;
+        s_tls_rgb_cap = needed_rgb;
+    }
+    if (tjDecompress2(
+            s_tls_tjd,
+            jpeg_buf,
+            (unsigned long)jpeg_len,
+            s_tls_rgb_scratch,
+            width,
+            0,
+            height,
+            TJPF_RGB,
+            TJFLAG_FASTDCT | TJFLAG_FASTUPSAMPLE) != 0) {
+        return -7;
+    }
+    rgb24_to_yuv420p(s_tls_rgb_scratch, out_yuv, width, height);
+    return 0;
 }
 
 /*
@@ -955,7 +1070,9 @@ int encode_jpeg_to_frame_packet(
                     return 19 + comp_len;
                 }
             }
-            memcpy(prev_buf, work_buf, raw_frame_bytes);
+            if ((width & 1) || (height & 1)) {
+                memcpy(prev_buf, work_buf, raw_frame_bytes);
+            }
         }
     } else {
         memcpy(prev_buf, work_buf, raw_frame_bytes);

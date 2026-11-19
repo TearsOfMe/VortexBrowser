@@ -1243,9 +1243,10 @@ class LocalPortalHTTPServer:
 # ============================================================================
 _FAST_PIXCONV = None
 _HAS_NATIVE_PACKET_ENCODER = False
+_HAS_NATIVE_YUV_DECODER = False
 
 def _bind_fast_pixconv_symbols(_lib) -> bool:
-    global _HAS_NATIVE_PACKET_ENCODER
+    global _HAS_NATIVE_PACKET_ENCODER, _HAS_NATIVE_YUV_DECODER
     _lib.rgb24_to_be_argb32.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_size_t]
     _lib.rgb24_to_be_argb32.restype = None
     _lib.rgb24_to_be_rgb565.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_size_t]
@@ -1299,6 +1300,18 @@ def _bind_fast_pixconv_symbols(_lib) -> bool:
         _lib.pack_sub_rect_yuv420p.restype = None
     _lib.pcm_s16be_is_silent.argtypes = [ctypes.c_char_p, ctypes.c_size_t, ctypes.c_int]
     _lib.pcm_s16be_is_silent.restype = ctypes.c_int
+    if hasattr(_lib, "decode_jpeg_to_yuv420p"):
+        _lib.decode_jpeg_to_yuv420p.argtypes = [
+            ctypes.c_char_p,
+            ctypes.c_size_t,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_char_p,
+        ]
+        _lib.decode_jpeg_to_yuv420p.restype = ctypes.c_int
+        _HAS_NATIVE_YUV_DECODER = True
+    else:
+        _HAS_NATIVE_YUV_DECODER = False
     if hasattr(_lib, "encode_jpeg_to_frame_packet"):
         _lib.encode_jpeg_to_frame_packet.argtypes = [
             ctypes.c_char_p,
@@ -1801,7 +1814,7 @@ class H264LiveStreamEncoder:
         else:
             self._start_encoder()
 
-    def encode_frame(self, yuv_bytes: bytes) -> Optional[bytes]:
+    def encode_frame(self, yuv_bytes: Union[bytes, bytearray, memoryview]) -> Optional[bytes]:
         if self._backend == "none":
             return None
         if not self.proc or not self.proc.stdin or self._fd is None:
@@ -3431,21 +3444,26 @@ class AmigaClientSession:
                 )
             chunks_sent = 0
             loop_iter = 0
+            silent_streak = 0
+            audio_loop = asyncio.get_running_loop()
             while self.running and proc.stdout:
                 chunk = await proc.stdout.readexactly(AUDIO_CHUNK_BYTES)
                 if not self.running:
                     break
 
                 loop_iter += 1
-                if loop_iter % 25 == 1:
-                    unmute_all_browser_sink_inputs()
+                if loop_iter == 1 or (silent_streak >= 25 and loop_iter % 120 == 1):
+                    await audio_loop.run_in_executor(None, unmute_all_browser_sink_inputs)
 
                 if _FAST_PIXCONV is not None:
                     if _FAST_PIXCONV.pcm_s16be_is_silent(chunk, len(chunk), 10) == 1:
+                        silent_streak += 1
                         continue
                 else:
                     if chunk == b"\x00" * len(chunk):
+                        silent_streak += 1
                         continue
+                silent_streak = 0
 
                 comp = lz4.block.compress(chunk, store_size=False)
                 if len(comp) < len(chunk):
@@ -3612,16 +3630,56 @@ class AmigaClientSession:
 
         await self._encode_and_send_png(jpeg_bytes, self.force_full_frame)
 
+    def _encode_h264_frame_sync(
+        self,
+        png_bytes: bytes,
+        w: int,
+        h: int,
+        yuv_buf: ctypes.Array,
+    ) -> Optional[bytes]:
+        """Decode JPEG -> YUV420P and encode H.264 NAL packet in worker thread."""
+        yuv_raw: Optional[Union[bytes, bytearray, memoryview]] = None
+        expected_len = (w * h * 3) // 2
+
+        if _FAST_PIXCONV is not None and _HAS_NATIVE_YUV_DECODER:
+            try:
+                if _FAST_PIXCONV.decode_jpeg_to_yuv420p(png_bytes, len(png_bytes), w, h, yuv_buf) == 0:
+                    yuv_raw = memoryview(yuv_buf).cast("B")
+            except Exception:
+                pass
+
+        if yuv_raw is None and _TURBO_JPEG is not None:
+            try:
+                yarr, _ = _TURBO_JPEG.decode_to_yuv(png_bytes, pad=1)
+                if len(yarr) == expected_len:
+                    yuv_raw = memoryview(yarr)
+            except Exception:
+                pass
+
+        if yuv_raw is None:
+            try:
+                im = Image.open(io.BytesIO(png_bytes)).convert("YCbCr")
+                if im.size != (w, h):
+                    im = im.resize((w, h))
+                y, cb, cr = im.split()
+                y_b = y.tobytes()
+                cb_sub = cb.resize((w // 2, h // 2), Image.Resampling.BILINEAR).tobytes()
+                cr_sub = cr.resize((w // 2, h // 2), Image.Resampling.BILINEAR).tobytes()
+                yuv_raw = y_b + cb_sub + cr_sub
+            except Exception:
+                pass
+
+        if yuv_raw is None:
+            return None
+
+        enc = self._get_h264_encoder(w, h)
+        if not enc:
+            return None
+        return enc.encode_frame(yuv_raw)
+
     async def _encode_and_send_png(self, png_bytes: bytes, force: bool = False) -> None:
         """Decode PNG/JPEG, run dirty-region detection, LZ4 compress, and send to Amiga."""
         t0 = time.monotonic()
-        force_full = self.force_full_frame or force or (self.last_frame_hash is None)
-        digest = hashlib.md5(png_bytes).digest()
-        if not force_full and digest == self.last_frame_hash:
-            return
-        self.last_frame_hash = digest
-        self.force_full_frame = False
-
         w = self.width
         h = self.height
         fmt = self.pixel_format
@@ -3629,6 +3687,27 @@ class AmigaClientSession:
         # Use Motion-JPEG only if explicitly requested via @CODEC:jpeg / @CODEC:mjpeg.
         # Otherwise default to LZ4 dirty-slice streaming which is 100x faster for the Amiga CPU!
         use_mjpeg = (self.codec_mode == "jpeg")
+        cur_url = (self.page.url or "").lower() if (not use_mjpeg and self.page) else ""
+        is_video_site = bool(cur_url) and any(k in cur_url for k in ("youtube.com/watch", "youtu.be/", "twitch.tv/", "/watch?v="))
+        audio_active = (getattr(self, "last_audio_time", 0.0) > t0 - 2.0)
+        # Emit H.264 video stream when in video stream mode, on video sites or when requested
+        should_h264 = (not use_mjpeg) and (
+            (self.codec_mode == "h264")
+            or (self.stream_mode == "h264")
+            or (self.stream_mode == "auto" and (self.is_video_mode or self._video_element_playing or (is_video_site and audio_active)))
+        )
+
+        was_h264 = getattr(self, "_was_h264", False)
+        force_full = self.force_full_frame or force or (self.last_frame_hash is None) or (not should_h264 and was_h264)
+
+        if not should_h264:
+            digest = hashlib.md5(png_bytes).digest()
+            if not force_full and digest == self.last_frame_hash:
+                return
+            self.last_frame_hash = digest
+            self.force_full_frame = False
+            self._was_h264 = False
+
         if use_mjpeg:
             hdr = STRUCT_MSG_FRAME.pack(
                 MSG_FRAME,
@@ -3641,55 +3720,43 @@ class AmigaClientSession:
             await self.send_packet(hdr + png_bytes)
             return
 
-        cur_url = (self.page.url or "").lower() if self.page else ""
-        is_video_site = any(k in cur_url for k in ("youtube.com/watch", "youtu.be/", "twitch.tv/", "/watch?v="))
-        audio_active = (getattr(self, "last_audio_time", 0.0) > time.monotonic() - 2.0)
-        # Emit H.264 video stream when in video stream mode, on video sites or when requested
-        should_h264 = (
-            (self.codec_mode == "h264")
-            or (self.stream_mode == "h264")
-            or (self.stream_mode == "auto" and (self.is_video_mode or self._video_element_playing or (is_video_site and audio_active)))
-        )
         if should_h264:
-            yuv_raw = None
-            if _TURBO_JPEG is not None:
-                try:
-                    yarr, _ = _TURBO_JPEG.decode_to_yuv(png_bytes, pad=1)
-                    if len(yarr) == (w * h * 3) // 2:
-                        yuv_raw = yarr.tobytes()
-                except Exception:
-                    pass
-            if yuv_raw is None:
-                try:
-                    im = Image.open(io.BytesIO(png_bytes)).convert("YCbCr")
-                    if im.size != (w, h):
-                        im = im.resize((w, h))
-                    y, cb, cr = im.split()
-                    y_b = y.tobytes()
-                    cb_sub = cb.resize((w // 2, h // 2), Image.Resampling.BILINEAR).tobytes()
-                    cr_sub = cr.resize((w // 2, h // 2), Image.Resampling.BILINEAR).tobytes()
-                    yuv_raw = y_b + cb_sub + cr_sub
-                except Exception:
-                    pass
-            if yuv_raw:
-                enc = self._get_h264_encoder(w, h)
-                if enc:
-                    h264_pkt = enc.encode_frame(yuv_raw)
-                    if h264_pkt:
-                        hdr = STRUCT_MSG_FRAME.pack(
-                            MSG_FRAME,
-                            w,
-                            h,
-                            FMT_YUV420P,
-                            CODEC_H264,
-                            len(h264_pkt),
-                        )
-                        await self.send_packet(hdr + h264_pkt)
-                        self._total_h264_frames += 1
-                        if (self._total_h264_frames % 50) == 1:
-                            logger.info("Sent H.264 video frame #%d: len=%d (%dx%d via VA-API/libx264)",
-                                        self._total_h264_frames, len(h264_pkt), w, h)
-                        return
+            yuv_len = (w * h * 3) // 2
+            if self._yuv_buf is None or len(self._yuv_buf) != yuv_len:
+                self._yuv_buf = ctypes.create_string_buffer(yuv_len)
+            loop = asyncio.get_running_loop()
+            h264_pkt = await loop.run_in_executor(
+                None,
+                self._encode_h264_frame_sync,
+                png_bytes,
+                w,
+                h,
+                self._yuv_buf,
+            )
+            if h264_pkt:
+                self.force_full_frame = False
+                self.last_frame_hash = b"H264"
+                self._was_h264 = True
+                hdr = STRUCT_MSG_FRAME.pack(
+                    MSG_FRAME,
+                    w,
+                    h,
+                    FMT_YUV420P,
+                    CODEC_H264,
+                    len(h264_pkt),
+                )
+                await self.send_packet(hdr + h264_pkt)
+                self._total_h264_frames += 1
+                if (self._total_h264_frames % 50) == 1:
+                    logger.info("Sent H.264 video frame #%d: len=%d (%dx%d via VA-API/libx264)",
+                                self._total_h264_frames, len(h264_pkt), w, h)
+                return
+            # Fallback to LZ4 if H.264 encoder produced no frame yet
+            self.last_frame_hash = hashlib.md5(png_bytes).digest()
+            self.force_full_frame = False
+            if was_h264:
+                force_full = True
+            self._was_h264 = False
 
         if fmt == FMT_YUV420P:
             bpp = 1

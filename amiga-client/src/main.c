@@ -446,13 +446,14 @@ int main(int argc, char **argv)
             LONG sel = ISocket->WaitSelect(g_app.sock_fd + 1, &rfds, NULL, NULL, &tv, &sigs);
 
             if (sel > 0 && g_app.sock_fd >= 0 && FD_ISSET(g_app.sock_fd, &rfds)) {
+                uint32_t prev_frames = g_app.renderer.frames_decoded;
                 int batch = 0;
                 do {
                     if (!net_handle_incoming(&g_app)) {
                         break;
                     }
                     batch++;
-                } while (batch < 2 && g_app.connected && net_has_pending_data(&g_app));
+                } while (batch < 12 && (g_app.renderer.frames_decoded - prev_frames) < 2 && g_app.connected && net_has_pending_data(&g_app));
 
                 /* Blit accumulated dirty scanlines once after draining pending packets */
                 renderer_flush_dirty(&g_app);

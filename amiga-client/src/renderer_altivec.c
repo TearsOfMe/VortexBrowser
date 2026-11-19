@@ -1,22 +1,77 @@
 #include "renderer_altivec.h"
 #include <altivec.h>
+#include <stdint.h>
 #include <string.h>
 
 void altivec_fast_memcpy(void * restrict dst, const void * restrict src, size_t n)
 {
     uint8_t * restrict d = (uint8_t *)dst;
     const uint8_t * restrict s = (const uint8_t *)src;
-    if ((((uintptr_t)d | (uintptr_t)s) & 15) == 0) {
-        size_t n16 = n >> 4;
-        for (size_t i = 0; i < n16; i++) {
-            vector unsigned char v = vec_ld(0, s + (i << 4));
-            vec_st(v, 0, d + (i << 4));
+    if (n < 64) {
+        memcpy(d, s, n);
+        return;
+    }
+
+    uintptr_t mis_d = (uintptr_t)d & 15U;
+    if (mis_d) {
+        size_t pre = 16U - mis_d;
+        memcpy(d, s, pre);
+        d += pre;
+        s += pre;
+        n -= pre;
+    }
+
+    if (((uintptr_t)s & 15U) == 0U) {
+        while (n >= 64) {
+            vector unsigned char v0 = vec_ld(0,  s);
+            vector unsigned char v1 = vec_ld(16, s);
+            vector unsigned char v2 = vec_ld(32, s);
+            vector unsigned char v3 = vec_ld(48, s);
+            vec_st(v0, 0,  d);
+            vec_st(v1, 16, d);
+            vec_st(v2, 32, d);
+            vec_st(v3, 48, d);
+            s += 64;
+            d += 64;
+            n -= 64;
         }
-        size_t rem = n & 15;
-        if (rem) {
-            memcpy(d + (n - rem), s + (n - rem), rem);
+        while (n >= 16) {
+            vector unsigned char v = vec_ld(0, s);
+            vec_st(v, 0, d);
+            s += 16;
+            d += 16;
+            n -= 16;
         }
-    } else {
+    } else if (n >= 32) {
+        /* d is 16-byte aligned, s is unaligned: permute across adjacent loads.
+         * Stop before the final 16 bytes so vec_ld never reads past s + n - 1. */
+        vector unsigned char perm = vec_lvsl(0, s);
+        vector unsigned char v0   = vec_ld(0, s);
+        while (n >= 80) {
+            vector unsigned char v1 = vec_ld(16, s);
+            vector unsigned char v2 = vec_ld(32, s);
+            vector unsigned char v3 = vec_ld(48, s);
+            vector unsigned char v4 = vec_ld(64, s);
+            vec_st(vec_perm(v0, v1, perm), 0,  d);
+            vec_st(vec_perm(v1, v2, perm), 16, d);
+            vec_st(vec_perm(v2, v3, perm), 32, d);
+            vec_st(vec_perm(v3, v4, perm), 48, d);
+            v0 = v4;
+            s += 64;
+            d += 64;
+            n -= 64;
+        }
+        while (n >= 32) {
+            vector unsigned char v1 = vec_ld(16, s);
+            vec_st(vec_perm(v0, v1, perm), 0, d);
+            v0 = v1;
+            s += 16;
+            d += 16;
+            n -= 16;
+        }
+    }
+
+    if (n) {
         memcpy(d, s, n);
     }
 }

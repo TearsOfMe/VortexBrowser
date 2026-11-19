@@ -642,6 +642,15 @@ static void upload_rect_to_bitmap(
     }
 }
 
+static inline void fast_plane_copy(const RendererState *r, void * restrict dst, const void * restrict src, size_t len)
+{
+    if (r->has_altivec && len >= 64) {
+        altivec_fast_memcpy(dst, src, len);
+    } else {
+        memcpy(dst, src, len);
+    }
+}
+
 static void upload_yuv420p_to_bitmap(
     RendererState *r,
     struct BitMap *bm,
@@ -650,7 +659,6 @@ static void upload_yuv420p_to_bitmap(
     uint16_t       h
 )
 {
-    (void)r;
     struct PlanarYUVInfo yuvInfo;
     memset(&yuvInfo, 0, sizeof(yuvInfo));
 
@@ -667,10 +675,10 @@ static void upload_yuv420p_to_bitmap(
         /* 1. Y plane: w x h (Luma, 8 bpp) */
         uint8_t *y_dst = (uint8_t *)yuvInfo.YMemory;
         if (yuvInfo.YBytesPerRow == w) {
-            memcpy(y_dst, y_src, (size_t)w * h);
+            fast_plane_copy(r, y_dst, y_src, (size_t)w * h);
         } else {
             for (uint16_t y = 0; y < h; y++) {
-                memcpy(y_dst, y_src, w);
+                fast_plane_copy(r, y_dst, y_src, w);
                 y_src += w;
                 y_dst += yuvInfo.YBytesPerRow;
             }
@@ -681,10 +689,10 @@ static void upload_yuv420p_to_bitmap(
         uint16_t half_h = h / 2;
         uint8_t *u_dst = (uint8_t *)yuvInfo.UMemory;
         if (yuvInfo.UBytesPerRow == half_w) {
-            memcpy(u_dst, u_src, (size_t)half_w * half_h);
+            fast_plane_copy(r, u_dst, u_src, (size_t)half_w * half_h);
         } else {
             for (uint16_t y = 0; y < half_h; y++) {
-                memcpy(u_dst, u_src, half_w);
+                fast_plane_copy(r, u_dst, u_src, half_w);
                 u_src += half_w;
                 u_dst += yuvInfo.UBytesPerRow;
             }
@@ -693,10 +701,10 @@ static void upload_yuv420p_to_bitmap(
         /* 3. V plane: (w/2) x (h/2) (Chroma Red) */
         uint8_t *v_dst = (uint8_t *)yuvInfo.VMemory;
         if (yuvInfo.VBytesPerRow == half_w) {
-            memcpy(v_dst, v_src, (size_t)half_w * half_h);
+            fast_plane_copy(r, v_dst, v_src, (size_t)half_w * half_h);
         } else {
             for (uint16_t y = 0; y < half_h; y++) {
-                memcpy(v_dst, v_src, half_w);
+                fast_plane_copy(r, v_dst, v_src, half_w);
                 v_src += half_w;
                 v_dst += yuvInfo.VBytesPerRow;
             }
@@ -710,9 +718,125 @@ static void upload_yuv420p_to_bitmap(
     }
 }
 
-static inline uint8_t clamp_u8_int(int v)
+static BOOL     s_yuv_lut_ready = FALSE;
+static int32_t  s_yuv_y[256];
+static int32_t  s_yuv_rv[256];
+static int32_t  s_yuv_gu[256];
+static int32_t  s_yuv_gv[256];
+static int32_t  s_yuv_bu[256];
+static uint8_t  s_yuv_clamp[1024];
+
+static void init_yuv_rgb_tables(void)
 {
-    return (v < 0) ? 0U : ((v > 255) ? 255U : (uint8_t)v);
+    if (s_yuv_lut_ready) {
+        return;
+    }
+    for (int i = 0; i < 256; i++) {
+        int c = i - 16;
+        s_yuv_y[i]  = ((c > 0) ? (298 * c) : 0) + 128;
+        int d = i - 128;
+        s_yuv_rv[i] =  409 * d;
+        s_yuv_gu[i] = -100 * d;
+        s_yuv_gv[i] = -208 * d;
+        s_yuv_bu[i] =  516 * d;
+    }
+    for (int i = 0; i < 1024; i++) {
+        int v = i - 384;
+        s_yuv_clamp[i] = (v < 0) ? 0U : ((v > 255) ? 255U : (uint8_t)v);
+    }
+    s_yuv_lut_ready = TRUE;
+}
+
+static void convert_yuv420_row_to_rgb565(
+    const uint8_t * restrict y_row,
+    const uint8_t * restrict u_row,
+    const uint8_t * restrict v_row,
+    uint16_t      * restrict dst16,
+    uint16_t                 width
+)
+{
+    if (!s_yuv_lut_ready) {
+        init_yuv_rgb_tables();
+    }
+    const uint8_t *clamp = s_yuv_clamp + 384;
+    uint16_t pairs = width >> 1;
+    for (uint16_t px = 0; px < pairs; px++) {
+        uint8_t u   = u_row[px];
+        uint8_t v   = v_row[px];
+        int32_t rv  = s_yuv_rv[v];
+        int32_t guv = s_yuv_gu[u] + s_yuv_gv[v];
+        int32_t bu  = s_yuv_bu[u];
+
+        int32_t y0  = s_yuv_y[y_row[0]];
+        uint8_t r0  = clamp[(y0 + rv)  >> 8];
+        uint8_t g0  = clamp[(y0 + guv) >> 8];
+        uint8_t b0  = clamp[(y0 + bu)  >> 8];
+        dst16[0] = (uint16_t)(((uint16_t)(r0 >> 3) << 11) | ((uint16_t)(g0 >> 2) << 5) | (uint16_t)(b0 >> 3));
+
+        int32_t y1  = s_yuv_y[y_row[1]];
+        uint8_t r1  = clamp[(y1 + rv)  >> 8];
+        uint8_t g1  = clamp[(y1 + guv) >> 8];
+        uint8_t b1  = clamp[(y1 + bu)  >> 8];
+        dst16[1] = (uint16_t)(((uint16_t)(r1 >> 3) << 11) | ((uint16_t)(g1 >> 2) << 5) | (uint16_t)(b1 >> 3));
+
+        y_row += 2;
+        dst16 += 2;
+    }
+    if ((width & 1U) && pairs > 0) {
+        uint8_t u   = u_row[pairs - 1];
+        uint8_t v   = v_row[pairs - 1];
+        int32_t y0  = s_yuv_y[y_row[0]];
+        uint8_t r0  = clamp[(y0 + s_yuv_rv[v]) >> 8];
+        uint8_t g0  = clamp[(y0 + s_yuv_gu[u] + s_yuv_gv[v]) >> 8];
+        uint8_t b0  = clamp[(y0 + s_yuv_bu[u]) >> 8];
+        dst16[0] = (uint16_t)(((uint16_t)(r0 >> 3) << 11) | ((uint16_t)(g0 >> 2) << 5) | (uint16_t)(b0 >> 3));
+    }
+}
+
+static void convert_yuv420_row_to_argb32(
+    const uint8_t * restrict y_row,
+    const uint8_t * restrict u_row,
+    const uint8_t * restrict v_row,
+    uint32_t      * restrict dst32,
+    uint16_t                 width
+)
+{
+    if (!s_yuv_lut_ready) {
+        init_yuv_rgb_tables();
+    }
+    const uint8_t *clamp = s_yuv_clamp + 384;
+    uint16_t pairs = width >> 1;
+    for (uint16_t px = 0; px < pairs; px++) {
+        uint8_t u   = u_row[px];
+        uint8_t v   = v_row[px];
+        int32_t rv  = s_yuv_rv[v];
+        int32_t guv = s_yuv_gu[u] + s_yuv_gv[v];
+        int32_t bu  = s_yuv_bu[u];
+
+        int32_t y0  = s_yuv_y[y_row[0]];
+        uint32_t r0 = clamp[(y0 + rv)  >> 8];
+        uint32_t g0 = clamp[(y0 + guv) >> 8];
+        uint32_t b0 = clamp[(y0 + bu)  >> 8];
+        dst32[0] = 0xFF000000U | (r0 << 16) | (g0 << 8) | b0;
+
+        int32_t y1  = s_yuv_y[y_row[1]];
+        uint32_t r1 = clamp[(y1 + rv)  >> 8];
+        uint32_t g1 = clamp[(y1 + guv) >> 8];
+        uint32_t b1 = clamp[(y1 + bu)  >> 8];
+        dst32[1] = 0xFF000000U | (r1 << 16) | (g1 << 8) | b1;
+
+        y_row += 2;
+        dst32 += 2;
+    }
+    if ((width & 1U) && pairs > 0) {
+        uint8_t u   = u_row[pairs - 1];
+        uint8_t v   = v_row[pairs - 1];
+        int32_t y0  = s_yuv_y[y_row[0]];
+        uint32_t r0 = clamp[(y0 + s_yuv_rv[v]) >> 8];
+        uint32_t g0 = clamp[(y0 + s_yuv_gu[u] + s_yuv_gv[v]) >> 8];
+        uint32_t b0 = clamp[(y0 + s_yuv_bu[u]) >> 8];
+        dst32[0] = 0xFF000000U | (r0 << 16) | (g0 << 8) | b0;
+    }
 }
 
 static void upload_rect_yuv420p_to_bitmap(
@@ -725,7 +849,6 @@ static void upload_rect_yuv420p_to_bitmap(
     uint16_t       rh
 )
 {
-    (void)r;
     if (!bm || !yuv_data || rw < 2 || rh < 2) {
         return;
     }
@@ -746,7 +869,7 @@ static void upload_rect_yuv420p_to_bitmap(
 
             uint8_t *y_dst = (uint8_t *)yuvInfo.YMemory + (size_t)ry * yuvInfo.YBytesPerRow + rx;
             for (uint16_t y = 0; y < rh; y++) {
-                memcpy(y_dst, y_src, rw);
+                fast_plane_copy(r, y_dst, y_src, rw);
                 y_src += rw;
                 y_dst += yuvInfo.YBytesPerRow;
             }
@@ -758,14 +881,14 @@ static void upload_rect_yuv420p_to_bitmap(
 
             uint8_t *u_dst = (uint8_t *)yuvInfo.UMemory + (size_t)half_y * yuvInfo.UBytesPerRow + half_x;
             for (uint16_t y = 0; y < half_h; y++) {
-                memcpy(u_dst, u_src, half_w);
+                fast_plane_copy(r, u_dst, u_src, half_w);
                 u_src += half_w;
                 u_dst += yuvInfo.UBytesPerRow;
             }
 
             uint8_t *v_dst = (uint8_t *)yuvInfo.VMemory + (size_t)half_y * yuvInfo.VBytesPerRow + half_x;
             for (uint16_t y = 0; y < half_h; y++) {
-                memcpy(v_dst, v_src, half_w);
+                fast_plane_copy(r, v_dst, v_src, half_w);
                 v_src += half_w;
                 v_dst += yuvInfo.VBytesPerRow;
             }
@@ -802,20 +925,7 @@ static void upload_rect_yuv420p_to_bitmap(
                 const uint8_t *u_row = u_plane + (size_t)(y >> 1) * half_rw;
                 const uint8_t *v_row = v_plane + (size_t)(y >> 1) * half_rw;
                 uint16_t *dst16 = (uint16_t *)(base_addr + (size_t)(ry + y) * dst_bpr) + rx;
-                for (uint16_t x = 0; x < rw; x++) {
-                    int y_val = (int)y_row[x];
-                    int u_val = (int)u_row[x >> 1] - 128;
-                    int v_val = (int)v_row[x >> 1] - 128;
-                    int c = y_val - 16;
-                    if (c < 0) c = 0;
-                    int r8 = (298 * c + 409 * v_val + 128) >> 8;
-                    int g8 = (298 * c - 100 * u_val - 208 * v_val + 128) >> 8;
-                    int b8 = (298 * c + 516 * u_val + 128) >> 8;
-                    uint16_t r5 = (uint16_t)(clamp_u8_int(r8) >> 3);
-                    uint16_t g6 = (uint16_t)(clamp_u8_int(g8) >> 2);
-                    uint16_t b5 = (uint16_t)(clamp_u8_int(b8) >> 3);
-                    dst16[x] = (uint16_t)((r5 << 11) | (g6 << 5) | b5);
-                }
+                convert_yuv420_row_to_rgb565(y_row, u_row, v_row, dst16, rw);
             }
         } else {
             for (uint16_t y = 0; y < rh; y++) {
@@ -823,17 +933,7 @@ static void upload_rect_yuv420p_to_bitmap(
                 const uint8_t *u_row = u_plane + (size_t)(y >> 1) * half_rw;
                 const uint8_t *v_row = v_plane + (size_t)(y >> 1) * half_rw;
                 uint32_t *dst32 = (uint32_t *)(base_addr + (size_t)(ry + y) * dst_bpr) + rx;
-                for (uint16_t x = 0; x < rw; x++) {
-                    int y_val = (int)y_row[x];
-                    int u_val = (int)u_row[x >> 1] - 128;
-                    int v_val = (int)v_row[x >> 1] - 128;
-                    int c = y_val - 16;
-                    if (c < 0) c = 0;
-                    uint32_t r8 = clamp_u8_int((298 * c + 409 * v_val + 128) >> 8);
-                    uint32_t g8 = clamp_u8_int((298 * c - 100 * u_val - 208 * v_val + 128) >> 8);
-                    uint32_t b8 = clamp_u8_int((298 * c + 516 * u_val + 128) >> 8);
-                    dst32[x] = 0xFF000000U | (r8 << 16) | (g8 << 8) | b8;
-                }
+                convert_yuv420_row_to_argb32(y_row, u_row, v_row, dst32, rw);
             }
         }
         IGraphics->UnlockBitMap(lock);
@@ -853,7 +953,6 @@ static void upload_yuv420p_to_rgb_bitmap(
     uint16_t       dst_h
 )
 {
-    (void)r;
     if (!bm || !yuv_data || src_w < 2 || src_h < 2 || dst_w < 2 || dst_h < 2) {
         return;
     }
@@ -884,20 +983,7 @@ static void upload_yuv420p_to_rgb_bitmap(
                 const uint8_t *u_row = u_plane + (size_t)(y >> 1) * half_src_w;
                 const uint8_t *v_row = v_plane + (size_t)(y >> 1) * half_src_w;
                 uint16_t *dst16 = (uint16_t *)(base_addr + (size_t)y * dst_bpr);
-                for (uint16_t x = 0; x < conv_w; x++) {
-                    int y_val = (int)y_row[x];
-                    int u_val = (int)u_row[x >> 1] - 128;
-                    int v_val = (int)v_row[x >> 1] - 128;
-                    int c = y_val - 16;
-                    if (c < 0) c = 0;
-                    int r8 = (298 * c + 409 * v_val + 128) >> 8;
-                    int g8 = (298 * c - 100 * u_val - 208 * v_val + 128) >> 8;
-                    int b8 = (298 * c + 516 * u_val + 128) >> 8;
-                    uint16_t r5 = (uint16_t)(clamp_u8_int(r8) >> 3);
-                    uint16_t g6 = (uint16_t)(clamp_u8_int(g8) >> 2);
-                    uint16_t b5 = (uint16_t)(clamp_u8_int(b8) >> 3);
-                    dst16[x] = (uint16_t)((r5 << 11) | (g6 << 5) | b5);
-                }
+                convert_yuv420_row_to_rgb565(y_row, u_row, v_row, dst16, conv_w);
             }
         } else {
             for (uint16_t y = 0; y < conv_h; y++) {
@@ -905,17 +991,7 @@ static void upload_yuv420p_to_rgb_bitmap(
                 const uint8_t *u_row = u_plane + (size_t)(y >> 1) * half_src_w;
                 const uint8_t *v_row = v_plane + (size_t)(y >> 1) * half_src_w;
                 uint32_t *dst32 = (uint32_t *)(base_addr + (size_t)y * dst_bpr);
-                for (uint16_t x = 0; x < conv_w; x++) {
-                    int y_val = (int)y_row[x];
-                    int u_val = (int)u_row[x >> 1] - 128;
-                    int v_val = (int)v_row[x >> 1] - 128;
-                    int c = y_val - 16;
-                    if (c < 0) c = 0;
-                    uint32_t r8 = clamp_u8_int((298 * c + 409 * v_val + 128) >> 8);
-                    uint32_t g8 = clamp_u8_int((298 * c - 100 * u_val - 208 * v_val + 128) >> 8);
-                    uint32_t b8 = clamp_u8_int((298 * c + 516 * u_val + 128) >> 8);
-                    dst32[x] = 0xFF000000U | (r8 << 16) | (g8 << 8) | b8;
-                }
+                convert_yuv420_row_to_argb32(y_row, u_row, v_row, dst32, conv_w);
             }
         }
         IGraphics->UnlockBitMap(lock);
@@ -940,17 +1016,7 @@ static void upload_yuv420p_to_rgb_bitmap(
         const uint8_t *u_row = u_plane + (size_t)(y >> 1) * half_src_w;
         const uint8_t *v_row = v_plane + (size_t)(y >> 1) * half_src_w;
         uint32_t *dst32 = r->conv_argb_buf + (size_t)y * conv_w;
-        for (uint16_t x = 0; x < conv_w; x++) {
-            int y_val = (int)y_row[x];
-            int u_val = (int)u_row[x >> 1] - 128;
-            int v_val = (int)v_row[x >> 1] - 128;
-            int c = y_val - 16;
-            if (c < 0) c = 0;
-            uint32_t r8 = clamp_u8_int((298 * c + 409 * v_val + 128) >> 8);
-            uint32_t g8 = clamp_u8_int((298 * c - 100 * u_val - 208 * v_val + 128) >> 8);
-            uint32_t b8 = clamp_u8_int((298 * c + 516 * u_val + 128) >> 8);
-            dst32[x] = 0xFF000000U | (r8 << 16) | (g8 << 8) | b8;
-        }
+        convert_yuv420_row_to_argb32(y_row, u_row, v_row, dst32, conv_w);
     }
 
     IGraphics->BltBitMapTags(
@@ -1435,6 +1501,16 @@ BOOL renderer_decode_and_present(
     return TRUE;
 }
 
+static void renderer_present_region(
+    VortexApp       *app,
+    struct RastPort *rp,
+    struct IBox     *area,
+    uint16_t         clip_x1,
+    uint16_t         clip_y1,
+    uint16_t         clip_x2,
+    uint16_t         clip_y2
+);
+
 void renderer_flush_dirty(VortexApp *app)
 {
     RendererState *r = &app->renderer;
@@ -1476,10 +1552,26 @@ void renderer_flush_dirty(VortexApp *app)
     int diff_h = (int)dh - (int)r->src_height;
     BOOL is_1to1 = (diff_w >= -2 && diff_w <= 2 && diff_h >= -2 && diff_h <= 2);
 
-    /* For YUV420P (always full frames), or on initial startup frames (frames_decoded <= 2),
-     * or when scaling or VA-API / H.264 is involved, always do a full present so the video/page is completely displayed */
-    if (r->decoded_va_surface || r->is_h264_active || r->src_format == FMT_YUV420P || r->frames_decoded <= 2 || !is_1to1 || r->src_bm_is_yuv) {
+    /* Full present on initial startup frames, scaled viewports, or VA-API / H.264 video */
+    if (r->decoded_va_surface || r->is_h264_active || r->frames_decoded <= 2 || !is_1to1) {
         renderer_present(app, app->win->RPort, area);
+        r->dirty = FALSE;
+        return;
+    }
+
+    /* 1:1 Partial Dirty 2D-Box GPU Composite Fast Path (planar YUV420P BitMap) */
+    if (r->src_bm_is_yuv) {
+        uint16_t max_w = (uint16_t)(dw & ~1U);
+        uint16_t max_h = (uint16_t)(dh & ~1U);
+        uint16_t x1 = (uint16_t)(r->dirty_x1 & ~1U);
+        uint16_t y1 = (uint16_t)(r->dirty_y1 & ~1U);
+        uint16_t x2 = (uint16_t)((r->dirty_x2 + 1U) & ~1U);
+        uint16_t y2 = (uint16_t)((r->dirty_y2 + 1U) & ~1U);
+        if (x2 > max_w) x2 = max_w;
+        if (y2 > max_h) y2 = max_h;
+        if (x2 > x1 && y2 > y1) {
+            renderer_present_region(app, app->win->RPort, area, x1, y1, x2, y2);
+        }
         r->dirty = FALSE;
         return;
     }
@@ -1542,7 +1634,15 @@ static ULONG composite_hook_func(struct Hook *hook, struct RastPort *rastPort, s
     return 0;
 }
 
-void renderer_present(VortexApp *app, struct RastPort *rp, struct IBox *area)
+static void renderer_present_region(
+    VortexApp       *app,
+    struct RastPort *rp,
+    struct IBox     *area,
+    uint16_t         clip_x1,
+    uint16_t         clip_y1,
+    uint16_t         clip_x2,
+    uint16_t         clip_y2
+)
 {
     RendererState *r = &app->renderer;
     if (!rp || !area || area->Width <= 2 || area->Height <= 2) {
@@ -1551,6 +1651,11 @@ void renderer_present(VortexApp *app, struct RastPort *rp, struct IBox *area)
 
     uint16_t dw = (uint16_t)(area->Width & ~1);
     uint16_t dh = (uint16_t)(area->Height & ~1);
+    if (clip_x2 > dw) clip_x2 = dw;
+    if (clip_y2 > dh) clip_y2 = dh;
+    if (clip_x1 >= clip_x2 || clip_y1 >= clip_y2) {
+        return;
+    }
 
     /* VA-API Hardware Video Acceleration: vaPutSurface straight into window RastPort (Radeon HD/RX UVD/VCN) */
     if (r->has_va && r->va_display && r->decoded_va_surface && r->is_h264_active) {
@@ -1601,10 +1706,10 @@ void renderer_present(VortexApp *app, struct RastPort *rp, struct IBox *area)
      * and completely eliminates screen tearing, layer locking, and mouse flickering! */
     if (rp->Layer && rp->BitMap && (r->src_bm_is_yuv || !is_1to1)) {
         struct Rectangle rect;
-        rect.MinX = area->Left;
-        rect.MinY = area->Top;
-        rect.MaxX = area->Left + dw - 1;
-        rect.MaxY = area->Top  + dh - 1;
+        rect.MinX = area->Left + clip_x1;
+        rect.MinY = area->Top  + clip_y1;
+        rect.MaxX = area->Left + clip_x2 - 1;
+        rect.MaxY = area->Top  + clip_y2 - 1;
 
         int32 scale_x = is_1to1 ? COMP_FLOAT_TO_FIX(1.0f) : COMP_FLOAT_TO_FIX((float)dw / (float)r->src_width);
         int32 scale_y = is_1to1 ? COMP_FLOAT_TO_FIX(1.0f) : COMP_FLOAT_TO_FIX((float)dh / (float)r->src_height);
@@ -1681,6 +1786,19 @@ void renderer_present(VortexApp *app, struct RastPort *rp, struct IBox *area)
             rp, area->Left, area->Top,
             copy_w, copy_h, 0xC0);
     }
+}
+
+void renderer_present(VortexApp *app, struct RastPort *rp, struct IBox *area)
+{
+    if (!rp || !area || area->Width <= 2 || area->Height <= 2) {
+        return;
+    }
+    renderer_present_region(
+        app, rp, area,
+        0, 0,
+        (uint16_t)(area->Width & ~1),
+        (uint16_t)(area->Height & ~1)
+    );
 }
 
 void renderer_sync_viewport_size(VortexApp *app)
