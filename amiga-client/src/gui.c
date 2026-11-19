@@ -1589,9 +1589,12 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
             break;
 
         case MID_WINDOW_SNAPSHOT:
+            app->prefs.resolution.win_pos_locked = FALSE;
             prefs_capture_window_box(app);
-            app->prefs.resolution.win_pos_locked = TRUE;
-            prefs_save(app, TRUE);
+            if (app->prefs.resolution.has_win_pos) {
+                app->prefs.resolution.win_pos_locked = TRUE;
+            }
+            prefs_save_keep_window_box(app, TRUE);
             app_set_status(GetVString(MSG_STATUS_WIN_SNAPSHOTTED),
                            (unsigned)app->prefs.resolution.win_w,
                            (unsigned)app->prefs.resolution.win_h,
@@ -1602,7 +1605,19 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
         case MID_WINDOW_UNSNAPSHOT:
             app->prefs.resolution.win_pos_locked = FALSE;
             app->prefs.resolution.has_win_pos = FALSE;
-            prefs_save(app, TRUE);
+            if (app->win && app->win->WScreen) {
+                struct Screen *scr = app->win->WScreen;
+                int16 bar_h = (int16)(scr->BarHeight + 1);
+                if (bar_h < 0 || bar_h > 120) bar_h = 24;
+                uint16 def_w = scr->Width;
+                uint16 def_h = (scr->Height > (uint16)bar_h) ? (uint16)(scr->Height - (uint16)bar_h) : scr->Height;
+                app->prefs.resolution.win_x = 0;
+                app->prefs.resolution.win_y = bar_h;
+                app->prefs.resolution.win_w = def_w;
+                app->prefs.resolution.win_h = def_h;
+                IIntuition->ChangeWindowBox(app->win, 0, bar_h, (int16)def_w, (int16)def_h);
+            }
+            prefs_save_keep_window_box(app, TRUE);
             app_set_status(GetVString(MSG_STATUS_WIN_UNSNAPSHOTTED));
             break;
 
@@ -3029,6 +3044,7 @@ BOOL gui_init(VortexApp *app)
     int16  win_top  = bar_h;
     uint16 win_w    = avail_scr_w;
     uint16 win_h    = (avail_scr_h > (uint16)bar_h) ? (uint16)(avail_scr_h - (uint16)bar_h) : avail_scr_h;
+    BOOL   restored_win_pos = FALSE;
 
     if ((!app->custom_screen || app->prefs.resolution.win_pos_locked) &&
         app->prefs.resolution.has_win_pos &&
@@ -3038,6 +3054,7 @@ BOOL gui_init(VortexApp *app)
         win_top  = app->prefs.resolution.win_y;
         win_w    = app->prefs.resolution.win_w;
         win_h    = app->prefs.resolution.win_h;
+        restored_win_pos = TRUE;
 
         if (win_left < 0) win_left = 0;
         if (win_top  < 0) win_top  = bar_h;
@@ -3361,6 +3378,7 @@ BOOL gui_init(VortexApp *app)
     app->win = (struct Window *)IIntuition->IDoMethod(app->win_obj, WM_OPEN);
     if (!app->win && app->custom_screen) {
         DBG_LOG("[GUI] WM_OPEN failed on custom screen; falling back to Workbench screen!\n");
+        restored_win_pos = FALSE;
         IIntuition->PubScreenStatus(app->custom_screen, PSNF_PRIVATE);
         IIntuition->CloseScreen(app->custom_screen);
         app->custom_screen = NULL;
@@ -3389,6 +3407,11 @@ BOOL gui_init(VortexApp *app)
     if (app->win) {
         /* Allow window to be resized freely down to 200x150, overriding layout GM_DOMAIN min constraints */
         IIntuition->WindowLimits(app->win, 200, 150, 0, 0);
+        if (restored_win_pos &&
+            (app->win->LeftEdge != win_left || app->win->TopEdge != win_top ||
+             app->win->Width != win_w || app->win->Height != win_h)) {
+            IIntuition->ChangeWindowBox(app->win, win_left, win_top, (int16)win_w, (int16)win_h);
+        }
 
         if (app->prefs.dark_theme == 1) {
             gui_draw_dark_titlebar(app);

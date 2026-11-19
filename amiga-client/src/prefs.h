@@ -133,6 +133,7 @@ void prefs_init(struct VortexApp *app);
 BOOL prefs_load(struct VortexApp *app);
 void prefs_load_tooltypes(struct VortexApp *app, int argc, char **argv);
 BOOL prefs_save(struct VortexApp *app, BOOL permanent);
+BOOL prefs_save_keep_window_box(struct VortexApp *app, BOOL permanent);
 void prefs_capture_window_box(struct VortexApp *app);
 void prefs_capture_dl_window_box(struct VortexApp *app);
 void prefs_capture_tabs(struct VortexApp *app);

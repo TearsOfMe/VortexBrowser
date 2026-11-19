@@ -547,6 +547,7 @@ void prefs_load_tooltypes(VortexApp *app, int argc, char **argv)
 void prefs_capture_window_box(VortexApp *app)
 {
     if (!app || !app->win) return;
+    if (app->prefs.resolution.win_pos_locked) return;
     if (app->win->Width >= 200 && app->win->Height >= 150) {
         app->prefs.resolution.win_x       = app->win->LeftEdge;
         app->prefs.resolution.win_y       = app->win->TopEdge;
@@ -706,13 +707,15 @@ static BOOL save_to_file(const VortexApp *app, const char *path)
     return TRUE;
 }
 
-BOOL prefs_save(VortexApp *app, BOOL permanent)
+static BOOL prefs_save_impl(VortexApp *app, BOOL permanent, BOOL capture_win)
 {
     if (!app) return FALSE;
 
     /* Capture open tabs and window position before saving */
     prefs_capture_tabs(app);
-    prefs_capture_window_box(app);
+    if (capture_win) {
+        prefs_capture_window_box(app);
+    }
     prefs_capture_dl_window_box(app);
 
     /* Always synchronize active app server into prefs if set */
@@ -739,6 +742,16 @@ BOOL prefs_save(VortexApp *app, BOOL permanent)
     }
 
     return ok_env && ok_arc;
+}
+
+BOOL prefs_save(VortexApp *app, BOOL permanent)
+{
+    return prefs_save_impl(app, permanent, TRUE);
+}
+
+BOOL prefs_save_keep_window_box(VortexApp *app, BOOL permanent)
+{
+    return prefs_save_impl(app, permanent, FALSE);
 }
 
 void prefs_resize_window_to_resolution(VortexApp *app, uint16_t req_w, uint16_t req_h)
@@ -791,11 +804,13 @@ void prefs_resize_window_to_resolution(VortexApp *app, uint16_t req_w, uint16_t 
     if (target_w != (int)app->win->Width || target_h != (int)app->win->Height ||
         new_left != (int)app->win->LeftEdge || new_top != (int)app->win->TopEdge) {
         IIntuition->ChangeWindowBox(app->win, (int16)new_left, (int16)new_top, (int16)target_w, (int16)target_h);
-        app->prefs.resolution.win_x       = (int16_t)new_left;
-        app->prefs.resolution.win_y       = (int16_t)new_top;
-        app->prefs.resolution.win_w       = (uint16_t)target_w;
-        app->prefs.resolution.win_h       = (uint16_t)target_h;
-        app->prefs.resolution.has_win_pos = TRUE;
+        if (!app->prefs.resolution.win_pos_locked) {
+            app->prefs.resolution.win_x       = (int16_t)new_left;
+            app->prefs.resolution.win_y       = (int16_t)new_top;
+            app->prefs.resolution.win_w       = (uint16_t)target_w;
+            app->prefs.resolution.win_h       = (uint16_t)target_h;
+            app->prefs.resolution.has_win_pos = TRUE;
+        }
     }
 }
 
