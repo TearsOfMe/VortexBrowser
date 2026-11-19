@@ -196,6 +196,9 @@ static void cleanup_h264_decoder(VortexApp *app)
         r->av_hw_device = NULL;
     }
     r->h264_decoder_init = FALSE;
+    r->is_h264_active = FALSE;
+    r->h264_width = 0;
+    r->h264_height = 0;
     r->decoded_va_surface = 0;
 }
 
@@ -1183,9 +1186,17 @@ static BOOL renderer_decode_h264(
         return FALSE;
     }
 
+    if (r->h264_decoder_init && r->h264_width != 0 && r->h264_height != 0 &&
+        (r->h264_width != w || r->h264_height != h)) {
+        cleanup_h264_decoder(app);
+    }
+
     if (!init_h264_decoder(app)) {
         return FALSE;
     }
+    r->is_h264_active = TRUE;
+    r->h264_width     = w;
+    r->h264_height    = h;
 
     AVCodecContext       *avctx  = (AVCodecContext *)r->av_codec_ctx;
     AVCodecParserContext *parser = (AVCodecParserContext *)r->av_parser;
@@ -1222,6 +1233,8 @@ static BOOL renderer_decode_h264(
                 if (fw >= 16 && fh >= 16) {
                     w = fw;
                     h = fh;
+                    r->h264_width  = fw;
+                    r->h264_height = fh;
                 }
 
                 if (frame->format == AV_PIX_FMT_VAAPI) {
@@ -1327,6 +1340,7 @@ BOOL renderer_decode_and_present(
         return renderer_decode_h264(app, lz4_data, lz4_len, w, h);
     }
     r->is_h264_active = FALSE;
+    r->decoded_va_surface = 0;
 
     if (codec == CODEC_JPEG) {
         return renderer_decode_jpeg(app, lz4_data, lz4_len, w, h);
@@ -1514,7 +1528,7 @@ static void renderer_present_region(
 void renderer_flush_dirty(VortexApp *app)
 {
     RendererState *r = &app->renderer;
-    if (!r->dirty || !r->has_frame || !r->src_bm[0]) {
+    if (!r->dirty || !r->has_frame || (!r->src_bm[0] && !r->decoded_va_surface)) {
         return;
     }
     if (!app->win || !app->win->RPort || !app->gad_space) {
@@ -1522,14 +1536,13 @@ void renderer_flush_dirty(VortexApp *app)
     }
 
     struct IBox *area = NULL;
-    struct IBox fallback_area;
-    if (app->cached_space_box.Width > 2 && app->cached_space_box.Height > 2) {
+    struct IBox  clamped_area;
+    struct IBox  fallback_area;
+    IIntuition->GetAttr(SPACE_AreaBox, app->gad_space, (uint32 *)&area);
+    if (area && area->Width > 2 && area->Height > 2) {
+        app->cached_space_box = *area;
+    } else if (app->cached_space_box.Width > 2 && app->cached_space_box.Height > 2) {
         area = &app->cached_space_box;
-    } else {
-        IIntuition->GetAttr(SPACE_AreaBox, app->gad_space, (uint32 *)&area);
-        if (area && area->Width > 2 && area->Height > 2) {
-            app->cached_space_box = *area;
-        }
     }
 
     if (!area || area->Width <= 2 || area->Height <= 2) {
@@ -1543,6 +1556,36 @@ void renderer_flush_dirty(VortexApp *app)
         }
         area = &fallback_area;
     }
+
+    clamped_area = *area;
+    {
+        int32_t min_left   = (int32_t)app->win->BorderLeft;
+        int32_t min_top    = (int32_t)app->win->BorderTop;
+        int32_t max_right  = (int32_t)app->win->Width  - (int32_t)app->win->BorderRight;
+        int32_t max_bottom = (int32_t)app->win->Height - (int32_t)app->win->BorderBottom;
+        if (clamped_area.Left < min_left) {
+            int32_t cut = min_left - (int32_t)clamped_area.Left;
+            clamped_area.Left   = (int16)min_left;
+            clamped_area.Width  = (clamped_area.Width > cut) ? (int16)(clamped_area.Width - cut) : 0;
+        }
+        if (clamped_area.Top < min_top) {
+            int32_t cut = min_top - (int32_t)clamped_area.Top;
+            clamped_area.Top    = (int16)min_top;
+            clamped_area.Height = (clamped_area.Height > cut) ? (int16)(clamped_area.Height - cut) : 0;
+        }
+        if ((int32_t)clamped_area.Left + (int32_t)clamped_area.Width > max_right) {
+            int32_t nw = max_right - (int32_t)clamped_area.Left;
+            clamped_area.Width = (nw > 0) ? (int16)nw : 0;
+        }
+        if ((int32_t)clamped_area.Top + (int32_t)clamped_area.Height > max_bottom) {
+            int32_t nh = max_bottom - (int32_t)clamped_area.Top;
+            clamped_area.Height = (nh > 0) ? (int16)nh : 0;
+        }
+    }
+    if (clamped_area.Width <= 2 || clamped_area.Height <= 2) {
+        return;
+    }
+    area = &clamped_area;
 
     uint16_t dw = (uint16_t)area->Width;
     uint16_t dh = (uint16_t)area->Height;
@@ -1565,8 +1608,8 @@ void renderer_flush_dirty(VortexApp *app)
         uint16_t max_h = (uint16_t)(dh & ~1U);
         uint16_t x1 = (uint16_t)(r->dirty_x1 & ~1U);
         uint16_t y1 = (uint16_t)(r->dirty_y1 & ~1U);
-        uint16_t x2 = (uint16_t)((r->dirty_x2 + 1U) & ~1U);
-        uint16_t y2 = (uint16_t)((r->dirty_y2 + 1U) & ~1U);
+        uint16_t x2 = (r->dirty_x2 >= max_w) ? max_w : (uint16_t)((r->dirty_x2 + 1U) & ~1U);
+        uint16_t y2 = (r->dirty_y2 >= max_h) ? max_h : (uint16_t)((r->dirty_y2 + 1U) & ~1U);
         if (x2 > max_w) x2 = max_w;
         if (y2 > max_h) y2 = max_h;
         if (x2 > x1 && y2 > y1) {
@@ -1651,6 +1694,9 @@ static void renderer_present_region(
 
     uint16_t dw = (uint16_t)(area->Width & ~1);
     uint16_t dh = (uint16_t)(area->Height & ~1);
+    if (dw < 16 || dh < 16 || r->src_width < 16 || r->src_height < 16) {
+        return;
+    }
     if (clip_x2 > dw) clip_x2 = dw;
     if (clip_y2 > dh) clip_y2 = dh;
     if (clip_x1 >= clip_x2 || clip_y1 >= clip_y2) {
@@ -1813,6 +1859,9 @@ void renderer_sync_viewport_size(VortexApp *app)
 
     struct IBox *area = NULL;
     IIntuition->GetAttr(SPACE_AreaBox, app->gad_space, (uint32 *)&area);
+    if (area && area->Width > 2 && area->Height > 2) {
+        app->cached_space_box = *area;
+    }
 
     uint16_t w = 0;
     uint16_t h = 0;
@@ -1820,7 +1869,6 @@ void renderer_sync_viewport_size(VortexApp *app)
     if (area && area->Width >= 320 && area->Height >= 200) {
         w = (uint16_t)(area->Width  & ~1);
         h = (uint16_t)(area->Height & ~1);
-        app->cached_space_box = *area;
     } else if (app->win) {
         /* Accurate fallback calculation from actual window geometry before Reaction first layout pass */
         int16 calc_w = (int16)app->win->Width - (int16)app->win->BorderLeft - (int16)app->win->BorderRight;

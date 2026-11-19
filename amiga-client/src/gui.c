@@ -1060,8 +1060,15 @@ static uint32 space_render_func(struct Hook *hook, Object *space_obj, struct gpR
         }
     }
     if (area && area->Width > 2 && area->Height > 2) {
-        if (app->renderer.has_frame && app->renderer.src_bm[0]) {
-            renderer_present(app, gpr->gpr_RPort, area);
+        if (app->renderer.has_frame && (app->renderer.src_bm[0] || app->renderer.decoded_va_surface)) {
+            /* NEVER call LockLayer / vaPutSurface / DoHookClipRects / AllocBitMap inside GM_RENDER
+             * (SPACE_RenderHook): Intuition already holds ObtainGIRPort/Layer locks during window
+             * resizing, so locking layers here deadlocks Workbench. Defer redraw to main loop. */
+            app->renderer.dirty    = TRUE;
+            app->renderer.dirty_x1 = 0;
+            app->renderer.dirty_y1 = 0;
+            app->renderer.dirty_x2 = 32767;
+            app->renderer.dirty_y2 = 32767;
         } else {
             uint32 pen = (app->prefs.dark_theme == 1) ? ((s_dark_pens.allocated && s_dark_pens.bg_pen >= 0) ? (uint32)s_dark_pens.bg_pen : 1) : 0;
             IGraphics->SetAPen(gpr->gpr_RPort, pen);
@@ -3809,6 +3816,18 @@ void gui_handle_events(VortexApp *app)
             case WMHI_NEWSIZE:
                 prefs_capture_window_box(app);
                 if (app->win && app->gad_space) {
+                    struct IBox *narea = NULL;
+                    IIntuition->GetAttr(SPACE_AreaBox, app->gad_space, (uint32 *)&narea);
+                    if (narea && narea->Width > 2 && narea->Height > 2) {
+                        app->cached_space_box = *narea;
+                    }
+                    if (app->renderer.has_frame) {
+                        app->renderer.dirty    = TRUE;
+                        app->renderer.dirty_x1 = 0;
+                        app->renderer.dirty_y1 = 0;
+                        app->renderer.dirty_x2 = 32767;
+                        app->renderer.dirty_y2 = 32767;
+                    }
                     renderer_sync_viewport_size(app);
                 }
                 if (app->prefs.dark_theme == 1) {

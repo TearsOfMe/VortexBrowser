@@ -418,6 +418,11 @@ int main(int argc, char **argv)
             }
         }
 
+        /* Flush debounced viewport @RESIZE once rate-limit interval elapses */
+        if (g_app.connected && g_app.renderer.resize_pending) {
+            renderer_sync_viewport_size(&g_app);
+        }
+
         /* If a frame is dirty or waiting to be blitted, flush it now */
         if (g_app.renderer.dirty && g_app.renderer.has_frame) {
             renderer_flush_dirty(&g_app);
