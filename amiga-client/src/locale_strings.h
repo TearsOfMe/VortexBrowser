@@ -472,12 +472,19 @@ extern "C" {
 #define MSG_PREFS_ASL_SCR_TITLE   948
 #define MSG_PREFS_QL_NEW_LINK     949
 #define MSG_TAB_FALLBACK_LINK     950
+#define MSG_MENU_WIN_SNAPSHOT     951
+#define MSG_MENU_WIN_UNSNAPSHOT   952
+#define MSG_STATUS_WIN_SNAPSHOTTED   953
+#define MSG_STATUS_WIN_UNSNAPSHOTTED 954
 
 /* Get localized string or built-in default */
 CONST_STRPTR GetVString(ULONG id);
 
 /* Active catalog language name for diagnostics / About requester */
 const char *locale_get_active_language(void);
+
+/* Resolved BCP-47 browser language tag (e.g. "fr-FR", "de-DE", "en-US") */
+const char *locale_get_bcp47_code(void);
 
 /* Character encoding translation helpers (codesets.library with ISO-8859-1 fallback) */
 void vb_utf8_to_local(const char *utf8_str, char *dst, size_t dst_size);

@@ -489,7 +489,9 @@ int main(int argc, char **argv)
     }
 
     prefs_capture_tabs(&g_app);
-    prefs_capture_window_box(&g_app);
+    if (!g_app.prefs.resolution.win_pos_locked) {
+        prefs_capture_window_box(&g_app);
+    }
     prefs_save(&g_app, TRUE);
 
     net_disconnect(&g_app);

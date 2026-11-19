@@ -979,6 +979,140 @@ def _unwrap_ddg_url(raw_href: str) -> str:
     return href
 
 
+_BARE_LOCALE_MAP: Dict[str, str] = {
+    "de": "de-DE", "deutsch": "de-DE", "german": "de-DE",
+    "fr": "fr-FR", "francais": "fr-FR", "french": "fr-FR",
+    "it": "it-IT", "italiano": "it-IT", "italian": "it-IT",
+    "es": "es-ES", "espanol": "es-ES", "spanish": "es-ES",
+    "en": "en-US", "english": "en-US",
+    "nl": "nl-NL", "dutch": "nl-NL", "nederlands": "nl-NL",
+    "pl": "pl-PL", "polish": "pl-PL", "polski": "pl-PL",
+    "pt": "pt-PT", "portuguese": "pt-PT", "portugues": "pt-PT",
+    "sv": "sv-SE", "swedish": "sv-SE", "svenska": "sv-SE",
+    "da": "da-DK", "danish": "da-DK", "dansk": "da-DK",
+    "fi": "fi-FI", "finnish": "fi-FI", "suomi": "fi-FI",
+    "no": "nb-NO", "nb": "nb-NO", "norwegian": "nb-NO", "norsk": "nb-NO",
+    "cs": "cs-CZ", "czech": "cs-CZ", "cestina": "cs-CZ",
+    "hu": "hu-HU", "hungarian": "hu-HU", "magyar": "hu-HU",
+    "el": "el-GR", "greek": "el-GR",
+    "tr": "tr-TR", "turkish": "tr-TR", "turkce": "tr-TR",
+    "ru": "ru-RU", "russian": "ru-RU",
+    "ja": "ja-JP", "japanese": "ja-JP",
+    "ko": "ko-KR", "korean": "ko-KR",
+    "zh": "zh-CN", "chinese": "zh-CN",
+}
+_LOCALE_TAG_RE = re.compile(r"^[a-z]{2,3}(?:-[A-Z0-9]{2,4})?$")
+
+
+def normalize_bcp47_locale(raw: Optional[str]) -> Optional[str]:
+    """Normalizes POSIX/OS locale strings (e.g. 'fr_FR.UTF-8', 'francais') to strict BCP-47 tags."""
+    if not raw:
+        return None
+    s = str(raw).strip().strip('"').strip("'")
+    if not s:
+        return None
+    s = s.split("@", 1)[0].split(".", 1)[0].strip()
+    if not s:
+        return None
+    low = s.lower()
+    if low in ("c", "posix"):
+        return None
+    if low in _BARE_LOCALE_MAP:
+        return _BARE_LOCALE_MAP[low]
+    parts = [p for p in re.split(r"[-_]", s) if p]
+    if not parts:
+        return None
+    lang = parts[0].lower()
+    if len(parts) == 1:
+        return _BARE_LOCALE_MAP.get(lang, lang if re.fullmatch(r"[a-z]{2,3}", lang) else None)
+    # Take primary language + region (skip intermediate script subtag like zh_Hans_CN -> zh-CN)
+    region = parts[-1].upper()
+    candidate = f"{lang}-{region}"
+    if _LOCALE_TAG_RE.fullmatch(candidate):
+        return candidate
+    return None
+
+
+def detect_system_locale(explicit_locale: str = "") -> Tuple[str, bool]:
+    """Detects host OS locale unless explicitly overridden. Returns (bcp47_tag, is_explicit)."""
+    explicit_raw = (explicit_locale or "").strip() or os.environ.get("VORTEX_LOCALE", "").strip()
+    if explicit_raw:
+        norm = normalize_bcp47_locale(explicit_raw)
+        if norm:
+            return norm, True
+
+    for env_key in ("LC_ALL", "LC_MESSAGES", "LANG", "LANGUAGE"):
+        val = os.environ.get(env_key, "").strip()
+        if not val:
+            continue
+        if env_key == "LANGUAGE":
+            val = val.split(":", 1)[0]
+        norm = normalize_bcp47_locale(val)
+        if norm:
+            return norm, False
+
+    for cfg_path in ("/etc/locale.conf", "/etc/default/locale"):
+        if os.path.isfile(cfg_path):
+            try:
+                with open(cfg_path, "r", encoding="utf-8", errors="ignore") as f:
+                    vals: Dict[str, str] = {}
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith("#") or "=" not in line:
+                            continue
+                        k, v = line.split("=", 1)
+                        vals[k.strip()] = v.strip().strip('"').strip("'")
+                for k in ("LC_ALL", "LC_MESSAGES", "LANG"):
+                    norm = normalize_bcp47_locale(vals.get(k, ""))
+                    if norm:
+                        return norm, False
+            except Exception:
+                pass
+
+    if platform.system() == "Darwin":
+        try:
+            res = subprocess.run(
+                ["defaults", "read", "-g", "AppleLocale"],
+                capture_output=True, text=True, timeout=2.0,
+            )
+            if res.returncode == 0:
+                norm = normalize_bcp47_locale(res.stdout.strip())
+                if norm:
+                    return norm, False
+        except Exception:
+            pass
+
+    return "en-US", False
+
+
+def build_accept_language(bcp47: str) -> str:
+    norm = normalize_bcp47_locale(bcp47) or "en-US"
+    base = norm.split("-", 1)[0].lower()
+    if norm == "en-US":
+        return "en-US,en;q=0.9"
+    if base == "en":
+        return f"{norm},en;q=0.9,en-US;q=0.8"
+    if "-" in norm:
+        return f"{norm},{base};q=0.9,en-US;q=0.8,en;q=0.7"
+    return f"{norm},en-US;q=0.8,en;q=0.7"
+
+
+def build_navigator_languages(bcp47: str) -> List[str]:
+    norm = normalize_bcp47_locale(bcp47) or "en-US"
+    base = norm.split("-", 1)[0].lower()
+    out: List[str] = [norm]
+    if base not in out:
+        out.append(base)
+    if base != "en":
+        out.extend(["en-US", "en"])
+    elif norm != "en-US":
+        out.append("en-US")
+    return out
+
+
+_SERVER_LOCALE, _LOCALE_EXPLICIT = detect_system_locale()
+
+
 def _fetch_search_results_sync(query: str) -> str:
     q_esc = html.escape(query)
     items_html = []
@@ -989,7 +1123,7 @@ def _fetch_search_results_sync(query: str) -> str:
             headers={
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0",
                 "Accept": "text/html,application/xhtml+xml",
-                "Accept-Language": "de-DE,de;q=0.9,en;q=0.8",
+                "Accept-Language": build_accept_language(_SERVER_LOCALE),
             },
         )
         with urllib.request.urlopen(req, timeout=8) as resp:
@@ -2193,6 +2327,8 @@ class AmigaClientSession:
         video_bitrate: int = 4000,
         storage_state_file: str = "",
         context_state: Optional[Dict[str, Any]] = None,
+        browser_locale: str = "",
+        locale_explicit: bool = False,
     ):
         self.reader = reader
         self.writer = writer
@@ -2201,6 +2337,8 @@ class AmigaClientSession:
         self.engine: str = engine.lower()
         self.storage_state_file: str = storage_state_file or get_vortex_storage_state_path(self.engine)
         self._context_state: Dict[str, Any] = context_state if context_state is not None else {}
+        self.browser_locale: str = normalize_bcp47_locale(browser_locale) or _SERVER_LOCALE
+        self.locale_explicit: bool = bool(locale_explicit)
         self.width = width
         self.height = height
         self.pixel_format = pixel_format
@@ -2613,7 +2751,7 @@ class AmigaClientSession:
                 self.context = await self.browser.new_context(
                     viewport={"width": self.width, "height": self.height},
                     accept_downloads=True,
-                    locale="de-DE",
+                    locale=self.browser_locale,
                 )
             # Pre-set Google & YouTube Cookie Consent (SOCS / CONSENT) so cookie walls never block browsing
             try:
@@ -2684,6 +2822,7 @@ class AmigaClientSession:
                 logger.debug("Twitch cookie load error: %s", _te)
 
             # Anti-Bot & Anti-Detection Stealth + YouTube/Twitch Dirty-Rect Turbo Script
+            nav_langs_json = json.dumps(build_navigator_languages(self.browser_locale))
             self._init_turbo_js = """(() => {
                 if (window.__vortexTurboInjected) return;
                 window.__vortexTurboInjected = true;
@@ -2711,7 +2850,9 @@ class AmigaClientSession:
                     Object.defineProperty(navigator, 'plugins', { get: () => fakePlugins });
                 }
                 try {
-                    Object.defineProperty(navigator, 'languages', { get: () => ['de-DE', 'de', 'en-US', 'en'] });
+                    const _defaultLangs = """ + nav_langs_json + """;
+                    Object.defineProperty(navigator, 'languages', { get: () => window.__vortex_languages || _defaultLangs });
+                    Object.defineProperty(navigator, 'language', { get: () => (window.__vortex_languages || _defaultLangs)[0] });
                 } catch (e) {}
 
                 document.addEventListener('click', function(e) {
@@ -5325,6 +5466,45 @@ class AmigaClientSession:
                 logger.warning("Charset error: %s", exc)
             return
 
+        if cmd.upper().startswith("@LANG:"):
+            raw_lang = cmd.split(":", 1)[1].strip()
+            if self.locale_explicit:
+                logger.info("Ignoring client @LANG:%s (server --locale=%s explicitly set)", raw_lang, self.browser_locale)
+                return
+            norm = normalize_bcp47_locale(raw_lang)
+            if not norm:
+                logger.warning("Ignoring invalid @LANG locale: %r", raw_lang)
+                return
+            if norm != self.browser_locale:
+                self.browser_locale = norm
+                accept_lang = build_accept_language(norm)
+                nav_langs_json = json.dumps(build_navigator_languages(norm))
+                if self.context:
+                    try:
+                        await self.context.set_extra_http_headers({"Accept-Language": accept_lang})
+                    except Exception:
+                        pass
+                    try:
+                        await self.context.add_init_script(f"window.__vortex_languages = {nav_langs_json};")
+                    except Exception:
+                        pass
+                if self.cdp and self.engine == "chromium":
+                    try:
+                        await self.cdp.send("Emulation.setLocaleOverride", {"locale": norm})
+                    except Exception:
+                        pass
+                    try:
+                        await self.cdp.send("Network.setExtraHTTPHeaders", {"headers": {"Accept-Language": accept_lang}})
+                    except Exception:
+                        pass
+                if self.page:
+                    try:
+                        await self.page.evaluate(f"window.__vortex_languages = {nav_langs_json};")
+                    except Exception:
+                        pass
+                logger.info("Applied Amiga client locale: %s (Accept-Language: %s)", norm, accept_lang)
+            return
+
         if cmd.upper().startswith("@DARKMODE:") or cmd.upper().startswith("@THEME:"):
             try:
                 val = cmd.split(":", 1)[1].strip()
@@ -6554,6 +6734,15 @@ async def run_server(args: argparse.Namespace) -> None:
         lvl = getattr(logging, str(args.log_level).upper(), logging.CRITICAL)
         logger.setLevel(lvl)
         logging.getLogger().setLevel(lvl)
+    global _SERVER_LOCALE, _LOCALE_EXPLICIT
+    server_locale, locale_explicit = detect_system_locale(getattr(args, "locale", ""))
+    _SERVER_LOCALE = server_locale
+    _LOCALE_EXPLICIT = locale_explicit
+    logger.info(
+        "Browser Locale: %s (%s)",
+        server_locale,
+        "explicit --locale / VORTEX_LOCALE" if locale_explicit else "system auto-detect; Amiga @LANG override enabled",
+    )
     engine = getattr(args, "engine", "chromium").lower()
     config_dir = get_vortex_config_dir()
     pid_file = os.path.join(config_dir, "server.pid")
@@ -6692,6 +6881,7 @@ async def run_server(args: argparse.Namespace) -> None:
 
         launch_args = _merge_chromium_feature_flags([
             "--ozone-platform=headless",
+            f"--lang={server_locale}",
             "--remote-debugging-port=9222",
             "--remote-allow-origins=*",
             "--no-sandbox",
@@ -6741,7 +6931,7 @@ async def run_server(args: argparse.Namespace) -> None:
                     env=browser_env,
                     viewport={"width": args.width, "height": args.height},
                     accept_downloads=True,
-                    locale="de-DE",
+                    locale=server_locale,
                     user_agent=firefox_user_agent,
                     firefox_user_prefs={
                         "browser.startup.page": 0,
@@ -6749,6 +6939,7 @@ async def run_server(args: argparse.Namespace) -> None:
                         "browser.sessionstore.max_tabs_undo": 0,
                         "browser.sessionstore.max_resumed_crashes": 0,
                         "browser.tabs.warnOnClose": False,
+                        "intl.accept_languages": build_accept_language(server_locale),
                         "media.autoplay.default": 0,
                         "media.autoplay.blocking_policy": 0,
                         "media.ffmpeg.vaapi.enabled": True,
@@ -6766,7 +6957,7 @@ async def run_server(args: argparse.Namespace) -> None:
                     "args": launch_args,
                     "viewport": {"width": args.width, "height": args.height},
                     "accept_downloads": True,
-                    "locale": "de-DE",
+                    "locale": server_locale,
                 }
                 detected_ua = _detect_chromium_ua(full_chrome)
                 if detected_ua:
@@ -6775,6 +6966,7 @@ async def run_server(args: argparse.Namespace) -> None:
             else:
                 logger.info("Launching Headless Chromium fallback persistent context at %s...", profile_dir)
                 fallback_args = _merge_chromium_feature_flags([
+                    f"--lang={server_locale}",
                     "--remote-debugging-port=9222",
                     "--remote-allow-origins=*",
                     "--no-sandbox",
@@ -6804,7 +6996,7 @@ async def run_server(args: argparse.Namespace) -> None:
                     "args": fallback_args,
                     "viewport": {"width": args.width, "height": args.height},
                     "accept_downloads": True,
-                    "locale": "de-DE",
+                    "locale": server_locale,
                 }
                 detected_ua = _detect_chromium_ua(getattr(pw.chromium, "executable_path", None))
                 if detected_ua:
@@ -6863,6 +7055,8 @@ async def run_server(args: argparse.Namespace) -> None:
                             video_bitrate=getattr(args, "video_bitrate", 8000),
                             storage_state_file=state_file,
                             context_state=context_state,
+                            browser_locale=server_locale,
+                            locale_explicit=locale_explicit,
                         )
                         active_session = session
 
@@ -6968,6 +7162,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--disable-extensions", dest="enable_extensions", action="store_false", help="Disable all browser extensions")
     parser.add_argument("--disable-gpu", action="store_true", help="Disable GPU hardware acceleration (forces CPU software rasterization)")
     parser.add_argument("--no-cpu-governor", action="store_true", help="Disable automatic switching of CPU governor to performance during client sessions")
+    parser.add_argument(
+        "--locale",
+        default=os.environ.get("VORTEX_LOCALE", ""),
+        help="Browser & website language locale (e.g. en-US, fr-FR, de-DE; default: auto-detect from system/Amiga) [env: VORTEX_LOCALE]",
+    )
     parser.add_argument(
         "--engine",
         choices=["chromium", "firefox"],

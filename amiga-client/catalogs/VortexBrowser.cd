@@ -1306,3 +1306,15 @@ New Link
 MSG_TAB_FALLBACK_LINK (950//)
 Link
 ;
+MSG_MENU_WIN_SNAPSHOT (951//)
+Snapshot Window (Lock Position & Size)
+;
+MSG_MENU_WIN_UNSNAPSHOT (952//)
+Reset Window Snapshot
+;
+MSG_STATUS_WIN_SNAPSHOTTED (953//)
+Window snapshot saved: %ux%u at (%d, %d)
+;
+MSG_STATUS_WIN_UNSNAPSHOTTED (954//)
+Window snapshot cleared (auto-save restored).
+;

@@ -1304,3 +1304,15 @@ Nuevo enlace
 MSG_TAB_FALLBACK_LINK
 Enlace
 ;
+MSG_MENU_WIN_SNAPSHOT
+Fijar ventana (Snapshot)
+;
+MSG_MENU_WIN_UNSNAPSHOT
+Restablecer posición de ventana
+;
+MSG_STATUS_WIN_SNAPSHOTTED
+Ventana guardada: %ux%u en (%d, %d)
+;
+MSG_STATUS_WIN_UNSNAPSHOTTED
+Fijación de ventana eliminada (autoguardado activo).
+;

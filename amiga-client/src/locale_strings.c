@@ -25,6 +25,7 @@ struct CodesetsIFace       *ICodesets          = NULL;
 static struct Catalog      *s_catalog          = NULL;
 static struct Locale       *s_locale           = NULL;
 static char                 s_active_language[128] = "english (built-in)";
+static char                 s_bcp47_locale[16]     = "en-US";
 static FallbackCatalogEntry *s_fallback_entries = NULL;
 static size_t               s_fallback_count   = 0;
 static char                *s_fallback_pool    = NULL;
@@ -536,6 +537,10 @@ static const StringEntry s_builtins[] = {
     { MSG_PREFS_ASL_SCR_TITLE,    "Select Screen Mode" },
     { MSG_PREFS_QL_NEW_LINK,      "New Link" },
     { MSG_TAB_FALLBACK_LINK,      "Link" },
+    { MSG_MENU_WIN_SNAPSHOT,      "Snapshot Window (Lock Position & Size)" },
+    { MSG_MENU_WIN_UNSNAPSHOT,    "Reset Window Snapshot" },
+    { MSG_STATUS_WIN_SNAPSHOTTED,   "Window snapshot saved: %ux%u at (%d, %d)" },
+    { MSG_STATUS_WIN_UNSNAPSHOTTED, "Window snapshot cleared (auto-save restored)." },
 };
 
 #define NUM_BUILTINS (sizeof(s_builtins) / sizeof(s_builtins[0]))
@@ -1334,6 +1339,78 @@ static size_t trim_trailing_ws(char *buf, int32 len)
     return n;
 }
 
+static void resolve_bcp47_locale(const char *lang_hint, const char *country_code)
+{
+    typedef struct {
+        const char *token;
+        const char *bcp47;
+    } SimpleLocaleMap;
+    static const SimpleLocaleMap simple_map[] = {
+        { "polish", "pl-PL" }, { "polski", "pl-PL" }, { "pl", "pl-PL" },
+        { "swedish", "sv-SE" }, { "svenska", "sv-SE" }, { "sv", "sv-SE" },
+        { "danish", "da-DK" }, { "dansk", "da-DK" }, { "da", "da-DK" },
+        { "finnish", "fi-FI" }, { "suomi", "fi-FI" }, { "fi", "fi-FI" },
+        { "norwegian", "nb-NO" }, { "norsk", "nb-NO" }, { "nb", "nb-NO" }, { "no", "nb-NO" },
+        { "czech", "cs-CZ" }, { "cestina", "cs-CZ" }, { "cs", "cs-CZ" },
+        { "hungarian", "hu-HU" }, { "magyar", "hu-HU" }, { "hu", "hu-HU" },
+        { "greek", "el-GR" }, { "el", "el-GR" },
+        { "turkish", "tr-TR" }, { "turkce", "tr-TR" }, { "tr", "tr-TR" },
+        { "russian", "ru-RU" }, { "ru", "ru-RU" },
+        { "japanese", "ja-JP" }, { "ja", "ja-JP" },
+        { "korean", "ko-KR" }, { "ko", "ko-KR" },
+        { "chinese", "zh-CN" }, { "zh", "zh-CN" },
+    };
+
+    char norm[64];
+    norm[0] = '\0';
+    if (lang_hint && lang_hint[0]) {
+        normalize_lang_token(lang_hint, norm, sizeof(norm));
+    }
+
+    const char *cc = (country_code && country_code[0]) ? country_code : "";
+    const char *res = "en-US";
+
+    if (norm[0]) {
+        if (ascii_eq_ci(norm, "french") || ascii_eq_ci(norm, "francais") || ascii_eq_ci(norm, "fr")) {
+            if (ascii_eq_ci(cc, "CAN")) res = "fr-CA";
+            else if (ascii_eq_ci(cc, "CHE")) res = "fr-CH";
+            else if (ascii_eq_ci(cc, "BEL")) res = "fr-BE";
+            else res = "fr-FR";
+        } else if (ascii_eq_ci(norm, "german") || ascii_eq_ci(norm, "deutsch") || ascii_eq_ci(norm, "de")) {
+            if (ascii_eq_ci(cc, "AUT")) res = "de-AT";
+            else if (ascii_eq_ci(cc, "CHE")) res = "de-CH";
+            else res = "de-DE";
+        } else if (ascii_eq_ci(norm, "italian") || ascii_eq_ci(norm, "italiano") || ascii_eq_ci(norm, "it")) {
+            res = ascii_eq_ci(cc, "CHE") ? "it-CH" : "it-IT";
+        } else if (ascii_eq_ci(norm, "spanish") || ascii_eq_ci(norm, "espanol") || ascii_eq_ci(norm, "es")) {
+            if (ascii_eq_ci(cc, "MEX")) res = "es-MX";
+            else if (ascii_eq_ci(cc, "ARG")) res = "es-AR";
+            else res = "es-ES";
+        } else if (ascii_eq_ci(norm, "english") || ascii_eq_ci(norm, "en")) {
+            if (ascii_eq_ci(cc, "GBR") || ascii_eq_ci(cc, "UK") || ascii_eq_ci(cc, "ENG")) res = "en-GB";
+            else if (ascii_eq_ci(cc, "CAN")) res = "en-CA";
+            else if (ascii_eq_ci(cc, "AUS")) res = "en-AU";
+            else if (ascii_eq_ci(cc, "NZL")) res = "en-NZ";
+            else if (ascii_eq_ci(cc, "IRL")) res = "en-IE";
+            else res = "en-US";
+        } else if (ascii_eq_ci(norm, "dutch") || ascii_eq_ci(norm, "nederlands") || ascii_eq_ci(norm, "nl")) {
+            res = ascii_eq_ci(cc, "BEL") ? "nl-BE" : "nl-NL";
+        } else if (ascii_eq_ci(norm, "portuguese") || ascii_eq_ci(norm, "portugues") || ascii_eq_ci(norm, "pt")) {
+            res = ascii_eq_ci(cc, "BRA") ? "pt-BR" : "pt-PT";
+        } else {
+            size_t i;
+            for (i = 0; i < sizeof(simple_map) / sizeof(simple_map[0]); i++) {
+                if (ascii_eq_ci(norm, simple_map[i].token)) {
+                    res = simple_map[i].bcp47;
+                    break;
+                }
+            }
+        }
+    }
+
+    snprintf(s_bcp47_locale, sizeof(s_bcp47_locale), "%s", res);
+}
+
 void locale_init_catalog(void)
 {
     APTR old_win = NULL;
@@ -1462,7 +1539,37 @@ void locale_init_catalog(void)
 
     if (IDOS) IDOS->SetProcWindow(old_win);
 
-    DBG_LOG("[Locale] Active language: %s\n", s_active_language);
+    const char *bcp47_cc = lp.country_code[0] ? lp.country_code : loc_cc;
+    const char *bcp47_hint = NULL;
+    if (s_locale) {
+        int i;
+        for (i = 0; i < 10; i++) {
+            const char *pref = (const char *)s_locale->loc_PrefLanguages[i];
+            if (pref && pref[0]) {
+                bcp47_hint = pref;
+                break;
+            }
+        }
+    }
+    if (!bcp47_hint && diag_pref[0]) {
+        bcp47_hint = diag_pref;
+    }
+    if (!bcp47_hint && s_catalog && s_catalog->cat_Language && ((const char *)s_catalog->cat_Language)[0]) {
+        bcp47_hint = (const char *)s_catalog->cat_Language;
+    }
+    if (!bcp47_hint && s_locale && s_locale->loc_LanguageName && s_locale->loc_LanguageName[0]) {
+        bcp47_hint = (const char *)s_locale->loc_LanguageName;
+    }
+    if (!bcp47_hint && lp.has_prefs) {
+        const char *cn = lp.country_name[0] ? lp.country_name : (s_locale ? (const char *)s_locale->loc_LocaleName : NULL);
+        bcp47_hint = map_country_to_language(cn, bcp47_cc);
+    }
+    if (!bcp47_hint) {
+        bcp47_hint = s_active_language;
+    }
+    resolve_bcp47_locale(bcp47_hint, bcp47_cc);
+
+    DBG_LOG("[Locale] Active language: %s | BCP-47: %s\n", s_active_language, s_bcp47_locale);
 
     if (!CodesetsBase) {
         CodesetsBase = IExec->OpenLibrary("codesets.library", 6);
@@ -1478,6 +1585,11 @@ void locale_init_catalog(void)
 const char *locale_get_active_language(void)
 {
     return s_active_language;
+}
+
+const char *locale_get_bcp47_code(void)
+{
+    return s_bcp47_locale;
 }
 
 void locale_close_catalog(void)

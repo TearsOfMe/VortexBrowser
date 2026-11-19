@@ -1304,3 +1304,15 @@ Nouveau lien
 MSG_TAB_FALLBACK_LINK
 Lien
 ;
+MSG_MENU_WIN_SNAPSHOT
+Figer la fenêtre (Snapshot)
+;
+MSG_MENU_WIN_UNSNAPSHOT
+Réinitialiser la position de la fenêtre
+;
+MSG_STATUS_WIN_SNAPSHOTTED
+Position de la fenêtre enregistrée : %ux%u à (%d, %d)
+;
+MSG_STATUS_WIN_UNSNAPSHOTTED
+Position figée effacée (sauvegarde automatique rétablie).
+;

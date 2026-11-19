@@ -53,6 +53,7 @@ typedef struct ResolutionConfig {
     uint16_t win_w;             /* Saved window outer Width */
     uint16_t win_h;             /* Saved window outer Height */
     BOOL     has_win_pos;       /* TRUE if window position & size were saved */
+    BOOL     win_pos_locked;    /* TRUE if user explicitly snapshotted window geometry */
 } ResolutionConfig;
 
 /* Search Engine Presets (Default: 0 = DuckDuckGo) */

@@ -1304,3 +1304,15 @@ New Link
 MSG_TAB_FALLBACK_LINK
 Link
 ;
+MSG_MENU_WIN_SNAPSHOT
+Snapshot Window (Lock Position & Size)
+;
+MSG_MENU_WIN_UNSNAPSHOT
+Reset Window Snapshot
+;
+MSG_STATUS_WIN_SNAPSHOTTED
+Window snapshot saved: %ux%u at (%d, %d)
+;
+MSG_STATUS_WIN_UNSNAPSHOTTED
+Window snapshot cleared (auto-save restored).
+;

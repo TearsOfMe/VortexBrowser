@@ -88,6 +88,7 @@ void prefs_init(VortexApp *app)
     app->prefs.resolution.win_w             = 0;
     app->prefs.resolution.win_h             = 0;
     app->prefs.resolution.has_win_pos       = FALSE;
+    app->prefs.resolution.win_pos_locked    = FALSE;
     app->prefs.soft_scroll                  = TRUE;
     app->prefs.show_status_bar              = FALSE; /* Default: OFF */
     app->prefs.pause_bg_media               = FALSE; /* Default: OFF */
@@ -207,6 +208,8 @@ static BOOL load_from_file(VortexApp *app, const char *path)
             }
         } else if (strcmp(key, "has_win_pos") == 0) {
             app->prefs.resolution.has_win_pos = (atoi(val) != 0);
+        } else if (strcmp(key, "win_pos_locked") == 0) {
+            app->prefs.resolution.win_pos_locked = (atoi(val) != 0);
         } else if (strcmp(key, "win_x") == 0) {
             app->prefs.resolution.win_x = (int16_t)atoi(val);
         } else if (strcmp(key, "win_y") == 0) {
@@ -627,6 +630,7 @@ static BOOL save_to_file(const VortexApp *app, const char *path)
     fprintf(fp, "custom_w=%u\n",   (unsigned)app->prefs.resolution.custom_w);
     fprintf(fp, "custom_h=%u\n",   (unsigned)app->prefs.resolution.custom_h);
     fprintf(fp, "has_win_pos=%d\n", app->prefs.resolution.has_win_pos ? 1 : 0);
+    fprintf(fp, "win_pos_locked=%d\n", app->prefs.resolution.win_pos_locked ? 1 : 0);
     fprintf(fp, "win_x=%d\n",       (int)app->prefs.resolution.win_x);
     fprintf(fp, "win_y=%d\n",       (int)app->prefs.resolution.win_y);
     fprintf(fp, "win_w=%u\n",       (unsigned)app->prefs.resolution.win_w);
@@ -859,6 +863,14 @@ void prefs_apply(VortexApp *app)
         char ccmd[48];
         snprintf(ccmd, sizeof(ccmd), "@CHARSET:%s", enc);
         net_send_url(app, ccmd);
+
+        /* System Browser Locale from AmigaOS locale.library */
+        const char *bcp47 = locale_get_bcp47_code();
+        if (bcp47 && bcp47[0] != '\0') {
+            char lcmd[32];
+            snprintf(lcmd, sizeof(lcmd), "@LANG:%s", bcp47);
+            net_send_url(app, lcmd);
+        }
 
         /* Dark Theme / Dark Mode */
         char dcmd[32];

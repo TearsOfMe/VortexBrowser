@@ -103,6 +103,8 @@ static struct NewMenu s_main_menu[] = {
     { NM_ITEM,  NM_BARLABEL,                                           NULL,        0, 0, NULL },
     { NM_ITEM,  (STRPTR)"Vollbild / Bildschirm umschalten (F11)",      NULL,        0, 0, (APTR)MID_TOGGLE_SCREEN },
     { NM_ITEM,  (STRPTR)"Statusleiste umschalten",                     NULL,        0, 0, (APTR)MID_TOGGLE_STATUSBAR },
+    { NM_ITEM,  (STRPTR)"Fenster fixieren (Snapshot)",                 NULL,        0, 0, (APTR)MID_WINDOW_SNAPSHOT },
+    { NM_ITEM,  (STRPTR)"Fensterposition zurücksetzen",                NULL,        0, 0, (APTR)MID_WINDOW_UNSNAPSHOT },
     { NM_ITEM,  NM_BARLABEL,                                           NULL,        0, 0, NULL },
     { NM_ITEM,  (STRPTR)"Schrift vergrößern (+)",                        (STRPTR)"+", 0, 0, (APTR)MID_FONT_LARGER },
     { NM_ITEM,  (STRPTR)"Schrift verkleinern (-)",                         (STRPTR)"-", 0, 0, (APTR)MID_FONT_SMALLER },
@@ -209,6 +211,10 @@ static void gui_localize_menu(void)
                     s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_TOGGLE_SCREEN); break;
                 case MID_TOGGLE_STATUSBAR:
                     s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_TOGGLE_STATUSBAR); break;
+                case MID_WINDOW_SNAPSHOT:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_WIN_SNAPSHOT); break;
+                case MID_WINDOW_UNSNAPSHOT:
+                    s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_WIN_UNSNAPSHOT); break;
                 case MID_FONT_LARGER:
                     s_main_menu[i].nm_Label = (STRPTR)GetVString(MSG_MENU_ZOOM_IN); break;
                 case MID_FONT_SMALLER:
@@ -1580,6 +1586,24 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
             app->prefs.show_status_bar = !app->prefs.show_status_bar;
             prefs_save(app, TRUE);
             app->reopen_gui_needed = TRUE;
+            break;
+
+        case MID_WINDOW_SNAPSHOT:
+            prefs_capture_window_box(app);
+            app->prefs.resolution.win_pos_locked = TRUE;
+            prefs_save(app, TRUE);
+            app_set_status(GetVString(MSG_STATUS_WIN_SNAPSHOTTED),
+                           (unsigned)app->prefs.resolution.win_w,
+                           (unsigned)app->prefs.resolution.win_h,
+                           (int)app->prefs.resolution.win_x,
+                           (int)app->prefs.resolution.win_y);
+            break;
+
+        case MID_WINDOW_UNSNAPSHOT:
+            app->prefs.resolution.win_pos_locked = FALSE;
+            app->prefs.resolution.has_win_pos = FALSE;
+            prefs_save(app, TRUE);
+            app_set_status(GetVString(MSG_STATUS_WIN_UNSNAPSHOTTED));
             break;
 
         case MID_QUICK_ADD_CURRENT:
@@ -3006,7 +3030,7 @@ BOOL gui_init(VortexApp *app)
     uint16 win_w    = avail_scr_w;
     uint16 win_h    = (avail_scr_h > (uint16)bar_h) ? (uint16)(avail_scr_h - (uint16)bar_h) : avail_scr_h;
 
-    if (!app->custom_screen &&
+    if ((!app->custom_screen || app->prefs.resolution.win_pos_locked) &&
         app->prefs.resolution.has_win_pos &&
         app->prefs.resolution.win_w >= 200 &&
         app->prefs.resolution.win_h >= 150) {
