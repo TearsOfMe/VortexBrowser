@@ -1939,9 +1939,9 @@ async def export_merged_storage_state(context: BrowserContext, state_file: str) 
         return False
     try:
         try:
-            new_state = await context.storage_state(indexed_db=True)
+            new_state = await asyncio.wait_for(context.storage_state(indexed_db=True), timeout=5.0)
         except TypeError:
-            new_state = await context.storage_state()
+            new_state = await asyncio.wait_for(context.storage_state(), timeout=5.0)
         if not isinstance(new_state, dict):
             return False
 
@@ -6289,6 +6289,22 @@ def get_gpu_launch_flags(disable_gpu: bool = False, hw_profile: Optional[dict] =
         hw_profile = detect_hardware_profile()
 
     has_dri = hw_profile.get("has_dri", False)
+    drm_drivers = hw_profile.get("drm_drivers", [])
+
+    # Legacy AMD radeon DRM (e.g. FirePro D500 / Tahiti GCN 1.0): --ignore-gpu-blocklist,
+    # --enable-zero-copy and VA-API flags trigger Viz/DRM ring lockups that freeze the
+    # entire Chromium browser process. Use stable CPU rasterization unless explicitly overridden.
+    is_legacy_radeon = (
+        hw_profile.get("has_amd_gpu", False)
+        and not hw_profile.get("has_intel_gpu", False)
+        and not hw_profile.get("has_nvidia_gpu", False)
+        and ("radeon" in drm_drivers)
+        and ("amdgpu" not in drm_drivers)
+    )
+    if is_legacy_radeon:
+        if os.environ.get("VORTEX_FORCE_LEGACY_RADEON_GPU", "0") == "1":
+            return ["--enable-gpu", "--use-gl=angle", "--use-angle=gles-egl"], has_dri
+        return ["--disable-gpu", "--disable-software-rasterizer"], False
 
     gpu_flags = [
         "--enable-gpu",
@@ -6304,7 +6320,7 @@ def get_gpu_launch_flags(disable_gpu: bool = False, hw_profile: Optional[dict] =
             "--use-angle=gles-egl",
             "--enable-features=CanvasOopRasterization",
         ])
-    elif hw_profile.get("has_intel_gpu") or (has_dri and hw_profile.get("cpu_vendor") == "Intel"):
+    elif hw_profile.get("has_intel_gpu") and not hw_profile.get("has_amd_gpu") and not hw_profile.get("has_nvidia_gpu"):
         # Intel GPU: ANGLE GLES/EGL backend + VA-API decoder & encoder
         gpu_flags.extend([
             "--use-gl=angle",
@@ -6313,10 +6329,8 @@ def get_gpu_launch_flags(disable_gpu: bool = False, hw_profile: Optional[dict] =
             "--disable-features=UseChromeOSDirectVideoDecoder",
         ])
     elif hw_profile.get("has_amd_gpu"):
-        drm_drivers = hw_profile.get("drm_drivers", [])
         if "radeon" in drm_drivers and "amdgpu" not in drm_drivers:
-            # Legacy AMD radeon DRM (e.g. FirePro D500 / Tahiti GCN 1.0): RADV Vulkan does not
-            # support the legacy radeon kernel driver, so use Mesa radeonsi via ANGLE GLES/EGL.
+            # Legacy AMD radeon DRM (e.g. hybrid setups): use Mesa radeonsi via ANGLE GLES/EGL.
             gpu_flags.extend([
                 "--use-gl=angle",
                 "--use-angle=gles-egl",
@@ -6618,14 +6632,17 @@ async def run_server(args: argparse.Namespace) -> None:
             logger.warning("=" * 68)
 
         hw = detect_hardware_profile()
+        drm_list = hw.get("drm_drivers", [])
+        drm_str = f" ({','.join(drm_list)})" if drm_list else ""
         logger.info(
-            "Hardware Profile: %s | CPU: %s (%s, %d cores%s) | DRI: %s",
+            "Hardware Profile: %s | CPU: %s (%s, %d cores%s) | DRI: %s%s",
             hw.get("arch", "x86_64"),
             hw.get("cpu_model", "Unknown"),
             hw.get("cpu_vendor", "Unknown"),
             hw.get("cpu_cores", 4),
             ", Low-Power Atom/Celeron" if hw.get("is_low_power") else "",
             "Yes" if hw.get("has_dri") else "No",
+            drm_str,
         )
 
         # Setup Intel VA-API driver if recommended and installed
@@ -6647,6 +6664,15 @@ async def run_server(args: argparse.Namespace) -> None:
         )
         if getattr(args, "disable_gpu", False):
             logger.info("GPU Hardware Acceleration: DISABLED by user flag (--disable-gpu)")
+        elif (
+            not has_dri
+            and hw.get("has_amd_gpu")
+            and "radeon" in hw.get("drm_drivers", [])
+            and "amdgpu" not in hw.get("drm_drivers", [])
+        ):
+            logger.info(
+                "GPU Hardware Acceleration: DISABLED (Legacy AMD 'radeon' DRM detected e.g. FirePro D500/Tahiti — using stable CPU rasterization to prevent GPU/Chromium lockups; set VORTEX_FORCE_LEGACY_RADEON_GPU=1 to override)"
+            )
         elif hw.get("is_rpi"):
             logger.info("GPU Hardware Acceleration: ENABLED (Raspberry Pi Broadcom V3D ANGLE GLES/EGL active)")
         elif hw.get("has_intel_gpu"):
