@@ -2437,7 +2437,7 @@ BOOL gui_init(VortexApp *app)
     if (app->prefs.resolution.use_custom_screen) {
         if (!app->custom_screen) {
             const char *pubname = "VORTEXBROWSER";
-            const char *title   = "VortexBrowser 0.99 RC3 (AmigaOS 4.1)";
+            const char *title   = "VortexBrowser 0.99 RC4 (AmigaOS 4.1)";
             uint16 scr_w = app->prefs.resolution.width;
             uint16 scr_h = app->prefs.resolution.height;
             uint16 scr_d = app->prefs.resolution.depth;
@@ -3287,7 +3287,7 @@ BOOL gui_init(VortexApp *app)
     app->win_obj = IIntuition->NewObject(NULL, "window.class",
         WA_Title,             app->win_title,
         (app->custom_screen != NULL) ? WA_ScreenTitle : TAG_IGNORE,
-        (app->custom_screen != NULL) ? (Tag)"VortexBrowser 0.99 RC3 (AmigaOS 4.1)" : 0,
+        (app->custom_screen != NULL) ? (Tag)"VortexBrowser 0.99 RC4 (AmigaOS 4.1)" : 0,
         s_dark_pens.allocated ? WA_BackFill : TAG_IGNORE,  (Tag)&s_dark_backfill_hook,
         s_dark_pens.allocated ? WA_DetailPen : TAG_IGNORE, (uint32)s_dark_pens.txt_pen,
         s_dark_pens.allocated ? WA_BlockPen : TAG_IGNORE,  (uint32)s_dark_pens.btn_bg_pen,
@@ -4469,7 +4469,7 @@ void gui_update_url_bar(VortexApp *app, const char *url)
         }
     }
     if (app->win) {
-        STRPTR scr_title = (app->custom_screen != NULL) ? (STRPTR)"VortexBrowser 0.99 RC3 (AmigaOS 4.1)" : (STRPTR)~0;
+        STRPTR scr_title = (app->custom_screen != NULL) ? (STRPTR)"VortexBrowser 0.99 RC4 (AmigaOS 4.1)" : (STRPTR)~0;
         IIntuition->SetWindowTitles(app->win, app->win_title, scr_title);
         if (app->prefs.dark_theme == 1) {
             gui_draw_dark_titlebar(app);

@@ -129,7 +129,7 @@ docker compose -f docker-compose.macos.yml up -d
 ```
 
 #### 4. Client auf AmigaOS 4.1 starten
-1. Archiv `VortexBrowser-0.99-RC3-AmigaOS4.lha` auf dem Amiga entpacken (z. B. nach `Work:Internet/VortexBrowser`).
+1. Archiv `VortexBrowser-0.99-RC4-AmigaOS4.lha` auf dem Amiga entpacken (z. B. nach `Work:Internet/VortexBrowser`).
 2. Doppelklick auf das `VortexBrowser`-Icon.
 3. Server-IP eintragen (oder `Amiga+1` drücken) und auf **Verbinden** klicken.
 
@@ -280,6 +280,6 @@ docker compose -f docker-compose.macos.yml up -d
 ```
 
 #### 4. Starting the Client on AmigaOS 4.1
-1. Unpack `VortexBrowser-0.99-RC3-AmigaOS4.lha` on your Amiga (e.g. into `Work:Internet/VortexBrowser`).
+1. Unpack `VortexBrowser-0.99-RC4-AmigaOS4.lha` on your Amiga (e.g. into `Work:Internet/VortexBrowser`).
 2. Double-click the `VortexBrowser` icon.
 3. Enter your Linux/Docker server IP (or press `Amiga+1`) and click **Connect**.
