@@ -1092,4 +1092,23 @@ int encode_jpeg_to_frame_packet(
     write_msg_frame_hdr(dst_pkt, (uint16_t)width, (uint16_t)height, (uint8_t)pixel_format, CODEC_LZ4, (uint32_t)comp_len);
     return 11 + comp_len;
 }
+
+/* Releases thread-local libturbojpeg handle and scratch buffers for the calling worker thread. */
+void fast_pixconv_release_tls(void)
+{
+    if (s_tls_tjd != NULL) {
+        tjDestroy(s_tls_tjd);
+        s_tls_tjd = NULL;
+    }
+    if (s_tls_rgb_scratch != NULL) {
+        free(s_tls_rgb_scratch);
+        s_tls_rgb_scratch = NULL;
+        s_tls_rgb_cap = 0;
+    }
+    if (s_tls_rect_scratch != NULL) {
+        free(s_tls_rect_scratch);
+        s_tls_rect_scratch = NULL;
+        s_tls_rect_cap = 0;
+    }
+}
 #endif

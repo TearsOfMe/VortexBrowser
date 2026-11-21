@@ -110,4 +110,4 @@ if [ -n "$AMIGA_FTP_AUTH" ] && [ -n "$AMIGA_FTP_HOST" ]; then
     fi
 fi
 
-echo "Build complete: VortexBrowser 0.99 RC4 (Universal + AltiVec) created!"
+echo "Build complete: VortexBrowser 0.99 RC5 (Universal + AltiVec) created!"

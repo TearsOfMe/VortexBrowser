@@ -14,11 +14,14 @@ import argparse
 import asyncio
 import atexit
 import base64
+import concurrent.futures
 import ctypes
 import fcntl
+import gc
 import glob
 import hashlib
 import html
+import inspect
 import io
 import logging
 import os
@@ -1434,6 +1437,9 @@ def _bind_fast_pixconv_symbols(_lib) -> bool:
         _lib.pack_sub_rect_yuv420p.restype = None
     _lib.pcm_s16be_is_silent.argtypes = [ctypes.c_char_p, ctypes.c_size_t, ctypes.c_int]
     _lib.pcm_s16be_is_silent.restype = ctypes.c_int
+    if hasattr(_lib, "fast_pixconv_release_tls"):
+        _lib.fast_pixconv_release_tls.argtypes = []
+        _lib.fast_pixconv_release_tls.restype = None
     if hasattr(_lib, "decode_jpeg_to_yuv420p"):
         _lib.decode_jpeg_to_yuv420p.argtypes = [
             ctypes.c_char_p,
@@ -1625,6 +1631,54 @@ def image_to_big_endian_pixels(
 
 
 # ============================================================================
+# Memory Reclamation & Safe CDP Helpers
+# ============================================================================
+def _reclaim_python_memory() -> None:
+    gc.collect()
+    if platform.system() == "Linux":
+        try:
+            ctypes.CDLL("libc.so.6").malloc_trim(0)
+        except Exception:
+            pass
+
+
+async def _safe_detach_cdp_session(cdp_obj: Any) -> None:
+    if cdp_obj is None:
+        return
+    detach_fn = getattr(cdp_obj, "detach", None)
+    if not callable(detach_fn):
+        return
+    try:
+        res = detach_fn()
+        if inspect.isawaitable(res):
+            await asyncio.wait_for(res, timeout=1.0)
+    except Exception:
+        pass
+
+
+_VIDEO_PLATFORM_URL_TOKENS = (
+    "youtube.com/watch",
+    "youtu.be/",
+    "twitch.tv/",
+    "/watch?v=",
+    "vimeo.com/",
+    "dailymotion.com/",
+    "ardmediathek.de",
+    "zdf.de",
+    "kick.com/",
+    "netflix.com/watch",
+    "primevideo.com",
+    "disneyplus.com",
+)
+
+
+def _is_video_platform_url(url: str) -> bool:
+    """Returns True when URL matches a known video-streaming platform path."""
+    lower = (url or "").lower()
+    return bool(lower) and any(tok in lower for tok in _VIDEO_PLATFORM_URL_TOKENS)
+
+
+# ============================================================================
 # DirectCDP Session (Direct WebSocket to Chromium DevTools Protocol)
 # ============================================================================
 class DirectCDPSession:
@@ -1734,20 +1788,38 @@ class DirectCDPSession:
                 if self.fallback_cdp is not None:
                     return await self.fallback_cdp.send(method, params or {})
                 raise
+            except BaseException:
+                self._pending.pop(mid, None)
+                raise
         if self.fallback_cdp is not None:
             return await self.fallback_cdp.send(method, params or {})
         raise RuntimeError("DirectCDP not connected and no fallback CDP session")
 
     async def close(self) -> None:
         self.connected = False
-        if self._reader_task and not self._reader_task.done():
-            self._reader_task.cancel()
+        if self._reader_task is not None:
+            if not self._reader_task.done():
+                self._reader_task.cancel()
+                try:
+                    await self._reader_task
+                except (asyncio.CancelledError, Exception):
+                    pass
+            self._reader_task = None
         if self.ws is not None:
             try:
                 await self.ws.close()
             except Exception:
                 pass
             self.ws = None
+        for fut in self._pending.values():
+            if not fut.done():
+                fut.set_exception(RuntimeError("DirectCDP WebSocket closed"))
+        self._pending.clear()
+        self._listeners.clear()
+        if self.fallback_cdp is not None:
+            fb = self.fallback_cdp
+            self.fallback_cdp = None
+            await _safe_detach_cdp_session(fb)
 
 
 # ============================================================================
@@ -2067,15 +2139,37 @@ def _collect_open_origins(context: BrowserContext) -> set[str]:
     return origins
 
 
+def _sanitize_origin_storage(item: Any) -> Optional[Tuple[str, List[Dict[str, str]]]]:
+    if not isinstance(item, dict):
+        return None
+    orig = item.get("origin")
+    if not isinstance(orig, str) or not orig:
+        return None
+    ls_out: List[Dict[str, str]] = []
+    origin_bytes = 0
+    for entry in item.get("localStorage") or []:
+        if not isinstance(entry, dict):
+            continue
+        k = entry.get("name")
+        v = entry.get("value")
+        if not isinstance(k, str) or not isinstance(v, str):
+            continue
+        item_bytes = len(k) + len(v)
+        if item_bytes > 65536:
+            continue
+        if origin_bytes + item_bytes > 131072:
+            break
+        ls_out.append({"name": k, "value": v})
+        origin_bytes += item_bytes
+    return orig, ls_out
+
+
 async def export_merged_storage_state(context: BrowserContext, state_file: str) -> bool:
-    """Exports cookies, localStorage, and IndexedDB cleanly without losing closed-tab origins."""
+    """Exports cookies and sanitized localStorage cleanly without bloating IPC/disk via IndexedDB."""
     if not context:
         return False
     try:
-        try:
-            new_state = await asyncio.wait_for(context.storage_state(indexed_db=True), timeout=5.0)
-        except TypeError:
-            new_state = await asyncio.wait_for(context.storage_state(), timeout=5.0)
+        new_state = await asyncio.wait_for(context.storage_state(), timeout=5.0)
         if not isinstance(new_state, dict):
             return False
 
@@ -2090,26 +2184,47 @@ async def export_merged_storage_state(context: BrowserContext, state_file: str) 
                 prev_state = {}
 
         open_origins = _collect_open_origins(context)
-        merged_origins: dict = {}
+        prev_closed: dict[str, dict] = {}
         for item in prev_state.get("origins") or []:
-            if isinstance(item, dict) and isinstance(item.get("origin"), str):
-                orig = item["origin"]
-                if orig not in open_origins:
-                    merged_origins[orig] = item
+            san = _sanitize_origin_storage(item)
+            if san is None:
+                continue
+            orig, ls_out = san
+            if orig not in open_origins and ls_out:
+                prev_closed[orig] = {"origin": orig, "localStorage": ls_out}
 
+        active_new: dict[str, dict] = {}
+        other_new: dict[str, dict] = {}
         for item in new_state.get("origins") or []:
-            if isinstance(item, dict) and isinstance(item.get("origin"), str):
-                orig = item["origin"]
-                has_ls = bool(item.get("localStorage"))
-                has_idb = bool(item.get("indexedDB"))
-                if has_ls or has_idb:
-                    merged_origins[orig] = item
+            san = _sanitize_origin_storage(item)
+            if san is None:
+                continue
+            orig, ls_out = san
+            prev_closed.pop(orig, None)
+            if ls_out:
+                entry = {"origin": orig, "localStorage": ls_out}
+                if orig in open_origins:
+                    active_new[orig] = entry
                 else:
-                    merged_origins.pop(orig, None)
+                    other_new[orig] = entry
+
+        # Cap total retained origins at 64, preferring currently open origins and newest additions
+        retained: dict[str, dict] = {}
+        for d in (active_new, other_new):
+            for k, v in d.items():
+                if len(retained) >= 64:
+                    break
+                retained[k] = v
+        if len(retained) < 64 and prev_closed:
+            for k, v in reversed(list(prev_closed.items())):
+                if len(retained) >= 64:
+                    break
+                if k not in retained:
+                    retained[k] = v
 
         payload = {
             "cookies": new_state.get("cookies") if isinstance(new_state.get("cookies"), list) else (prev_state.get("cookies") or []),
-            "origins": [merged_origins[k] for k in sorted(merged_origins)],
+            "origins": list(retained.values()),
         }
 
         parent_dir = os.path.dirname(state_file)
@@ -2399,6 +2514,15 @@ class AmigaClientSession:
         self._storage_save_lock = asyncio.Lock()
         self._last_storage_save_time: float = 0.0
         self._pending_storage_save_task: Optional[asyncio.Task] = None
+        self._closed_event = asyncio.Event()
+        self._cdp_lock = asyncio.Lock()
+        self._switching_tab: bool = False
+        self._tab_generation: int = 0
+        self.last_audio_time: float = 0.0
+        self._encode_executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=1,
+            thread_name_prefix="vb_enc",
+        )
 
         self.web_zoom_pct: int = 100
         self.web_font_size: int = 16
@@ -2450,72 +2574,135 @@ class AmigaClientSession:
             self._h264_encoder = H264LiveStreamEncoder(width, height, self.target_fps, self.video_bitrate_k)
         return self._h264_encoder
 
-    async def _attach_direct_cdp(self, target_page: Page) -> None:
-        """Creates a DirectCDP WebSocket connection directly to Chromium's DevTools port,
-        bypassing any driver pipe overhead, with seamless fallback to Rustwright/Playwright CDPSession.
-        """
-        if self.cdp is not None and isinstance(self.cdp, DirectCDPSession):
+    async def _detach_cdp_unlocked(self) -> None:
+        cdp = self.cdp
+        self.cdp = None
+        if cdp is None:
+            return
+        if isinstance(cdp, DirectCDPSession):
             try:
-                await self.cdp.close()
+                await cdp.close()
             except Exception:
                 pass
-        self.cdp = None
-        if not self.context or self.engine != "chromium":
+        else:
+            try:
+                cdp.remove_listener("Page.fileChooserOpened", self._on_cdp_file_chooser_opened)
+            except Exception:
+                pass
+            await _safe_detach_cdp_session(cdp)
+
+    async def _detach_cdp(self) -> None:
+        async with self._cdp_lock:
+            await self._detach_cdp_unlocked()
+
+    async def _gc_current_cdp_page(self) -> None:
+        if self.cdp is None:
             return
-
-        base_cdp = None
-        target_id = None
         try:
-            base_cdp = await self.context.new_cdp_session(target_page)
-            t_info = await asyncio.wait_for(base_cdp.send("Target.getTargetInfo"), timeout=1.5)
-            target_id = (t_info.get("targetInfo") or {}).get("targetId")
-        except Exception as exc:
-            logger.debug("Base CDP session creation warning: %s", exc)
+            await asyncio.wait_for(self.cdp.send("HeapProfiler.collectGarbage"), timeout=0.3)
+        except Exception:
+            pass
 
-        if _HAS_WEBSOCKETS and self.cdp_port > 0:
-            ws_url = None
-            if target_id:
-                ws_url = f"ws://127.0.0.1:{self.cdp_port}/devtools/page/{target_id}"
-            else:
-                try:
-                    def _fetch_targets():
-                        with urllib.request.urlopen(f"http://127.0.0.1:{self.cdp_port}/json", timeout=1.0) as r:
-                            return json.loads(r.read().decode("utf-8", errors="replace"))
-                    targets = await asyncio.to_thread(_fetch_targets)
-                    for t in targets:
-                        if t.get("type") == "page" and t.get("webSocketDebuggerUrl"):
-                            ws_url = t["webSocketDebuggerUrl"]
-                            break
-                except Exception:
-                    pass
+    async def _attach_direct_cdp(self, target_page: Page) -> None:
+        """Creates a DirectCDP WebSocket connection directly to Chromium's DevTools port,
+        detaching the bootstrap Playwright CDP session immediately once DirectCDP is connected.
+        """
+        async with self._cdp_lock:
+            gen = self._tab_generation
+            if self.page is not target_page or not self.running:
+                return
+            await self._detach_cdp_unlocked()
+            if (
+                not self.context
+                or self.engine != "chromium"
+                or self._tab_generation != gen
+                or self.page is not target_page
+                or not self.running
+            ):
+                return
 
-            if ws_url:
-                direct = DirectCDPSession(ws_url, fallback_cdp=base_cdp)
-                if await direct.connect():
-                    self.cdp = direct
-                    if getattr(self, "_init_turbo_js", None) and not getattr(target_page, "_vb_turbo_injected", False):
+            base_cdp = None
+            target_id = None
+            try:
+                base_cdp = await self.context.new_cdp_session(target_page)
+                t_info = await asyncio.wait_for(base_cdp.send("Target.getTargetInfo"), timeout=1.5)
+                target_id = (t_info.get("targetInfo") or {}).get("targetId")
+            except Exception as exc:
+                logger.debug("Base CDP session creation warning: %s", exc)
+
+            if self._tab_generation != gen or self.page is not target_page or not self.running:
+                await _safe_detach_cdp_session(base_cdp)
+                return
+
+            if _HAS_WEBSOCKETS and self.cdp_port > 0:
+                ws_url = None
+                if target_id:
+                    ws_url = f"ws://127.0.0.1:{self.cdp_port}/devtools/page/{target_id}"
+                else:
+                    try:
+                        def _fetch_targets():
+                            with urllib.request.urlopen(f"http://127.0.0.1:{self.cdp_port}/json", timeout=1.0) as r:
+                                return json.loads(r.read().decode("utf-8", errors="replace"))
+                        targets = await asyncio.to_thread(_fetch_targets)
+                        target_url = ""
                         try:
-                            await self.cdp.send("Page.enable")
-                            await self.cdp.send("Page.setInterceptFileChooserDialog", {"enabled": True})
-                            await self.cdp.send("Page.addScriptToEvaluateOnNewDocument", {"source": self._init_turbo_js})
-                            await self.cdp.send("Runtime.evaluate", {"expression": self._init_turbo_js})
+                            target_url = target_page.url or ""
+                        except Exception:
+                            pass
+                        page_targets = [
+                            t for t in targets
+                            if t.get("type") == "page" and t.get("webSocketDebuggerUrl")
+                        ]
+                        for t in page_targets:
+                            if target_url and t.get("url") == target_url:
+                                ws_url = t["webSocketDebuggerUrl"]
+                                break
+                        if not ws_url and len(page_targets) == 1:
+                            ws_url = page_targets[0]["webSocketDebuggerUrl"]
+                    except Exception:
+                        pass
+
+                if ws_url:
+                    direct = DirectCDPSession(ws_url, fallback_cdp=None)
+                    if await direct.connect():
+                        await _safe_detach_cdp_session(base_cdp)
+                        if self._tab_generation != gen or self.page is not target_page or not self.running:
+                            await direct.close()
+                            return
+                        self.cdp = direct
+                        if getattr(self, "_init_turbo_js", None) and not getattr(target_page, "_vb_turbo_injected", False):
                             try:
-                                setattr(target_page, "_vb_turbo_injected", True)
+                                await self.cdp.send("Page.enable")
+                                await self.cdp.send("Page.setInterceptFileChooserDialog", {"enabled": True})
+                                await self.cdp.send("Page.addScriptToEvaluateOnNewDocument", {"source": self._init_turbo_js})
+                                await self.cdp.send("Runtime.evaluate", {"expression": self._init_turbo_js})
+                                try:
+                                    setattr(target_page, "_vb_turbo_injected", True)
+                                except Exception:
+                                    pass
                             except Exception:
                                 pass
-                        except Exception:
-                            pass
-                    else:
-                        try:
-                            await self.cdp.send("Page.enable")
-                            await self.cdp.send("Page.setInterceptFileChooserDialog", {"enabled": True})
-                        except Exception:
-                            pass
-                    # Listen for Page.fileChooserOpened on DirectCDP
-                    self.cdp.on("Page.fileChooserOpened", self._on_cdp_file_chooser_opened)
-                    return
+                        else:
+                            try:
+                                await self.cdp.send("Page.enable")
+                                await self.cdp.send("Page.setInterceptFileChooserDialog", {"enabled": True})
+                            except Exception:
+                                pass
+                        # Listen for Page.fileChooserOpened on DirectCDP
+                        if (
+                            self.cdp is direct
+                            and self._tab_generation == gen
+                            and self.page is target_page
+                            and self.running
+                        ):
+                            self.cdp.on("Page.fileChooserOpened", self._on_cdp_file_chooser_opened)
+                        return
+                    await direct.close()
 
-        self.cdp = base_cdp
+            if self._tab_generation != gen or self.page is not target_page or not self.running:
+                await _safe_detach_cdp_session(base_cdp)
+                return
+            self.cdp = base_cdp
 
     async def send_packet(self, data: bytes) -> bool:
         if not self.running:
@@ -2618,9 +2805,51 @@ class AmigaClientSession:
         page.on("framenavigated", self._on_main_frame_navigated)
         page.on("load", self._on_page_loaded)
         page.on("domcontentloaded", self._on_dom_content_loaded)
+        page.on("close", self._on_page_closed)
+
+    def _detach_page_listeners(self, page: Any) -> None:
+        if page is None:
+            return
+        for ev, cb in (
+            ("filechooser", self._on_filechooser_event),
+            ("download", self._on_download_event),
+            ("framenavigated", self._on_main_frame_navigated),
+            ("load", self._on_page_loaded),
+            ("domcontentloaded", self._on_dom_content_loaded),
+            ("close", self._on_page_closed),
+        ):
+            try:
+                page.remove_listener(ev, cb)
+            except Exception:
+                pass
+
+    def _on_page_closed(self, *args) -> None:
+        closed_page = args[0] if args else None
+        if closed_page is None:
+            return
+        self._detach_page_listeners(closed_page)
+        if not self.tabs or closed_page not in self.tabs:
+            return
+        idx = self.tabs.index(closed_page)
+        self.tabs.pop(idx)
+        was_active = (closed_page == self.page)
+        if idx < self.active_tab_idx:
+            self.active_tab_idx -= 1
+        elif self.active_tab_idx >= len(self.tabs):
+            self.active_tab_idx = max(0, len(self.tabs) - 1)
+        if was_active:
+            if self.running and self.tabs:
+                self.page = self.tabs[self.active_tab_idx]
+                t = asyncio.create_task(self._activate_tab(self.active_tab_idx))
+                self.background_tasks.add(t)
+                t.add_done_callback(self.background_tasks.discard)
+            else:
+                self.page = None
 
     def _on_page_loaded(self, *args) -> None:
         if not self.running:
+            return
+        if args and args[0] != self.page:
             return
         self._send_progress(100, "Fertig")
         self._on_page_updated()
@@ -2630,6 +2859,8 @@ class AmigaClientSession:
 
     def _on_dom_content_loaded(self, *args) -> None:
         if not self.running:
+            return
+        if args and args[0] != self.page:
             return
         self._send_progress(75, "Erstelle Seite...")
         self._on_page_updated()
@@ -2671,9 +2902,13 @@ class AmigaClientSession:
                 logger.info("History updated redirect in-place [%d]: %s", self.nav_idx, url)
                 return
 
-        # Push new history entry
+        # Push new history entry (bounded to 200 entries)
         self.nav_history = self.nav_history[: self.nav_idx + 1]
         self.nav_times = self.nav_times[: self.nav_idx + 1]
+        if len(self.nav_history) >= 200:
+            overflow = len(self.nav_history) - 199
+            self.nav_history = self.nav_history[overflow:]
+            self.nav_times = self.nav_times[overflow:]
         self.nav_history.append(url)
         self.nav_times.append(now)
         self.nav_idx = len(self.nav_history) - 1
@@ -2921,19 +3156,22 @@ class AmigaClientSession:
                         }));
                     } catch(e) {}
 
-                    setInterval(() => {
-                        injectYtStyle();
-                        const flexy = document.querySelector('ytd-watch-flexy[cinematics-enabled]');
-                        if (flexy) flexy.removeAttribute('cinematics-enabled');
-                        const cin = document.getElementById('cinematics');
-                        if (cin && cin.innerHTML) cin.innerHTML = '';
-                        const player = document.getElementById('movie_player');
-                        if (player && typeof player.setPlaybackQualityRange === 'function') {
-                            try {
-                                player.setPlaybackQualityRange('hd720', 'hd720');
-                            } catch(e) {}
-                        }
-                    }, 1500);
+                    if (window === window.top && /(?:^|\\.)youtube\\.com$/i.test(location.hostname)) {
+                        setInterval(() => {
+                            if (document.hidden) return;
+                            injectYtStyle();
+                            const flexy = document.querySelector('ytd-watch-flexy[cinematics-enabled]');
+                            if (flexy) flexy.removeAttribute('cinematics-enabled');
+                            const cin = document.getElementById('cinematics');
+                            if (cin && cin.innerHTML) cin.innerHTML = '';
+                            const player = document.getElementById('movie_player');
+                            if (player && typeof player.setPlaybackQualityRange === 'function') {
+                                try {
+                                    player.setPlaybackQualityRange('hd720', 'hd720');
+                                } catch(e) {}
+                            }
+                        }, 1500);
+                    }
                 } catch(e) {}
 
                 // Twitch Performance Turbo (Pre-set 720p30 / freeze animated emotes / hide bloat)
@@ -3190,6 +3428,110 @@ class AmigaClientSession:
                         _vortexExtractCredentials(e.target);
                     }
                 }, true);
+
+                // --- Lightweight WeakRef Media & AudioContext Registry for Background Tab Pause ---
+                if (!window.__vortexMediaReg) {
+                    window.__vortexMediaReg = true;
+                    const _vbMediaRefs = new Set();
+                    const _vbAudioCtxRefs = new Set();
+                    const _vbPruneRefs = (s, maxLen) => {
+                        if (s.size <= maxLen) return;
+                        for (const r of s) {
+                            if (!r.deref()) s.delete(r);
+                        }
+                    };
+                    const _vbTrackMedia = (el) => {
+                        if (!el || typeof WeakRef === 'undefined') return;
+                        try {
+                            for (const r of _vbMediaRefs) {
+                                if (r.deref() === el) return;
+                            }
+                            _vbMediaRefs.add(new WeakRef(el));
+                            _vbPruneRefs(_vbMediaRefs, 64);
+                        } catch (e) {}
+                    };
+                    const _vbTrackCtx = (ctx) => {
+                        if (!ctx || typeof WeakRef === 'undefined') return;
+                        try {
+                            for (const r of _vbAudioCtxRefs) {
+                                if (r.deref() === ctx) return;
+                            }
+                            _vbAudioCtxRefs.add(new WeakRef(ctx));
+                            _vbPruneRefs(_vbAudioCtxRefs, 32);
+                        } catch (e) {}
+                    };
+                    try {
+                        if (window.HTMLMediaElement && HTMLMediaElement.prototype.play) {
+                            const origPlay = HTMLMediaElement.prototype.play;
+                            HTMLMediaElement.prototype.play = function() {
+                                _vbTrackMedia(this);
+                                return origPlay.apply(this, arguments);
+                            };
+                        }
+                    } catch (e) {}
+                    const _vbWrapAudioCtx = (propName) => {
+                        try {
+                            const OrigCtx = window[propName];
+                            if (!OrigCtx || OrigCtx.__vbWrapped) return;
+                            const WrappedCtx = function(...args) {
+                                const inst = new OrigCtx(...args);
+                                _vbTrackCtx(inst);
+                                return inst;
+                            };
+                            WrappedCtx.prototype = OrigCtx.prototype;
+                            Object.setPrototypeOf(WrappedCtx, OrigCtx);
+                            WrappedCtx.__vbWrapped = true;
+                            window[propName] = WrappedCtx;
+                        } catch (e) {}
+                    };
+                    _vbWrapAudioCtx('AudioContext');
+                    _vbWrapAudioCtx('webkitAudioContext');
+                    const _vbResumeSuspendedCtx = () => {
+                        for (const r of _vbAudioCtxRefs) {
+                            const c = r.deref();
+                            if (!c) { _vbAudioCtxRefs.delete(r); continue; }
+                            try {
+                                if (c.__vbSuspendedByTabSwitch && c.state === 'suspended' && typeof c.resume === 'function') {
+                                    c.__vbSuspendedByTabSwitch = false;
+                                    Promise.resolve(c.resume()).catch(() => {});
+                                }
+                            } catch (e) {}
+                        }
+                    };
+                    window.addEventListener('pointerdown', _vbResumeSuspendedCtx, true);
+                    window.addEventListener('keydown', _vbResumeSuspendedCtx, true);
+                    window.__vortexPauseMedia = () => {
+                        const pauseRoot = (root) => {
+                            if (!root || !root.querySelectorAll) return;
+                            try {
+                                root.querySelectorAll('video, audio').forEach(m => {
+                                    try { if (!m.paused) m.pause(); } catch (e) {}
+                                });
+                            } catch (e) {}
+                            try {
+                                root.querySelectorAll('*').forEach(el => {
+                                    if (el.shadowRoot) pauseRoot(el.shadowRoot);
+                                });
+                            } catch (e) {}
+                        };
+                        pauseRoot(document);
+                        for (const r of _vbMediaRefs) {
+                            const m = r.deref();
+                            if (!m) { _vbMediaRefs.delete(r); continue; }
+                            try { if (!m.paused && typeof m.pause === 'function') m.pause(); } catch (e) {}
+                        }
+                        for (const r of _vbAudioCtxRefs) {
+                            const c = r.deref();
+                            if (!c) { _vbAudioCtxRefs.delete(r); continue; }
+                            try {
+                                if (c.state === 'running' && typeof c.suspend === 'function') {
+                                    c.__vbSuspendedByTabSwitch = true;
+                                    Promise.resolve(c.suspend()).catch(() => {});
+                                }
+                            } catch (e) {}
+                        }
+                    };
+                }
             })()"""
             self._context_state["active_session"] = self
             if not self._context_state.get("scripts_initialized"):
@@ -3234,14 +3576,8 @@ class AmigaClientSession:
             self._setup_page_listeners(self.page)
             await self._apply_dark_mode(self.page)
 
-            # Pre-allocate pixel conversion buffers (reused across frames to avoid alloc churn)
-            num_pixels = self.width * self.height
-            if self._argb_buf is None or len(self._argb_buf) != num_pixels * 4:
-                self._argb_buf = ctypes.create_string_buffer(num_pixels * 4)
-            if self._rgb565_buf is None or len(self._rgb565_buf) != num_pixels * 2:
-                self._rgb565_buf = ctypes.create_string_buffer(num_pixels * 2)
-            if self._yuv_buf is None or len(self._yuv_buf) != (num_pixels * 3) // 2:
-                self._yuv_buf = ctypes.create_string_buffer((num_pixels * 3) // 2)
+            # Pre-allocate ONLY the pixel conversion buffers needed for active format
+            self._ensure_work_buffers(self.width, self.height, self.pixel_format)
 
             # Start CDP screencast (push-based frame streaming, no request/response overhead)
             if self.engine == "chromium":
@@ -3292,60 +3628,100 @@ class AmigaClientSession:
         except Exception as exc:
             logger.error("Session error: %s", exc)
         finally:
-            self.running = False
-            if self._h264_encoder is not None:
-                self._h264_encoder.stop()
-                self._h264_encoder = None
-            await self._stop_screencast()
-            if self.cdp is not None and isinstance(self.cdp, DirectCDPSession):
-                try:
-                    await self.cdp.close()
-                except Exception:
-                    pass
-            if self.context:
-                try:
-                    self.context.remove_listener("page", self._on_popup_page)
-                except Exception:
-                    pass
-            for tab in list(self.tabs):
-                try:
-                    tab.remove_listener("filechooser", self._on_filechooser_event)
-                    tab.remove_listener("download", self._on_download_event)
-                    tab.remove_listener("framenavigated", self._on_main_frame_navigated)
-                    tab.remove_listener("load", self._on_page_loaded)
-                    tab.remove_listener("domcontentloaded", self._on_dom_content_loaded)
-                except Exception:
-                    pass
-            for fut in self.pending_downloads.values():
-                if not fut.done():
-                    fut.cancel()
-            if self._pending_storage_save_task and not self._pending_storage_save_task.done():
-                self._pending_storage_save_task.cancel()
-            for t in list(self.background_tasks):
-                t.cancel()
-            if self._context_state.get("active_session") is self:
-                self._context_state["active_session"] = None
-            if self.is_persistent_context:
-                try:
-                    await self.save_storage_state(force=True)
-                except Exception:
-                    pass
-                for tab in self.tabs[1:]:
+            try:
+                self.running = False
+                if self._h264_encoder is not None:
+                    self._h264_encoder.stop()
+                    self._h264_encoder = None
+                await self._stop_screencast()
+                await self._detach_cdp()
+                if self.context:
                     try:
-                        await tab.close()
+                        self.context.remove_listener("page", self._on_popup_page)
                     except Exception:
                         pass
-            elif self.context:
+                for tab in list(self.tabs):
+                    self._detach_page_listeners(tab)
+                for fut in self.pending_downloads.values():
+                    if not fut.done():
+                        fut.cancel()
+                self.pending_downloads.clear()
+                for entry in self.pending_uploads.values():
+                    if len(entry) >= 2 and entry[1] and not entry[1].done():
+                        entry[1].cancel()
+                self.pending_uploads.clear()
+                if self._pending_storage_save_task and not self._pending_storage_save_task.done():
+                    self._pending_storage_save_task.cancel()
+                for t in list(self.background_tasks):
+                    t.cancel()
+                self.background_tasks.clear()
+                if self._context_state.get("active_session") is self:
+                    self._context_state["active_session"] = None
+                if self.is_persistent_context:
+                    try:
+                        await self.save_storage_state(force=True)
+                    except Exception:
+                        pass
+                    for tab in list(self.tabs[1:]):
+                        try:
+                            if not tab.is_closed():
+                                await tab.close()
+                        except Exception:
+                            pass
+                    if self.context:
+                        try:
+                            for stray in list(getattr(self.context, "pages", []) or [])[1:]:
+                                self._detach_page_listeners(stray)
+                                try:
+                                    if not stray.is_closed():
+                                        await stray.close()
+                                except Exception:
+                                    pass
+                        except Exception:
+                            pass
+                    if self.tabs:
+                        try:
+                            await asyncio.wait_for(
+                                self.tabs[0].goto("about:blank", wait_until="commit", timeout=3000),
+                                timeout=3.5,
+                            )
+                        except Exception:
+                            pass
+                elif self.context:
+                    try:
+                        await self.context.close()
+                    except Exception:
+                        pass
+                self.tabs.clear()
+                self.page = None
+                self.nav_history.clear()
+                self.nav_times.clear()
+                self.prev_raw_buf = None
+                self._argb_buf = None
+                self._rgb565_buf = None
+                self._yuv_buf = None
+                self._rect_buf = None
+                self._pkt_buf = None
                 try:
-                    await self.context.close()
+                    self.writer.close()
+                    await self.writer.wait_closed()
                 except Exception:
                     pass
-            try:
-                self.writer.close()
-                await self.writer.wait_closed()
-            except Exception:
-                pass
-            logger.info("AmigaOS 4 client session closed (%s)", peer)
+                if getattr(self, "_encode_executor", None) is not None:
+                    if _FAST_PIXCONV is not None and hasattr(_FAST_PIXCONV, "fast_pixconv_release_tls"):
+                        try:
+                            self._encode_executor.submit(_FAST_PIXCONV.fast_pixconv_release_tls)
+                        except Exception:
+                            pass
+                    try:
+                        self._encode_executor.shutdown(wait=False)
+                    except Exception:
+                        pass
+                    self._encode_executor = None
+                _reclaim_python_memory()
+                logger.info("AmigaOS 4 client session closed (%s)", peer)
+            finally:
+                self._closed_event.set()
 
     def _safe_dispatch_resize(self) -> None:
         if not self.page or not self.running:
@@ -3367,40 +3743,46 @@ class AmigaClientSession:
         self.active_until = time.monotonic() + 3.0
         self.force_frame_event.set()
 
-    async def _start_screencast(self) -> bool:
-        """Start CDP Page.screencast — push-based frame delivery.
+    def _ack_screencast_frame(self, session_id: Optional[int]) -> None:
+        cdp_ref = self.cdp
+        if session_id is None or cdp_ref is None:
+            return
 
-        This avoids the request/response round-trip of Page.captureScreenshot per frame,
-        which is the single biggest CPU cost on the streaming server.
-        """
+        async def _send_ack() -> None:
+            try:
+                await cdp_ref.send("Page.screencastFrameAck", {"sessionId": session_id})
+            except Exception:
+                pass
+
+        try:
+            t = asyncio.create_task(_send_ack())
+            self.background_tasks.add(t)
+            t.add_done_callback(self.background_tasks.discard)
+        except Exception:
+            pass
+
+    async def _start_screencast(self) -> bool:
+        """Start CDP Page.screencast — push-based frame delivery with 2-frame backpressure."""
         if not self.cdp or not self.page or self.screencast_active:
             return False
         try:
-            fmt_map = {FMT_ARGB32: "RGB", FMT_RGB565: "RGB", FMT_YUV420P: "RGB"}
-            # Larger queue: Chromium pushes frames faster than we can process them.
-            # A small queue causes QueueFull drops → stuttering video. 16 frames of
-            # headroom lets the loop keep up without dropping frames.
-            self.screencast_queue = asyncio.Queue(maxsize=16)
+            self.screencast_queue = asyncio.Queue(maxsize=2)
             self.screencast_active = True
 
             def _screencast_handler(params: dict) -> None:
                 self.last_screencast_frame_time = time.monotonic()
-                session_id = params.get("sessionId")
-                if session_id is not None and self.cdp is not None:
-                    try:
-                        asyncio.create_task(self.cdp.send("Page.screencastFrameAck", {"sessionId": session_id}))
-                    except Exception:
-                        pass
-                if self.screencast_queue is not None:
-                    if self.screencast_queue.full():
+                q = self.screencast_queue
+                if q is not None:
+                    if q.full():
                         try:
-                            self.screencast_queue.get_nowait()
+                            dropped = q.get_nowait()
+                            self._ack_screencast_frame(dropped.get("sessionId"))
                         except asyncio.QueueEmpty:
                             pass
                     try:
-                        self.screencast_queue.put_nowait(params)
+                        q.put_nowait(params)
                     except asyncio.QueueFull:
-                        pass
+                        self._ack_screencast_frame(params.get("sessionId"))
                 self.force_frame_event.set()
 
             self._screencast_handler = _screencast_handler
@@ -3429,6 +3811,7 @@ class AmigaClientSession:
         except Exception as exc:
             logger.debug("Could not start CDP screencast: %s", exc)
             self.screencast_active = False
+            self.screencast_queue = None
             return False
 
     async def _stop_screencast(self) -> None:
@@ -3449,6 +3832,12 @@ class AmigaClientSession:
         except Exception:
             pass
         finally:
+            if self.screencast_queue is not None:
+                while not self.screencast_queue.empty():
+                    try:
+                        self.screencast_queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
             self._screencast_handler = None
             self.screencast_queue = None
 
@@ -3497,11 +3886,11 @@ class AmigaClientSession:
         if not self.context:
             return
         now = time.monotonic()
-        if not force and (now - self._last_storage_save_time) < 2.0:
+        if not force and (now - self._last_storage_save_time) < 15.0:
             return
         async with self._storage_save_lock:
             now2 = time.monotonic()
-            if not force and (now2 - self._last_storage_save_time) < 2.0:
+            if not force and (now2 - self._last_storage_save_time) < 15.0:
                 return
             saved = await export_merged_storage_state(self.context, self.storage_state_file)
             if saved:
@@ -3531,7 +3920,7 @@ class AmigaClientSession:
     async def _periodic_storage_sync_loop(self) -> None:
         while self.running:
             try:
-                await asyncio.sleep(30.0)
+                await asyncio.sleep(120.0)
                 if not self.running:
                     break
                 await self.save_storage_state(force=False)
@@ -3648,10 +4037,15 @@ class AmigaClientSession:
     # Frame Capture & Dirty-Slice LZ4 Streaming Loop
     # ------------------------------------------------------------------------
     async def _capture_jpeg_fast(self) -> Optional[bytes]:
-        if self.cdp is not None:
+        gen = self._tab_generation
+        cdp_ref = self.cdp
+        page_ref = self.page
+        if self._switching_tab or not self.running or page_ref is None:
+            return None
+        if cdp_ref is not None:
             try:
                 res = await asyncio.wait_for(
-                    self.cdp.send(
+                    cdp_ref.send(
                         "Page.captureScreenshot",
                         {
                             "format": "jpeg",
@@ -3666,99 +4060,133 @@ class AmigaClientSession:
                     return base64.b64decode(b64_data)
             except Exception as exc:
                 logger.debug("CDP screenshot error: %s", exc)
+                if self._switching_tab or self._tab_generation != gen or self.cdp is not cdp_ref or not self.running:
+                    return None
+                exc_str = str(exc)
+                if "Not attached to an active page" in exc_str:
+                    return None
                 if self.screencast_active:
-                    try:
-                        await self.cdp.send("Page.stopScreencast")
-                        res = await asyncio.wait_for(
-                            self.cdp.send(
-                                "Page.captureScreenshot",
-                                {
-                                    "format": "jpeg",
-                                    "quality": self.jpeg_quality,
-                                    "optimizeForSpeed": True,
-                                },
-                            ),
-                            timeout=2.0,
-                        )
-                        await self.cdp.send(
-                            "Page.startScreencast",
-                            {
-                                "format": "jpeg",
-                                "quality": self.jpeg_quality,
-                                "everyNthFrame": 1,
-                                "maxWidth": self.width,
-                                "maxHeight": self.height,
-                            },
-                        )
-                        b64_data = res.get("data")
-                        if b64_data:
-                            return base64.b64decode(b64_data)
-                    except Exception:
-                        pass
-                elif not self.screencast_active:
-                    try:
-                        if self.context and self.page and self.engine == "chromium":
-                            await asyncio.wait_for(
-                                self._attach_direct_cdp(self.page),
+                    if "DirectCDP WebSocket closed" not in exc_str:
+                        try:
+                            await cdp_ref.send("Page.stopScreencast")
+                            res = await asyncio.wait_for(
+                                cdp_ref.send(
+                                    "Page.captureScreenshot",
+                                    {
+                                        "format": "jpeg",
+                                        "quality": self.jpeg_quality,
+                                        "optimizeForSpeed": True,
+                                    },
+                                ),
                                 timeout=2.0,
                             )
+                            b64_data = res.get("data")
+                            if b64_data:
+                                return base64.b64decode(b64_data)
+                        except Exception:
+                            pass
+                        finally:
+                            if (
+                                self.screencast_active
+                                and not self._switching_tab
+                                and self._tab_generation == gen
+                                and self.cdp is cdp_ref
+                            ):
+                                try:
+                                    await cdp_ref.send(
+                                        "Page.startScreencast",
+                                        {
+                                            "format": "jpeg",
+                                            "quality": self.jpeg_quality,
+                                            "everyNthFrame": 1,
+                                            "maxWidth": self.width,
+                                            "maxHeight": self.height,
+                                        },
+                                    )
+                                except Exception:
+                                    pass
+                elif (
+                    not self._switching_tab
+                    and self._tab_generation == gen
+                    and self.context
+                    and self.page is page_ref
+                    and self.engine == "chromium"
+                ):
+                    try:
+                        await asyncio.wait_for(
+                            self._attach_direct_cdp(page_ref),
+                            timeout=2.0,
+                        )
                     except Exception:
-                        self.cdp = None
-        if self.page is not None:
-            try:
-                return await asyncio.wait_for(
-                    self.page.screenshot(
-                        type="jpeg",
-                        quality=self.jpeg_quality,
-                        full_page=False,
-                        timeout=2000,
-                        animations="disabled",
-                        caret="initial",
-                    ),
-                    timeout=2.5,
-                )
-            except Exception:
-                return None
-        return None
+                        if self._tab_generation == gen and self.cdp is cdp_ref:
+                            self.cdp = None
+        if self._switching_tab or self._tab_generation != gen or self.page is not page_ref or page_ref is None or not self.running:
+            return None
+        try:
+            return await asyncio.wait_for(
+                page_ref.screenshot(
+                    type="jpeg",
+                    quality=self.jpeg_quality,
+                    full_page=False,
+                    timeout=2000,
+                    animations="disabled",
+                    caret="initial",
+                ),
+                timeout=2.5,
+            )
+        except Exception:
+            return None
 
     async def _capture_and_send_frame(self, force: bool = False) -> None:
-        if not self.running or not self.page:
+        if not self.running or not self.page or self._switching_tab:
             return
+        gen = self._tab_generation
 
         # Prefer CDP screencast (push-based) when available — no request/response overhead
         if self.screencast_active and self.screencast_queue is not None:
             params = None
             while not self.screencast_queue.empty():
                 try:
-                    params = self.screencast_queue.get_nowait()
+                    nxt = self.screencast_queue.get_nowait()
+                    if params is not None:
+                        self._ack_screencast_frame(params.get("sessionId"))
+                    params = nxt
                 except asyncio.QueueEmpty:
                     break
 
             if params is not None:
                 try:
                     b64_data = params.get("data")
+                    self._ack_screencast_frame(params.get("sessionId"))
                     if b64_data:
+                        if self._switching_tab or self._tab_generation != gen:
+                            return
                         jpeg_bytes = base64.b64decode(b64_data)
-                        await self._encode_and_send_png(jpeg_bytes, self.force_full_frame)
+                        await self._encode_and_send_png(jpeg_bytes, self.force_full_frame, tab_gen=gen)
                         return
                 except Exception as exc:
                     logger.debug("Screencast frame decode error: %s", exc)
 
+            if self._switching_tab or self._tab_generation != gen:
+                return
+
             # If screencast is active and queue was empty, capture fallback screenshot if:
             # - No initial frame has EVER been sent yet (self.last_frame_hash is None), OR
             # - An explicit full refresh was requested (self.force_full_frame), OR
-            # - Video/audio/active interaction is ongoing and CDP screencast hasn't pushed a frame for > 65ms.
+            # - Video/active interaction is ongoing and CDP screencast hasn't pushed a frame for > 65ms.
             now = time.monotonic()
             is_dynamic = (
                 self.is_video_mode
                 or self._video_element_playing
-                or (getattr(self, "last_audio_time", 0.0) > now - 2.0)
                 or (now < self.active_until)
             )
             screencast_stalled = is_dynamic and ((now - self.last_screencast_frame_time) >= 0.065)
             needs_frame = self.force_full_frame or (self.last_frame_hash is None) or screencast_stalled
             if not needs_frame:
                 return
+
+        if self._switching_tab or self._tab_generation != gen:
+            return
 
         # Fallback to direct fast CDP screenshot (when screencast is not active or frame is forced)
         try:
@@ -3769,7 +4197,10 @@ class AmigaClientSession:
             logger.debug("Screenshot skipped during navigation: %s", exc)
             return
 
-        await self._encode_and_send_png(jpeg_bytes, self.force_full_frame)
+        if self._switching_tab or self._tab_generation != gen:
+            return
+
+        await self._encode_and_send_png(jpeg_bytes, self.force_full_frame, tab_gen=gen)
 
     def _encode_h264_frame_sync(
         self,
@@ -3818,8 +4249,45 @@ class AmigaClientSession:
             return None
         return enc.encode_frame(yuv_raw)
 
-    async def _encode_and_send_png(self, png_bytes: bytes, force: bool = False) -> None:
+    def _ensure_work_buffers(self, width: int, height: int, fmt: int) -> Tuple[int, int]:
+        num_px = width * height
+        if fmt == FMT_YUV420P:
+            bpp = 1
+            frame_bytes_len = (num_px * 3) // 2
+            if self._yuv_buf is None or len(self._yuv_buf) != frame_bytes_len:
+                self._yuv_buf = ctypes.create_string_buffer(frame_bytes_len)
+            self._argb_buf = None
+            self._rgb565_buf = None
+        elif fmt == FMT_RGB565:
+            bpp = 2
+            frame_bytes_len = num_px * 2
+            if self._rgb565_buf is None or len(self._rgb565_buf) != frame_bytes_len:
+                self._rgb565_buf = ctypes.create_string_buffer(frame_bytes_len)
+            self._argb_buf = None
+            self._yuv_buf = None
+        else:
+            bpp = 4
+            frame_bytes_len = num_px * 4
+            if self._argb_buf is None or len(self._argb_buf) != frame_bytes_len:
+                self._argb_buf = ctypes.create_string_buffer(frame_bytes_len)
+            self._rgb565_buf = None
+            self._yuv_buf = None
+
+        max_pkt_len = frame_bytes_len + (frame_bytes_len // 255) + 4096
+        if self.prev_raw_buf is None or len(self.prev_raw_buf) != frame_bytes_len or self.prev_dims != (width, height):
+            self.prev_raw_buf = ctypes.create_string_buffer(frame_bytes_len)
+            self.prev_dims = (width, height)
+            self._pkt_buf = ctypes.create_string_buffer(max_pkt_len)
+        elif self._pkt_buf is None or len(self._pkt_buf) < max_pkt_len:
+            self._pkt_buf = ctypes.create_string_buffer(max_pkt_len)
+        return bpp, frame_bytes_len
+
+    async def _encode_and_send_png(self, png_bytes: bytes, force: bool = False, tab_gen: Optional[int] = None) -> None:
         """Decode PNG/JPEG, run dirty-region detection, LZ4 compress, and send to Amiga."""
+        gen = self._tab_generation if tab_gen is None else tab_gen
+        if self._switching_tab or self._tab_generation != gen or not self.running:
+            return
+
         t0 = time.monotonic()
         w = self.width
         h = self.height
@@ -3829,8 +4297,9 @@ class AmigaClientSession:
         # Otherwise default to LZ4 dirty-slice streaming which is 100x faster for the Amiga CPU!
         use_mjpeg = (self.codec_mode == "jpeg")
         cur_url = (self.page.url or "").lower() if (not use_mjpeg and self.page) else ""
-        is_video_site = bool(cur_url) and any(k in cur_url for k in ("youtube.com/watch", "youtu.be/", "twitch.tv/", "/watch?v="))
-        audio_active = (getattr(self, "last_audio_time", 0.0) > t0 - 2.0)
+        is_video_site = _is_video_platform_url(cur_url)
+        last_audio = getattr(self, "last_audio_time", 0.0)
+        audio_active = (last_audio > 0.0) and (last_audio > t0 - 2.0)
         # Emit H.264 video stream when in video stream mode, on video sites or when requested
         should_h264 = (not use_mjpeg) and (
             (self.codec_mode == "h264")
@@ -3841,15 +4310,18 @@ class AmigaClientSession:
         was_h264 = getattr(self, "_was_h264", False)
         force_full = self.force_full_frame or force or (self.last_frame_hash is None) or (not should_h264 and was_h264)
 
+        digest: Optional[bytes] = None
         if not should_h264:
             digest = hashlib.md5(png_bytes).digest()
             if not force_full and digest == self.last_frame_hash:
                 return
+
+        if use_mjpeg:
+            if self._switching_tab or self._tab_generation != gen or not self.running:
+                return
             self.last_frame_hash = digest
             self.force_full_frame = False
             self._was_h264 = False
-
-        if use_mjpeg:
             hdr = STRUCT_MSG_FRAME.pack(
                 MSG_FRAME,
                 w,
@@ -3867,13 +4339,15 @@ class AmigaClientSession:
                 self._yuv_buf = ctypes.create_string_buffer(yuv_len)
             loop = asyncio.get_running_loop()
             h264_pkt = await loop.run_in_executor(
-                None,
+                self._encode_executor,
                 self._encode_h264_frame_sync,
                 png_bytes,
                 w,
                 h,
                 self._yuv_buf,
             )
+            if self._switching_tab or self._tab_generation != gen or not self.running:
+                return
             if h264_pkt:
                 self.force_full_frame = False
                 self.last_frame_hash = b"H264"
@@ -3893,39 +4367,20 @@ class AmigaClientSession:
                                 self._total_h264_frames, len(h264_pkt), w, h)
                 return
             # Fallback to LZ4 if H.264 encoder produced no frame yet
-            self.last_frame_hash = hashlib.md5(png_bytes).digest()
-            self.force_full_frame = False
+            digest = hashlib.md5(png_bytes).digest()
             if was_h264:
                 force_full = True
-            self._was_h264 = False
 
-        if fmt == FMT_YUV420P:
-            bpp = 1
-            frame_bytes_len = (w * h * 3) // 2
-        elif fmt == FMT_RGB565:
-            bpp = 2
-            frame_bytes_len = w * h * 2
-        else:
-            bpp = 4
-            frame_bytes_len = w * h * 4
-
-        max_pkt_len = frame_bytes_len + (frame_bytes_len // 255) + 4096
-        if self.prev_raw_buf is None or len(self.prev_raw_buf) != frame_bytes_len or self.prev_dims != (w, h):
-            self.prev_raw_buf = ctypes.create_string_buffer(frame_bytes_len)
-            self.prev_dims = (w, h)
-            num_px = w * h
-            self._argb_buf = ctypes.create_string_buffer(num_px * 4)
-            self._rgb565_buf = ctypes.create_string_buffer(num_px * 2)
-            self._yuv_buf = ctypes.create_string_buffer((num_px * 3) // 2)
-            self._pkt_buf = ctypes.create_string_buffer(max_pkt_len)
+        prev_dims_before = self.prev_dims
+        prev_buf_before = self.prev_raw_buf
+        bpp, _ = self._ensure_work_buffers(w, h, fmt)
+        if prev_buf_before is None or prev_dims_before != (w, h):
             force_full = True
-        elif self._pkt_buf is None or len(self._pkt_buf) < max_pkt_len:
-            self._pkt_buf = ctypes.create_string_buffer(max_pkt_len)
 
         t_decode = time.monotonic()
         loop = asyncio.get_running_loop()
         header_and_payload = await loop.run_in_executor(
-            None,
+            self._encode_executor,
             self._encode_frame_or_slice_sync,
             png_bytes,
             w,
@@ -3941,6 +4396,11 @@ class AmigaClientSession:
             self.allow_yuv_rect,
             self.is_video_mode or self._video_element_playing,
         )
+        if self._switching_tab or self._tab_generation != gen or not self.running:
+            return
+        self.last_frame_hash = digest
+        self.force_full_frame = False
+        self._was_h264 = False
         t_encode = time.monotonic()
         if header_and_payload:
             await self.send_packet(header_and_payload)
@@ -4143,6 +4603,9 @@ class AmigaClientSession:
             if time.monotonic() < self.pause_frames_until:
                 await asyncio.sleep(0.04)
                 continue
+            if self._switching_tab:
+                await asyncio.sleep(0.02)
+                continue
 
             now_tick = time.monotonic()
             if now_tick - self._sec_start_time >= 1.0:
@@ -4151,45 +4614,78 @@ class AmigaClientSession:
                 self._sec_start_time = now_tick
 
             # Dynamic Video Detection:
-            # 1. Real audio streaming active (e.g. YouTube, Twitch)
-            audio_active = (getattr(self, "last_audio_time", 0.0) > now_tick - 2.0)
+            # 1. Real audio streaming active (paired with video-platform URL or <video> playback)
+            last_audio = getattr(self, "last_audio_time", 0.0)
+            audio_active = (last_audio > 0.0) and (last_audio > now_tick - 2.0)
 
             # 2. Page URL check (YouTube watch page, Twitch, video platforms)
             cur_url = (self.page.url or "").lower() if self.page else ""
-            is_video_site = any(k in cur_url for k in ("youtube.com/watch", "youtu.be/", "twitch.tv/", "/watch?v="))
+            is_video_site = _is_video_platform_url(cur_url)
 
             # 3. Query HTML5 <video> element playback state asynchronously every 0.6 seconds
-            if self.page and (now_tick - self._last_video_eval_time) >= 0.6:
+            if self.page and not self._switching_tab and (now_tick - self._last_video_eval_time) >= 0.6:
                 self._last_video_eval_time = now_tick
-                async def _eval_video():
+                target_page = self.page
+                eval_gen = self._tab_generation
+                async def _eval_video(tp=target_page, eg=eval_gen):
                     try:
-                        if self.page and self.running:
-                            is_playing = await asyncio.wait_for(
-                                self.page.evaluate(
-                                    """() => {
-                                        try {
-                                            const vids = Array.from(document.querySelectorAll('video'));
-                                            for (const v of vids) {
-                                                if (!v.paused && !v.ended && v.readyState >= 2) return true;
-                                            }
-                                            const yt = document.getElementById('movie_player');
-                                            if (yt && typeof yt.getPlayerState === 'function') {
-                                                const st = yt.getPlayerState();
-                                                if (st === 1 || st === 3) return true;
-                                            }
-                                            for (const f of document.querySelectorAll('iframe')) {
-                                                try {
-                                                    if (f.contentDocument && Array.from(f.contentDocument.querySelectorAll('video')).some(v => !v.paused && !v.ended && v.readyState >= 2)) {
-                                                        return true;
-                                                    }
-                                                } catch (e) {}
-                                            }
-                                        } catch (e) {}
-                                        return false;
-                                    }"""
-                                ),
-                                timeout=0.5,
-                            )
+                        if (
+                            not tp
+                            or not self.running
+                            or self._switching_tab
+                            or self._tab_generation != eg
+                            or self.page is not tp
+                        ):
+                            return
+                        check_js = """() => {
+                            try {
+                                const checkRoot = (root) => {
+                                    if (!root || !root.querySelectorAll) return false;
+                                    for (const v of root.querySelectorAll('video')) {
+                                        if (!v.paused && !v.ended && v.readyState >= 2) {
+                                            const r = v.getBoundingClientRect ? v.getBoundingClientRect() : null;
+                                            if (!r || (r.width >= 32 && r.height >= 32)) return true;
+                                        }
+                                    }
+                                    for (const el of root.querySelectorAll('*')) {
+                                        if (el.shadowRoot && checkRoot(el.shadowRoot)) return true;
+                                    }
+                                    return false;
+                                };
+                                if (checkRoot(document)) return true;
+                                const yt = document.getElementById('movie_player');
+                                if (yt && typeof yt.getPlayerState === 'function') {
+                                    const st = yt.getPlayerState();
+                                    if (st === 1 || st === 3) return true;
+                                }
+                            } catch (e) {}
+                            return false;
+                        }"""
+                        is_playing = False
+                        frames = list(getattr(tp, "frames", None) or [])[:6]
+                        if not frames:
+                            frames = [tp]
+                        for frame in frames:
+                            if (
+                                not self.running
+                                or self._switching_tab
+                                or self._tab_generation != eg
+                                or self.page is not tp
+                            ):
+                                return
+                            try:
+                                res = await asyncio.wait_for(frame.evaluate(check_js), timeout=0.35)
+                                if res:
+                                    is_playing = True
+                                    break
+                            except Exception:
+                                pass
+                        if (
+                            self.running
+                            and not self._switching_tab
+                            and self._tab_generation == eg
+                            and self.page is tp
+                        ):
                             self._video_element_playing = bool(is_playing)
                     except Exception:
                         pass
@@ -4197,7 +4693,7 @@ class AmigaClientSession:
                 self.background_tasks.add(t_vid)
                 t_vid.add_done_callback(self.background_tasks.discard)
 
-            video_active = audio_active or self._video_element_playing or (is_video_site and (audio_active or self._video_element_playing))
+            video_active = self._video_element_playing or (is_video_site and audio_active)
             if video_active:
                 self._last_video_state_time = now_tick
                 if not self.is_video_mode:
@@ -4211,6 +4707,15 @@ class AmigaClientSession:
                     self.is_video_mode = False
                     logger.info("Video playback ended/idle -> Restoring standard browsing mode")
                     await self._set_screencast_quality(self.base_jpeg_quality)
+            elif (
+                self._h264_encoder is not None
+                and self.stream_mode != "h264"
+                and self.codec_mode != "h264"
+                and (now_tick - self._last_video_state_time) >= 10.0
+            ):
+                logger.info("Video idle for 10s -> stopping H.264 encoder subprocess to reclaim RAM")
+                self._h264_encoder.stop()
+                self._h264_encoder = None
 
             t0 = time.monotonic()
             forced = self.force_frame_event.is_set()
@@ -4229,8 +4734,7 @@ class AmigaClientSession:
             else:
                 now_loop = time.monotonic()
                 if (
-                    getattr(self, "last_audio_time", 0.0) > now_loop - 1.5
-                    or self.is_video_mode
+                    self.is_video_mode
                     or self._video_element_playing
                     or now_loop < self.active_until
                 ):
@@ -4815,7 +5319,8 @@ class AmigaClientSession:
                 if self.screencast_queue is not None:
                     while not self.screencast_queue.empty():
                         try:
-                            self.screencast_queue.get_nowait()
+                            dropped = self.screencast_queue.get_nowait()
+                            self._ack_screencast_frame(dropped.get("sessionId"))
                         except asyncio.QueueEmpty:
                             break
                 self._trigger_full_refresh(True)
@@ -4950,49 +5455,73 @@ class AmigaClientSession:
     async def _activate_tab(self, tidx: int, old_page=None) -> None:
         if tidx < 0 or tidx >= len(self.tabs):
             return
-        await self._stop_screencast()
-        self.active_tab_idx = tidx
-        self.page = self.tabs[tidx]
-        self.prev_raw_buf = None
-        self.last_frame_hash = None
-        self.force_full_frame = True
-
-        # Wake Chromium renderer immediately from background throttling
+        self._tab_generation += 1
+        self._switching_tab = True
+        target_page = self.tabs[tidx]
         try:
-            await self.page.bring_to_front()
-        except Exception:
-            pass
+            if old_page and old_page != target_page:
+                try:
+                    await asyncio.wait_for(self._pause_page_media(old_page), timeout=0.6)
+                except Exception:
+                    pass
+            await self._gc_current_cdp_page()
+            await self._stop_screencast()
+            await self._detach_cdp()
+            self.active_tab_idx = tidx
+            self.page = target_page
+            self._video_element_playing = False
+            self._last_video_eval_time = 0.0
+            if self.is_video_mode and self.stream_mode != "h264" and self.codec_mode != "h264":
+                self.is_video_mode = False
+                self.jpeg_quality = self.base_jpeg_quality
+                self.current_screencast_quality = self.base_jpeg_quality
+            self.last_frame_hash = None
+            self.force_full_frame = True
 
-        # Only resize viewport when dimensions actually changed — avoids triggering
-        # expensive full-page re-layout / re-pagination on heavy apps like read.amazon.com
-        try:
-            vp = self.page.viewport_size
-            if not vp or vp.get("width") != self.width or vp.get("height") != self.height:
-                await self.page.set_viewport_size({"width": self.width, "height": self.height})
-        except Exception:
-            pass
+            # Wake Chromium renderer immediately from background throttling
+            try:
+                await target_page.bring_to_front()
+            except Exception:
+                pass
 
-        if self.context and self.engine == "chromium":
-            await self._attach_direct_cdp(self.page)
-            await self._start_screencast()
-        else:
-            self.cdp = None
+            # Only resize viewport when dimensions actually changed — avoids triggering
+            # expensive full-page re-layout / re-pagination on heavy apps like read.amazon.com
+            try:
+                vp = target_page.viewport_size
+                if not vp or vp.get("width") != self.width or vp.get("height") != self.height:
+                    await target_page.set_viewport_size({"width": self.width, "height": self.height})
+            except Exception:
+                pass
+
+            if self.context and self.engine == "chromium":
+                await self._attach_direct_cdp(target_page)
+                await self._start_screencast()
+            else:
+                self.cdp = None
+        finally:
+            self._switching_tab = False
 
         # Trigger immediate frame capture BEFORE running background JS tasks
+        self.last_frame_hash = None
+        self.force_full_frame = True
         self._trigger_full_refresh(True)
-        self._send_nav_update(self.page.url or "", tab_idx=tidx)
+        cur_page = self.page
+        if cur_page is not None:
+            self._send_nav_update(cur_page.url or "", tab_idx=tidx)
         self._schedule_delayed_frames()
 
         async def _post_switch_tasks() -> None:
-            if old_page and old_page != self.page:
-                await self._pause_page_media(old_page)
-            if getattr(self.page, "_vb_applied_dark_mode", None) != self.dark_mode:
-                await self._apply_dark_mode(self.page)
+            p = cur_page
+            if not p or self.page is not p or not self.running:
+                return
+            if getattr(p, "_vb_applied_dark_mode", None) != self.dark_mode:
+                await self._apply_dark_mode(p)
                 try:
-                    setattr(self.page, "_vb_applied_dark_mode", self.dark_mode)
+                    setattr(p, "_vb_applied_dark_mode", self.dark_mode)
                 except Exception:
                     pass
-                self._trigger_full_refresh(True)
+                if self.page is p:
+                    self._trigger_full_refresh(True)
 
         t = asyncio.create_task(_post_switch_tasks())
         self.background_tasks.add(t)
@@ -5004,18 +5533,33 @@ class AmigaClientSession:
         pause_js = """
         (() => {
             try {
-                document.querySelectorAll('video, audio').forEach(m => {
-                    try { if (!m.paused) m.pause(); } catch(e) {}
-                });
+                if (typeof window.__vortexPauseMedia === 'function') {
+                    window.__vortexPauseMedia();
+                }
+            } catch(e) {}
+            try {
+                const pauseRoot = (root) => {
+                    if (!root || !root.querySelectorAll) return;
+                    root.querySelectorAll('video, audio').forEach(m => {
+                        try { if (!m.paused) m.pause(); } catch(e) {}
+                    });
+                    root.querySelectorAll('*').forEach(el => {
+                        if (el.shadowRoot) pauseRoot(el.shadowRoot);
+                    });
+                };
+                pauseRoot(document);
             } catch(e) {}
         })();
         """
         try:
-            for frame in page.frames:
-                try:
-                    await asyncio.wait_for(frame.evaluate(pause_js), timeout=0.5)
-                except Exception:
-                    pass
+            frames = list(getattr(page, "frames", None) or [])
+            if not frames:
+                frames = [page]
+            await asyncio.gather(
+                *(asyncio.wait_for(frame.evaluate(pause_js), timeout=0.45) for frame in frames),
+                return_exceptions=True,
+            )
+            self.last_audio_time = 0.0
         except Exception:
             pass
 
@@ -5159,12 +5703,19 @@ class AmigaClientSession:
         elif DARKREADER_JS:
             try:
                 if is_dark:
+                    has_dr = False
+                    try:
+                        has_dr = bool(await asyncio.wait_for(
+                            target_page.evaluate("typeof DarkReader !== 'undefined'"),
+                            timeout=0.5,
+                        ))
+                    except Exception:
+                        has_dr = False
+                    prefix = "" if has_dr else (DARKREADER_JS + "\n")
                     js = (
                         "(() => {"
                         "try {"
-                        "if (typeof DarkReader === 'undefined') {"
-                        + DARKREADER_JS +
-                        "\n}"
+                        + prefix +
                         "if (typeof DarkReader !== 'undefined') {"
                         "DarkReader.enable({ brightness: 100, contrast: 90, sepia: 10 });"
                         "}"
@@ -5269,8 +5820,6 @@ class AmigaClientSession:
             t = asyncio.create_task(self._apply_dark_mode(self.page))
             self.background_tasks.add(t)
             t.add_done_callback(self.background_tasks.discard)
-            self.background_tasks.add(t)
-            t.add_done_callback(self.background_tasks.discard)
 
     async def _handle_navigation(self, raw_cmd: str) -> None:
         if not self.page or not raw_cmd:
@@ -5343,15 +5892,12 @@ class AmigaClientSession:
                 self.pixel_format = new_fmt
                 if new_fmt == FMT_YUV420P:
                     fmt_name = "Planar YUV420p (12-bit)"
-                    buf_len = (self.width * self.height * 3) // 2
                 elif new_fmt == FMT_RGB565:
                     fmt_name = "RGB565 (16-bit)"
-                    buf_len = self.width * self.height * 2
                 else:
                     fmt_name = "ARGB32 (32-bit)"
-                    buf_len = self.width * self.height * 4
                 logger.info("Client requested pixel format switch to %s", fmt_name)
-                self.prev_raw_buf = ctypes.create_string_buffer(buf_len)
+                self._ensure_work_buffers(self.width, self.height, new_fmt)
                 self._trigger_full_refresh(True)
             return
 
@@ -5551,18 +6097,34 @@ class AmigaClientSession:
             if self.context:
                 try:
                     self._creating_tab = True
+                    self._tab_generation += 1
+                    self._switching_tab = True
                     old_page = self.page
-                    await self._pause_page_media(old_page)
+                    if old_page:
+                        try:
+                            await asyncio.wait_for(self._pause_page_media(old_page), timeout=0.6)
+                        except Exception:
+                            pass
+                    await self._gc_current_cdp_page()
                     await self._stop_screencast()
+                    await self._detach_cdp()
                     new_page = await self.context.new_page()
                     self.tabs.append(new_page)
                     self.active_tab_idx = len(self.tabs) - 1
                     self.page = new_page
-                    self.prev_raw_buf = None
+                    self._video_element_playing = False
+                    self._last_video_eval_time = 0.0
+                    if self.is_video_mode and self.stream_mode != "h264" and self.codec_mode != "h264":
+                        self.is_video_mode = False
+                        self.jpeg_quality = self.base_jpeg_quality
+                        self.current_screencast_quality = self.base_jpeg_quality
                     self.last_frame_hash = None
                     self.force_full_frame = True
                     self._setup_page_listeners(new_page)
-                    await self.page.set_viewport_size({"width": self.width, "height": self.height})
+                    try:
+                        await new_page.set_viewport_size({"width": self.width, "height": self.height})
+                    except Exception:
+                        pass
                     if self.engine == "chromium":
                         await self._attach_direct_cdp(new_page)
                         await self._start_screencast()
@@ -5570,20 +6132,33 @@ class AmigaClientSession:
                         self.cdp = None
                     await self._apply_dark_mode(new_page)
                     self._send_progress(20, f"Lade {target}...")
-                    await self.page.goto(target, wait_until="commit", timeout=15000)
-                    self._send_nav_update(self.page.url or target)
-                    self._trigger_full_refresh(True)
-                    self._schedule_delayed_frames()
+                    await new_page.goto(target, wait_until="commit", timeout=15000)
+                    self._send_nav_update(new_page.url or target)
                 except Exception as exc:
                     logger.warning("New tab creation error: %s", exc)
                 finally:
+                    self._switching_tab = False
                     self._creating_tab = False
+                self.last_frame_hash = None
+                self.force_full_frame = True
+                self._trigger_full_refresh(True)
+                self._schedule_delayed_frames()
             return
 
         if cmd.upper().startswith("@SWITCHTAB:"):
             try:
                 tidx = int(cmd.split(":", 1)[1].strip())
                 if 0 <= tidx < len(self.tabs):
+                    cdp_ok = (
+                        self.engine != "chromium"
+                        or (
+                            self.cdp is not None
+                            and (not isinstance(self.cdp, DirectCDPSession) or self.cdp.connected)
+                        )
+                    )
+                    if tidx == self.active_tab_idx and self.page is self.tabs[tidx] and cdp_ok:
+                        self._trigger_full_refresh(True)
+                        return
                     old_page = self.page if tidx != self.active_tab_idx else None
                     await self._activate_tab(tidx, old_page=old_page)
             except Exception as exc:
@@ -5594,16 +6169,33 @@ class AmigaClientSession:
             try:
                 tidx = int(cmd.split(":", 1)[1].strip())
                 if 0 <= tidx < len(self.tabs) and len(self.tabs) > 1:
-                    await self._stop_screencast()
                     p_to_close = self.tabs.pop(tidx)
+                    was_active = (p_to_close == self.page)
+                    if was_active:
+                        self._tab_generation += 1
+                        self._switching_tab = True
+                        try:
+                            await self._stop_screencast()
+                            await self._detach_cdp()
+                        except Exception:
+                            self._switching_tab = False
+                    self._detach_page_listeners(p_to_close)
                     try:
                         await p_to_close.close()
                     except Exception:
                         pass
-                    if self.active_tab_idx >= len(self.tabs):
+                    if tidx < self.active_tab_idx:
+                        self.active_tab_idx -= 1
+                    elif self.active_tab_idx >= len(self.tabs):
                         self.active_tab_idx = len(self.tabs) - 1
-                    await self._activate_tab(self.active_tab_idx)
+                    if was_active:
+                        try:
+                            await self._activate_tab(self.active_tab_idx)
+                        finally:
+                            self._switching_tab = False
+                    _reclaim_python_memory()
             except Exception as exc:
+                self._switching_tab = False
                 logger.warning("Close tab error: %s", exc)
             return
 
@@ -6873,6 +7465,10 @@ async def run_server(args: argparse.Namespace) -> None:
 
         # On Atom / Celeron 4-core chips, dedicate 2 threads to raster and preserve 2 threads
         # for Python asyncio loop, screencast frame grab, and SIMD compression.
+        is_low_mem = bool(hw.get("is_low_power") or hw.get("is_rpi"))
+        js_heap_mb = 256 if is_low_mem else 512
+        renderer_limit = 2 if is_low_mem else 4
+
         if hw.get("is_low_power") or hw.get("cpu_cores", 4) <= 4:
             raster_threads = 2
             logger.info("Low-power CPU detected: Adjusted raster threads to 2 (preserves cores for stream encoding)")
@@ -6893,8 +7489,10 @@ async def run_server(args: argparse.Namespace) -> None:
             "--disable-blink-features=AutomationControlled",
             f"--num-raster-threads={raster_threads}",
             "--enable-low-res-tiling",
-            "--disable-background-timer-throttling",
-            "--disable-renderer-backgrounding",
+            f"--js-flags=--max-old-space-size={js_heap_mb}",
+            f"--renderer-process-limit={renderer_limit}",
+            "--disk-cache-size=67108864",
+            "--media-cache-size=33554432",
             "--disable-features=Translate,OptimizationHints,MediaRouter,DialMediaRouteProvider",
         ] + gpu_flags)
         if all_exts:
@@ -6978,8 +7576,10 @@ async def run_server(args: argparse.Namespace) -> None:
                     "--disable-blink-features=AutomationControlled",
                     f"--num-raster-threads={raster_threads}",
                     "--enable-low-res-tiling",
-                    "--disable-background-timer-throttling",
-                    "--disable-renderer-backgrounding",
+                    f"--js-flags=--max-old-space-size={js_heap_mb}",
+                    f"--renderer-process-limit={renderer_limit}",
+                    "--disk-cache-size=67108864",
+                    "--media-cache-size=33554432",
                     "--disable-features=Translate,OptimizationHints,MediaRouter,DialMediaRouteProvider",
                 ] + gpu_flags)
                 if all_exts:
@@ -7024,18 +7624,18 @@ async def run_server(args: argparse.Namespace) -> None:
                 session = None
                 try:
                     async with active_session_lock:
-                        if active_session is not None and active_session.running:
-                            logger.info("New client connected: terminating previous active session")
-                            active_session.running = False
+                        prev_sess = active_session
+                        if prev_sess is not None:
+                            logger.info("New client connected: waiting for previous session to close cleanly")
+                            prev_sess.running = False
                             try:
-                                active_session.writer.close()
-                                await asyncio.wait_for(active_session.writer.wait_closed(), timeout=0.5)
+                                prev_sess.writer.close()
                             except Exception:
                                 pass
-                            for _ in range(15):
-                                if not active_session or not active_session.running:
-                                    break
-                                await asyncio.sleep(0.05)
+                            try:
+                                await asyncio.wait_for(prev_sess._closed_event.wait(), timeout=3.0)
+                            except Exception:
+                                pass
 
                         session = AmigaClientSession(
                             reader=reader,

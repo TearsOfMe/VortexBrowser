@@ -247,6 +247,7 @@ for T in "${TARGETS[@]}"; do
 
     docker run -i --rm --privileged --platform linux/arm64 \
         -v "$DOCKER_VOL:/work" \
+        -v "$SCRIPT_DIR:/src_server:ro" \
         -v "$OUT_DIR:/out" \
         -e TARGET="$T" -e CPU_FLAG="$CPU_FLAG" \
         -e DEF_W="$DEF_W" -e DEF_H="$DEF_H" -e DEF_FPS="$DEF_FPS" -e DEF_BR="$DEF_BR" \
@@ -276,6 +277,15 @@ mount --bind /proc /mnt/rpi/proc
 mount --bind /sys /mnt/rpi/sys
 mount --bind /dev /mnt/rpi/dev
 mount --bind /dev/pts /mnt/rpi/dev/pts
+
+# Sync latest server sources into cached rootfs (preserving browser_bin.txt and .venv)
+for fname in server.py fast_pixconv.c run_server.sh install_server.sh README.md darkreader.js requirements.txt; do
+    if [ -f "/src_server/${fname}" ]; then
+        cp -f "/src_server/${fname}" "/mnt/rpi/home/pi/vortexbrowse/server/${fname}"
+    fi
+done
+chown -R 1000:1000 /mnt/rpi/home/pi/vortexbrowse/server
+chmod +x /mnt/rpi/home/pi/vortexbrowse/server/server.py /mnt/rpi/home/pi/vortexbrowse/server/run_server.sh /mnt/rpi/home/pi/vortexbrowse/server/install_server.sh
 
 chroot /mnt/rpi /bin/bash -e << CHROOT_EOF
 RPI_HOST="vortexbrowser"
