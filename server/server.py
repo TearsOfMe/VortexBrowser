@@ -5552,7 +5552,7 @@ class AmigaClientSession:
                             await self.send_clipboard_to_amiga(sel_text)
                         else:
                             try:
-                                sel = await self.page.evaluate("""() => {
+                                sel = await self._safe_eval("""() => {
                                     let s = window.getSelection() ? window.getSelection().toString() : '';
                                     if (s && s.length > 0) return s;
                                     let el = document.activeElement;
@@ -5562,7 +5562,7 @@ class AmigaClientSession:
                                         } catch (e) {}
                                     }
                                     return '';
-                                }""")
+                                }""", timeout=0.35, default='')
                                 if sel and len(sel.strip()) > 0:
                                     logger.info("Selected text (%d chars): %r", len(sel), sel[:60])
                                     await self.send_clipboard_to_amiga(sel)
