@@ -596,15 +596,39 @@ PORTAL_HTML = """<!DOCTYPE html>
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.3);
     white-space: nowrap;
   }
-  .search-bar {
-    display: flex;
-    gap: 8px;
+  .search-wrap {
     margin-bottom: 14px;
     background: #f8fafc;
     border: 1px solid #94a3b8;
     border-radius: 6px;
-    padding: 5px;
+    padding: 7px;
     box-shadow: inset 0 1px 3px rgba(0,0,0,0.12);
+  }
+  .engine-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-bottom: 6px;
+  }
+  .engine-pill {
+    padding: 4px 10px;
+    border-radius: 4px;
+    border: 1px solid #94a3b8;
+    background: #e2e8f0;
+    color: #1e293b;
+    font-size: 11.5px;
+    font-weight: bold;
+    cursor: pointer;
+  }
+  .engine-pill:hover { background: #cbd5e1; }
+  .engine-pill.active {
+    background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
+    border-color: #1e40af;
+    color: #ffffff;
+  }
+  .search-bar {
+    display: flex;
+    gap: 8px;
   }
   .search-bar input {
     flex: 1;
@@ -776,10 +800,21 @@ PORTAL_HTML = """<!DOCTYPE html>
       box-shadow: 0 2px 4px rgba(0,0,0,0.5);
     }
     .title-box p { color: #a1a1aa; }
-    .search-bar {
+    .search-wrap {
       background: #27272a;
       border-color: #3f3f46;
       box-shadow: inset 0 1px 3px rgba(0,0,0,0.4);
+    }
+    .engine-pill {
+      background: #18181b;
+      border-color: #3f3f46;
+      color: #d4d4d8;
+    }
+    .engine-pill:hover { background: #3f3f46; }
+    .engine-pill.active {
+      background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+      border-color: #60a5fa;
+      color: #ffffff;
     }
     .search-bar input {
       background: #18181b;
@@ -827,30 +862,24 @@ PORTAL_HTML = """<!DOCTYPE html>
   }
 </style>
 <script>
-function playAmigaSynth() {
-  try {
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (!window._vbAudioCtx) {
-      window._vbAudioCtx = new AudioCtx();
-    }
-    const ctx = window._vbAudioCtx;
-    if (ctx.state === 'suspended') {
-      ctx.resume();
-    }
-    const notes = [261.63, 329.63, 392.00, 523.25, 659.25, 523.25, 392.00, 523.25];
-    notes.forEach((freq, idx) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.12);
-      gain.gain.setValueAtTime(0.35, ctx.currentTime + idx * 0.12);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + idx * 0.12 + 0.11);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(ctx.currentTime + idx * 0.12);
-      osc.stop(ctx.currentTime + idx * 0.12 + 0.115);
-    });
-  } catch (e) {}
+function setEngine(btn) {
+  document.querySelectorAll('.engine-pill').forEach(function(el) { el.classList.remove('active'); });
+  btn.classList.add('active');
+  document.getElementById('se').value = btn.getAttribute('data-url');
+  var q = document.getElementById('q');
+  q.placeholder = 'Suchbegriff f\u00fcr ' + btn.textContent + ' oder URL eingeben...';
+  q.focus();
+}
+function doSearch() {
+  var q = document.getElementById('q').value.trim();
+  if (!q) return false;
+  if (q.startsWith('http://') || q.startsWith('https://')) {
+    window.location.href = q;
+    return false;
+  }
+  var eng = document.getElementById('se').value;
+  window.location.href = eng.replace('%s', encodeURIComponent(q));
+  return false;
 }
 </script>
 </head>
@@ -863,22 +892,24 @@ function playAmigaSynth() {
     <div class="badge">AmigaOS 4.1 PPC</div>
   </div>
 
-  <form class="search-bar" onsubmit="event.preventDefault(); const q=document.getElementById('q').value.trim(); if(!q) return; if(q.startsWith('http://')||q.startsWith('https://')) { window.location.href=q; return; } const eng=document.getElementById('se').value; window.location.href=eng.replace('%s', encodeURIComponent(q));">
-    <span style="color:#64748b;font-weight:bold;font-size:13px;align-self:center;padding:0 4px;">Suche:</span>
-    <select id="se" style="padding:8px 10px;border-radius:4px;border:1px solid #cbd5e1;background:#f8fafc;color:#0f172a;font-weight:bold;font-size:13px;">
-      <option value="https://duckduckgo.com/?q=%s" selected>DuckDuckGo</option>
-      <option value="https://www.google.de/search?q=%s">Google</option>
-      <option value="https://www.bing.com/search?q=%s">Bing</option>
-      <option value="https://www.startpage.com/sp/search?query=%s">Startpage</option>
-      <option value="https://www.ecosia.org/search?q=%s">Ecosia</option>
-      <option value="https://os4depot.net/?function=search&ias=1&s=%s">OS4Depot</option>
-      <option value="https://aminet.net/search?query=%s">Aminet</option>
-      <option value="https://de.wikipedia.org/w/index.php?search=%s">Wikipedia (DE)</option>
-      <option value="https://www.youtube.com/results?search_query=%s">YouTube</option>
-    </select>
-    <input id="q" type="text" autofocus placeholder="Suchbegriff oder URL eingeben (Standard: DuckDuckGo)..." />
-    <button type="submit" class="btn-search">Suche</button>
-  </form>
+  <div class="search-wrap">
+    <div class="engine-pills">
+      <button type="button" class="engine-pill active" data-url="https://duckduckgo.com/?q=%s" onclick="setEngine(this)">DuckDuckGo</button>
+      <button type="button" class="engine-pill" data-url="https://www.google.de/search?q=%s" onclick="setEngine(this)">Google</button>
+      <button type="button" class="engine-pill" data-url="https://www.bing.com/search?q=%s" onclick="setEngine(this)">Bing</button>
+      <button type="button" class="engine-pill" data-url="https://www.startpage.com/sp/search?query=%s" onclick="setEngine(this)">Startpage</button>
+      <button type="button" class="engine-pill" data-url="https://www.ecosia.org/search?q=%s" onclick="setEngine(this)">Ecosia</button>
+      <button type="button" class="engine-pill" data-url="https://os4depot.net/?function=search&ias=1&s=%s" onclick="setEngine(this)">OS4Depot</button>
+      <button type="button" class="engine-pill" data-url="https://aminet.net/search?query=%s" onclick="setEngine(this)">Aminet</button>
+      <button type="button" class="engine-pill" data-url="https://de.wikipedia.org/w/index.php?search=%s" onclick="setEngine(this)">Wikipedia (DE)</button>
+      <button type="button" class="engine-pill" data-url="https://www.youtube.com/results?search_query=%s" onclick="setEngine(this)">YouTube</button>
+    </div>
+    <form class="search-bar" onsubmit="return doSearch();">
+      <input type="hidden" id="se" value="https://duckduckgo.com/?q=%s" />
+      <input id="q" type="text" autofocus placeholder="Suchbegriff f&uuml;r DuckDuckGo oder URL eingeben..." />
+      <button type="submit" class="btn-search">Suche</button>
+    </form>
+  </div>
 
   <div class="section-head">
     <h2>Downloads, Software-Archive &amp; Offizielle AmigaOS 4 Portale</h2>
