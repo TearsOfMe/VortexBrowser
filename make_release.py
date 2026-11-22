@@ -562,6 +562,152 @@ and 16-bit 48kHz audio directly to AmigaOS with native Reaction GUI controls.
 with open(os.path.join(AMIGA_DRAWER, f"{APP_NAME}.guide"), "w", encoding="iso-8859-1") as f:
     f.write(GUIDE_CONTENT)
 
+GUIDE_EN_CONTENT = """@database "VortexBrowser_EN.guide"
+@author "TearsOfMe"
+@(c) "(C) 2026 TearsOfMe"
+@$VER: VortexBrowser_EN.guide 1.0 (22.11.2026)
+
+@node MAIN "VortexBrowser 1.0 - Official AmigaOS 4.1 User Manual"
+@next INTRO
+
+@{b}==============================================================================
+                      VORTEXBROWSER 1.0 FOR AMIGAOS 4.1
+                 High-Performance Remote Web Browser (PPC)
+==============================================================================@{ub}
+
+Welcome to @{b}VortexBrowser 1.0@{ub}!
+VortexBrowser brings the modern web (HTML5, CSS3, ES2024 JavaScript, YouTube,
+Twitch, WebGL) smoothly to AmigaOS 4.1 by offloading browser rendering to a
+Linux, macOS, Docker, or Raspberry Pi companion server and streaming pixels
+using planar YUV420p + 2D Dirty-Rect + LZ4 (or H.264 via va.library) plus
+16-bit 44.1 kHz stereo audio via AHI.
+
+  @{" 1. Quick Installation (Amiga + Server)   " link INTRO}
+  @{" 2. System Requirements                   " link REQS}
+  @{" 3. Binaries & ToolTypes                  " link INSTALL}
+  @{" 4. Controls & Keyboard Shortcuts         " link KEYS}
+  @{" 5. Features & Startpage                  " link FEATURES}
+  @{" 6. Troubleshooting (Rustwright / GPU)    " link TROUBLE}
+
+@endnode
+
+@node INTRO "1. Quick Installation (AmigaOS 4 + Companion Server)"
+@prev MAIN
+@next REQS
+
+@{b}1. AmigaOS 4 (Client)@{ub}
+- Extract vortexbrowser.lha or VortexBrowser-1.0-AmigaOS4.lha using UnArc
+  into any drawer (e.g. Work:Internet/VortexBrowser/).
+- No external .so libraries needed (libavcodec, liblz4, libjpeg are compiled
+  statically into the binary).
+- Launch:
+  * @{b}VortexBrowser@{ub}         -> All AmigaOS 4 systems (X5000, A1222+, Sam440/460,
+                             Pegasos II, QEMU, Classic PPC)
+  * @{b}VortexBrowser-AltiVec@{ub} -> AltiVec CPUs (X1000, G4, G5)
+- Configure Server Address in Icon ToolTypes (SERVER=<IP-or-host>, PORT=7788)
+  or directly in Settings (Amiga+E).
+
+@{b}2. Companion Server (choose one of 3 options)@{ub}
+- @{b}Option A - Raspberry Pi 3 / 4 / 5 (Plug & Play):@{ub}
+  Flash the matching .img.xz (rpi3/4/5) to a >= 16 GB microSD card, connect
+  Ethernet, power on (~60-90s first boot), and connect from the Amiga to
+  vortexbrowser.local (Pi 4), vortexbrowser-rpi3.local, or vortexbrowser-rpi5.local.
+- @{b}Option B - Linux or macOS:@{ub}
+  Copy Server-Linux/ to your host. Run ./install_server.sh (Linux) or
+  ./install_macos.sh (macOS) once, then ./run_server.sh / ./run_macos.sh.
+- @{b}Option C - Docker:@{ub}
+  Run the Docker container with: --shm-size=2g -p 7788:7788 -p 9757:9757.
+
+@endnode
+
+@node REQS "2. System Requirements"
+@prev INTRO
+@next INSTALL
+
+@{b}AmigaOS 4.1 Client:@{ub}
+- AmigaOS 4.1 Final Edition (Update 1 or 2 recommended)
+- 256 MB RAM minimum (512 MB+ recommended for HD streams)
+- Picasso96 RTG 24/32-bit screen (Radeon HD/RX recommended for CompositeTags)
+- Optional: va.library (Enhancer Software) for hardware H.264 decoding
+- Roadshow TCP/IP (bsdsocket.library v4+) & AHI (ahi.device Unit 0)
+
+@{b}Companion Server:@{ub}
+- Linux x86_64/ARM64, macOS (Apple Silicon / Intel), Docker, or Raspberry Pi 3/4/5
+- Python 3.10+, Ungoogled-Chromium (default) or Firefox, PulseAudio/PipeWire
+
+@endnode
+
+@node INSTALL "3. Binaries & ToolTypes"
+@prev REQS
+@next KEYS
+
+Supported ToolTypes in VortexBrowser.info (remove parentheses to activate):
+  SERVER=<IP-or-Hostname>  Companion server address (e.g. SERVER=192.168.178.2)
+  PORT=<Number>            Control/video TCP port (default: 7788)
+  FPS=<Number>             Target frame rate (15, 25, 30, 50, 60; default: 25)
+  QUALITY=<1-100>          JPEG/Stream quality (default: 100)
+  CUSTOMSCREEN             Open on a dedicated custom RTG screen
+  WIDTH=<px> / HEIGHT=<px> Custom screen or window dimensions
+  DEPTH=<16|24>            RTG screen depth (default: 24)
+  DARK                     Start with Dark Mode enabled
+  URL=<URL>                Initial page (default: @HOME built-in startpage)
+
+Configuration files are stored in ENVARC:VortexBrowser/vortexbrowser.prefs.
+
+@endnode
+
+@node KEYS "4. Controls & Keyboard Shortcuts"
+@prev INSTALL
+@next FEATURES
+
+  Amiga+T        Open new tab
+  Amiga+W        Close current tab
+  Amiga+R        Reload page
+  Amiga+H        Go to Startpage (@HOME)
+  Amiga+B / +N   Back / Forward
+  Amiga+E        Settings (Server, Quick Dial, Bookmarks, Display)
+  Amiga+D        Download Manager
+  Amiga+K        Password Manager (Blowfish-CBC + SHA-256)
+  Amiga+U        Toggle Dark Mode (DarkReader + Dark ReAction GUI)
+  Right Click    Native AmigaOS 4 context menu (save link/image via ASL)
+
+@endnode
+
+@node FEATURES "5. Features & Startpage"
+@prev KEYS
+@next TROUBLE
+
+- On a fresh install, VortexBrowser opens the built-in Startpage (@HOME)
+  featuring clickable search engines (DuckDuckGo, Google, Bing, Startpage,
+  Ecosia, OS4Depot, Aminet, Wikipedia, YouTube) and AmigaOS 4 news & download
+  portals sorted by language (EN, DE, FR, IT, PL, CS).
+- 8 default Quick Dial buttons: OS4Welt, Amiga-News, OS4Depot, Amigans,
+  Aminet, YouTube, Twitch, Wikipedia.
+- Help -> About VortexBrowser displays the active server engine
+  (Chromium Rustwright DirectCDP, Chromium Playwright, or Firefox Playwright).
+
+@endnode
+
+@node TROUBLE "6. Troubleshooting (Rustwright / GPU)"
+@prev FEATURES
+
+- If a host experiences disconnects or hangs with Rustwright:
+    VORTEX_DISABLE_RUSTWRIGHT=1 ./run_server.sh
+  or:
+    python3 server.py --no-rustwright
+- If headless Chromium fails due to GPU drivers:
+    python3 server.py --disable-gpu
+- For Docker deployments, always pass --shm-size=2g for heavy websites.
+
+@endnode
+"""
+
+with open(os.path.join(AMIGA_DRAWER, f"{APP_NAME}_EN.guide"), "w", encoding="iso-8859-1") as f:
+    f.write(GUIDE_EN_CONTENT)
+en_guide_info = os.path.join(AMIGA_DRAWER, f"{APP_NAME}.guide.info")
+if os.path.exists(en_guide_info):
+    shutil.copy2(en_guide_info, os.path.join(AMIGA_DRAWER, f"{APP_NAME}_EN.guide.info"))
+
 # -------------------------------------------------------------
 # German Quickstart Readme: LIESMICH.txt
 # -------------------------------------------------------------
