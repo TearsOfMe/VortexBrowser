@@ -552,7 +552,7 @@ PORTAL_HTML = """<!DOCTYPE html>
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<title>VortexBrowser - Startseite &amp; Schnellwahl</title>
+<title>VortexBrowser - AmigaOS 4 Startseite &amp; Schnellwahl</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -560,7 +560,7 @@ PORTAL_HTML = """<!DOCTYPE html>
     background: linear-gradient(180deg, #e6eaf0 0%, #d3dae4 100%);
     color: #1e293b;
     min-height: 100vh;
-    padding: 16px 22px;
+    padding: 14px 20px 22px 20px;
   }
   .header {
     display: flex;
@@ -570,20 +570,17 @@ PORTAL_HTML = """<!DOCTYPE html>
     border: 1px solid #1a2c42;
     border-radius: 6px;
     padding: 10px 16px;
-    margin-bottom: 14px;
+    margin-bottom: 12px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.18);
   }
   .title-box h1 {
-    font-size: 20px;
+    font-size: 19px;
     color: #ffffff;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.4px;
     text-shadow: 1px 1px 2px #0f172a;
-    display: flex;
-    align-items: center;
-    gap: 8px;
   }
   .title-box p {
-    font-size: 12px;
+    font-size: 11.5px;
     color: #cbd5e1;
     margin-top: 2px;
   }
@@ -597,6 +594,7 @@ PORTAL_HTML = """<!DOCTYPE html>
     font-size: 11px;
     letter-spacing: 0.5px;
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.3);
+    white-space: nowrap;
   }
   .search-bar {
     display: flex;
@@ -615,7 +613,7 @@ PORTAL_HTML = """<!DOCTYPE html>
     border: 1px solid #cbd5e1;
     background: #ffffff;
     color: #0f172a;
-    font-size: 14px;
+    font-size: 13.5px;
   }
   .search-bar input:focus {
     outline: none;
@@ -623,18 +621,19 @@ PORTAL_HTML = """<!DOCTYPE html>
     box-shadow: 0 0 0 2px rgba(37,99,235,0.25);
   }
   .btn-search, .btn-action {
-    padding: 8px 16px;
+    padding: 6px 13px;
     border-radius: 4px;
     border: 1px solid #64748b;
     background: linear-gradient(180deg, #f1f5f9 0%, #cbd5e1 100%);
     color: #0f172a;
     font-weight: bold;
-    font-size: 13px;
+    font-size: 12px;
     cursor: pointer;
     text-decoration: none;
     display: inline-block;
     box-shadow: 0 1px 2px rgba(0,0,0,0.12);
   }
+  .btn-search { padding: 8px 16px; font-size: 13px; }
   .btn-search:hover, .btn-action:hover {
     background: linear-gradient(180deg, #ffffff 0%, #e2e8f0 100%);
     border-color: #475569;
@@ -643,11 +642,39 @@ PORTAL_HTML = """<!DOCTYPE html>
     background: #cbd5e1;
     box-shadow: inset 0 1px 3px rgba(0,0,0,0.25);
   }
+  .section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 14px 0 8px 0;
+    padding: 4px 10px;
+    background: #cbd5e1;
+    border-left: 4px solid #20354f;
+    border-radius: 4px;
+  }
+  .section-head h2 {
+    font-size: 13px;
+    font-weight: bold;
+    color: #0f172a;
+    letter-spacing: 0.3px;
+  }
+  .section-head .lang-tag {
+    font-size: 10.5px;
+    font-weight: bold;
+    color: #334155;
+    background: #e2e8f0;
+    padding: 2px 7px;
+    border-radius: 3px;
+    border: 1px solid #94a3b8;
+  }
   .grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
-    margin-bottom: 14px;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  @media (max-width: 820px) {
+    .grid { grid-template-columns: repeat(2, 1fr); }
   }
   .card {
     background: #ffffff;
@@ -658,17 +685,17 @@ PORTAL_HTML = """<!DOCTYPE html>
     display: flex;
     flex-direction: column;
   }
-  .card-top {
-    height: 5px;
-  }
+  .card-top { height: 4px; }
   .card-top-blue   { background: #2563eb; }
   .card-top-orange { background: #ea580c; }
   .card-top-red    { background: #dc2626; }
   .card-top-teal   { background: #0d9488; }
   .card-top-green  { background: #16a34a; }
   .card-top-purple { background: #7c3aed; }
+  .card-top-amber  { background: #d97706; }
+  .card-top-slate  { background: #475569; }
   .card-body {
-    padding: 10px 14px;
+    padding: 9px 12px;
     flex: 1;
     display: flex;
     flex-direction: column;
@@ -676,21 +703,32 @@ PORTAL_HTML = """<!DOCTYPE html>
   }
   .card-body h3 {
     color: #1e3a8a;
-    font-size: 15px;
-    margin-bottom: 4px;
+    font-size: 14px;
+    margin-bottom: 3px;
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 6px;
+  }
+  .badge-lang {
+    font-size: 10px;
+    font-weight: bold;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: #e2e8f0;
+    color: #334155;
+    border: 1px solid #cbd5e1;
   }
   .card-body p {
     color: #475569;
-    font-size: 12px;
+    font-size: 11.5px;
     margin-bottom: 8px;
     line-height: 1.35;
   }
   .card-action {
     display: flex;
     justify-content: flex-end;
+    gap: 6px;
   }
   .dl-strip {
     background: #ffffff;
@@ -698,12 +736,13 @@ PORTAL_HTML = """<!DOCTYPE html>
     border-left: 5px solid #d97706;
     border-radius: 6px;
     padding: 10px 14px;
+    margin-top: 12px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     box-shadow: 0 2px 4px rgba(0,0,0,0.08);
   }
-  .dl-strip h3 { color: #b45309; font-size: 14px; margin-bottom: 2px; }
+  .dl-strip h3 { color: #b45309; font-size: 13.5px; margin-bottom: 2px; }
   .dl-strip p { color: #64748b; font-size: 11.5px; }
   .btn-amber {
     background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%);
@@ -715,6 +754,7 @@ PORTAL_HTML = """<!DOCTYPE html>
     font-weight: bold;
     font-size: 12px;
     box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+    white-space: nowrap;
   }
   .btn-amber:hover {
     background: linear-gradient(180deg, #fbbf24 0%, #b45309 100%);
@@ -735,9 +775,7 @@ PORTAL_HTML = """<!DOCTYPE html>
       border-color: #3f3f46;
       box-shadow: 0 2px 4px rgba(0,0,0,0.5);
     }
-    .title-box p {
-      color: #a1a1aa;
-    }
+    .title-box p { color: #a1a1aa; }
     .search-bar {
       background: #27272a;
       border-color: #3f3f46;
@@ -748,9 +786,7 @@ PORTAL_HTML = """<!DOCTYPE html>
       color: #fafafa;
       border-color: #3f3f46;
     }
-    .search-bar input:focus {
-      border-color: #3b82f6;
-    }
+    .search-bar input:focus { border-color: #3b82f6; }
     .btn-search, .btn-action {
       background: linear-gradient(180deg, #3f3f46 0%, #27272a 100%);
       border-color: #52525b;
@@ -759,26 +795,35 @@ PORTAL_HTML = """<!DOCTYPE html>
     .btn-search:hover, .btn-action:hover {
       background: linear-gradient(180deg, #52525b 0%, #3f3f46 100%);
     }
+    .section-head {
+      background: #27272a;
+      border-left-color: #3b82f6;
+    }
+    .section-head h2 { color: #f4f4f5; }
+    .section-head .lang-tag {
+      background: #18181b;
+      color: #d4d4d8;
+      border-color: #3f3f46;
+    }
     .card {
       background: #27272a;
       border-color: #3f3f46;
       box-shadow: 0 2px 4px rgba(0,0,0,0.4);
     }
-    .card-body h3 {
-      color: #60a5fa;
+    .card-body h3 { color: #60a5fa; }
+    .badge-lang {
+      background: #18181b;
+      color: #d4d4d8;
+      border-color: #3f3f46;
     }
-    .card-body p {
-      color: #a1a1aa;
-    }
+    .card-body p { color: #a1a1aa; }
     .dl-strip {
       background: #27272a;
       border-color: #3f3f46;
       border-left: 5px solid #d97706;
       box-shadow: 0 2px 4px rgba(0,0,0,0.4);
     }
-    .dl-strip p {
-      color: #a1a1aa;
-    }
+    .dl-strip p { color: #a1a1aa; }
   }
 </style>
 <script>
@@ -812,108 +857,279 @@ function playAmigaSynth() {
 <body>
   <div class="header">
     <div class="title-box">
-      <h1>VortexBrowser &bull; Startseite &amp; Schnellwahl</h1>
-      <p>Schnellwahl &bull; Turbo LZ4-Streaming &bull; AHI Stereo-Audio &bull; AmigaOS 4 Kontextmen&uuml; &bull; ASL Download</p>
+      <h1>VortexBrowser 1.0 &bull; AmigaOS 4 Portal &amp; Schnellwahl</h1>
+      <p>AmigaOS 4 News &amp; Downloads nach Sprache sortiert &bull; LZ4-Streaming &bull; AHI Stereo-Audio &bull; ASL Download</p>
     </div>
     <div class="badge">AmigaOS 4.1 PPC</div>
   </div>
 
   <form class="search-bar" onsubmit="event.preventDefault(); const q=document.getElementById('q').value.trim(); if(!q) return; if(q.startsWith('http://')||q.startsWith('https://')) { window.location.href=q; return; } const eng=document.getElementById('se').value; window.location.href=eng.replace('%s', encodeURIComponent(q));">
-    <span style="color:#ffffff;font-weight:bold;font-size:13px;align-self:center;padding:0 4px;">Suche:</span>
+    <span style="color:#64748b;font-weight:bold;font-size:13px;align-self:center;padding:0 4px;">Suche:</span>
     <select id="se" style="padding:8px 10px;border-radius:4px;border:1px solid #cbd5e1;background:#f8fafc;color:#0f172a;font-weight:bold;font-size:13px;">
       <option value="https://duckduckgo.com/?q=%s" selected>DuckDuckGo</option>
       <option value="https://www.google.de/search?q=%s">Google</option>
       <option value="https://www.bing.com/search?q=%s">Bing</option>
       <option value="https://www.startpage.com/sp/search?query=%s">Startpage</option>
       <option value="https://www.ecosia.org/search?q=%s">Ecosia</option>
+      <option value="https://os4depot.net/?function=search&ias=1&s=%s">OS4Depot</option>
+      <option value="https://aminet.net/search?query=%s">Aminet</option>
       <option value="https://de.wikipedia.org/w/index.php?search=%s">Wikipedia (DE)</option>
       <option value="https://www.youtube.com/results?search_query=%s">YouTube</option>
-      <option value="https://aminet.net/search?query=%s">Aminet</option>
-      <option value="https://os4depot.net/?function=search&ias=1&s=%s">OS4Depot</option>
     </select>
     <input id="q" type="text" autofocus placeholder="Suchbegriff oder URL eingeben (Standard: DuckDuckGo)..." />
     <button type="submit" class="btn-search">Suche</button>
   </form>
 
+  <div class="section-head">
+    <h2>Downloads, Software-Archive &amp; Offizielle AmigaOS 4 Portale</h2>
+    <span class="lang-tag">GLOBAL / EN</span>
+  </div>
+  <div class="grid">
+    <div class="card">
+      <div class="card-top card-top-blue"></div>
+      <div class="card-body">
+        <div>
+          <h3>OS4Depot.net <span class="badge-lang">EN</span></h3>
+          <p>Das zentrale Software-Archiv speziell f&uuml;r native AmigaOS 4 Programme, Libraries, Treiber und Spiele.</p>
+        </div>
+        <div class="card-action"><a class="btn-action" href="https://os4depot.net">&Ouml;ffnen</a></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-top card-top-green"></div>
+      <div class="card-body">
+        <div>
+          <h3>Aminet.net <span class="badge-lang">EN</span></h3>
+          <p>Das weltgr&ouml;&szlig;te Amiga-Softwarearchiv f&uuml;r Classic 68k, PowerPC und AmigaOS 4.</p>
+        </div>
+        <div class="card-action"><a class="btn-action" href="https://aminet.net">&Ouml;ffnen</a></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-top card-top-red"></div>
+      <div class="card-body">
+        <div>
+          <h3>AmigaOS.net <span class="badge-lang">EN</span></h3>
+          <p>Die offizielle AmigaOS 4 Homepage mit Systeminfos, Features und Ank&uuml;ndigungen.</p>
+        </div>
+        <div class="card-action"><a class="btn-action" href="https://www.amigaos.net">&Ouml;ffnen</a></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-top card-top-teal"></div>
+      <div class="card-body">
+        <div>
+          <h3>AmigaOS Wiki <span class="badge-lang">EN</span></h3>
+          <p>Offizielle Dokumentation, Benutzerhandbuch, SDK-Referenz und Entwickler-Guides f&uuml;r AmigaOS 4.</p>
+        </div>
+        <div class="card-action"><a class="btn-action" href="https://wiki.amigaos.net">&Ouml;ffnen</a></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-top card-top-slate"></div>
+      <div class="card-body">
+        <div>
+          <h3>Hyperion Entertainment <span class="badge-lang">EN</span></h3>
+          <p>Offizielle AmigaOS 4.1 Final Edition Updates, Registrierung und Download-Bereich.</p>
+        </div>
+        <div class="card-action"><a class="btn-action" href="https://www.hyperion-entertainment.com">&Ouml;ffnen</a></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-top card-top-purple"></div>
+      <div class="card-body">
+        <div>
+          <h3>VortexBrowser GitHub <span class="badge-lang">EN / DE</span></h3>
+          <p>Quellcode, Release-Pakete, Raspberry-Pi-Images und Companion-Server f&uuml;r VortexBrowser.</p>
+        </div>
+        <div class="card-action"><a class="btn-action" href="https://github.com/TearsOfMe/VortexBrowser">&Ouml;ffnen</a></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-head">
+    <h2>Deutschsprachige AmigaOS 4 News &amp; Foren</h2>
+    <span class="lang-tag">DEUTSCH</span>
+  </div>
   <div class="grid">
     <div class="card">
       <div class="card-top card-top-orange"></div>
       <div class="card-body">
         <div>
-          <h3>Amiga-News.de</h3>
-          <p>Aktuelle Nachrichten rund um AmigaOS 4, PowerPC Hardware und Community-Projekte.</p>
+          <h3>Amiga-News.de <span class="badge-lang">DE</span></h3>
+          <p>Der t&auml;gliche Amiga-Newsticker mit allen Meldungen zu AmigaOS 4, Hardware und Software-Releases.</p>
         </div>
-        <div class="card-action">
-          <a class="btn-action" href="https://www.amiga-news.de">&Ouml;ffnen</a>
-        </div>
+        <div class="card-action"><a class="btn-action" href="https://www.amiga-news.de">&Ouml;ffnen</a></div>
       </div>
     </div>
-
     <div class="card">
       <div class="card-top card-top-blue"></div>
       <div class="card-body">
         <div>
-          <h3>OS4Depot.net</h3>
-          <p>Das zentrale Archiv f&uuml;r native AmigaOS 4 Software, Bibliotheken und Spiele.</p>
+          <h3>A1k.org <span class="badge-lang">DE</span></h3>
+          <p>Das gro&szlig;e deutschsprachige Forum rund um AmigaOS 4, NextGen-Hardware und klassische Amigas.</p>
         </div>
-        <div class="card-action">
-          <a class="btn-action" href="https://os4depot.net">&Ouml;ffnen</a>
-        </div>
+        <div class="card-action"><a class="btn-action" href="https://www.a1k.org">&Ouml;ffnen</a></div>
       </div>
     </div>
+    <div class="card">
+      <div class="card-top card-top-red"></div>
+      <div class="card-body">
+        <div>
+          <h3>Amiga Future <span class="badge-lang">DE / EN</span></h3>
+          <p>Online-Portal des gedruckten Amiga-Magazins mit News, Testberichten, Forum und Downloads.</p>
+        </div>
+        <div class="card-action"><a class="btn-action" href="https://www.amigafuture.de">&Ouml;ffnen</a></div>
+      </div>
+    </div>
+  </div>
 
+  <div class="section-head">
+    <h2>Englischsprachige &amp; Internationale AmigaOS 4 News &amp; Foren</h2>
+    <span class="lang-tag">ENGLISH</span>
+  </div>
+  <div class="grid">
     <div class="card">
       <div class="card-top card-top-teal"></div>
       <div class="card-body">
         <div>
-          <h3>Amigans.net</h3>
-          <p>Das internationale AmigaOS 4 Forum f&uuml;r Anwender, Entwickler und Erfahrungsaustausch.</p>
+          <h3>Amigans.net <span class="badge-lang">EN</span></h3>
+          <p>Zentrales internationales AmigaOS 4 Forum f&uuml;r Anwender, Entwickler und Bug-Reports.</p>
         </div>
-        <div class="card-action">
-          <a class="btn-action" href="https://www.amigans.net">&Ouml;ffnen</a>
-        </div>
+        <div class="card-action"><a class="btn-action" href="https://www.amigans.net">&Ouml;ffnen</a></div>
       </div>
     </div>
-
+    <div class="card">
+      <div class="card-top card-top-blue"></div>
+      <div class="card-body">
+        <div>
+          <h3>AmigaWorld.net <span class="badge-lang">EN</span></h3>
+          <p>Eines der gr&ouml;&szlig;ten englischsprachigen Newsportale und Foren mit starkem AmigaOS-4-Fokus.</p>
+        </div>
+        <div class="card-action"><a class="btn-action" href="https://amigaworld.net">&Ouml;ffnen</a></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-top card-top-orange"></div>
+      <div class="card-body">
+        <div>
+          <h3>Amiga-News.de (English) <span class="badge-lang">EN</span></h3>
+          <p>Englische Ausgabe des t&auml;glichen Amiga-Newstickers f&uuml;r OS4, MorphOS, AROS und Classic.</p>
+        </div>
+        <div class="card-action"><a class="btn-action" href="https://www.amiga-news.de/en/">&Ouml;ffnen</a></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-top card-top-slate"></div>
+      <div class="card-body">
+        <div>
+          <h3>Amiga.org <span class="badge-lang">EN</span></h3>
+          <p>Internationales Traditionsforum mit News, technischen Diskussionen und OS4-Threads.</p>
+        </div>
+        <div class="card-action"><a class="btn-action" href="https://www.amiga.org">&Ouml;ffnen</a></div>
+      </div>
+    </div>
     <div class="card">
       <div class="card-top card-top-green"></div>
       <div class="card-body">
         <div>
-          <h3>Aminet</h3>
-          <p>Das weltgr&ouml;&szlig;te Amiga-Softwarearchiv f&uuml;r Classic, PPC und AmigaOS 4.</p>
+          <h3>AmigaNG.com <span class="badge-lang">EN</span></h3>
+          <p>Spezialisiertes Newsportal f&uuml;r Next-Generation-Amiga-Systeme, PowerPC-Hardware und OS4.</p>
         </div>
-        <div class="card-action">
-          <a class="btn-action" href="https://aminet.net">&Ouml;ffnen</a>
-        </div>
+        <div class="card-action"><a class="btn-action" href="https://www.amigang.com">&Ouml;ffnen</a></div>
       </div>
     </div>
-
     <div class="card">
-      <div class="card-top" style="background: linear-gradient(135deg, #0ea5e9, #0284c7);"></div>
+      <div class="card-top card-top-amber"></div>
       <div class="card-body">
         <div>
-          <h3>A1k.org Amiga Forum</h3>
-          <p>Das gro&szlig;e deutschsprachige Forum rund um klassische Amigas und AmigaOS.</p>
+          <h3>IntuitionBase <span class="badge-lang">EN</span></h3>
+          <p>Wissensdatenbank, Hardware-Kompatibilit&auml;t und Praxis-Guides rund um AmigaOS 4 &amp; AmigaOne.</p>
         </div>
-        <div class="card-action">
-          <a class="btn-action" href="https://www.a1k.org">&Ouml;ffnen</a>
-        </div>
+        <div class="card-action"><a class="btn-action" href="https://intuitionbase.com">&Ouml;ffnen</a></div>
       </div>
     </div>
+  </div>
 
+  <div class="section-head">
+    <h2>Franz&ouml;sische AmigaOS &amp; Amiga Newsportale</h2>
+    <span class="lang-tag">FRAN&Ccedil;AIS</span>
+  </div>
+  <div class="grid">
     <div class="card">
-      <div class="card-top" style="background: linear-gradient(135deg, #64748b, #334155);"></div>
+      <div class="card-top card-top-blue"></div>
       <div class="card-body">
         <div>
-          <h3>Wikipedia (DE)</h3>
-          <p>Die freie Enzyklop&auml;die mit Millionen Artikeln auf Deutsch.</p>
+          <h3>AmigaImpact <span class="badge-lang">FR</span></h3>
+          <p>Gro&szlig;es franz&ouml;sisches Amiga-Newsportal mit aktivem Forum f&uuml;r AmigaOS 4, MorphOS und Classic.</p>
         </div>
-        <div class="card-action">
-          <a class="btn-action" href="https://de.wikipedia.org">&Ouml;ffnen</a>
-        </div>
+        <div class="card-action"><a class="btn-action" href="https://www.amigaimpact.org">&Ouml;ffnen</a></div>
       </div>
     </div>
+    <div class="card">
+      <div class="card-top card-top-teal"></div>
+      <div class="card-body">
+        <div>
+          <h3>Obligement <span class="badge-lang">FR</span></h3>
+          <p>Franz&ouml;sisches Online-Magazin mit ausf&uuml;hrlichen Testberichten, Interviews und Tutorials.</p>
+        </div>
+        <div class="card-action"><a class="btn-action" href="http://obligement.free.fr">&Ouml;ffnen</a></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-top card-top-red"></div>
+      <div class="card-body">
+        <div>
+          <h3>Amiga France <span class="badge-lang">FR</span></h3>
+          <p>Franz&ouml;sische Community f&uuml;r aktuelle Amiga-News, Projekte und Software-Vorstellungen.</p>
+        </div>
+        <div class="card-action"><a class="btn-action" href="https://www.amigafrance.com">&Ouml;ffnen</a></div>
+      </div>
+    </div>
+  </div>
 
+  <div class="section-head">
+    <h2>Italienische, Polnische &amp; Tschechische Amiga-Portale</h2>
+    <span class="lang-tag">IT / PL / CS</span>
+  </div>
+  <div class="grid">
+    <div class="card">
+      <div class="card-top card-top-green"></div>
+      <div class="card-body">
+        <div>
+          <h3>Amigapage.it <span class="badge-lang">IT</span></h3>
+          <p>Italienisches Amiga-Newsportal und Forum f&uuml;r moderne AmigaOS-Systeme, Hardware und Software.</p>
+        </div>
+        <div class="card-action"><a class="btn-action" href="https://www.amigapage.it">&Ouml;ffnen</a></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-top card-top-red"></div>
+      <div class="card-body">
+        <div>
+          <h3>PPA.pl <span class="badge-lang">PL</span></h3>
+          <p>Polski Portal Amigowy &ndash; t&auml;gliche News, Szene-Berichte, Reviews und Forum der polnischen Community.</p>
+        </div>
+        <div class="card-action"><a class="btn-action" href="https://www.ppa.pl">&Ouml;ffnen</a></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-top card-top-blue"></div>
+      <div class="card-body">
+        <div>
+          <h3>Amigaportal.cz <span class="badge-lang">CS</span></h3>
+          <p>Tschechisches/Slowakisches Amiga-Portal mit Hardware-Berichten, OS4-Themen und Community-Forum.</p>
+        </div>
+        <div class="card-action"><a class="btn-action" href="https://www.amigaportal.cz">&Ouml;ffnen</a></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-head">
+    <h2>Media, Streaming &amp; System-Tests</h2>
+    <span class="lang-tag">TOOLS</span>
+  </div>
+  <div class="grid">
     <div class="card">
       <div class="card-top card-top-red"></div>
       <div class="card-body">
@@ -923,13 +1139,12 @@ function playAmigaSynth() {
         </div>
         <div class="card-action">
           <a class="btn-action" href="https://www.youtube.com">&Ouml;ffnen</a>
-          <a class="btn-action" href="https://m.youtube.com" style="margin-left: 6px; background: linear-gradient(180deg, #d32f2f, #9a0007); color: #fff;">Lite / Mobil</a>
+          <a class="btn-action" href="https://m.youtube.com" style="background: linear-gradient(180deg, #d32f2f, #9a0007); color: #fff;">Lite / Mobil</a>
         </div>
       </div>
     </div>
-
     <div class="card">
-      <div class="card-top" style="background: linear-gradient(135deg, #9146ff, #5c16c5);"></div>
+      <div class="card-top card-top-purple"></div>
       <div class="card-body">
         <div>
           <h3>Twitch</h3>
@@ -937,13 +1152,12 @@ function playAmigaSynth() {
         </div>
         <div class="card-action">
           <a class="btn-action" href="https://www.twitch.tv">&Ouml;ffnen</a>
-          <a class="btn-action" href="https://m.twitch.tv" style="margin-left: 6px; background: linear-gradient(180deg, #9146ff, #5c16c5); color: #fff;">Lite / Mobil</a>
+          <a class="btn-action" href="https://m.twitch.tv" style="background: linear-gradient(180deg, #9146ff, #5c16c5); color: #fff;">Lite / Mobil</a>
         </div>
       </div>
     </div>
-
     <div class="card">
-      <div class="card-top card-top-purple"></div>
+      <div class="card-top card-top-teal"></div>
       <div class="card-body">
         <div>
           <h3>AHI Sound &amp; Klick-Test</h3>
