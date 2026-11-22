@@ -2784,6 +2784,7 @@ class AmigaClientSession:
         self._screencast_handler = None
         self.last_screencast_frame_time: float = 0.0
         self._video_eval_in_flight: bool = False
+        self._cached_page_url: str = ""
 
         # Mouse click tracking for gesture stabilization & upload trigger
         self._mouse_down_x: int = -1
@@ -2966,6 +2967,8 @@ class AmigaClientSession:
     def _send_nav_update(self, url: str, tab_idx: int = -1, title: str = "") -> None:
         if not self.running or not url:
             return
+        if tab_idx < 0 or tab_idx == self.active_tab_idx:
+            self._cached_page_url = url.lower()
 
         async def _do_send():
             nonlocal title
@@ -4695,7 +4698,7 @@ class AmigaClientSession:
         # Use Motion-JPEG only if explicitly requested via @CODEC:jpeg / @CODEC:mjpeg.
         # Otherwise default to LZ4 dirty-slice streaming which is 100x faster for the Amiga CPU!
         use_mjpeg = (self.codec_mode == "jpeg")
-        cur_url = (self.page.url or "").lower() if (not use_mjpeg and self.page) else ""
+        cur_url = self._cached_page_url if (not use_mjpeg and self.page) else ""
         is_video_site = _is_video_platform_url(cur_url)
         last_audio = getattr(self, "last_audio_time", 0.0)
         audio_active = (last_audio > 0.0) and (last_audio > t0 - 2.0)
@@ -5018,7 +5021,7 @@ class AmigaClientSession:
             audio_active = (last_audio > 0.0) and (last_audio > now_tick - 2.0)
 
             # 2. Page URL check (YouTube watch page, Twitch, video platforms)
-            cur_url = (self.page.url or "").lower() if self.page else ""
+            cur_url = self._cached_page_url if self.page else ""
             is_video_site = _is_video_platform_url(cur_url)
 
             # 3. Query HTML5 <video> element playback state asynchronously every 0.6 seconds (non-overlapping)
@@ -5077,25 +5080,28 @@ class AmigaClientSession:
                             return false;
                         }"""
                         is_playing = False
-                        max_frames = 6 if vs else 3
-                        frames = list(getattr(tp, "frames", None) or [])[:max_frames]
-                        if not frames:
-                            frames = [tp]
-                        for frame in frames:
-                            if (
-                                not self.running
-                                or self._switching_tab
-                                or self._tab_generation != eg
-                                or self.page is not tp
-                            ):
-                                return
-                            try:
-                                res = await asyncio.wait_for(frame.evaluate(check_js, vs), timeout=0.35)
-                                if res:
-                                    is_playing = True
-                                    break
-                            except Exception:
-                                pass
+                        if isinstance(self.cdp, DirectCDPSession) and self.cdp.connected:
+                            is_playing = bool(await self._safe_eval(check_js, vs, timeout=0.35, default=False))
+                        else:
+                            max_frames = 6 if vs else 3
+                            frames = list(getattr(tp, "frames", None) or [])[:max_frames]
+                            if not frames:
+                                frames = [tp]
+                            for frame in frames:
+                                if (
+                                    not self.running
+                                    or self._switching_tab
+                                    or self._tab_generation != eg
+                                    or self.page is not tp
+                                ):
+                                    return
+                                try:
+                                    res = await asyncio.wait_for(frame.evaluate(check_js, vs), timeout=0.35)
+                                    if res:
+                                        is_playing = True
+                                        break
+                                except Exception:
+                                    pass
                         if (
                             self.running
                             and not self._switching_tab
