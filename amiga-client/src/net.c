@@ -430,6 +430,17 @@ BOOL net_handle_incoming(VortexApp *app)
             break;
         }
 
+        case MSG_SERVER_INFO: {
+            MsgServerInfo sinfo;
+            if (!recv_exact(app->sock_fd, &sinfo, sizeof(MsgServerInfo))) {
+                net_disconnect(app);
+                return FALSE;
+            }
+            sinfo.engine_name[sizeof(sinfo.engine_name) - 1] = '\0';
+            snprintf(app->server_engine, sizeof(app->server_engine), "%s", sinfo.engine_name);
+            break;
+        }
+
         case MSG_PAGE_PROGRESS: {
             MsgProgress prog;
             if (!recv_exact(app->sock_fd, &prog, sizeof(MsgProgress))) {

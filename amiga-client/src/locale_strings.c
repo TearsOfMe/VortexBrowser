@@ -285,7 +285,7 @@ static const StringEntry s_builtins[] = {
     { MSG_ABOUT_SCR_WB,           "Workbench Screen" },
     { MSG_ABOUT_ALTIVEC_YES,      "AltiVec 128-Bit SIMD (Enabled - X1000/G4)" },
     { MSG_ABOUT_ALTIVEC_NO,       "Scalar Baseline (Safe for X5000/A1222+/Sam460/G3)" },
-    { MSG_ABOUT_SEC_SERVER,       "VortexBrowser for AmigaOS 4\nVersion 1.0\n\n=== SERVER INFORMATION ===\nServer Address: %s:%u\nConnection Status: %s\nServer Engine: Chromium (Linux Headless Streaming)\n\n" },
+    { MSG_ABOUT_SEC_SERVER,       "VortexBrowser for AmigaOS 4\nVersion 1.0\n\n=== SERVER INFORMATION ===\nServer Address: %s:%u\nConnection Status: %s\nServer Engine: %s\n\n" },
     { MSG_ABOUT_SEC_GRAPHICS,     "=== RESOLUTION & GRAPHICS ===\nScreen: %ux%u (%u-bit, %s)\nWindow Size: %ux%u (Pos: %d,%d)\nBrowser Viewport: %ux%u px (1:1 Auto-Sync)\nServer Stream: %ux%u (%s)\nDecoded Frames: %u\nActive Language: %s\n\n" },
     { MSG_ABOUT_SEC_AUDIO,        "=== AUDIO & OPTIMIZATION ===\nAudio Engine: AHI 16-Bit Stereo (44100 Hz CD Quality PCM Low-Latency)\nCPU Target: PowerPC Universal (Dynamic CPU Detection)\nVector SIMD: %s\nCompression: LZ4 Realtime Stream Decompressor" },
     { MSG_ABOUT_TITLE,            "About VortexBrowser" },
@@ -750,7 +750,7 @@ static void normalize_lang_token(const char *src, char *dst, size_t dst_sz)
 
 static struct Catalog *try_open_catalog_sys(const char *lang_name)
 {
-    struct TagItem tags[3];
+    struct TagItem tags[4];
     struct Catalog *cat;
     int n = 0;
 
@@ -758,6 +758,11 @@ static struct Catalog *try_open_catalog_sys(const char *lang_name)
 
     tags[n].ti_Tag  = OC_BuiltInLanguage;
     tags[n].ti_Data = (Tag)"english";
+    n++;
+
+    /* Require catalog v3+ so older 0.99 RC5 catalogs in LOCALE:Catalogs/ are ignored */
+    tags[n].ti_Tag  = OC_Version;
+    tags[n].ti_Data = 3;
     n++;
 
     /* Omit OC_BuiltInCodeSet per AmigaOS 4 locale.doc so locale.library

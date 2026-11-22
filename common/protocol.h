@@ -43,6 +43,7 @@ extern "C" {
 #define MSG_UPLOAD_RESPONSE   0x0D  /* Amiga -> Server: User selected file info (or cancel) */
 #define MSG_UPLOAD_CHUNK      0x0E  /* Amiga -> Server: 64KB data chunk of file being uploaded */
 #define MSG_PASSWORD_SAVE     0x0F  /* Server -> Amiga: Captured submitted login credentials for saving */
+#define MSG_SERVER_INFO       0x10  /* Server -> Amiga: Active browser automation core / engine info */
 
 /* Pixel Formats for MSG_FRAME.format */
 #define FMT_ARGB32            1     /* 32-bit Big-Endian ARGB (PIXF_A8R8G8B8, 4 bytes/px) */
@@ -249,6 +250,13 @@ typedef struct MsgRectHdr {
     uint16_t h;  /* Sub-rectangle height in pixels */
 } MsgRectHdr;
 
+/* 0x10: MSG_SERVER_INFO (64 bytes)
+ * Wire layout: [uint8_t msg_type=0x10] [MsgServerInfo (64B)]
+ */
+typedef struct MsgServerInfo {
+    char engine_name[64]; /* Active engine, e.g. "Chromium (Rustwright DirectCDP)" or "Chromium (Playwright)" */
+} MsgServerInfo;
+
 #pragma pack(pop)
 
 /* Compile-time size verification to ensure binary compatibility between PPC C and Python */
@@ -268,6 +276,7 @@ typedef char vb_assert_msg_upload_resp_size[(sizeof(MsgUploadResponse) == 266) ?
 typedef char vb_assert_msg_upload_chunk_size[(sizeof(MsgUploadChunk) == 8) ? 1 : -1];
 typedef char vb_assert_msg_rect_size[(sizeof(MsgRectHdr) == 8) ? 1 : -1];
 typedef char vb_assert_msg_pw_save_size[(sizeof(MsgPasswordSave) == 512) ? 1 : -1];
+typedef char vb_assert_msg_server_info_size[(sizeof(MsgServerInfo) == 64) ? 1 : -1];
 
 #ifdef __cplusplus
 }

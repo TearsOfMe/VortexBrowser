@@ -176,6 +176,7 @@ typedef struct VortexApp {
     /* Network configuration & state */
     char           server_host[128];
     uint16_t       server_port;
+    char           server_engine[64];
     LONG           sock_fd;
     BOOL           connected;
     BOOL           auto_fallback_done; /* Prevent infinite recursion on mutual fallback */

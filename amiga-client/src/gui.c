@@ -1655,11 +1655,12 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
 
             const char *scr_type = app->custom_screen ? GetVString(MSG_ABOUT_SCR_CUSTOM) : GetVString(MSG_ABOUT_SCR_WB);
 
+            const char *eng_str = app->server_engine[0] ? app->server_engine : "Chromium (Linux Headless Streaming)";
             int len = 0;
             len += snprintf(about_buf + len, sizeof(about_buf) - (size_t)len,
                 GetVString(MSG_ABOUT_SEC_SERVER),
                 app->server_host, (unsigned)app->server_port,
-                conn_str);
+                conn_str, eng_str);
             if (len < 0) len = 0;
             if ((size_t)len < sizeof(about_buf)) {
                 int n = snprintf(about_buf + len, sizeof(about_buf) - (size_t)len,

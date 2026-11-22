@@ -90,6 +90,7 @@ MSG_UPLOAD_REQUEST    = 0x0C
 MSG_UPLOAD_RESPONSE   = 0x0D
 MSG_UPLOAD_CHUNK      = 0x0E
 MSG_PASSWORD_SAVE     = 0x0F
+MSG_SERVER_INFO       = 0x10
 
 FMT_ARGB32 = 1
 FMT_RGB565 = 2
@@ -131,6 +132,7 @@ STRUCT_MSG_UPLOAD_REQ   = struct.Struct(">BII256s")
 STRUCT_MSG_UPLOAD_RESP  = struct.Struct(">IIBB256s")
 STRUCT_MSG_UPLOAD_CHUNK = struct.Struct(">BII")
 STRUCT_MSG_PASSWORD_SAVE = struct.Struct(">B256s128s128s")
+STRUCT_MSG_SERVER_INFO   = struct.Struct(">B64s")
 
 DOWNLOAD_CHUNK_SIZE = 64 * 1024
 AUDIO_SAMPLE_RATE   = 44100
@@ -2678,6 +2680,7 @@ class AmigaClientSession:
         context_state: Optional[Dict[str, Any]] = None,
         browser_locale: str = "",
         locale_explicit: bool = False,
+        use_rustwright: bool = False,
     ):
         self.reader = reader
         self.writer = writer
@@ -2688,6 +2691,7 @@ class AmigaClientSession:
         self._context_state: Dict[str, Any] = context_state if context_state is not None else {}
         self.browser_locale: str = normalize_bcp47_locale(browser_locale) or _SERVER_LOCALE
         self.locale_explicit: bool = bool(locale_explicit)
+        self.use_rustwright: bool = bool(use_rustwright)
         self.width = width
         self.height = height
         self.pixel_format = pixel_format
@@ -3775,6 +3779,17 @@ class AmigaClientSession:
                 }
             })()"""
             self._context_state["active_session"] = self
+            try:
+                if self.engine == "firefox":
+                    eng_label = "Firefox (Playwright)"
+                elif self.use_rustwright:
+                    eng_label = "Chromium (Rustwright DirectCDP)"
+                else:
+                    eng_label = "Chromium (Playwright)"
+                eng_bytes = eng_label.encode("utf-8", errors="replace")[:63].ljust(64, b"\x00")
+                await self.send_packet(STRUCT_MSG_SERVER_INFO.pack(MSG_SERVER_INFO, eng_bytes))
+            except Exception as _se:
+                logger.debug("send MSG_SERVER_INFO warning: %s", _se)
             if not self._context_state.get("scripts_initialized"):
                 ctx_state = self._context_state
 
@@ -7915,6 +7930,7 @@ async def run_server(args: argparse.Namespace) -> None:
                             context_state=context_state,
                             browser_locale=server_locale,
                             locale_explicit=locale_explicit,
+                            use_rustwright=use_rustwright,
                         )
                         active_session = session
 
