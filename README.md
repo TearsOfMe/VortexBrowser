@@ -1,4 +1,4 @@
-# VortexBrowser – High-Performance Headless Web Browser Streaming System
+# VortexBrowser 1.0 – High-Performance Headless Web Browser Streaming System
 **(Universeller Linux / macOS Server [AMD/Intel/Apple Silicon/Raspberry Pi/Docker] $\rightarrow$ AmigaOS 4.1 PowerPC Client)**
 
 [English version below / Zur englischen Version wechseln](#english-version)
@@ -52,9 +52,10 @@ VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwrigh
    - **Dynamische Breitenanpassung der Schnellwahl-Buttons:** Die Schnellwahl-Leiste nutzt automatisch die gesamte verfügbare Fensterbreite.
    - **Favoriten:** In den Einstellungen (`Amiga+E`) können Lesezeichen und Schnellwahl-Seiten gepflegt werden.
 
-3. **Multi-Tab-Browsing & Sitzungswiederherstellung:**
+3. **Multi-Tab-Browsing, Media-Kontrolle & Sitzungswiederherstellung:**
    - Echte Tabs über `clicktab.gadget` mit AmigaOS 4 Standard-Bedienung (`Amiga+T` für neuen Tab, `Amiga+W` zum Schließen).
    - **Tab-Persistenz:** Sämtliche geöffneten Tabs, Titel und der aktive Tab werden beim Beenden automatisch in `ENVARC:` gespeichert und beim nächsten Start nahtlos wiederhergestellt.
+   - **Video / Audio beim Tab-Wechsel pausieren:** Optionale Einstellung in den Prefs (`Amiga+E`, Standard: Aus), die beim Tab-Wechsel HTML5-`<audio>`/`<video>`, freistehende `new Audio()`-Webradio-Player, Shadow-DOM-Media sowie Web-Audio (`AudioContext`) im Hintergrund-Tab pausiert und beim Zurückwechseln per Klick/Taste fortsetzt.
 
 4. **Download-Manager:**
    - Vollständiger nativer Download-Manager (`Amiga+D`) mit Live-Geschwindigkeitsanzeige, Fortschritt in Prozent, Restzeitschätzung (ETA), Datei- und Ordneröffner.
@@ -129,8 +130,8 @@ docker compose -f docker-compose.macos.yml up -d
 ```
 
 #### 4. Client auf AmigaOS 4.1 starten
-1. Archiv `VortexBrowser-1.0-AmigaOS4.lha` auf dem Amiga entpacken (z. B. nach `Work:Internet/VortexBrowser`).
-2. Doppelklick auf das `VortexBrowser`-Icon.
+1. Archiv `VortexBrowser-1.0-AmigaOS4.lha` (oder das Komplettpaket `VortexBrowser-1.0-Complete.zip`) auf dem Amiga entpacken (z. B. nach `Work:Internet/VortexBrowser`).
+2. Doppelklick auf `VortexBrowser` (Universal für alle AmigaOS-4-Systeme) bzw. `VortexBrowser-AltiVec` (für G4 / G5 / AmigaOne X1000).
 3. Server-IP eintragen (oder `Amiga+1` drücken) und auf **Verbinden** klicken.
 
 #### Hinweis / Troubleshooting (Rustwright-CDP-Timeout)
@@ -146,27 +147,7 @@ VORTEX_DISABLE_RUSTWRIGHT=1 ./run_server.sh
 <a name="english-version"></a>
 ## English Version
 
-VortexBrowser renders modern websites via headless Chromium (Playwright / Rustwright + DirectCDP WebSocket) on a **universal Linux / macOS server or Docker container** (with automatic hardware acceleration for AMD Ryzen Vulkan, Intel QuickSync VA-API, **Apple VideoToolbox**, and Raspberry Pi 4/5 V3D) and streams compressed video data using **Planar YUV420P + 2D Dirty-Rect + LZ4** to a native **AmigaOS 4.1 PowerPC ReAction client**.
-
----
-
-### Systemanforderungen
-
-#### AmigaOS 4.1 Client
-* **Betriebssystem:** **AmigaOS 4.1 Final Edition** (Update 1 oder Update 2 empfohlen)
-* **Prozessor & Binary-Variante:**
-  * **`VortexBrowser` (Universal PowerPC):** Läuft auf **jedem** AmigaOS-4-System (AmigaOne X5000, A1222/A1222+ Tabor, Sam440ep/Flex, Sam460ex/cr, Pegasos II, AmigaOne XE/SE/µA1, Classic PPC sowie QEMU `pegasos2`/`sam460ex`), inklusive dynamischer AltiVec-Erkennung im Pixel-Renderer.
-  * **`VortexBrowser-AltiVec`:** Optimierte Recompile-Version für **PowerPC-CPUs mit AltiVec** (AmigaOne X1000, PowerMac G4/G5, AmigaOne XE G4).
-* **Arbeitsspeicher:** Mindestens **256 MB RAM** (**512 MB+ RAM** für HD-Streams empfohlen).
-* **Grafik:** RTG-Grafikkarte (`Picasso96`) mit **24/32-Bit TrueColor** (`Radeon HD` oder `Radeon RX` empfohlen für GPU-Scaling via `CompositeTags()`).
-* **Hardware-Videodekodierung (optional):** **`va.library`** (aus *Enhancer Software*) für Hardware-H.264-Dekodierung auf Radeon HD/RX (`UVD`/`VCN`). Ohne `va.library` schaltet der Client automatisch auf den schnellen YUV420p/LZ4-Pfad um.
-* **Netzwerk:** Konfiguriertes **Roadshow TCP/IP** (`bsdsocket.library` v4+), LAN (100 Mbit/Gigabit empfohlen) mit Verbindung zum Server (TCP-Port **7788** für Video/Steuerung, **9757** für Audio).
-* **Audio:** Konfiguriertes **AHI** (`ahi.device`, Unit 0) für synchrone 16-Bit-Stereo-Ausgabe.
-* **System-Bibliotheken:** Standard AmigaOS 4.1 ReAction-Klassen (`window.class`, `layout.gadget`, `clicktab.gadget`, `listbrowser.gadget`, `chooser.gadget`, `popupmenu.class`, `locale.library`, `icon.library`); optional `codesets.library` (v5/6) für erweiterte Zeichensatzkonvertierung. Alle Codecs (`libavcodec`, `liblz4`, `libjpeg`) sind statisch einkompiliert – keine externen `.so`-Bibliotheken nötig.
-
-#### Rendering-Server (Backend)
-* **Hardware:** Beliebiger x86_64/ARM64 Linux-PC, Mac (Apple Silicon / Intel) oder **Raspberry Pi 3 / 4 / 5** (min. **1 GB RAM** mit ZRAM auf Pi 3; **2–8 GB RAM** auf Pi 4/5 oder Desktop optimal).
-* **Software:** Linux/macOS mit Python 3.10+, **Rustwright** + Playwright, **Ungoogled-Chromium** (Standard) oder **Firefox**, `pulseaudio`/`pipewire-pulse` – oder fertig geflashtes [Raspberry-Pi-SD-Image](server/README_RASPI_IMAGE.md).
+VortexBrowser 1.0 renders modern websites via headless Chromium (Playwright / Rustwright + DirectCDP WebSocket) on a **universal Linux / macOS server or Docker container** (with automatic hardware acceleration for AMD Ryzen Vulkan, Intel QuickSync VA-API, **Apple VideoToolbox**, and Raspberry Pi 4/5 V3D) and streams compressed video data using **Planar YUV420P + 2D Dirty-Rect + LZ4** to a native **AmigaOS 4.1 PowerPC ReAction client**.
 
 ---
 
@@ -211,9 +192,10 @@ VortexBrowser renders modern websites via headless Chromium (Playwright / Rustwr
    - **Dynamic Quick Link Layout:** Toolbar buttons scale to use available window width.
    - **Bookmarks & Quick Links:** Managed in preferences (`Amiga+E`).
 
-3. **Multi-Tab Browsing & Session Persistence:**
+3. **Multi-Tab Browsing, Media Control & Session Persistence:**
    - Tabs via `clicktab.gadget` using standard shortcuts (`Amiga+T` for new tab, `Amiga+W` to close).
    - **Session Restore:** Open tabs, URLs, and active index are stored in `ENVARC:` on exit and restored upon restart.
+   - **Pause Video / Audio on Tab Switch:** Optional preference (`Amiga+E`, default: Off) that pauses background `<audio>`/`<video>`, detached `new Audio()` web radio players, Shadow DOM media, and Web Audio (`AudioContext`), resuming on click/keypress when switching back.
 
 4. **Download Manager:**
    - Native Download Manager (`Amiga+D`) displaying download speed, progress percentage, ETA, and buttons to open files or folders.
@@ -287,8 +269,8 @@ docker compose -f docker-compose.macos.yml up -d
 ```
 
 #### 4. Starting the Client on AmigaOS 4.1
-1. Unpack `VortexBrowser-1.0-AmigaOS4.lha` on your Amiga (e.g. into `Work:Internet/VortexBrowser`).
-2. Double-click the `VortexBrowser` icon.
+1. Unpack `VortexBrowser-1.0-AmigaOS4.lha` (or the full package `VortexBrowser-1.0-Complete.zip`) on your Amiga (e.g. into `Work:Internet/VortexBrowser`).
+2. Double-click `VortexBrowser` (universal for all AmigaOS 4 machines) or `VortexBrowser-AltiVec` (for G4 / G5 / AmigaOne X1000).
 3. Enter your Linux/Docker server IP (or press `Amiga+1`) and click **Connect**.
 
 #### Troubleshooting (Rustwright CDP Timeout)
