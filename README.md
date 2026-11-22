@@ -103,6 +103,7 @@ Um die ToolTypes zu bearbeiten:
   # oder direkt: python server.py --no-rustwright
   ```
 * **GPU-Treiber-Freeze unter Linux:** Sollte der Browser bei bestimmten Grafiktreibern einfrieren, hilft ein Start mit `--disable-gpu`.
+* **Schwere Webseiten (z. B. `cnn.com`) / Docker-SHM:** Im Server 1.0 ist das V8-Heap-Limit auf 1536 MB (512 MB auf Low-Power/Pi) angehoben und eine automatische Tab-Crash-Wiederherstellung aktiv. Bei manuellem `docker run` immer `--shm-size=2g` übergeben.
 
 ---
 
@@ -246,6 +247,7 @@ VortexBrowser supports configuration via standard AmigaOS 4 **ToolTypes** in `.i
   # or directly: python server.py --no-rustwright
   ```
 * **Linux GPU Driver Freeze:** If Chromium freezes on certain GPU drivers, try launching with `--disable-gpu`.
+* **Heavy Websites (e.g. `cnn.com`) / Docker SHM:** Server 1.0 raises the V8 JS heap limit to 1536 MB (512 MB on low-power/Pi) and automatically recovers crashed tabs without dropping the Amiga session. When using `docker run` manually, always pass `--shm-size=2g`.
 
 ---
 

@@ -100,6 +100,7 @@ Falls beim Klicken/Navigieren ein `RUSTWRIGHT TIMEOUT DIAGNOSTIC`-Hänger auftri
 VORTEX_DISABLE_RUSTWRIGHT=1 ./run_server.sh
 # oder direkt: python server.py --no-rustwright
 ```
+Bei manuellem `docker run` für schwere Seiten (z. B. `cnn.com`) bitte immer `--shm-size=2g` mitgeben.
 
 ---
 ---
