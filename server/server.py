@@ -4052,11 +4052,64 @@ class AmigaClientSession:
     async def _safe_eval(self, script: str, arg: Any = None, timeout: float = 0.6, default: Any = None) -> Any:
         if not self.page or not self.running:
             return default
+        if isinstance(self.cdp, DirectCDPSession) and self.cdp.connected:
+            try:
+                s = script.strip()
+                if arg is not None:
+                    expr = f"({s})({json.dumps(arg)})"
+                elif s.startswith("()"):
+                    expr = f"({s})()"
+                else:
+                    expr = s
+                res = await asyncio.wait_for(
+                    self.cdp.send(
+                        "Runtime.evaluate",
+                        {"expression": expr, "returnByValue": True, "awaitPromise": False},
+                    ),
+                    timeout=timeout,
+                )
+                if isinstance(res, dict) and "exceptionDetails" not in res:
+                    val_obj = res.get("result")
+                    if isinstance(val_obj, dict) and "value" in val_obj:
+                        return val_obj["value"]
+                    return default
+            except Exception:
+                return default
         try:
             coro = self.page.evaluate(script) if arg is None else self.page.evaluate(script, arg)
             return await asyncio.wait_for(coro, timeout=timeout)
         except Exception:
             return default
+
+    async def _cdp_mouse(
+        self,
+        cdp_type: str,
+        x: int,
+        y: int,
+        button: str = "none",
+        click_count: int = 0,
+        delta_y: float = 0.0,
+        timeout: float = 0.25,
+    ) -> bool:
+        """Dispatch mouse events directly via DirectCDP WebSocket, bypassing Rustwright PyO3/Tokio locks."""
+        if not (isinstance(self.cdp, DirectCDPSession) and self.cdp.connected):
+            return False
+        params: Dict[str, Any] = {
+            "type": cdp_type,
+            "x": float(x),
+            "y": float(y),
+            "button": button,
+        }
+        if click_count > 0:
+            params["clickCount"] = int(click_count)
+        if cdp_type == "mouseWheel":
+            params["deltaX"] = 0.0
+            params["deltaY"] = float(delta_y)
+        try:
+            await asyncio.wait_for(self.cdp.send("Input.dispatchMouseEvent", params), timeout=timeout)
+            return True
+        except Exception:
+            return False
 
     def _safe_dispatch_resize(self) -> None:
         if not self.page or not self.running:
@@ -5405,7 +5458,11 @@ class AmigaClientSession:
                         f"window.scrollTo(0, Math.max(0, (document.documentElement.scrollHeight - window.innerHeight) * {ratio:.4f}))"
                     )
                 else:
-                    await asyncio.wait_for(self.page.mouse.click(cx, cy, button=btn), timeout=1.5)
+                    if not await self._cdp_mouse("mouseMoved", cx, cy, "none", 0):
+                        await asyncio.wait_for(self.page.mouse.click(cx, cy, button=btn), timeout=1.5)
+                    else:
+                        await self._cdp_mouse("mousePressed", cx, cy, btn, 1)
+                        await self._cdp_mouse("mouseReleased", cx, cy, btn, 1)
                     if btn == "left":
                         self._schedule_storage_save(delay=3.5)
                 self._trigger_full_refresh(True)
@@ -5448,8 +5505,11 @@ class AmigaClientSession:
                 else:
                     if btn == "left":
                         await self._safe_eval("([x, y]) => window.__vortex_selection && window.__vortex_selection.start(x, y)", [cx, cy], timeout=0.4)
-                    await asyncio.wait_for(self.page.mouse.move(cx, cy), timeout=1.0)
-                    await asyncio.wait_for(self.page.mouse.down(button=btn, click_count=self._click_count), timeout=1.0)
+                    if not await self._cdp_mouse("mouseMoved", cx, cy, "none", 0):
+                        await asyncio.wait_for(self.page.mouse.move(cx, cy), timeout=1.0)
+                        await asyncio.wait_for(self.page.mouse.down(button=btn, click_count=self._click_count), timeout=1.0)
+                    else:
+                        await self._cdp_mouse("mousePressed", cx, cy, btn, self._click_count)
                 self._trigger_full_refresh(True)
                 self._schedule_delayed_frames()
 
@@ -5477,8 +5537,11 @@ class AmigaClientSession:
                     # If user dragged, release with click_count=1 to finalize the freeform selection
                     if dist > 4 or dragged:
                         self._click_count = 1
-                    await asyncio.wait_for(self.page.mouse.move(cx, cy), timeout=1.0)
-                    await asyncio.wait_for(self.page.mouse.up(button=btn, click_count=self._click_count), timeout=1.0)
+                    if not await self._cdp_mouse("mouseMoved", cx, cy, btn, 0):
+                        await asyncio.wait_for(self.page.mouse.move(cx, cy), timeout=1.0)
+                        await asyncio.wait_for(self.page.mouse.up(button=btn, click_count=self._click_count), timeout=1.0)
+                    else:
+                        await self._cdp_mouse("mouseReleased", cx, cy, btn, self._click_count)
 
                     self._mouse_down_btn = ""
 
@@ -5580,10 +5643,12 @@ class AmigaClientSession:
                         if dist > 4:
                             self._click_count = 1
                             await self._safe_eval("([x, y]) => window.__vortex_selection && window.__vortex_selection.update(x, y)", [cx, cy], timeout=0.25)
-                        await asyncio.wait_for(self.page.mouse.move(cx, cy), timeout=0.2)
+                        if not await self._cdp_mouse("mouseMoved", cx, cy, "left", 0, timeout=0.2):
+                            await asyncio.wait_for(self.page.mouse.move(cx, cy), timeout=0.2)
                         self._trigger_full_refresh(False)
                     else:
-                        await asyncio.wait_for(self.page.mouse.move(cx, cy), timeout=0.15)
+                        if not await self._cdp_mouse("mouseMoved", cx, cy, "none", 0, timeout=0.15):
+                            await asyncio.wait_for(self.page.mouse.move(cx, cy), timeout=0.15)
                 except Exception:
                     pass
                     pass
@@ -5678,8 +5743,9 @@ class AmigaClientSession:
                 )
                 if not scrolled:
                     try:
-                        await asyncio.wait_for(self.page.mouse.move(cx, cy), timeout=0.2)
-                        await asyncio.wait_for(self.page.mouse.wheel(0, float(dy)), timeout=0.4)
+                        if not await self._cdp_mouse("mouseWheel", cx, cy, "none", 0, delta_y=float(dy), timeout=0.4):
+                            await asyncio.wait_for(self.page.mouse.move(cx, cy), timeout=0.2)
+                            await asyncio.wait_for(self.page.mouse.wheel(0, float(dy)), timeout=0.4)
                     except Exception:
                         pass
                 if self.screencast_queue is not None:
