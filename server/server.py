@@ -5628,59 +5628,58 @@ class AmigaClientSession:
                     dy = 120 if delta_y > 0 else -120
                 logger.info("INPUT_WHEEL dy=%d at (%d, %d) soft=%s", dy, cx, cy, self.soft_scroll)
                 scrolled = False
-                try:
-                    scrolled = bool(
-                        await self.page.evaluate(
-                            """([x, y, dy]) => {
-                                let el = document.elementFromPoint(x, y);
-                                while (el && el !== document.body && el !== document.documentElement) {
-                                    const style = window.getComputedStyle(el);
-                                    const oy = style ? style.overflowY : '';
-                                    if ((oy === 'auto' || oy === 'scroll' || oy === 'overlay') &&
-                                        el.clientHeight >= 120 && el.clientWidth >= 150 &&
-                                        el.scrollHeight > el.clientHeight + 24) {
-                                        const canUp = (dy < 0 && el.scrollTop > 1);
-                                        const canDown = (dy > 0 && (el.scrollTop + el.clientHeight) < (el.scrollHeight - 2));
-                                        if (canUp || canDown) {
-                                            const prev = el.scrollTop;
-                                            el.scrollBy({ top: dy, left: 0, behavior: 'instant' });
-                                            if (el.scrollTop === prev) {
-                                                el.scrollTop = prev + dy;
-                                            }
-                                            if (el.scrollTop !== prev) return true;
+                scrolled = bool(
+                    await self._safe_eval(
+                        """([x, y, dy]) => {
+                            let el = document.elementFromPoint(x, y);
+                            while (el && el !== document.body && el !== document.documentElement) {
+                                const style = window.getComputedStyle(el);
+                                const oy = style ? style.overflowY : '';
+                                if ((oy === 'auto' || oy === 'scroll' || oy === 'overlay') &&
+                                    el.clientHeight >= 120 && el.clientWidth >= 150 &&
+                                    el.scrollHeight > el.clientHeight + 24) {
+                                    const canUp = (dy < 0 && el.scrollTop > 1);
+                                    const canDown = (dy > 0 && (el.scrollTop + el.clientHeight) < (el.scrollHeight - 2));
+                                    if (canUp || canDown) {
+                                        const prev = el.scrollTop;
+                                        el.scrollBy({ top: dy, left: 0, behavior: 'instant' });
+                                        if (el.scrollTop === prev) {
+                                            el.scrollTop = prev + dy;
                                         }
+                                        if (el.scrollTop !== prev) return true;
                                     }
-                                    el = el.parentElement;
                                 }
-                                const root = document.documentElement;
-                                const prevBehavior = root ? root.style.scrollBehavior : '';
-                                if (root) root.style.scrollBehavior = 'auto';
-                                const se = document.scrollingElement || document.documentElement || document.body;
-                                const prevWin = window.scrollY || window.pageYOffset || (se ? se.scrollTop : 0) || 0;
-                                window.scrollBy({ top: dy, left: 0, behavior: 'instant' });
-                                let afterWin = window.scrollY || window.pageYOffset || (se ? se.scrollTop : 0) || 0;
-                                if (afterWin === prevWin && se) {
-                                    se.scrollTop = prevWin + dy;
-                                    afterWin = se.scrollTop;
-                                }
-                                if (afterWin === prevWin && document.body) {
-                                    const pb = document.body.scrollTop;
-                                    document.body.scrollBy({ top: dy, left: 0, behavior: 'instant' });
-                                    if (document.body.scrollTop === pb) document.body.scrollTop = pb + dy;
-                                    if (document.body.scrollTop !== pb) afterWin = document.body.scrollTop;
-                                }
-                                if (root) root.style.scrollBehavior = prevBehavior;
-                                return (afterWin !== prevWin) || (dy < 0 && prevWin <= 0);
-                            }""",
-                            [cx, cy, dy],
-                        )
+                                el = el.parentElement;
+                            }
+                            const root = document.documentElement;
+                            const prevBehavior = root ? root.style.scrollBehavior : '';
+                            if (root) root.style.scrollBehavior = 'auto';
+                            const se = document.scrollingElement || document.documentElement || document.body;
+                            const prevWin = window.scrollY || window.pageYOffset || (se ? se.scrollTop : 0) || 0;
+                            window.scrollBy({ top: dy, left: 0, behavior: 'instant' });
+                            let afterWin = window.scrollY || window.pageYOffset || (se ? se.scrollTop : 0) || 0;
+                            if (afterWin === prevWin && se) {
+                                se.scrollTop = prevWin + dy;
+                                afterWin = se.scrollTop;
+                            }
+                            if (afterWin === prevWin && document.body) {
+                                const pb = document.body.scrollTop;
+                                document.body.scrollBy({ top: dy, left: 0, behavior: 'instant' });
+                                if (document.body.scrollTop === pb) document.body.scrollTop = pb + dy;
+                                if (document.body.scrollTop !== pb) afterWin = document.body.scrollTop;
+                            }
+                            if (root) root.style.scrollBehavior = prevBehavior;
+                            return (afterWin !== prevWin) || (dy < 0 && prevWin <= 0);
+                        }""",
+                        [cx, cy, dy],
+                        timeout=0.4,
+                        default=False,
                     )
-                except Exception:
-                    scrolled = False
+                )
                 if not scrolled:
                     try:
-                        await self.page.mouse.move(cx, cy)
-                        await self.page.mouse.wheel(0, float(dy))
+                        await asyncio.wait_for(self.page.mouse.move(cx, cy), timeout=0.2)
+                        await asyncio.wait_for(self.page.mouse.wheel(0, float(dy)), timeout=0.4)
                     except Exception:
                         pass
                 if self.screencast_queue is not None:
