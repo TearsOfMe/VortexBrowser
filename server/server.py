@@ -4974,7 +4974,8 @@ class AmigaClientSession:
                 self._video_eval_in_flight = True
                 target_page = self.page
                 eval_gen = self._tab_generation
-                async def _eval_video(tp=target_page, eg=eval_gen):
+                is_vid_site = is_video_site
+                async def _eval_video(tp=target_page, eg=eval_gen, vs=is_vid_site):
                     try:
                         if (
                             not tp
@@ -4984,14 +4985,28 @@ class AmigaClientSession:
                             or self.page is not tp
                         ):
                             return
-                        check_js = """() => {
+                        check_js = """(isVideoSite) => {
                             try {
+                                const vw = window.innerWidth || 1280;
+                                const vh = window.innerHeight || 720;
                                 const checkRoot = (root) => {
                                     if (!root || !root.querySelectorAll) return false;
                                     for (const v of root.querySelectorAll('video')) {
                                         if (!v.paused && !v.ended && v.readyState >= 2) {
                                             const r = v.getBoundingClientRect ? v.getBoundingClientRect() : null;
-                                            if (!r || (r.width >= 32 && r.height >= 32)) return true;
+                                            if (!r) {
+                                                if (isVideoSite) return true;
+                                                continue;
+                                            }
+                                            if (isVideoSite) {
+                                                if (r.width >= 32 && r.height >= 32) return true;
+                                            } else {
+                                                const visible = (r.bottom > 0 && r.top < vh && r.right > 0 && r.left < vw);
+                                                const hasAudio = (!v.muted && v.volume > 0);
+                                                if (visible && ((hasAudio && r.width >= 200 && r.height >= 120) || (r.width >= 640 && r.height >= 360))) {
+                                                    return true;
+                                                }
+                                            }
                                         }
                                     }
                                     for (const el of root.querySelectorAll('*')) {
@@ -5009,7 +5024,8 @@ class AmigaClientSession:
                             return false;
                         }"""
                         is_playing = False
-                        frames = list(getattr(tp, "frames", None) or [])[:6]
+                        max_frames = 6 if vs else 3
+                        frames = list(getattr(tp, "frames", None) or [])[:max_frames]
                         if not frames:
                             frames = [tp]
                         for frame in frames:
@@ -5021,7 +5037,7 @@ class AmigaClientSession:
                             ):
                                 return
                             try:
-                                res = await asyncio.wait_for(frame.evaluate(check_js), timeout=0.35)
+                                res = await asyncio.wait_for(frame.evaluate(check_js, vs), timeout=0.35)
                                 if res:
                                     is_playing = True
                                     break
