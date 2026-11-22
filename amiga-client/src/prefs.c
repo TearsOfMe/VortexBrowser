@@ -125,14 +125,15 @@ void prefs_init(VortexApp *app)
     app->prefs.search_engine        = 0; /* DuckDuckGo (Default) */
 
     /* 3. Quick Links (with icons & variable count) */
-    app->prefs.num_quick_links = 7;
-    set_quicklink_entry(&app->prefs.quick_links[0], "Amiga-News", "https://www.amiga-news.de", "amiga-news");
-    set_quicklink_entry(&app->prefs.quick_links[1], "OS4Depot",   "https://os4depot.net",      "os4depot");
-    set_quicklink_entry(&app->prefs.quick_links[2], "Amigans",    "https://www.amigans.net",   "amigans");
-    set_quicklink_entry(&app->prefs.quick_links[3], "Aminet",     "https://aminet.net",        "aminet");
-    set_quicklink_entry(&app->prefs.quick_links[4], "YouTube",    "https://www.youtube.com",   "youtube");
-    set_quicklink_entry(&app->prefs.quick_links[5], "Twitch",     "https://m.twitch.tv",       "twitch");
-    set_quicklink_entry(&app->prefs.quick_links[6], "Wikipedia",  "https://de.wikipedia.org",  "wikipedia");
+    app->prefs.num_quick_links = 8;
+    set_quicklink_entry(&app->prefs.quick_links[0], "OS4Welt",    "https://os4welt.de",        "globe");
+    set_quicklink_entry(&app->prefs.quick_links[1], "Amiga-News", "https://www.amiga-news.de", "amiga-news");
+    set_quicklink_entry(&app->prefs.quick_links[2], "OS4Depot",   "https://os4depot.net",      "os4depot");
+    set_quicklink_entry(&app->prefs.quick_links[3], "Amigans",    "https://www.amigans.net",   "amigans");
+    set_quicklink_entry(&app->prefs.quick_links[4], "Aminet",     "https://aminet.net",        "aminet");
+    set_quicklink_entry(&app->prefs.quick_links[5], "YouTube",    "https://www.youtube.com",   "youtube");
+    set_quicklink_entry(&app->prefs.quick_links[6], "Twitch",     "https://m.twitch.tv",       "twitch");
+    set_quicklink_entry(&app->prefs.quick_links[7], "Wikipedia",  "https://de.wikipedia.org",  "wikipedia");
 }
 
 static BOOL load_from_file(VortexApp *app, const char *path)
