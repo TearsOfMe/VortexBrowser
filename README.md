@@ -129,9 +129,16 @@ docker compose -f docker-compose.macos.yml up -d
 ```
 
 #### 4. Client auf AmigaOS 4.1 starten
-1. Archiv `VortexBrowser-0.99-RC5-AmigaOS4.lha` auf dem Amiga entpacken (z. B. nach `Work:Internet/VortexBrowser`).
+1. Archiv `VortexBrowser-1.0-AmigaOS4.lha` auf dem Amiga entpacken (z. B. nach `Work:Internet/VortexBrowser`).
 2. Doppelklick auf das `VortexBrowser`-Icon.
 3. Server-IP eintragen (oder `Amiga+1` drücken) und auf **Verbinden** klicken.
+
+#### Hinweis / Troubleshooting (Rustwright-CDP-Timeout)
+Falls beim Klicken/Navigieren ein `RUSTWRIGHT TIMEOUT DIAGNOSTIC`-Hänger auftritt, lässt sich Rustwright ohne Code-Änderung deaktivieren und auf Standard-Playwright umschalten:
+```bash
+VORTEX_DISABLE_RUSTWRIGHT=1 ./run_server.sh
+# oder direkt: python server.py --no-rustwright
+```
 
 ---
 ---
@@ -280,6 +287,13 @@ docker compose -f docker-compose.macos.yml up -d
 ```
 
 #### 4. Starting the Client on AmigaOS 4.1
-1. Unpack `VortexBrowser-0.99-RC5-AmigaOS4.lha` on your Amiga (e.g. into `Work:Internet/VortexBrowser`).
+1. Unpack `VortexBrowser-1.0-AmigaOS4.lha` on your Amiga (e.g. into `Work:Internet/VortexBrowser`).
 2. Double-click the `VortexBrowser` icon.
 3. Enter your Linux/Docker server IP (or press `Amiga+1`) and click **Connect**.
+
+#### Troubleshooting (Rustwright CDP Timeout)
+If clicking/navigating triggers a `RUSTWRIGHT TIMEOUT DIAGNOSTIC` freeze on your system, you can disable Rustwright and fall back to standard Playwright without editing any code:
+```bash
+VORTEX_DISABLE_RUSTWRIGHT=1 ./run_server.sh
+# or directly: python server.py --no-rustwright
+```

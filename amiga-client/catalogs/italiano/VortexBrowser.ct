@@ -561,7 +561,7 @@ MSG_ABOUT_ALTIVEC_NO
 Base scalare (Sicuro per X5000/A1222+/Sam460/G3)
 ;
 MSG_ABOUT_SEC_SERVER
-VortexBrowser per AmigaOS 4\nVersione 0.99 RC5\n\n=== INFORMAZIONI SERVER ===\nIndirizzo server: %s:%u\nStato connessione: %s\nMotore server: Chromium (Streaming Linux Headless)\n\n
+VortexBrowser per AmigaOS 4\nVersione 1.0\n\n=== INFORMAZIONI SERVER ===\nIndirizzo server: %s:%u\nStato connessione: %s\nMotore server: Chromium (Streaming Linux Headless)\n\n
 ;
 MSG_ABOUT_SEC_GRAPHICS
 === RISOLUZIONE E GRAFICA ===\nSchermo: %ux%u (%u bit, %s)\nFinestra: %ux%u (Pos: %d,%d)\nViewport browser: %ux%u px (Auto-Sync 1:1)\nFlusso server: %ux%u (%s)\nFotogrammi decodificati: %u\nLingua attiva: %s\n\n

@@ -2518,6 +2518,7 @@ class AmigaClientSession:
         self._cdp_lock = asyncio.Lock()
         self._switching_tab: bool = False
         self._tab_generation: int = 0
+        self._pending_ack_tasks: int = 0
         self.last_audio_time: float = 0.0
         self._encode_executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=1,
@@ -2708,13 +2709,19 @@ class AmigaClientSession:
         if not self.running:
             return False
         async with self.write_lock:
+            if not self.running:
+                return False
             try:
                 self.writer.write(data)
-                await self.writer.drain()
+                await asyncio.wait_for(self.writer.drain(), timeout=10.0)
                 return True
             except Exception as exc:
                 logger.warning("Socket write failed: %s", exc)
                 self.running = False
+                try:
+                    self.writer.close()
+                except Exception:
+                    pass
                 return False
 
     def _send_nav_update(self, url: str, tab_idx: int = -1, title: str = "") -> None:
@@ -3745,21 +3752,32 @@ class AmigaClientSession:
 
     def _ack_screencast_frame(self, session_id: Optional[int]) -> None:
         cdp_ref = self.cdp
-        if session_id is None or cdp_ref is None:
+        if session_id is None or cdp_ref is None or not self.running:
             return
+        if self._pending_ack_tasks >= 8:
+            return
+
+        self._pending_ack_tasks += 1
 
         async def _send_ack() -> None:
             try:
-                await cdp_ref.send("Page.screencastFrameAck", {"sessionId": session_id})
+                await asyncio.wait_for(
+                    cdp_ref.send("Page.screencastFrameAck", {"sessionId": session_id}),
+                    timeout=1.5,
+                )
             except Exception:
                 pass
+
+        def _on_ack_done(task: asyncio.Task) -> None:
+            self.background_tasks.discard(task)
+            self._pending_ack_tasks = max(0, self._pending_ack_tasks - 1)
 
         try:
             t = asyncio.create_task(_send_ack())
             self.background_tasks.add(t)
-            t.add_done_callback(self.background_tasks.discard)
+            t.add_done_callback(_on_ack_done)
         except Exception:
-            pass
+            self._pending_ack_tasks = max(0, self._pending_ack_tasks - 1)
 
     async def _start_screencast(self) -> bool:
         """Start CDP Page.screencast — push-based frame delivery with 2-frame backpressure."""
@@ -7504,14 +7522,20 @@ async def run_server(args: argparse.Namespace) -> None:
             logger.info("Browser extensions (uBlock Origin, h264ify): DISABLED as requested")
             launch_args.append("--disable-extensions")
 
+    disable_rustwright = getattr(args, "no_rustwright", False) or (
+        os.environ.get("VORTEX_DISABLE_RUSTWRIGHT", "").strip().lower() in ("1", "true", "yes")
+    )
     use_rustwright = (
         _HAS_RUSTWRIGHT
         and _rustwright_async is not None
         and engine == "chromium"
+        and not disable_rustwright
     )
     pw_factory = _rustwright_async if use_rustwright else _playwright_async
     if use_rustwright:
         logger.info("Browser Automation Core: Rustwright (native Rust PyO3 + DirectCDP)")
+    elif disable_rustwright and engine == "chromium":
+        logger.info("Browser Automation Core: Playwright (chromium; Rustwright disabled via --no-rustwright / VORTEX_DISABLE_RUSTWRIGHT)")
     else:
         logger.info("Browser Automation Core: Playwright (%s)", engine)
 
@@ -7762,6 +7786,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--disable-extensions", dest="enable_extensions", action="store_false", help="Disable all browser extensions")
     parser.add_argument("--disable-gpu", action="store_true", help="Disable GPU hardware acceleration (forces CPU software rasterization)")
     parser.add_argument("--no-cpu-governor", action="store_true", help="Disable automatic switching of CPU governor to performance during client sessions")
+    parser.add_argument(
+        "--no-rustwright",
+        dest="no_rustwright",
+        action="store_true",
+        default=os.environ.get("VORTEX_DISABLE_RUSTWRIGHT", "").strip().lower() in ("1", "true", "yes"),
+        help="Disable Rustwright and use standard Playwright for Chromium [env: VORTEX_DISABLE_RUSTWRIGHT=1]",
+    )
     parser.add_argument(
         "--locale",
         default=os.environ.get("VORTEX_LOCALE", ""),

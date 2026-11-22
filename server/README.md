@@ -94,6 +94,13 @@ docker compose -f docker-compose.macos.yml up -d
   * Integriertes uBlock Origin & h264ify Erweiterungen
   * DarkReader für automatischen Dark Mode
 
+#### Hinweis / Troubleshooting (Rustwright-CDP-Timeout)
+Falls beim Klicken/Navigieren ein `RUSTWRIGHT TIMEOUT DIAGNOSTIC`-Hänger auftritt, lässt sich Rustwright ohne Code-Änderung deaktivieren (Fallback auf Standard-Playwright):
+```bash
+VORTEX_DISABLE_RUSTWRIGHT=1 ./run_server.sh
+# oder direkt: python server.py --no-rustwright
+```
+
 ---
 ---
 
@@ -182,3 +189,10 @@ docker compose -f docker-compose.macos.yml up -d
 * **Integrated Ad-Blocking & Content Enhancements**:
   * Built-in uBlock Origin & h264ify extensions
   * DarkReader dark mode engine
+
+#### Troubleshooting (Rustwright CDP Timeout)
+If clicking/navigating triggers a `RUSTWRIGHT TIMEOUT DIAGNOSTIC` freeze on your system, you can disable Rustwright and fall back to standard Playwright without editing any code:
+```bash
+VORTEX_DISABLE_RUSTWRIGHT=1 ./run_server.sh
+# or directly: python server.py --no-rustwright
+```
