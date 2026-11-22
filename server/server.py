@@ -3051,6 +3051,7 @@ class AmigaClientSession:
         page.on("load", self._on_page_loaded)
         page.on("domcontentloaded", self._on_dom_content_loaded)
         page.on("close", self._on_page_closed)
+        page.on("crash", self._on_page_crashed)
 
     def _detach_page_listeners(self, page: Any) -> None:
         if page is None:
@@ -3062,11 +3063,79 @@ class AmigaClientSession:
             ("load", self._on_page_loaded),
             ("domcontentloaded", self._on_dom_content_loaded),
             ("close", self._on_page_closed),
+            ("crash", self._on_page_crashed),
         ):
             try:
                 page.remove_listener(ev, cb)
             except Exception:
                 pass
+
+    def _on_page_crashed(self, *args) -> None:
+        crashed_page = args[0] if args else self.page
+        crashed_url = ""
+        try:
+            crashed_url = crashed_page.url if crashed_page else ""
+        except Exception:
+            pass
+        logger.error("Browser tab crashed (%s) — recovering tab without dropping Amiga session", crashed_url or "unknown")
+        if not self.running or not self.context:
+            return
+
+        async def _recover_crashed_tab() -> None:
+            if not self.running or not self.context:
+                return
+            try:
+                idx = self.tabs.index(crashed_page) if (crashed_page and crashed_page in self.tabs) else self.active_tab_idx
+            except Exception:
+                idx = self.active_tab_idx
+            try:
+                self._detach_page_listeners(crashed_page)
+            except Exception:
+                pass
+            try:
+                new_page = await self.context.new_page()
+                try:
+                    await new_page.set_viewport_size({"width": self.width, "height": self.height})
+                except Exception:
+                    pass
+                self._setup_page_listeners(new_page)
+                await self._apply_dark_mode(new_page)
+                if 0 <= idx < len(self.tabs):
+                    self.tabs[idx] = new_page
+                else:
+                    self.tabs.append(new_page)
+                    idx = len(self.tabs) - 1
+                if crashed_page == self.page or idx == self.active_tab_idx:
+                    self._switching_tab = True
+                    self._tab_generation += 1
+                    try:
+                        await self._stop_screencast()
+                        await self._detach_cdp()
+                        self.page = new_page
+                        self.active_tab_idx = idx
+                        if self.engine == "chromium":
+                            await self._attach_direct_cdp(new_page)
+                            await self._start_screencast()
+                    finally:
+                        self._switching_tab = False
+                    try:
+                        await new_page.goto(self.portal_url, wait_until="domcontentloaded", timeout=8000)
+                    except Exception:
+                        pass
+                    self._send_progress(100, "Tab wiederhergestellt")
+                    self._send_nav_update(self.portal_url)
+                    self._trigger_full_refresh(True)
+                try:
+                    if crashed_page and not crashed_page.is_closed():
+                        await crashed_page.close()
+                except Exception:
+                    pass
+            except Exception as rec_exc:
+                logger.warning("Tab crash recovery warning: %s", rec_exc)
+
+        t = asyncio.create_task(_recover_crashed_tab())
+        self.background_tasks.add(t)
+        t.add_done_callback(self.background_tasks.discard)
 
     def _on_page_closed(self, *args) -> None:
         closed_page = args[0] if args else None
@@ -4967,13 +5036,19 @@ class AmigaClientSession:
                     self.is_video_mode = True
                     logger.info("Video playback detected (audio=%s, elem=%s, site=%s) -> Entering Video Stream mode",
                                 audio_active, self._video_element_playing, is_video_site)
-                    await self._set_screencast_quality(self.video_jpeg_quality)
+                    try:
+                        await self._set_screencast_quality(self.video_jpeg_quality)
+                    except Exception:
+                        pass
             elif self.is_video_mode:
                 # Video ended/paused; wait 3.0s of static/quiet before restoring crisp high quality (e.g. q80)
                 if (now_tick - self._last_video_state_time) >= 3.0:
                     self.is_video_mode = False
                     logger.info("Video playback ended/idle -> Restoring standard browsing mode")
-                    await self._set_screencast_quality(self.base_jpeg_quality)
+                    try:
+                        await self._set_screencast_quality(self.base_jpeg_quality)
+                    except Exception:
+                        pass
             elif (
                 self._h264_encoder is not None
                 and self.stream_mode != "h264"
@@ -4991,7 +5066,11 @@ class AmigaClientSession:
                 idle_ticks = 0
 
             prev_hash = self.last_frame_hash
-            await self._capture_and_send_frame(force=forced)
+            try:
+                await self._capture_and_send_frame(force=forced)
+            except Exception as frame_exc:
+                logger.debug("Frame capture warning (session kept alive): %s", frame_exc)
+                await asyncio.sleep(0.05)
 
             # A frame was actually sent if the content hash changed
             if self.last_frame_hash != prev_hash:
@@ -7733,7 +7812,7 @@ async def run_server(args: argparse.Namespace) -> None:
         # On Atom / Celeron 4-core chips, dedicate 2 threads to raster and preserve 2 threads
         # for Python asyncio loop, screencast frame grab, and SIMD compression.
         is_low_mem = bool(hw.get("is_low_power") or hw.get("is_rpi"))
-        js_heap_mb = 256 if is_low_mem else 512
+        js_heap_mb = 512 if is_low_mem else 1536
         renderer_limit = 2 if is_low_mem else 4
 
         if hw.get("is_low_power") or hw.get("cpu_cores", 4) <= 4:
@@ -7742,8 +7821,8 @@ async def run_server(args: argparse.Namespace) -> None:
         else:
             raster_threads = 4
 
-        launch_args = _merge_chromium_feature_flags([
-            "--ozone-platform=headless",
+        ozone_flags = ["--ozone-platform=headless"] if platform.system() == "Linux" else []
+        launch_args = _merge_chromium_feature_flags(ozone_flags + [
             f"--lang={server_locale}",
             "--remote-debugging-port=9222",
             "--remote-allow-origins=*",
