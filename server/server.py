@@ -5563,15 +5563,13 @@ class AmigaClientSession:
                         dist = ((cx - self._mouse_down_x) ** 2 + (cy - self._mouse_down_y) ** 2) ** 0.5
                         if dist > 4:
                             self._click_count = 1
-                            try:
-                                await self.page.evaluate("([x, y]) => window.__vortex_selection && window.__vortex_selection.update(x, y)", [cx, cy])
-                            except Exception:
-                                pass
-                        await self.page.mouse.move(cx, cy)
+                            await self._safe_eval("([x, y]) => window.__vortex_selection && window.__vortex_selection.update(x, y)", [cx, cy], timeout=0.25)
+                        await asyncio.wait_for(self.page.mouse.move(cx, cy), timeout=0.2)
                         self._trigger_full_refresh(False)
                     else:
-                        await self.page.mouse.move(cx, cy)
+                        await asyncio.wait_for(self.page.mouse.move(cx, cy), timeout=0.15)
                 except Exception:
+                    pass
                     pass
 
                 now = time.monotonic()
@@ -7842,6 +7840,7 @@ async def run_server(args: argparse.Namespace) -> None:
             "--enable-low-res-tiling",
             f"--js-flags=--max-old-space-size={js_heap_mb}",
             f"--renderer-process-limit={renderer_limit}",
+            "--process-per-site",
             "--disk-cache-size=67108864",
             "--media-cache-size=33554432",
             "--disable-features=Translate,OptimizationHints,MediaRouter,DialMediaRouteProvider",
