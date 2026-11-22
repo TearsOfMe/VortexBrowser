@@ -326,9 +326,10 @@ int main(int argc, char **argv)
         }
     }
 
-    /* Sanitize start_url if corrupted with an internal command */
-    if (g_app.prefs.start_url[0] == '@' || g_app.prefs.start_url[0] == '\0') {
-        strncpy(g_app.prefs.start_url, "https://www.amiga-news.de", sizeof(g_app.prefs.start_url) - 1);
+    /* Sanitize start_url if empty or corrupted with a non-@HOME internal command */
+    if (g_app.prefs.start_url[0] == '\0' ||
+        (g_app.prefs.start_url[0] == '@' && strcmp(g_app.prefs.start_url, "@HOME") != 0)) {
+        strncpy(g_app.prefs.start_url, "@HOME", sizeof(g_app.prefs.start_url) - 1);
         g_app.prefs.start_url[sizeof(g_app.prefs.start_url) - 1] = '\0';
     }
     if (g_app.current_url[0] == '\0' || g_app.current_url[0] == '@') {

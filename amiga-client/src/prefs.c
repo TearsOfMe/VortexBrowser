@@ -111,7 +111,7 @@ void prefs_init(VortexApp *app)
     app->prefs.dl_win_y                     = 0;
     app->prefs.dl_win_w                     = 0;
     app->prefs.dl_win_h                     = 0;
-    strncpy(app->prefs.start_url, "https://www.amiga-news.de", sizeof(app->prefs.start_url) - 1);
+    strncpy(app->prefs.start_url, "@HOME", sizeof(app->prefs.start_url) - 1);
     app->prefs.start_url[sizeof(app->prefs.start_url) - 1] = '\0';
     app->prefs.save_last_url                = TRUE; /* Default: ON (letzte Seite speichern) */
 
