@@ -95,6 +95,17 @@ Um die ToolTypes zu bearbeiten:
 
 ---
 
+### Hinweis / Troubleshooting
+
+* **Rustwright-CDP-Timeout (`RUSTWRIGHT TIMEOUT DIAGNOSTIC`):** Falls beim Klicken oder Navigieren ein Hänger auftritt, lässt sich Rustwright ohne Code-Änderung deaktivieren und auf Standard-Playwright umschalten:
+  ```bash
+  VORTEX_DISABLE_RUSTWRIGHT=1 ./run_server.sh
+  # oder direkt: python server.py --no-rustwright
+  ```
+* **GPU-Treiber-Freeze unter Linux:** Sollte der Browser bei bestimmten Grafiktreibern einfrieren, hilft ein Start mit `--disable-gpu`.
+
+---
+
 ### Build & Ausführung
 
 #### 1. Nativ auf Linux-Host (PC, CachyOS, Debian/Ubuntu, Raspberry Pi)
@@ -133,13 +144,6 @@ docker compose -f docker-compose.macos.yml up -d
 1. Archiv `VortexBrowser-1.0-AmigaOS4.lha` (oder das Komplettpaket `VortexBrowser-1.0-Complete.zip`) auf dem Amiga entpacken (z. B. nach `Work:Internet/VortexBrowser`).
 2. Doppelklick auf `VortexBrowser` (Universal für alle AmigaOS-4-Systeme) bzw. `VortexBrowser-AltiVec` (für G4 / G5 / AmigaOne X1000).
 3. Server-IP eintragen (oder `Amiga+1` drücken) und auf **Verbinden** klicken.
-
-#### Hinweis / Troubleshooting (Rustwright-CDP-Timeout)
-Falls beim Klicken/Navigieren ein `RUSTWRIGHT TIMEOUT DIAGNOSTIC`-Hänger auftritt, lässt sich Rustwright ohne Code-Änderung deaktivieren und auf Standard-Playwright umschalten:
-```bash
-VORTEX_DISABLE_RUSTWRIGHT=1 ./run_server.sh
-# oder direkt: python server.py --no-rustwright
-```
 
 ---
 ---
@@ -234,6 +238,17 @@ VortexBrowser supports configuration via standard AmigaOS 4 **ToolTypes** in `.i
 
 ---
 
+### Troubleshooting
+
+* **Rustwright CDP Timeout (`RUSTWRIGHT TIMEOUT DIAGNOSTIC`):** If clicking or navigating triggers a freeze on your system, disable Rustwright and fall back to standard Playwright without editing any code:
+  ```bash
+  VORTEX_DISABLE_RUSTWRIGHT=1 ./run_server.sh
+  # or directly: python server.py --no-rustwright
+  ```
+* **Linux GPU Driver Freeze:** If Chromium freezes on certain GPU drivers, try launching with `--disable-gpu`.
+
+---
+
 ### Build & Run Instructions
 
 #### 1. Native on Linux Host (PC, CachyOS, Debian/Ubuntu, Raspberry Pi)
@@ -272,10 +287,3 @@ docker compose -f docker-compose.macos.yml up -d
 1. Unpack `VortexBrowser-1.0-AmigaOS4.lha` (or the full package `VortexBrowser-1.0-Complete.zip`) on your Amiga (e.g. into `Work:Internet/VortexBrowser`).
 2. Double-click `VortexBrowser` (universal for all AmigaOS 4 machines) or `VortexBrowser-AltiVec` (for G4 / G5 / AmigaOne X1000).
 3. Enter your Linux/Docker server IP (or press `Amiga+1`) and click **Connect**.
-
-#### Troubleshooting (Rustwright CDP Timeout)
-If clicking/navigating triggers a `RUSTWRIGHT TIMEOUT DIAGNOSTIC` freeze on your system, you can disable Rustwright and fall back to standard Playwright without editing any code:
-```bash
-VORTEX_DISABLE_RUSTWRIGHT=1 ./run_server.sh
-# or directly: python server.py --no-rustwright
-```
