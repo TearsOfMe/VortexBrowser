@@ -982,6 +982,16 @@ function playAmigaSynth() {
         <div class="card-action"><a class="btn-action" href="https://www.amigafuture.de">&Ouml;ffnen</a></div>
       </div>
     </div>
+    <div class="card">
+      <div class="card-top card-top-teal"></div>
+      <div class="card-body">
+        <div>
+          <h3>OS4Welt.de <span class="badge-lang">DE</span></h3>
+          <p>Deutschsprachiges AmigaOS-4-Forum und Community-Portal f&uuml;r News, Treiber, Hardware und Hilfe.</p>
+        </div>
+        <div class="card-action"><a class="btn-action" href="https://os4welt.de">&Ouml;ffnen</a></div>
+      </div>
+    </div>
   </div>
 
   <div class="section-head">
@@ -1126,8 +1136,8 @@ function playAmigaSynth() {
   </div>
 
   <div class="section-head">
-    <h2>Media, Streaming &amp; System-Tests</h2>
-    <span class="lang-tag">TOOLS</span>
+    <h2>Media &amp; Streaming</h2>
+    <span class="lang-tag">VIDEO / AUDIO</span>
   </div>
   <div class="grid">
     <div class="card">
@@ -1156,27 +1166,6 @@ function playAmigaSynth() {
         </div>
       </div>
     </div>
-    <div class="card">
-      <div class="card-top card-top-teal"></div>
-      <div class="card-body">
-        <div>
-          <h3>AHI Sound &amp; Klick-Test</h3>
-          <p>Testet AHI 16-Bit Stereo-Ausgabe &uuml;ber PipeWire und direkte Dirty-Slice Bildaktualisierung.</p>
-        </div>
-        <div class="card-action" style="flex-direction: column; align-items: flex-end;">
-          <button class="btn-action" id="btn-test" onclick="window._clicks=(window._clicks||0)+1; playAmigaSynth(); document.getElementById('click-status').textContent='Ton + Klick OK! ('+window._clicks+'x)';">Ton &amp; Klick-Test</button>
-          <div id="click-status">Bereit f&uuml;r AHI-Sound.</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="dl-strip">
-    <div>
-      <h3>ASL Download &amp; Kontextmen&uuml;-Test (Rechtsklick auf den Button!)</h3>
-      <p>Rechte Maustaste auf den Button &rarr; &bdquo;Verkn&uuml;pftes Ziel speichern unter...&ldquo; &ouml;ffnet den nativen AmigaOS 4 ASL FileRequester.</p>
-    </div>
-    <a class="btn-amber" id="btn-download" href="/download/VortexBrowse_TestPackage.lha">Test-Paket herunterladen (.lha)</a>
   </div>
 </body>
 </html>
