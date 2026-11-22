@@ -6652,11 +6652,7 @@ class AmigaClientSession:
                             target = f"https://duckduckgo.com/?q={quote_plus(target)}"
                         else:
                             target = "https://" + target
-                    await self.page.goto(target, wait_until="domcontentloaded", timeout=20000)
-                    try:
-                        await self.page.wait_for_load_state("load", timeout=2500)
-                    except Exception:
-                        pass
+                    await self.page.goto(target, wait_until="commit", timeout=15000)
             except Exception as exc:
                 logger.warning("Navigation warning for '%s': %s", cmd, exc)
             finally:
