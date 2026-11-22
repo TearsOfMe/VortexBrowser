@@ -2783,6 +2783,7 @@ class AmigaClientSession:
         self.screencast_active: bool = False
         self._screencast_handler = None
         self.last_screencast_frame_time: float = 0.0
+        self._video_eval_in_flight: bool = False
 
         # Mouse click tracking for gesture stabilization & upload trigger
         self._mouse_down_x: int = -1
@@ -4048,6 +4049,15 @@ class AmigaClientSession:
             finally:
                 self._closed_event.set()
 
+    async def _safe_eval(self, script: str, arg: Any = None, timeout: float = 0.6, default: Any = None) -> Any:
+        if not self.page or not self.running:
+            return default
+        try:
+            coro = self.page.evaluate(script) if arg is None else self.page.evaluate(script, arg)
+            return await asyncio.wait_for(coro, timeout=timeout)
+        except Exception:
+            return default
+
     def _safe_dispatch_resize(self) -> None:
         if not self.page or not self.running:
             return
@@ -4958,9 +4968,10 @@ class AmigaClientSession:
             cur_url = (self.page.url or "").lower() if self.page else ""
             is_video_site = _is_video_platform_url(cur_url)
 
-            # 3. Query HTML5 <video> element playback state asynchronously every 0.6 seconds
-            if self.page and not self._switching_tab and (now_tick - self._last_video_eval_time) >= 0.6:
+            # 3. Query HTML5 <video> element playback state asynchronously every 0.6 seconds (non-overlapping)
+            if self.page and not self._switching_tab and not self._video_eval_in_flight and (now_tick - self._last_video_eval_time) >= 0.6:
                 self._last_video_eval_time = now_tick
+                self._video_eval_in_flight = True
                 target_page = self.page
                 eval_gen = self._tab_generation
                 async def _eval_video(tp=target_page, eg=eval_gen):
@@ -5025,6 +5036,8 @@ class AmigaClientSession:
                             self._video_element_playing = bool(is_playing)
                     except Exception:
                         pass
+                    finally:
+                        self._video_eval_in_flight = False
                 t_vid = asyncio.create_task(_eval_video())
                 self.background_tasks.add(t_vid)
                 t_vid.add_done_callback(self.background_tasks.discard)
@@ -5372,11 +5385,11 @@ class AmigaClientSession:
 
                 if btn == "left" and cx >= (self.width - 20):
                     ratio = float(cy) / float(max(1, self.height))
-                    await self.page.evaluate(
+                    await self._safe_eval(
                         f"window.scrollTo(0, Math.max(0, (document.documentElement.scrollHeight - window.innerHeight) * {ratio:.4f}))"
                     )
                 else:
-                    await self.page.mouse.click(cx, cy, button=btn)
+                    await asyncio.wait_for(self.page.mouse.click(cx, cy, button=btn), timeout=1.5)
                     if btn == "left":
                         self._schedule_storage_save(delay=3.5)
                 self._trigger_full_refresh(True)
@@ -5413,17 +5426,14 @@ class AmigaClientSession:
 
                 if btn == "left" and cx >= (self.width - 20):
                     ratio = float(cy) / float(max(1, self.height))
-                    await self.page.evaluate(
+                    await self._safe_eval(
                         f"window.scrollTo(0, Math.max(0, (document.documentElement.scrollHeight - window.innerHeight) * {ratio:.4f}))"
                     )
                 else:
                     if btn == "left":
-                        try:
-                            await self.page.evaluate("([x, y]) => window.__vortex_selection && window.__vortex_selection.start(x, y)", [cx, cy])
-                        except Exception:
-                            pass
-                    await self.page.mouse.move(cx, cy)
-                    await self.page.mouse.down(button=btn, click_count=self._click_count)
+                        await self._safe_eval("([x, y]) => window.__vortex_selection && window.__vortex_selection.start(x, y)", [cx, cy], timeout=0.4)
+                    await asyncio.wait_for(self.page.mouse.move(cx, cy), timeout=1.0)
+                    await asyncio.wait_for(self.page.mouse.down(button=btn, click_count=self._click_count), timeout=1.0)
                 self._trigger_full_refresh(True)
                 self._schedule_delayed_frames()
 
@@ -5443,19 +5453,16 @@ class AmigaClientSession:
                     dragged = False
                     sel_text = ""
                     if btn == "left":
-                        try:
-                            res = await self.page.evaluate("([x, y]) => window.__vortex_selection ? window.__vortex_selection.finish(x, y) : {dragged: false, text: ''}", [cx, cy])
-                            if res and isinstance(res, dict):
-                                dragged = bool(res.get("dragged", False))
-                                sel_text = res.get("text", "") or ""
-                        except Exception:
-                            pass
+                        res = await self._safe_eval("([x, y]) => window.__vortex_selection ? window.__vortex_selection.finish(x, y) : {dragged: false, text: ''}", [cx, cy], timeout=0.4)
+                        if res and isinstance(res, dict):
+                            dragged = bool(res.get("dragged", False))
+                            sel_text = res.get("text", "") or ""
 
                     # If user dragged, release with click_count=1 to finalize the freeform selection
                     if dist > 4 or dragged:
                         self._click_count = 1
-                    await self.page.mouse.move(cx, cy)
-                    await self.page.mouse.up(button=btn, click_count=self._click_count)
+                    await asyncio.wait_for(self.page.mouse.move(cx, cy), timeout=1.0)
+                    await asyncio.wait_for(self.page.mouse.up(button=btn, click_count=self._click_count), timeout=1.0)
 
                     self._mouse_down_btn = ""
 
@@ -5692,22 +5699,24 @@ class AmigaClientSession:
         if not self.page:
             return False
         try:
-            is_editing = await self.page.evaluate(
+            is_editing = await self._safe_eval(
                 """() => {
                     const el = document.activeElement;
                     if (!el) return false;
                     const tag = (el.tagName || '').toUpperCase();
                     return (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable);
-                }"""
+                }""",
+                timeout=0.5,
+                default=False,
             )
             if is_editing:
                 return False
             if absolute == "top":
-                await self.page.evaluate("window.scrollTo({ top: 0, left: 0, behavior: 'instant' })")
+                await self._safe_eval("window.scrollTo({ top: 0, left: 0, behavior: 'instant' })", timeout=0.5)
             elif absolute == "bottom":
-                await self.page.evaluate("window.scrollTo({ top: document.documentElement.scrollHeight, left: 0, behavior: 'instant' })")
+                await self._safe_eval("window.scrollTo({ top: document.documentElement.scrollHeight, left: 0, behavior: 'instant' })", timeout=0.5)
             else:
-                await self.page.evaluate(f"window.scrollBy({{ top: {int(dy)}, left: 0, behavior: 'instant' }})")
+                await self._safe_eval(f"window.scrollBy({{ top: {int(dy)}, left: 0, behavior: 'instant' }})", timeout=0.5)
             return True
         except Exception:
             return False
