@@ -2,7 +2,9 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONTAINER_ID="${1:-7f239cb96d8c259d2d5489d6df3a79b3ef6b736346acb46960f3f928c40f17fd}"
+DOCKER_IMAGE="${VORTEX_OS4_DOCKER_IMAGE:-walkero/amigagccondocker:os4-gcc15-3.7.0}"
+HOST_UID="$(id -u)"
+HOST_GID="$(id -g)"
 
 echo "=== [1/3] Building Universal Native SIMD Pixel Converter (fast_pixconv.so) ==="
 if [ -f "${SCRIPT_DIR}/server/fast_pixconv.c" ]; then
@@ -15,19 +17,21 @@ if [ -f "${SCRIPT_DIR}/server/fast_pixconv.c" ]; then
         -o "${SCRIPT_DIR}/server/fast_pixconv.so" 2>/dev/null || true
 fi
 
-echo "=== [2/3] Cross-Compiling AmigaOS 4.1 PowerPC Client (Universal + AltiVec) via Docker ==="
-docker exec "${CONTAINER_ID}" bash -c "mkdir -p /tmp/vb_build/common /tmp/vb_build/amiga-client /tmp/vb_build/sdk_va"
-docker cp "${SCRIPT_DIR}/common/." "${CONTAINER_ID}:/tmp/vb_build/common/"
-docker cp "${SCRIPT_DIR}/amiga-client/." "${CONTAINER_ID}:/tmp/vb_build/amiga-client/"
-docker cp "${SCRIPT_DIR}/sdk_va/." "${CONTAINER_ID}:/tmp/vb_build/sdk_va/"
+echo "=== [2/3] Cross-Compiling AmigaOS 4.1 PowerPC Client (Universal + AltiVec) via Docker (${DOCKER_IMAGE}) ==="
 echo "--- Compiling Universal (Dynamic CPU Detection) and Pure AltiVec builds ---"
-docker exec "${CONTAINER_ID}" bash -c "cd /tmp/vb_build/amiga-client && make clean && make"
-
-docker cp "${CONTAINER_ID}:/tmp/vb_build/amiga-client/VortexBrowser" "${SCRIPT_DIR}/amiga-client/VortexBrowser"
-docker cp "${CONTAINER_ID}:/tmp/vb_build/amiga-client/VortexBrowser.stripped" "${SCRIPT_DIR}/amiga-client/VortexBrowser.stripped"
-docker cp "${CONTAINER_ID}:/tmp/vb_build/amiga-client/VortexBrowser-AltiVec" "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec"
-docker cp "${CONTAINER_ID}:/tmp/vb_build/amiga-client/VortexBrowser-AltiVec.stripped" "${SCRIPT_DIR}/amiga-client/VortexBrowser-AltiVec.stripped"
-docker cp "${CONTAINER_ID}:/tmp/vb_build/amiga-client/catalogs/." "${SCRIPT_DIR}/amiga-client/catalogs/"
+docker run --rm \
+    -v "${SCRIPT_DIR}:/src:ro" \
+    -v "${SCRIPT_DIR}/amiga-client:/out_amiga" \
+    "${DOCKER_IMAGE}" bash -c "
+        set -e
+        mkdir -p /tmp/vb_build
+        cp -r /src/common /src/amiga-client /src/sdk_va /tmp/vb_build/
+        cd /tmp/vb_build/amiga-client
+        make clean && make
+        cp -f VortexBrowser VortexBrowser.stripped VortexBrowser-AltiVec VortexBrowser-AltiVec.stripped /out_amiga/
+        cp -rf catalogs/. /out_amiga/catalogs/
+        chown -R ${HOST_UID}:${HOST_GID} /out_amiga/VortexBrowser /out_amiga/VortexBrowser.stripped /out_amiga/VortexBrowser-AltiVec /out_amiga/VortexBrowser-AltiVec.stripped /out_amiga/catalogs
+    "
 cp -f "${SCRIPT_DIR}/amiga-client/VortexBrowser" "${SCRIPT_DIR}/amiga-client/VortexBrowse"
 cp -f "${SCRIPT_DIR}/amiga-client/VortexBrowser.stripped" "${SCRIPT_DIR}/amiga-client/VortexBrowse.stripped"
 
