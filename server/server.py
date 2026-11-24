@@ -2412,6 +2412,140 @@ def _sanitize_origin_storage(item: Any) -> Optional[Tuple[str, List[Dict[str, st
     return orig, ls_out
 
 
+def _cookie_dedup_key(cookie: Dict[str, Any]) -> Optional[Tuple[str, str, str]]:
+    """Returns canonical (name, bare_domain, path) key for host-vs-dot cookie collision detection."""
+    if not isinstance(cookie, dict):
+        return None
+    name = cookie.get("name")
+    dom = cookie.get("domain")
+    path = cookie.get("path") or "/"
+    if not name or not dom:
+        return None
+    return (str(name), str(dom).lstrip(".").lower(), str(path))
+
+
+def _pick_winning_cookie(items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Selects the surviving cookie when host-only and wildcard-dot variants collide."""
+    all_positive = all(
+        isinstance(it.get("expires"), (int, float)) and float(it.get("expires", -1)) > 0
+        for it in items
+    )
+    if all_positive:
+        return max(
+            items,
+            key=lambda it: (
+                float(it.get("expires", 0)),
+                1 if str(it.get("domain", "")).startswith(".") else 0,
+            ),
+        )
+    return max(
+        items,
+        key=lambda it: (
+            1 if str(it.get("domain", "")).startswith(".") else 0,
+            float(it.get("expires", -1) or -1),
+        ),
+    )
+
+
+def _deduplicate_cookie_list(cookies: Any) -> List[Dict[str, Any]]:
+    """Removes colliding host-only vs .domain duplicates while leaving unrelated cookies untouched."""
+    if not isinstance(cookies, list):
+        return []
+    grouped: Dict[Tuple[str, str, str], List[Dict[str, Any]]] = {}
+    for c in cookies:
+        key = _cookie_dedup_key(c)
+        if key is not None:
+            grouped.setdefault(key, []).append(c)
+
+    winners: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
+    for key, items in grouped.items():
+        if len(items) < 2:
+            continue
+        base_dom = key[1]
+        has_bare = any(str(it.get("domain", "")).lower() == base_dom for it in items)
+        has_dot = any(str(it.get("domain", "")).startswith(".") for it in items)
+        if has_bare and has_dot:
+            winners[key] = _pick_winning_cookie(items)
+
+    if not winners:
+        return [c for c in cookies if isinstance(c, dict)]
+
+    emitted_keys: Set[Tuple[str, str, str]] = set()
+    cleaned: List[Dict[str, Any]] = []
+    for c in cookies:
+        key = _cookie_dedup_key(c)
+        if key is None:
+            continue
+        if key in winners:
+            if key not in emitted_keys:
+                cleaned.append(winners[key])
+                emitted_keys.add(key)
+        else:
+            cleaned.append(c)
+    return cleaned
+
+
+def _build_cdp_cookie_param(raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Builds a CDP Storage.setCookies payload preserving leading-dot domains and partitionKey."""
+    name = raw.get("name")
+    value = raw.get("value")
+    domain = raw.get("domain")
+    if not name or value is None or not domain:
+        return None
+    param: Dict[str, Any] = {
+        "name": str(name),
+        "value": str(value),
+        "domain": str(domain),
+        "path": str(raw.get("path") or "/"),
+        "secure": bool(raw.get("secure", False)),
+        "httpOnly": bool(raw.get("httpOnly", False)),
+    }
+    exp = raw.get("expires")
+    if isinstance(exp, (int, float)) and float(exp) > 0:
+        param["expires"] = float(exp)
+    same_site = raw.get("sameSite")
+    if same_site in ("Strict", "Lax", "None"):
+        param["sameSite"] = same_site
+    if isinstance(raw.get("partitionKey"), dict):
+        param["partitionKey"] = raw["partitionKey"]
+    return param
+
+
+async def _cdp_set_cookies(context: BrowserContext, cookies: List[Dict[str, Any]]) -> bool:
+    """Restores cookies via CDP Storage.setCookies so wildcard leading dots stay intact."""
+    params = [p for c in cookies if (p := _build_cdp_cookie_param(c)) is not None]
+    if not params:
+        return True
+    page = None
+    created_temp = False
+    cdp = None
+    try:
+        existing_pages = list(getattr(context, "pages", []) or [])
+        page = existing_pages[0] if existing_pages else await context.new_page()
+        created_temp = len(existing_pages) == 0
+        cdp = await context.new_cdp_session(page)
+        await cdp.send("Storage.setCookies", {"cookies": params})
+        return True
+    except Exception:
+        try:
+            fallback = []
+            for p in params:
+                ck = dict(p)
+                ck.pop("partitionKey", None)
+                fallback.append(ck)
+            await context.add_cookies(fallback)
+            return True
+        except Exception:
+            return False
+    finally:
+        await _safe_detach_cdp_session(cdp)
+        if created_temp and page is not None:
+            try:
+                await page.close()
+            except Exception:
+                pass
+
+
 async def export_merged_storage_state(context: BrowserContext, state_file: str) -> bool:
     """Exports cookies and sanitized localStorage cleanly without bloating IPC/disk via IndexedDB."""
     if not context:
@@ -2470,8 +2604,9 @@ async def export_merged_storage_state(context: BrowserContext, state_file: str) 
                 if k not in retained:
                     retained[k] = v
 
+        raw_cookies = new_state.get("cookies") if isinstance(new_state.get("cookies"), list) else (prev_state.get("cookies") or [])
         payload = {
-            "cookies": new_state.get("cookies") if isinstance(new_state.get("cookies"), list) else (prev_state.get("cookies") or []),
+            "cookies": _deduplicate_cookie_list(raw_cookies),
             "origins": list(retained.values()),
         }
 
@@ -2563,50 +2698,38 @@ async def recover_profile_storage_state(context: BrowserContext, state_file: str
     try:
         existing_cookies = await context.cookies()
         existing_keys = {
-            (c.get("name"), c.get("domain"), c.get("path", "/"))
+            key
             for c in existing_cookies
-            if isinstance(c, dict)
+            if (key := _cookie_dedup_key(c)) is not None
         }
     except Exception:
         existing_keys = set()
 
     now_ts = time.time()
-    to_restore = []
+    grouped_missing: Dict[Tuple[str, str, str], List[Dict[str, Any]]] = {}
     for raw in payload.get("cookies") or []:
-        if not isinstance(raw, dict):
+        norm_key = _cookie_dedup_key(raw)
+        if norm_key is None or norm_key in existing_keys:
             continue
-        name = raw.get("name")
-        value = raw.get("value")
-        domain = raw.get("domain")
-        path = raw.get("path", "/")
-        if not name or value is None or not domain:
-            continue
-        if (name, domain, path) in existing_keys:
+        if raw.get("value") is None:
             continue
         exp = raw.get("expires")
         if isinstance(exp, (int, float)) and exp > 0 and exp <= now_ts:
             continue
-        ck: Dict[str, Any] = {
-            "name": name,
-            "value": value,
-            "domain": domain,
-            "path": path,
-            "secure": bool(raw.get("secure", False)),
-            "httpOnly": bool(raw.get("httpOnly", False)),
-        }
-        if isinstance(exp, (int, float)) and exp > 0:
-            ck["expires"] = float(exp)
-        same_site = raw.get("sameSite")
-        if same_site in ("Strict", "Lax", "None"):
-            ck["sameSite"] = same_site
-        to_restore.append(ck)
+        grouped_missing.setdefault(norm_key, []).append(raw)
+
+    to_restore: List[Dict[str, Any]] = [
+        param
+        for items in grouped_missing.values()
+        if (param := _build_cdp_cookie_param(_pick_winning_cookie(items))) is not None
+    ]
 
     if to_restore:
         try:
-            await context.add_cookies(to_restore)
-            logger.info("Recovered %d missing persistent cookie(s) from %s", len(to_restore), state_file)
+            if await _cdp_set_cookies(context, to_restore):
+                logger.info("Recovered %d missing persistent cookie(s) from %s", len(to_restore), state_file)
         except Exception as exc:
-            logger.debug("recover_profile_storage_state add_cookies warning: %s", exc)
+            logger.debug("recover_profile_storage_state restore warning: %s", exc)
 
     recovery_js = _build_local_storage_recovery_script(payload.get("origins") or [])
     if recovery_js:
@@ -2615,6 +2738,59 @@ async def recover_profile_storage_state(context: BrowserContext, state_file: str
             logger.info("Installed localStorage crash-recovery fallback from %s", state_file)
         except Exception as exc:
             logger.debug("recover_profile_storage_state init script warning: %s", exc)
+
+
+async def deduplicate_context_cookies(context: BrowserContext) -> None:
+    """Remove stale host-only vs dot-domain duplicate cookies (e.g. phpBB sid mismatch causing invalid form tokens)."""
+    if not context:
+        return
+    try:
+        cookies = await context.cookies()
+    except Exception:
+        return
+    grouped: Dict[Tuple[str, str, str], List[Dict[str, Any]]] = {}
+    for c in cookies:
+        key = _cookie_dedup_key(c)
+        if key is not None:
+            grouped.setdefault(key, []).append(c)
+
+    conflicts: List[Tuple[str, str, str, Dict[str, Any]]] = []
+    for (name, base_dom, path), items in grouped.items():
+        if len(items) < 2:
+            continue
+        if not any(str(it.get("domain", "")).lower() == base_dom for it in items):
+            continue
+        if not any(str(it.get("domain", "")).startswith(".") for it in items):
+            continue
+        winner = _pick_winning_cookie(items)
+        param = _build_cdp_cookie_param(winner)
+        if param is not None:
+            conflicts.append((name, base_dom, path, param))
+
+    if not conflicts:
+        return
+
+    page = None
+    created_temp = False
+    cdp = None
+    try:
+        existing_pages = list(getattr(context, "pages", []) or [])
+        page = existing_pages[0] if existing_pages else await context.new_page()
+        created_temp = len(existing_pages) == 0
+        cdp = await context.new_cdp_session(page)
+        for name, base_dom, path, _param in conflicts:
+            await cdp.send("Network.deleteCookies", {"name": name, "domain": base_dom, "path": path})
+        await cdp.send("Storage.setCookies", {"cookies": [param for _, _, _, param in conflicts]})
+        logger.info("Deduplicated %d conflicting host/domain cookie(s)", len(conflicts))
+    except Exception as exc:
+        logger.debug("deduplicate_context_cookies warning: %s", exc)
+    finally:
+        await _safe_detach_cdp_session(cdp)
+        if created_temp and page is not None:
+            try:
+                await page.close()
+            except Exception:
+                pass
 
 
 def _detect_chromium_ua(executable_path: Optional[str]) -> Optional[str]:
@@ -2811,6 +2987,7 @@ class AmigaClientSession:
         self._popup_adopt_lock = asyncio.Lock()
         self._adopting_popups: set = set()
         self.last_upload_intercept_time: float = 0.0
+        self._server_clipboard: str = ""
 
         # Pre-allocated pixel conversion buffers (reused across frames to avoid alloc churn)
         self._argb_buf: Optional[ctypes.Array] = None
@@ -5628,6 +5805,7 @@ class AmigaClientSession:
                         except UnicodeDecodeError:
                             clip_text = clip_bytes.decode("latin-1", errors="replace")
                         logger.info("Received MSG_CLIPBOARD from Amiga (%d chars): %r", len(clip_text), clip_text[:60])
+                        self._server_clipboard = clip_text
                         if self.page:
                             inserted = False
                             if isinstance(self.cdp, DirectCDPSession) and self.cdp.connected:
@@ -5886,12 +6064,14 @@ class AmigaClientSession:
                     if btn == "left":
                         if sel_text and len(sel_text.strip()) > 0:
                             logger.info("Selected text (%d chars): %r", len(sel_text), sel_text[:60])
+                            self._server_clipboard = sel_text
                             await self.send_clipboard_to_amiga(sel_text)
                         else:
                             try:
-                                sel = await self._safe_eval(_JS_GET_DEEP_SELECTION, timeout=0.35, default="")
+                                sel = await self._safe_eval(self._JS_GET_DEEP_SELECTION, timeout=0.35, default="")
                                 if sel and len(sel.strip()) > 0:
                                     logger.info("Selected text (%d chars): %r", len(sel), sel[:60])
+                                    self._server_clipboard = sel
                                     await self.send_clipboard_to_amiga(sel)
                             except Exception:
                                 pass
@@ -6085,6 +6265,29 @@ class AmigaClientSession:
         return '';
     }"""
 
+    _JS_GET_ACTIVE_TEXT = """() => {
+        let doc = document, el = document.activeElement;
+        for (let i = 0; i < 8 && el; i++) {
+            if (el.tagName === 'IFRAME') {
+                try {
+                    const cd = el.contentDocument || (el.contentWindow && el.contentWindow.document);
+                    if (!cd) break;
+                    doc = cd;
+                    el = doc.activeElement;
+                    continue;
+                } catch (e) { break; }
+            }
+            if (el.shadowRoot && el.shadowRoot.activeElement) {
+                el = el.shadowRoot.activeElement;
+                continue;
+            }
+            break;
+        }
+        if (!el) return null;
+        if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') return el.value;
+        return el.innerText;
+    }"""
+
     _CDP_KEY_DEFS = {
         "a": ("a", "KeyA", 65),
         "c": ("c", "KeyC", 67),
@@ -6242,6 +6445,7 @@ class AmigaClientSession:
                     sel = await self._safe_eval(self._JS_GET_DEEP_SELECTION, timeout=0.35, default="")
                     if sel and len(sel) > 0:
                         logger.info("Copying selection (%d chars) to Amiga clipboard", len(sel))
+                        self._server_clipboard = sel
                         await self.send_clipboard_to_amiga(sel)
                 except Exception:
                     pass
@@ -6250,8 +6454,26 @@ class AmigaClientSession:
                     await asyncio.wait_for(self.page.keyboard.press(kcombo), timeout=1.5)
                 return
             elif text_or_url in ("Paste", "Control+v", "Control+V") or key_code == 22:
+                before_text = None
+                if self._server_clipboard:
+                    before_text = await self._safe_eval(self._JS_GET_ACTIVE_TEXT, timeout=0.25, default=None)
                 if not await self._cdp_dispatch_key("v", modifiers=2, command="paste"):
                     await asyncio.wait_for(self.page.keyboard.press("Control+v"), timeout=1.5)
+                if self._server_clipboard and before_text is not None:
+                    after_text = await self._safe_eval(self._JS_GET_ACTIVE_TEXT, timeout=0.25, default=None)
+                    if after_text == before_text:
+                        inserted = False
+                        if isinstance(self.cdp, DirectCDPSession) and self.cdp.connected:
+                            try:
+                                await asyncio.wait_for(
+                                    self.cdp.send("Input.insertText", {"text": self._server_clipboard}),
+                                    timeout=0.8,
+                                )
+                                inserted = True
+                            except Exception:
+                                inserted = False
+                        if not inserted:
+                            await asyncio.wait_for(self.page.keyboard.insert_text(self._server_clipboard), timeout=1.0)
                 return
             elif text_or_url in ("Control+a", "Control+A", "Control+z", "Control+Z", "Control+y", "Control+Y") or key_code in (1, 25, 26):
                 ctrl_map = {1: ("a", "selectAll"), 25: ("y", "redo"), 26: ("z", "undo")}
@@ -8451,6 +8673,7 @@ async def run_server(args: argparse.Namespace) -> None:
 
             if needs_recovery:
                 await recover_profile_storage_state(browser, state_file)
+            await deduplicate_context_cookies(browser)
 
             context_state: Dict[str, Any] = {
                 "scripts_initialized": False,

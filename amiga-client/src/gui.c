@@ -1019,6 +1019,51 @@ static int32  s_wheel_accum_dy     = 0;
 static int16  s_wheel_win_x        = 640;
 static int16  s_wheel_win_y        = 360;
 static BOOL   s_current_rmb_trap   = FALSE;
+static BOOL   s_hw_ctrl            = FALSE;
+static BOOL   s_hw_ramiga          = FALSE;
+static BOOL   s_hw_lamiga          = FALSE;
+static BOOL   s_hw_shift           = FALSE;
+static BOOL   s_hw_alt             = FALSE;
+
+#define RAW_QUAL_RING_SZ 16
+static struct {
+    uint16 code;
+    uint16 qual;
+    BOOL   valid;
+} s_raw_qual_ring[RAW_QUAL_RING_SZ];
+static int s_raw_qual_head = 0;
+
+static void record_idcmp_rawkey(uint16 code, uint16 qual)
+{
+    BOOL is_up = (code & IECODE_UP_PREFIX) != 0;
+    uint16 base = code & 0x7F;
+    if (base == 0x63)      s_hw_ctrl   = !is_up;
+    else if (base == 0x67) s_hw_ramiga = !is_up;
+    else if (base == 0x66) s_hw_lamiga = !is_up;
+    else if (base == 0x60 || base == 0x61) s_hw_shift = !is_up;
+    else if (base == 0x64 || base == 0x65) s_hw_alt   = !is_up;
+
+    if (!is_up) {
+        s_raw_qual_ring[s_raw_qual_head].code  = base;
+        s_raw_qual_ring[s_raw_qual_head].qual  = qual;
+        s_raw_qual_ring[s_raw_qual_head].valid = TRUE;
+        s_raw_qual_head = (s_raw_qual_head + 1) % RAW_QUAL_RING_SZ;
+    }
+}
+
+static uint16 lookup_rawkey_qual(uint16 rawkey)
+{
+    uint16 base = rawkey & 0x7F;
+    for (int i = 1; i <= RAW_QUAL_RING_SZ; i++) {
+        int idx = (s_raw_qual_head - i + RAW_QUAL_RING_SZ) % RAW_QUAL_RING_SZ;
+        if (s_raw_qual_ring[idx].valid && s_raw_qual_ring[idx].code == base) {
+            uint16 q = s_raw_qual_ring[idx].qual;
+            s_raw_qual_ring[idx].valid = FALSE;
+            return q;
+        }
+    }
+    return 0;
+}
 
 void gui_set_rmb_trap(VortexApp *app, BOOL trap)
 {
@@ -1180,9 +1225,17 @@ static uint32 idcmp_hook_func(struct Hook *hook, Object *win_obj, struct IntuiMe
         if (imsg->Class == IDCMP_CHANGEWINDOW) {
             prefs_capture_window_box(app);
         }
+        if (imsg->Class == IDCMP_INACTIVEWINDOW) {
+            s_hw_ctrl = s_hw_ramiga = s_hw_lamiga = s_hw_shift = s_hw_alt = FALSE;
+        }
         if (app->prefs.dark_theme == 1) {
             gui_draw_dark_titlebar(app);
         }
+        return 0;
+    }
+
+    if (imsg->Class == IDCMP_RAWKEY) {
+        record_idcmp_rawkey(imsg->Code, imsg->Qualifier);
         return 0;
     }
 
@@ -3516,7 +3569,7 @@ BOOL gui_init(VortexApp *app)
         WINDOW_NewMenu,         s_main_menu,
         WINDOW_IDCMPHook,       &s_idcmp_hook,
         WINDOW_IDCMPHookBits,   IDCMP_MOUSEBUTTONS | IDCMP_EXTENDEDMOUSE | IDCMP_MOUSEMOVE |
-                                IDCMP_CHANGEWINDOW | IDCMP_ACTIVEWINDOW | IDCMP_INACTIVEWINDOW,
+                                IDCMP_RAWKEY | IDCMP_CHANGEWINDOW | IDCMP_ACTIVEWINDOW | IDCMP_INACTIVEWINDOW,
         (app->prefs.dark_theme == 1) ? WINDOW_PostRefreshHook : TAG_IGNORE, (Tag)&s_post_refresh_hook,
         TAG_DONE);
 
@@ -4050,10 +4103,23 @@ void gui_handle_events(VortexApp *app)
                         break;
                     }
 
-                    uint32 qual = 0;
+                    uint32 qual = (uint32)lookup_rawkey_qual(rawkey);
                     if (app->win_obj) {
-                        IIntuition->GetAttr(WINDOW_Qualifier, app->win_obj, &qual);
+                        uint32 wq = 0;
+                        IIntuition->GetAttr(WINDOW_Qualifier, app->win_obj, &wq);
+                        qual |= (wq & 0xFFFFU) | ((wq >> 16) & 0xFFFFU);
+                        struct InputEvent *ev = NULL;
+                        IIntuition->GetAttr(WINDOW_InputEvent, app->win_obj, (uint32 *)&ev);
+                        if (ev) {
+                            qual |= (uint32)ev->ie_Qualifier;
+                        }
                     }
+                    if (s_hw_ctrl)   qual |= IEQUALIFIER_CONTROL;
+                    if (s_hw_ramiga) qual |= IEQUALIFIER_RCOMMAND;
+                    if (s_hw_lamiga) qual |= IEQUALIFIER_LCOMMAND;
+                    if (s_hw_shift)  qual |= IEQUALIFIER_LSHIFT;
+                    if (s_hw_alt)    qual |= IEQUALIFIER_RALT;
+
                     BOOL has_ctrl   = ((qual & IEQUALIFIER_CONTROL) != 0) &&
                                       ((qual & (IEQUALIFIER_LALT | IEQUALIFIER_RALT)) == 0);
                     BOOL has_ramiga = (qual & IEQUALIFIER_RCOMMAND) != 0;
@@ -4427,7 +4493,10 @@ void gui_handle_events(VortexApp *app)
                 CTX_NEW_TAB,
                 CTX_CLOSE_TAB,
                 CTX_MAIN_MENU,
-                CTX_TOGGLE_DARK_THEME
+                CTX_TOGGLE_DARK_THEME,
+                CTX_EDIT_CUT,
+                CTX_EDIT_COPY,
+                CTX_EDIT_PASTE
             };
 
             BOOL has_link  = (app->ctx_menu.link_url[0] != '\0');
@@ -4492,6 +4561,10 @@ void gui_handle_events(VortexApp *app)
                 } else {
                     menu_obj = PMMENU(hdr_buf),
                         PMA_MenuHandler, &pm_hook,
+                        PMITEM(GetVString(MSG_MENU_CUT)), PMIA_ID, CTX_EDIT_CUT, PMEND,
+                        PMITEM(GetVString(MSG_MENU_COPY)), PMIA_ID, CTX_EDIT_COPY, PMEND,
+                        PMITEM(GetVString(MSG_MENU_PASTE)), PMIA_ID, CTX_EDIT_PASTE, PMEND,
+                        PMBAR(), PMEND,
                         PMITEM(GetVString(MSG_MENU_BACK)), PMIA_ID, CTX_BACK, PMEND,
                         PMITEM(GetVString(MSG_MENU_FORWARD)), PMIA_ID, CTX_FORWARD, PMEND,
                         PMITEM(GetVString(MSG_MENU_RELOAD)), PMIA_ID, CTX_RELOAD, PMEND,
@@ -4552,6 +4625,18 @@ void gui_handle_events(VortexApp *app)
             }
 
             switch (selected_id) {
+                case CTX_EDIT_CUT:
+                    dispatch_edit_shortcut(app, 'x', SHORTCUT_SRC_MENU);
+                    break;
+
+                case CTX_EDIT_COPY:
+                    dispatch_edit_shortcut(app, 'c', SHORTCUT_SRC_MENU);
+                    break;
+
+                case CTX_EDIT_PASTE:
+                    dispatch_edit_shortcut(app, 'v', SHORTCUT_SRC_MENU);
+                    break;
+
                 case CTX_TOGGLE_DARK_THEME:
                     handle_menu_command(app, MID_TOGGLE_DARK_THEME);
                     break;

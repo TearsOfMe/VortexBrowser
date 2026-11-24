@@ -584,8 +584,16 @@ void vb_utf8_to_local(const char *utf8_str, char *dst, size_t dst_size)
             CSA_AllocIfNeeded, FALSE,
             TAG_DONE);
         if (res) {
-            dst[dst_size - 1] = '\0';
-            return;
+            if (res != (STRPTR)dst) {
+                strncpy(dst, (const char *)res, dst_size - 1);
+                dst[dst_size - 1] = '\0';
+                ICodesets->CodesetsFreeA(res, NULL);
+            } else {
+                dst[dst_size - 1] = '\0';
+            }
+            if (dst[0] != '\0') {
+                return;
+            }
         }
     }
 
@@ -647,8 +655,16 @@ void vb_local_to_utf8(const char *local_str, char *dst, size_t dst_size)
             CSA_AllocIfNeeded, FALSE,
             TAG_DONE);
         if (res) {
-            dst[dst_size - 1] = '\0';
-            return;
+            if (res != (UTF8 *)dst) {
+                strncpy(dst, (const char *)res, dst_size - 1);
+                dst[dst_size - 1] = '\0';
+                ICodesets->CodesetsFreeA(res, NULL);
+            } else {
+                dst[dst_size - 1] = '\0';
+            }
+            if (dst[0] != '\0') {
+                return;
+            }
         }
     }
 
