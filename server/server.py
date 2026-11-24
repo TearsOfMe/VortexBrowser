@@ -3801,7 +3801,7 @@ class AmigaClientSession:
                             this.isDragging = true;
 
                             let el = document.elementFromPoint(this.startX, this.startY);
-                            if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) return;
+                            if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable || el.tagName === 'IFRAME')) return;
 
                             let r1 = document.caretRangeFromPoint ? document.caretRangeFromPoint(this.startX, this.startY) : null;
                             let r2 = document.caretRangeFromPoint ? document.caretRangeFromPoint(x, y) : null;
@@ -3837,11 +3837,28 @@ class AmigaClientSession:
                             this.startX = -1;
                             this.startY = -1;
                             this.isDragging = false;
-                            let s = window.getSelection() ? window.getSelection().toString() : '';
+                            let doc = document, win = window, el = document.activeElement;
+                            for (let i = 0; i < 8 && el; i++) {
+                                if (el.tagName === 'IFRAME') {
+                                    try {
+                                        const cd = el.contentDocument || (el.contentWindow && el.contentWindow.document);
+                                        if (!cd) break;
+                                        doc = cd;
+                                        win = el.contentWindow || doc.defaultView || win;
+                                        el = doc.activeElement;
+                                        continue;
+                                    } catch (e) { break; }
+                                }
+                                if (el.shadowRoot && el.shadowRoot.activeElement) {
+                                    el = el.shadowRoot.activeElement;
+                                    continue;
+                                }
+                                break;
+                            }
+                            let s = (win && win.getSelection) ? win.getSelection().toString() : (doc.getSelection ? doc.getSelection().toString() : '');
                             if (s && s.length > 0) return { dragged: dragged, text: s };
 
-                            let el = document.activeElement;
-                            if (el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && el.type === 'text'))) {
+                            if (el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT')) {
                                 try {
                                     let sub = el.value.substring(el.selectionStart, el.selectionEnd);
                                     if (sub && sub.length > 0) return { dragged: dragged, text: sub };
@@ -5872,17 +5889,7 @@ class AmigaClientSession:
                             await self.send_clipboard_to_amiga(sel_text)
                         else:
                             try:
-                                sel = await self._safe_eval("""() => {
-                                    let s = window.getSelection() ? window.getSelection().toString() : '';
-                                    if (s && s.length > 0) return s;
-                                    let el = document.activeElement;
-                                    if (el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && el.type === 'text'))) {
-                                        try {
-                                            return el.value.substring(el.selectionStart, el.selectionEnd);
-                                        } catch (e) {}
-                                    }
-                                    return '';
-                                }""", timeout=0.35, default='')
+                                sel = await self._safe_eval(_JS_GET_DEEP_SELECTION, timeout=0.35, default="")
                                 if sel and len(sel.strip()) > 0:
                                     logger.info("Selected text (%d chars): %r", len(sel), sel[:60])
                                     await self.send_clipboard_to_amiga(sel)
@@ -6049,13 +6056,113 @@ class AmigaClientSession:
         except Exception as exc:
             logger.warning("Input execution warning (type=%d): %s", event_type, exc)
 
+    _JS_GET_DEEP_SELECTION = """() => {
+        let doc = document, win = window, el = document.activeElement;
+        for (let i = 0; i < 8 && el; i++) {
+            if (el.tagName === 'IFRAME') {
+                try {
+                    const cd = el.contentDocument || (el.contentWindow && el.contentWindow.document);
+                    if (!cd) break;
+                    doc = cd;
+                    win = el.contentWindow || doc.defaultView || win;
+                    el = doc.activeElement;
+                    continue;
+                } catch (e) { break; }
+            }
+            if (el.shadowRoot && el.shadowRoot.activeElement) {
+                el = el.shadowRoot.activeElement;
+                continue;
+            }
+            break;
+        }
+        const s = (win && win.getSelection) ? win.getSelection().toString() : (doc.getSelection ? doc.getSelection().toString() : '');
+        if (s && s.length > 0) return s;
+        if (el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT')) {
+            try {
+                return el.value.substring(el.selectionStart, el.selectionEnd);
+            } catch (e) {}
+        }
+        return '';
+    }"""
+
+    _CDP_KEY_DEFS = {
+        "a": ("a", "KeyA", 65),
+        "c": ("c", "KeyC", 67),
+        "v": ("v", "KeyV", 86),
+        "x": ("x", "KeyX", 88),
+        "y": ("y", "KeyY", 89),
+        "z": ("z", "KeyZ", 90),
+        "ArrowLeft":  ("ArrowLeft",  "ArrowLeft",  37),
+        "ArrowUp":    ("ArrowUp",    "ArrowUp",    38),
+        "ArrowRight": ("ArrowRight", "ArrowRight", 39),
+        "ArrowDown":  ("ArrowDown",  "ArrowDown",  40),
+        "Home":       ("Home",       "Home",       36),
+        "End":        ("End",        "End",        35),
+    }
+
+    async def _cdp_dispatch_key(
+        self,
+        key_id: str,
+        modifiers: int = 0,
+        command: Optional[str] = None,
+        timeout: float = 0.6,
+    ) -> bool:
+        """Dispatch key shortcut directly via DirectCDP WebSocket (supports editing commands in iframes)."""
+        if not (isinstance(self.cdp, DirectCDPSession) and self.cdp.connected):
+            return False
+        kdef = self._CDP_KEY_DEFS.get(key_id)
+        if not kdef:
+            return False
+        key_val, code_val, vk = kdef
+        down_params: Dict[str, Any] = {
+            "type": "rawKeyDown",
+            "modifiers": int(modifiers),
+            "key": key_val,
+            "code": code_val,
+            "windowsVirtualKeyCode": int(vk),
+            "nativeVirtualKeyCode": int(vk),
+        }
+        if command:
+            down_params["commands"] = [command]
+        up_params: Dict[str, Any] = {
+            "type": "keyUp",
+            "modifiers": int(modifiers),
+            "key": key_val,
+            "code": code_val,
+            "windowsVirtualKeyCode": int(vk),
+            "nativeVirtualKeyCode": int(vk),
+        }
+        try:
+            await asyncio.wait_for(self.cdp.send("Input.dispatchKeyEvent", down_params), timeout=timeout)
+            await asyncio.wait_for(self.cdp.send("Input.dispatchKeyEvent", up_params), timeout=timeout)
+            return True
+        except Exception:
+            return False
+
     async def _scroll_if_not_editing(self, dy: int, absolute: Optional[str] = None) -> bool:
         if not self.page:
             return False
         try:
             is_editing = await self._safe_eval(
                 """() => {
-                    const el = document.activeElement;
+                    let doc = document, el = document.activeElement;
+                    for (let i = 0; i < 8 && el; i++) {
+                        if (el.tagName === 'IFRAME') {
+                            try {
+                                const cd = el.contentDocument || (el.contentWindow && el.contentWindow.document);
+                                if (!cd) break;
+                                doc = cd;
+                                el = doc.activeElement;
+                                continue;
+                            } catch (e) { break; }
+                        }
+                        if (el.shadowRoot && el.shadowRoot.activeElement) {
+                            el = el.shadowRoot.activeElement;
+                            continue;
+                        }
+                        break;
+                    }
+                    if (doc && doc.designMode === 'on') return true;
                     if (!el) return false;
                     const tag = (el.tagName || '').toUpperCase();
                     return (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable);
@@ -6112,6 +6219,11 @@ class AmigaClientSession:
                     return
                 await self.page.keyboard.press("End")
                 return
+            elif text_or_url in ("Shift+ArrowLeft", "Shift+ArrowRight", "Shift+ArrowUp", "Shift+ArrowDown", "Shift+Home", "Shift+End"):
+                base_k = text_or_url.split("+", 1)[1]
+                if not await self._cdp_dispatch_key(base_k, modifiers=8):
+                    await asyncio.wait_for(self.page.keyboard.press(text_or_url), timeout=1.5)
+                return
             elif text_or_url in (" ", "Space"):
                 if await self._scroll_if_not_editing(420):
                     return
@@ -6127,35 +6239,29 @@ class AmigaClientSession:
             elif text_or_url in ("Copy", "Control+c", "Control+C", "Cut", "Control+x", "Control+X") or key_code in (3, 24):
                 is_cut = text_or_url in ("Cut", "Control+x", "Control+X") or key_code == 24
                 try:
-                    sel = await self._safe_eval(
-                        """() => {
-                            let s = window.getSelection() ? window.getSelection().toString() : '';
-                            if (s && s.length > 0) return s;
-                            let el = document.activeElement;
-                            if (el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT')) {
-                                try {
-                                    return el.value.substring(el.selectionStart, el.selectionEnd);
-                                } catch (e) {}
-                            }
-                            return '';
-                        }""",
-                        timeout=0.35,
-                        default="",
-                    )
-                    if sel and len(sel.strip()) > 0:
+                    sel = await self._safe_eval(self._JS_GET_DEEP_SELECTION, timeout=0.35, default="")
+                    if sel and len(sel) > 0:
                         logger.info("Copying selection (%d chars) to Amiga clipboard", len(sel))
                         await self.send_clipboard_to_amiga(sel)
                 except Exception:
                     pass
-                await asyncio.wait_for(self.page.keyboard.press("Control+x" if is_cut else "Control+c"), timeout=1.5)
+                kchar, kcmd, kcombo = ("x", "cut", "Control+x") if is_cut else ("c", "copy", "Control+c")
+                if not await self._cdp_dispatch_key(kchar, modifiers=2, command=kcmd):
+                    await asyncio.wait_for(self.page.keyboard.press(kcombo), timeout=1.5)
                 return
             elif text_or_url in ("Paste", "Control+v", "Control+V") or key_code == 22:
-                await asyncio.wait_for(self.page.keyboard.press("Control+v"), timeout=1.5)
+                if not await self._cdp_dispatch_key("v", modifiers=2, command="paste"):
+                    await asyncio.wait_for(self.page.keyboard.press("Control+v"), timeout=1.5)
                 return
             elif text_or_url in ("Control+a", "Control+A", "Control+z", "Control+Z", "Control+y", "Control+Y") or key_code in (1, 25, 26):
-                ctrl_map = {1: "Control+a", 25: "Control+y", 26: "Control+z"}
-                combo = text_or_url if text_or_url.startswith("Control+") else ctrl_map.get(key_code, "Control+a")
-                await asyncio.wait_for(self.page.keyboard.press(combo.lower().replace("control+", "Control+")), timeout=1.5)
+                ctrl_map = {1: ("a", "selectAll"), 25: ("y", "redo"), 26: ("z", "undo")}
+                if text_or_url.lower().startswith("control+"):
+                    kchar = text_or_url[-1].lower()
+                    kcmd = {"a": "selectAll", "y": "redo", "z": "undo"}.get(kchar, "selectAll")
+                else:
+                    kchar, kcmd = ctrl_map.get(key_code, ("a", "selectAll"))
+                if not await self._cdp_dispatch_key(kchar, modifiers=2, command=kcmd):
+                    await asyncio.wait_for(self.page.keyboard.press(f"Control+{kchar}"), timeout=1.5)
                 return
             else:
                 await asyncio.wait_for(self.page.keyboard.type(text_or_url), timeout=1.5)

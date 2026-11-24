@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
+#include <ctype.h>
 
 #include <proto/exec.h>
 #include <proto/dos.h>
@@ -12,6 +13,7 @@
 #include <proto/chooser.h>
 #include <proto/bsdsocket.h>
 #include <proto/popupmenu.h>
+#include <proto/keymap.h>
 
 #include <classes/window.h>
 #include <classes/popupmenu.h>
@@ -74,6 +76,71 @@ static void send_amiga_clipboard_paste(VortexApp *app)
         if (clip_str) free(clip_str);
         net_send_key(app, INPUT_KEY_DOWN, 22, "Paste");
     }
+}
+
+enum {
+    SHORTCUT_SRC_VANILLA = 1,
+    SHORTCUT_SRC_RAWKEY  = 2,
+    SHORTCUT_SRC_MENU    = 3
+};
+
+static char resolve_rawkey_base_char(uint16 rawkey)
+{
+    if (IKeymap) {
+        struct InputEvent ie;
+        char kbuf[4];
+        memset(&ie, 0, sizeof(ie));
+        ie.ie_Class     = IECLASS_RAWKEY;
+        ie.ie_Code      = rawkey;
+        ie.ie_Qualifier = 0;
+        if (IKeymap->MapRawKey(&ie, (STRPTR)kbuf, sizeof(kbuf) - 1, NULL) == 1) {
+            return (char)tolower((unsigned char)kbuf[0]);
+        }
+    }
+    switch (rawkey) {
+        case 0x20: return 'a';
+        case 0x33: return 'c';
+        case 0x34: return 'v';
+        case 0x32: return 'x';
+        case 0x15: return 'y';
+        case 0x31: return 'z';
+        default:   return '\0';
+    }
+}
+
+static BOOL dispatch_edit_shortcut(VortexApp *app, char ch, int source)
+{
+    static char    s_last_ch  = '\0';
+    static int     s_last_src = 0;
+    static int64_t s_last_us  = 0;
+
+    if (!app) return FALSE;
+    char lc = (char)tolower((unsigned char)ch);
+    if (lc != 'a' && lc != 'c' && lc != 'v' && lc != 'x' && lc != 'y' && lc != 'z') {
+        return FALSE;
+    }
+
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    int64_t now_us = (int64_t)tv.tv_sec * 1000000LL + (int64_t)tv.tv_usec;
+    if (lc == s_last_ch && source != s_last_src && (now_us - s_last_us) < 80000LL) {
+        /* Same keystroke delivered by multiple IDCMP classes (RAWKEY + VANILLAKEY/MENUPICK) */
+        return TRUE;
+    }
+    s_last_ch  = lc;
+    s_last_src = source;
+    s_last_us  = now_us;
+
+    switch (lc) {
+        case 'a': net_send_key(app, INPUT_KEY_DOWN, 0x01, "Control+a"); break;
+        case 'c': net_send_key(app, INPUT_KEY_DOWN, 0x03, "Copy");      break;
+        case 'v': send_amiga_clipboard_paste(app);                      break;
+        case 'x': net_send_key(app, INPUT_KEY_DOWN, 0x18, "Cut");       break;
+        case 'y': net_send_key(app, INPUT_KEY_DOWN, 0x19, "Control+y"); break;
+        case 'z': net_send_key(app, INPUT_KEY_DOWN, 0x1A, "Control+z"); break;
+        default:  return FALSE;
+    }
+    return TRUE;
 }
 
 static void handle_menu_command(VortexApp *app, uint32 item_id);
@@ -1759,15 +1826,15 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
         }
 
         case MID_EDIT_CUT:
-            net_send_key(app, INPUT_KEY_DOWN, 24, "Cut");
+            dispatch_edit_shortcut(app, 'x', SHORTCUT_SRC_MENU);
             break;
 
         case MID_EDIT_COPY:
-            net_send_key(app, INPUT_KEY_DOWN, 3, "Copy");
+            dispatch_edit_shortcut(app, 'c', SHORTCUT_SRC_MENU);
             break;
 
         case MID_EDIT_PASTE:
-            send_amiga_clipboard_paste(app);
+            dispatch_edit_shortcut(app, 'v', SHORTCUT_SRC_MENU);
             break;
 
         case MID_NAV_BACK:
@@ -3926,18 +3993,18 @@ void gui_handle_events(VortexApp *app)
 
             case WMHI_VANILLAKEY: {
                 uint16 ascii = (uint16)(result & WMHI_KEYMASK);
-                if (ascii == 0x01) { /* Ctrl+A */
-                    net_send_key(app, INPUT_KEY_DOWN, ascii, "Control+a");
-                } else if (ascii == 0x03) { /* Ctrl+C */
-                    net_send_key(app, INPUT_KEY_DOWN, ascii, "Copy");
-                } else if (ascii == 0x16) { /* Ctrl+V: Paste Amiga clipboard */
-                    send_amiga_clipboard_paste(app);
-                } else if (ascii == 0x18) { /* Ctrl+X */
-                    net_send_key(app, INPUT_KEY_DOWN, ascii, "Cut");
-                } else if (ascii == 0x19) { /* Ctrl+Y */
-                    net_send_key(app, INPUT_KEY_DOWN, ascii, "Control+y");
-                } else if (ascii == 0x1A) { /* Ctrl+Z */
-                    net_send_key(app, INPUT_KEY_DOWN, ascii, "Control+z");
+                if (ascii == 0x01) {
+                    dispatch_edit_shortcut(app, 'a', SHORTCUT_SRC_VANILLA);
+                } else if (ascii == 0x03) {
+                    dispatch_edit_shortcut(app, 'c', SHORTCUT_SRC_VANILLA);
+                } else if (ascii == 0x16) {
+                    dispatch_edit_shortcut(app, 'v', SHORTCUT_SRC_VANILLA);
+                } else if (ascii == 0x18) {
+                    dispatch_edit_shortcut(app, 'x', SHORTCUT_SRC_VANILLA);
+                } else if (ascii == 0x19) {
+                    dispatch_edit_shortcut(app, 'y', SHORTCUT_SRC_VANILLA);
+                } else if (ascii == 0x1A) {
+                    dispatch_edit_shortcut(app, 'z', SHORTCUT_SRC_VANILLA);
                 } else if (ascii == 0x08) {
                     net_send_key(app, INPUT_KEY_DOWN, ascii, "Backspace");
                 } else if (ascii == 0x09) {
@@ -3982,6 +4049,25 @@ void gui_handle_events(VortexApp *app)
                         }
                         break;
                     }
+
+                    uint32 qual = 0;
+                    if (app->win_obj) {
+                        IIntuition->GetAttr(WINDOW_Qualifier, app->win_obj, &qual);
+                    }
+                    BOOL has_ctrl   = ((qual & IEQUALIFIER_CONTROL) != 0) &&
+                                      ((qual & (IEQUALIFIER_LALT | IEQUALIFIER_RALT)) == 0);
+                    BOOL has_ramiga = (qual & IEQUALIFIER_RCOMMAND) != 0;
+                    BOOL has_lamiga = (qual & IEQUALIFIER_LCOMMAND) != 0;
+                    if (has_ctrl || has_ramiga || has_lamiga) {
+                        char base_ch = resolve_rawkey_base_char(rawkey);
+                        /* Keep RAmiga+A free for Bookmark menu shortcut outside viewport; allow Ctrl+A / LAmiga+A */
+                        if (base_ch && (base_ch != 'a' || has_ctrl || has_lamiga)) {
+                            if (dispatch_edit_shortcut(app, base_ch, SHORTCUT_SRC_RAWKEY)) {
+                                break;
+                            }
+                        }
+                    }
+
                     const char *kname = NULL;
                     switch (rawkey) {
                         case 0x48: kname = "PageUp";     break;
@@ -4005,7 +4091,16 @@ void gui_handle_events(VortexApp *app)
                         default:   break;
                     }
                     if (kname) {
-                        net_send_key(app, INPUT_KEY_DOWN, rawkey, kname);
+                        BOOL has_shift = ((qual & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)) != 0) &&
+                                         !has_ctrl && !has_ramiga && !has_lamiga;
+                        if (has_shift && (rawkey == 0x4C || rawkey == 0x4D || rawkey == 0x4E ||
+                                          rawkey == 0x4F || rawkey == 0x70 || rawkey == 0x71)) {
+                            char sk[24];
+                            snprintf(sk, sizeof(sk), "Shift+%s", kname);
+                            net_send_key(app, INPUT_KEY_DOWN, rawkey, sk);
+                        } else {
+                            net_send_key(app, INPUT_KEY_DOWN, rawkey, kname);
+                        }
                     }
                 }
                 break;
