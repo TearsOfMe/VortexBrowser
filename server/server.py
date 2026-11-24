@@ -3960,7 +3960,7 @@ class AmigaClientSession:
                             this.startY = y;
                             this.isDragging = false;
                             let el = document.elementFromPoint(x, y);
-                            if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+                            if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable || el.tagName === 'IFRAME')) return;
                             let r = document.caretRangeFromPoint ? document.caretRangeFromPoint(x, y) : null;
                             if (r) {
                                 let s = window.getSelection();
@@ -5682,20 +5682,77 @@ class AmigaClientSession:
                                     mSrc = new URL(mSrc, document.baseURI).href;
                                 } catch (e) {}
                             }
-                            return { linkHref, linkLabel, mSrc };
+                            let isEditable = false;
+                            try {
+                                let targetEl = document.elementFromPoint(x, y);
+                                let targetDoc = document;
+                                let hostFrame = null;
+                                let fx = x, fy = y;
+                                for (let i = 0; i < 6 && targetEl; i++) {
+                                    if (targetEl.shadowRoot && targetEl.shadowRoot.elementFromPoint) {
+                                        const inner = targetEl.shadowRoot.elementFromPoint(fx, fy);
+                                        if (inner && inner !== targetEl) { targetEl = inner; continue; }
+                                    }
+                                    if (targetEl.tagName === 'IFRAME') {
+                                        const cd = targetEl.contentDocument || (targetEl.contentWindow && targetEl.contentWindow.document);
+                                        if (!cd) break;
+                                        const r = targetEl.getBoundingClientRect();
+                                        fx -= r.left; fy -= r.top;
+                                        hostFrame = targetEl;
+                                        targetDoc = cd;
+                                        targetEl = cd.elementFromPoint(fx, fy);
+                                        continue;
+                                    }
+                                    break;
+                                }
+                                if (targetEl) {
+                                    const tag = (targetEl.tagName || '').toUpperCase();
+                                    if (tag === 'INPUT' || tag === 'TEXTAREA' || targetEl.isContentEditable || (targetDoc && targetDoc.designMode === 'on')) {
+                                        isEditable = true;
+                                        const needsFocus = (hostFrame && document.activeElement !== hostFrame) || (targetDoc.activeElement !== targetEl);
+                                        if (needsFocus) {
+                                            if (hostFrame && typeof hostFrame.focus === 'function') {
+                                                hostFrame.focus({ preventScroll: true });
+                                            }
+                                            if (typeof targetEl.focus === 'function') {
+                                                targetEl.focus({ preventScroll: true });
+                                            }
+                                            if ((targetEl.isContentEditable || (targetDoc && targetDoc.designMode === 'on')) && targetDoc.getSelection) {
+                                                const sel = targetDoc.getSelection();
+                                                if (sel && sel.rangeCount === 0) {
+                                                    const r = targetDoc.caretRangeFromPoint ? targetDoc.caretRangeFromPoint(fx, fy) : null;
+                                                    if (r) {
+                                                        sel.addRange(r);
+                                                    } else {
+                                                        const nr = targetDoc.createRange();
+                                                        nr.selectNodeContents(targetEl);
+                                                        nr.collapse(false);
+                                                        sel.addRange(nr);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            } catch (e) {}
+
+                            return { linkHref, linkLabel, mSrc, isEditable };
                         }""",
                         [cx, cy],
                     ),
                     timeout=1.0,
                 )
+                is_editable = False
                 if isinstance(info, dict):
                     link_url = str(info.get("linkHref") or "")
                     link_text = str(info.get("linkLabel") or "")
                     media_url = str(info.get("mSrc") or "")
+                    is_editable = bool(info.get("isEditable", False))
             except Exception as exc:
+                is_editable = False
                 logger.warning("Context menu target inspection warning at (%d, %d): %s", cx, cy, exc)
 
-            if not link_url and self.last_hover_url:
+            if not is_editable and not link_url and self.last_hover_url:
                 link_url = self.last_hover_url
                 logger.info("Using last_hover_url fallback for context menu: %s", link_url)
                 if not link_text:
@@ -5807,19 +5864,7 @@ class AmigaClientSession:
                         logger.info("Received MSG_CLIPBOARD from Amiga (%d chars): %r", len(clip_text), clip_text[:60])
                         self._server_clipboard = clip_text
                         if self.page:
-                            inserted = False
-                            if isinstance(self.cdp, DirectCDPSession) and self.cdp.connected:
-                                try:
-                                    await asyncio.wait_for(
-                                        self.cdp.send("Input.insertText", {"text": clip_text}),
-                                        timeout=1.0,
-                                    )
-                                    inserted = True
-                                except Exception:
-                                    inserted = False
-                            if not inserted:
-                                await asyncio.wait_for(self.page.keyboard.insert_text(clip_text), timeout=1.5)
-                            self._trigger_full_refresh(True)
+                            await self._paste_text_into_active(clip_text)
                 except (asyncio.IncompleteReadError, Exception) as e:
                     logger.warning("Error reading MSG_CLIPBOARD: %s", e)
             else:
@@ -6288,6 +6333,85 @@ class AmigaClientSession:
         return el.innerText;
     }"""
 
+    _JS_INSERT_TEXT_DEEP = """([text]) => {
+        let doc = document, el = document.activeElement;
+        for (let i = 0; i < 8 && el; i++) {
+            if (el.tagName === 'IFRAME') {
+                try {
+                    const cd = el.contentDocument || (el.contentWindow && el.contentWindow.document);
+                    if (!cd) break;
+                    doc = cd;
+                    el = doc.activeElement;
+                    continue;
+                } catch (e) { break; }
+            }
+            if (el.shadowRoot && el.shadowRoot.activeElement) {
+                el = el.shadowRoot.activeElement;
+                continue;
+            }
+            break;
+        }
+        if (!el) return false;
+        const tag = (el.tagName || '').toUpperCase();
+        if (tag === 'TEXTAREA' || tag === 'INPUT') {
+            try {
+                const s = typeof el.selectionStart === 'number' ? el.selectionStart : el.value.length;
+                const e = typeof el.selectionEnd === 'number' ? el.selectionEnd : s;
+                if (typeof el.setRangeText === 'function') {
+                    el.setRangeText(text, s, e, 'end');
+                } else {
+                    el.value = el.value.slice(0, s) + text + el.value.slice(e);
+                    el.selectionStart = el.selectionEnd = s + text.length;
+                }
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+                return true;
+            } catch (err) {}
+        }
+        if (el.isContentEditable || (doc && doc.designMode === 'on')) {
+            try {
+                const sel = doc.getSelection ? doc.getSelection() : null;
+                if (sel && sel.rangeCount === 0) {
+                    const nr = doc.createRange();
+                    nr.selectNodeContents(el);
+                    nr.collapse(false);
+                    sel.addRange(nr);
+                }
+                if (doc.execCommand && doc.execCommand('insertText', false, text)) {
+                    return true;
+                }
+            } catch (err) {}
+        }
+        return false;
+    }"""
+
+    async def _paste_text_into_active(self, clip_text: str) -> None:
+        if not self.page or not clip_text:
+            return
+        before_text = await self._safe_eval(self._JS_GET_ACTIVE_TEXT, timeout=0.25, default=None)
+        inserted = False
+        if isinstance(self.cdp, DirectCDPSession) and self.cdp.connected:
+            try:
+                await asyncio.wait_for(
+                    self.cdp.send("Input.insertText", {"text": clip_text}),
+                    timeout=1.0,
+                )
+                inserted = True
+            except Exception:
+                inserted = False
+        if not inserted:
+            try:
+                await asyncio.wait_for(self.page.keyboard.insert_text(clip_text), timeout=1.5)
+                inserted = True
+            except Exception:
+                inserted = False
+        if before_text is not None:
+            after_text = await self._safe_eval(self._JS_GET_ACTIVE_TEXT, timeout=0.25, default=None)
+            if after_text == before_text:
+                await self._safe_eval(self._JS_INSERT_TEXT_DEEP, [clip_text], timeout=0.4, default=False)
+        self._trigger_full_refresh(True)
+        self._schedule_delayed_frames()
+
     _CDP_KEY_DEFS = {
         "a": ("a", "KeyA", 65),
         "c": ("c", "KeyC", 67),
@@ -6422,6 +6546,9 @@ class AmigaClientSession:
                     return
                 await self.page.keyboard.press("End")
                 return
+            elif text_or_url == "Shift+Tab":
+                await asyncio.wait_for(self.page.keyboard.press("Shift+Tab"), timeout=1.5)
+                return
             elif text_or_url in ("Shift+ArrowLeft", "Shift+ArrowRight", "Shift+ArrowUp", "Shift+ArrowDown", "Shift+Home", "Shift+End"):
                 base_k = text_or_url.split("+", 1)[1]
                 if not await self._cdp_dispatch_key(base_k, modifiers=8):
@@ -6462,18 +6589,7 @@ class AmigaClientSession:
                 if self._server_clipboard and before_text is not None:
                     after_text = await self._safe_eval(self._JS_GET_ACTIVE_TEXT, timeout=0.25, default=None)
                     if after_text == before_text:
-                        inserted = False
-                        if isinstance(self.cdp, DirectCDPSession) and self.cdp.connected:
-                            try:
-                                await asyncio.wait_for(
-                                    self.cdp.send("Input.insertText", {"text": self._server_clipboard}),
-                                    timeout=0.8,
-                                )
-                                inserted = True
-                            except Exception:
-                                inserted = False
-                        if not inserted:
-                            await asyncio.wait_for(self.page.keyboard.insert_text(self._server_clipboard), timeout=1.0)
+                        await self._paste_text_into_active(self._server_clipboard)
                 return
             elif text_or_url in ("Control+a", "Control+A", "Control+z", "Control+Z", "Control+y", "Control+Y") or key_code in (1, 25, 26):
                 ctrl_map = {1: ("a", "selectAll"), 25: ("y", "redo"), 26: ("z", "undo")}

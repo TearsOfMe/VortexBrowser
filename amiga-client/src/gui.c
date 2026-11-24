@@ -30,6 +30,7 @@
 #include <intuition/icclass.h>
 #include <intuition/pointerclass.h>
 #include <devices/inputevent.h>
+#include <libraries/keymap.h>
 #include <sys/select.h>
 #include <sys/time.h>
 
@@ -71,6 +72,7 @@ static void send_amiga_clipboard_paste(VortexApp *app)
         } else {
             net_send_clipboard(app, clip_str);
         }
+        app_set_status("Aus Zwischenablage eingef\xFCgt (%u Zeichen)", (unsigned)src_len);
         free(clip_str);
     } else {
         if (clip_str) free(clip_str);
@@ -86,18 +88,22 @@ enum {
 
 static char resolve_rawkey_base_char(uint16 rawkey)
 {
+    uint16 base = rawkey & 0x7F;
     if (IKeymap) {
         struct InputEvent ie;
-        char kbuf[4];
+        char kbuf[8];
         memset(&ie, 0, sizeof(ie));
-        ie.ie_Class     = IECLASS_RAWKEY;
-        ie.ie_Code      = rawkey;
-        ie.ie_Qualifier = 0;
+        ie.ie_Class         = IECLASS_RAWKEY;
+        ie.ie_SubClass      = 0;
+        ie.ie_Code          = base;
+        ie.ie_Qualifier     = 0;
+        ie.ie_Prev1DownCode = 0x80; /* Per keymap.doc: 0x80 stops dead-key scan */
+        ie.ie_Prev1DownQual = 0;
         if (IKeymap->MapRawKey(&ie, (STRPTR)kbuf, sizeof(kbuf) - 1, NULL) == 1) {
             return (char)tolower((unsigned char)kbuf[0]);
         }
     }
-    switch (rawkey) {
+    switch (base) {
         case 0x20: return 'a';
         case 0x33: return 'c';
         case 0x34: return 'v';
@@ -1019,51 +1025,6 @@ static int32  s_wheel_accum_dy     = 0;
 static int16  s_wheel_win_x        = 640;
 static int16  s_wheel_win_y        = 360;
 static BOOL   s_current_rmb_trap   = FALSE;
-static BOOL   s_hw_ctrl            = FALSE;
-static BOOL   s_hw_ramiga          = FALSE;
-static BOOL   s_hw_lamiga          = FALSE;
-static BOOL   s_hw_shift           = FALSE;
-static BOOL   s_hw_alt             = FALSE;
-
-#define RAW_QUAL_RING_SZ 16
-static struct {
-    uint16 code;
-    uint16 qual;
-    BOOL   valid;
-} s_raw_qual_ring[RAW_QUAL_RING_SZ];
-static int s_raw_qual_head = 0;
-
-static void record_idcmp_rawkey(uint16 code, uint16 qual)
-{
-    BOOL is_up = (code & IECODE_UP_PREFIX) != 0;
-    uint16 base = code & 0x7F;
-    if (base == 0x63)      s_hw_ctrl   = !is_up;
-    else if (base == 0x67) s_hw_ramiga = !is_up;
-    else if (base == 0x66) s_hw_lamiga = !is_up;
-    else if (base == 0x60 || base == 0x61) s_hw_shift = !is_up;
-    else if (base == 0x64 || base == 0x65) s_hw_alt   = !is_up;
-
-    if (!is_up) {
-        s_raw_qual_ring[s_raw_qual_head].code  = base;
-        s_raw_qual_ring[s_raw_qual_head].qual  = qual;
-        s_raw_qual_ring[s_raw_qual_head].valid = TRUE;
-        s_raw_qual_head = (s_raw_qual_head + 1) % RAW_QUAL_RING_SZ;
-    }
-}
-
-static uint16 lookup_rawkey_qual(uint16 rawkey)
-{
-    uint16 base = rawkey & 0x7F;
-    for (int i = 1; i <= RAW_QUAL_RING_SZ; i++) {
-        int idx = (s_raw_qual_head - i + RAW_QUAL_RING_SZ) % RAW_QUAL_RING_SZ;
-        if (s_raw_qual_ring[idx].valid && s_raw_qual_ring[idx].code == base) {
-            uint16 q = s_raw_qual_ring[idx].qual;
-            s_raw_qual_ring[idx].valid = FALSE;
-            return q;
-        }
-    }
-    return 0;
-}
 
 void gui_set_rmb_trap(VortexApp *app, BOOL trap)
 {
@@ -1225,17 +1186,9 @@ static uint32 idcmp_hook_func(struct Hook *hook, Object *win_obj, struct IntuiMe
         if (imsg->Class == IDCMP_CHANGEWINDOW) {
             prefs_capture_window_box(app);
         }
-        if (imsg->Class == IDCMP_INACTIVEWINDOW) {
-            s_hw_ctrl = s_hw_ramiga = s_hw_lamiga = s_hw_shift = s_hw_alt = FALSE;
-        }
         if (app->prefs.dark_theme == 1) {
             gui_draw_dark_titlebar(app);
         }
-        return 0;
-    }
-
-    if (imsg->Class == IDCMP_RAWKEY) {
-        record_idcmp_rawkey(imsg->Code, imsg->Qualifier);
         return 0;
     }
 
@@ -3559,7 +3512,7 @@ BOOL gui_init(VortexApp *app)
         WA_MaxWidth,          ~0UL,
         WA_MaxHeight,         ~0UL,
         WA_IDCMP,             IDCMP_CLOSEWINDOW | IDCMP_GADGETUP | IDCMP_GADGETDOWN |
-                              IDCMP_RAWKEY | IDCMP_VANILLAKEY | IDCMP_MOUSEBUTTONS |
+                              IDCMP_RAWKEY | IDCMP_MOUSEBUTTONS |
                               IDCMP_MOUSEMOVE | IDCMP_EXTENDEDMOUSE | IDCMP_NEWSIZE |
                               IDCMP_CHANGEWINDOW | IDCMP_ACTIVEWINDOW | IDCMP_INACTIVEWINDOW |
                               IDCMP_MENUPICK,
@@ -3569,7 +3522,7 @@ BOOL gui_init(VortexApp *app)
         WINDOW_NewMenu,         s_main_menu,
         WINDOW_IDCMPHook,       &s_idcmp_hook,
         WINDOW_IDCMPHookBits,   IDCMP_MOUSEBUTTONS | IDCMP_EXTENDEDMOUSE | IDCMP_MOUSEMOVE |
-                                IDCMP_RAWKEY | IDCMP_CHANGEWINDOW | IDCMP_ACTIVEWINDOW | IDCMP_INACTIVEWINDOW,
+                                IDCMP_CHANGEWINDOW | IDCMP_ACTIVEWINDOW | IDCMP_INACTIVEWINDOW,
         (app->prefs.dark_theme == 1) ? WINDOW_PostRefreshHook : TAG_IGNORE, (Tag)&s_post_refresh_hook,
         TAG_DONE);
 
@@ -3992,6 +3945,9 @@ void gui_handle_events(VortexApp *app)
 
             case WMHI_MENUPICK: {
                 uint16 selection = (uint16)code;
+                if (selection == MENUNULL) {
+                    selection = (uint16)(result & WMHI_MENUMASK);
+                }
                 while (selection != MENUNULL && app->win) {
                     struct MenuItem *item = IIntuition->ItemAddress(app->win->MenuStrip, selection);
                     if (item) {
@@ -4045,7 +4001,20 @@ void gui_handle_events(VortexApp *app)
                 break;
 
             case WMHI_VANILLAKEY: {
+                /* Main window uses pure IDCMP_RAWKEY (no IDCMP_VANILLAKEY), kept as defensive fallback */
                 uint16 ascii = (uint16)(result & WMHI_KEYMASK);
+                uint32 wq = 0;
+                if (app->win_obj) {
+                    IIntuition->GetAttr(WINDOW_Qualifier, app->win_obj, &wq);
+                }
+                uint16 vqual = (uint16)((wq & 0xFFFFU) | ((wq >> 16) & 0xFFFFU));
+                BOOL v_cmd = (vqual & (IEQUALIFIER_RCOMMAND | IEQUALIFIER_LCOMMAND)) != 0 ||
+                             (((vqual & IEQUALIFIER_CONTROL) != 0) && ((vqual & (IEQUALIFIER_LALT | IEQUALIFIER_RALT)) == 0));
+                if (v_cmd && ascii >= 0x20 && ascii <= 0x7E) {
+                    if (dispatch_edit_shortcut(app, (char)ascii, SHORTCUT_SRC_VANILLA)) {
+                        break;
+                    }
+                }
                 if (ascii == 0x01) {
                     dispatch_edit_shortcut(app, 'a', SHORTCUT_SRC_VANILLA);
                 } else if (ascii == 0x03) {
@@ -4074,10 +4043,9 @@ void gui_handle_events(VortexApp *app)
                     key_str[1] = '\0';
                     net_send_key(app, INPUT_KEY_DOWN, ascii, key_str);
                 } else if (ascii >= 0xA0 && ascii <= 0xFF) {
-                    char utf8_str[4];
-                    utf8_str[0] = (char)(0xC0 | ((ascii >> 6) & 0x1F));
-                    utf8_str[1] = (char)(0x80 | (ascii & 0x3F));
-                    utf8_str[2] = '\0';
+                    char local_ch[2] = { (char)ascii, '\0' };
+                    char utf8_str[8];
+                    vb_local_to_utf8(local_ch, utf8_str, sizeof(utf8_str));
                     net_send_key(app, INPUT_KEY_DOWN, ascii, utf8_str);
                 }
                 break;
@@ -4085,87 +4053,177 @@ void gui_handle_events(VortexApp *app)
 
             case WMHI_RAWKEY: {
                 uint16 rawkey = (uint16)(result & WMHI_KEYMASK);
-                if ((rawkey & IECODE_UP_PREFIX) == 0) {
-                    /* NewMouse / RAWKEY_NM_WHEEL_UP (0x7A) / RAWKEY_NM_WHEEL_DOWN (0x7B) */
-                    if ((rawkey == 0x7A || rawkey == 0x7B) && !s_got_extended_wheel && app->win) {
-                        int16_t rx = 0, ry = 0;
-                        if (renderer_map_window_to_remote(app, app->win->MouseX, app->win->MouseY, &rx, &ry)) {
-                            int32 step = (rawkey == 0x7A) ? -120 : 120;
-                            if ((step > 0 && s_wheel_accum_dy < 0) || (step < 0 && s_wheel_accum_dy > 0)) {
-                                s_wheel_accum_dy = 0;
-                            }
-                            s_wheel_accum_dy += step;
-                            if (s_wheel_accum_dy >  480) s_wheel_accum_dy =  480;
-                            if (s_wheel_accum_dy < -480) s_wheel_accum_dy = -480;
-                            s_wheel_win_x = app->win->MouseX;
-                            s_wheel_win_y = app->win->MouseY;
+                if (rawkey & IECODE_UP_PREFIX) {
+                    break;
+                }
+
+                /* NewMouse / RAWKEY_NM_WHEEL_UP (0x7A) / RAWKEY_NM_WHEEL_DOWN (0x7B) */
+                if ((rawkey == 0x7A || rawkey == 0x7B) && !s_got_extended_wheel && app->win) {
+                    int16_t rx = 0, ry = 0;
+                    if (renderer_map_window_to_remote(app, app->win->MouseX, app->win->MouseY, &rx, &ry)) {
+                        int32 step = (rawkey == 0x7A) ? -120 : 120;
+                        if ((step > 0 && s_wheel_accum_dy < 0) || (step < 0 && s_wheel_accum_dy > 0)) {
+                            s_wheel_accum_dy = 0;
                         }
+                        s_wheel_accum_dy += step;
+                        if (s_wheel_accum_dy >  480) s_wheel_accum_dy =  480;
+                        if (s_wheel_accum_dy < -480) s_wheel_accum_dy = -480;
+                        s_wheel_win_x = app->win->MouseX;
+                        s_wheel_win_y = app->win->MouseY;
+                    }
+                    break;
+                }
+
+                /* Ignore bare modifier / non-input rawkeys */
+                if ((rawkey >= RAWKEY_LSHIFT && rawkey <= RAWKEY_RCOMMAND) ||
+                    rawkey == RAWKEY_HELP || rawkey == RAWKEY_MENU ||
+                    rawkey == RAWKEY_PRINTSCR || rawkey == RAWKEY_BREAK) {
+                    break;
+                }
+
+                /* Query live kernel qualifiers + dead-key InputEvent from window.class */
+                struct InputEvent *ev = NULL;
+                uint32 wq = 0;
+                if (app->win_obj) {
+                    IIntuition->GetAttr(WINDOW_InputEvent, app->win_obj, (uint32 *)&ev);
+                    IIntuition->GetAttr(WINDOW_Qualifier, app->win_obj, &wq);
+                }
+                uint16 qual = ev ? ev->ie_Qualifier : (uint16)((wq & 0xFFFFU) | ((wq >> 16) & 0xFFFFU));
+                if (qual == 0 && wq != 0) {
+                    qual = (uint16)((wq & 0xFFFFU) | ((wq >> 16) & 0xFFFFU));
+                }
+
+                BOOL has_ctrl   = ((qual & IEQUALIFIER_CONTROL) != 0) &&
+                                  ((qual & (IEQUALIFIER_LALT | IEQUALIFIER_RALT)) == 0);
+                BOOL has_ramiga = (qual & IEQUALIFIER_RCOMMAND) != 0;
+                BOOL has_lamiga = (qual & IEQUALIFIER_LCOMMAND) != 0;
+                BOOL has_shift  = (qual & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)) != 0;
+
+                /* 1. Editing & browser shortcuts via Ctrl / RAmiga / LAmiga (case- & CapsLock-independent,
+                 *    works even while WFLG_RMBTRAP is active over the browser viewport!) */
+                if (has_ctrl || has_ramiga || has_lamiga) {
+                    char base_ch = resolve_rawkey_base_char(rawkey);
+                    if (base_ch && dispatch_edit_shortcut(app, base_ch, SHORTCUT_SRC_RAWKEY)) {
                         break;
                     }
-
-                    uint32 qual = (uint32)lookup_rawkey_qual(rawkey);
-                    if (app->win_obj) {
-                        uint32 wq = 0;
-                        IIntuition->GetAttr(WINDOW_Qualifier, app->win_obj, &wq);
-                        qual |= (wq & 0xFFFFU) | ((wq >> 16) & 0xFFFFU);
-                        struct InputEvent *ev = NULL;
-                        IIntuition->GetAttr(WINDOW_InputEvent, app->win_obj, (uint32 *)&ev);
-                        if (ev) {
-                            qual |= (uint32)ev->ie_Qualifier;
+                    /* When WFLG_RMBTRAP suppresses Intuition's menu bar, still honor core RAmiga menu keys */
+                    if (has_ramiga && base_ch) {
+                        switch (base_ch) {
+                            case 'o': handle_menu_command(app, MID_PROJ_OPEN);         break;
+                            case 't': handle_menu_command(app, MID_TAB_NEW);           break;
+                            case 'w': handle_menu_command(app, MID_TAB_CLOSE);         break;
+                            case 'k': handle_menu_command(app, MID_PROJ_PASSWORDS);    break;
+                            case 'd': handle_menu_command(app, MID_PROJ_DOWNLOADS);    break;
+                            case 'u': handle_menu_command(app, MID_TOGGLE_DARK_THEME); break;
+                            case 'b': handle_menu_command(app, MID_NAV_BACK);          break;
+                            case 'f': handle_menu_command(app, MID_NAV_FORWARD);       break;
+                            case 'r': handle_menu_command(app, MID_NAV_RELOAD);        break;
+                            case 's': handle_menu_command(app, MID_NAV_STOP);          break;
+                            case 'h': handle_menu_command(app, MID_NAV_HOME);          break;
+                            case 'q': handle_menu_command(app, MID_PROJ_QUIT);         break;
+                            case '+': handle_menu_command(app, MID_FONT_LARGER);       break;
+                            case '-': handle_menu_command(app, MID_FONT_SMALLER);      break;
+                            case '0': handle_menu_command(app, MID_FONT_RESET);        break;
+                            default:  break;
                         }
                     }
-                    if (s_hw_ctrl)   qual |= IEQUALIFIER_CONTROL;
-                    if (s_hw_ramiga) qual |= IEQUALIFIER_RCOMMAND;
-                    if (s_hw_lamiga) qual |= IEQUALIFIER_LCOMMAND;
-                    if (s_hw_shift)  qual |= IEQUALIFIER_LSHIFT;
-                    if (s_hw_alt)    qual |= IEQUALIFIER_RALT;
+                    /* Never leak stray characters into web forms while Ctrl or Amiga key is held */
+                    break;
+                }
 
-                    BOOL has_ctrl   = ((qual & IEQUALIFIER_CONTROL) != 0) &&
-                                      ((qual & (IEQUALIFIER_LALT | IEQUALIFIER_RALT)) == 0);
-                    BOOL has_ramiga = (qual & IEQUALIFIER_RCOMMAND) != 0;
-                    BOOL has_lamiga = (qual & IEQUALIFIER_LCOMMAND) != 0;
-                    if (has_ctrl || has_ramiga || has_lamiga) {
-                        char base_ch = resolve_rawkey_base_char(rawkey);
-                        /* Keep RAmiga+A free for Bookmark menu shortcut outside viewport; allow Ctrl+A / LAmiga+A */
-                        if (base_ch && (base_ch != 'a' || has_ctrl || has_lamiga)) {
-                            if (dispatch_edit_shortcut(app, base_ch, SHORTCUT_SRC_RAWKEY)) {
-                                break;
-                            }
+                /* 2. Special non-text keys */
+                if (rawkey == RAWKEY_BACKSPACE) {
+                    net_send_key(app, INPUT_KEY_DOWN, 0x08, "Backspace");
+                    break;
+                } else if (rawkey == RAWKEY_TAB) {
+                    net_send_key(app, INPUT_KEY_DOWN, 0x09, has_shift ? "Shift+Tab" : "Tab");
+                    break;
+                } else if (rawkey == RAWKEY_RETURN || rawkey == RAWKEY_ENTER) {
+                    net_send_key(app, INPUT_KEY_DOWN, 0x0D, "Enter");
+                    break;
+                } else if (rawkey == RAWKEY_ESC) {
+                    net_send_key(app, INPUT_KEY_DOWN, 0x1B, "Escape");
+                    break;
+                } else if (rawkey == RAWKEY_DEL) {
+                    net_send_key(app, INPUT_KEY_DOWN, 0x7F, "Delete");
+                    break;
+                } else if (rawkey == RAWKEY_F11) {
+                    handle_menu_command(app, MID_TOGGLE_SCREEN);
+                    break;
+                } else if (rawkey == RAWKEY_INSERT || rawkey == RAWKEY_F12) {
+                    break;
+                }
+
+                const char *kname = NULL;
+                switch (rawkey) {
+                    case RAWKEY_PAGEUP:    kname = "PageUp";     break;
+                    case RAWKEY_PAGEDOWN:  kname = "PageDown";   break;
+                    case RAWKEY_CRSRUP:    kname = "ArrowUp";    break;
+                    case RAWKEY_CRSRDOWN:  kname = "ArrowDown";  break;
+                    case RAWKEY_CRSRRIGHT: kname = "ArrowRight"; break;
+                    case RAWKEY_CRSRLEFT:  kname = "ArrowLeft";  break;
+                    case RAWKEY_F1:        kname = "F1";         break;
+                    case RAWKEY_F2:        kname = "F2";         break;
+                    case RAWKEY_F3:        kname = "F3";         break;
+                    case RAWKEY_F4:        kname = "F4";         break;
+                    case RAWKEY_F5:        kname = "F5";         break;
+                    case RAWKEY_F6:        kname = "F6";         break;
+                    case RAWKEY_F7:        kname = "F7";         break;
+                    case RAWKEY_F8:        kname = "F8";         break;
+                    case RAWKEY_F9:        kname = "F9";         break;
+                    case RAWKEY_F10:       kname = "F10";        break;
+                    case RAWKEY_HOME:      kname = "Home";       break;
+                    case RAWKEY_END:       kname = "End";        break;
+                    default:               break;
+                }
+                if (kname) {
+                    if (has_shift && (rawkey == RAWKEY_CRSRUP || rawkey == RAWKEY_CRSRDOWN ||
+                                      rawkey == RAWKEY_CRSRRIGHT || rawkey == RAWKEY_CRSRLEFT ||
+                                      rawkey == RAWKEY_HOME || rawkey == RAWKEY_END)) {
+                        char sk[24];
+                        snprintf(sk, sizeof(sk), "Shift+%s", kname);
+                        net_send_key(app, INPUT_KEY_DOWN, rawkey, sk);
+                    } else {
+                        net_send_key(app, INPUT_KEY_DOWN, rawkey, kname);
+                    }
+                    break;
+                }
+
+                /* 3. Regular text input via IKeymap->MapRawKey (handles Shift, CapsLock, AltGr, dead keys, umlauts) */
+                if (IKeymap) {
+                    struct InputEvent ie;
+                    char kbuf[16];
+                    if (ev) {
+                        ie = *ev;
+                        ie.ie_Class    = IECLASS_RAWKEY;
+                        ie.ie_SubClass = 0;
+                        ie.ie_Code     = rawkey;
+                    } else {
+                        memset(&ie, 0, sizeof(ie));
+                        ie.ie_Class         = IECLASS_RAWKEY;
+                        ie.ie_SubClass      = 0;
+                        ie.ie_Code          = rawkey;
+                        ie.ie_Qualifier     = qual;
+                        ie.ie_Prev1DownCode = 0x80;
+                        ie.ie_Prev1DownQual = 0;
+                    }
+                    WORD actual = IKeymap->MapRawKey(&ie, (STRPTR)kbuf, (WORD)(sizeof(kbuf) - 1), NULL);
+                    if (actual > 0) {
+                        unsigned char first = (unsigned char)kbuf[0];
+                        /* Ignore ANSI CSI/ESC sequences and control bytes */
+                        if (first == 0x9B || first == 0x1B || first < 0x20 || first == 0x7F ||
+                            (first >= 0x80 && first <= 0x9F)) {
+                            break;
                         }
-                    }
-
-                    const char *kname = NULL;
-                    switch (rawkey) {
-                        case 0x48: kname = "PageUp";     break;
-                        case 0x49: kname = "PageDown";   break;
-                        case 0x4C: kname = "ArrowUp";    break;
-                        case 0x4D: kname = "ArrowDown";  break;
-                        case 0x4E: kname = "ArrowRight"; break;
-                        case 0x4F: kname = "ArrowLeft";  break;
-                        case 0x50: kname = "F1";         break;
-                        case 0x51: kname = "F2";         break;
-                        case 0x52: kname = "F3";         break;
-                        case 0x53: kname = "F4";         break;
-                        case 0x54: kname = "F5";         break;
-                        case 0x55: kname = "F6";         break;
-                        case 0x56: kname = "F7";         break;
-                        case 0x57: kname = "F8";         break;
-                        case 0x58: kname = "F9";         break;
-                        case 0x59: kname = "F10";        break;
-                        case 0x70: kname = "Home";       break;
-                        case 0x71: kname = "End";        break;
-                        default:   break;
-                    }
-                    if (kname) {
-                        BOOL has_shift = ((qual & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)) != 0) &&
-                                         !has_ctrl && !has_ramiga && !has_lamiga;
-                        if (has_shift && (rawkey == 0x4C || rawkey == 0x4D || rawkey == 0x4E ||
-                                          rawkey == 0x4F || rawkey == 0x70 || rawkey == 0x71)) {
-                            char sk[24];
-                            snprintf(sk, sizeof(sk), "Shift+%s", kname);
-                            net_send_key(app, INPUT_KEY_DOWN, rawkey, sk);
+                        kbuf[actual] = '\0';
+                        if (actual == 1 && first >= 0x20 && first <= 0x7E) {
+                            net_send_key(app, INPUT_KEY_DOWN, first, kbuf);
                         } else {
-                            net_send_key(app, INPUT_KEY_DOWN, rawkey, kname);
+                            char utf8_str[64];
+                            vb_local_to_utf8(kbuf, utf8_str, sizeof(utf8_str));
+                            if (utf8_str[0] != '\0') {
+                                net_send_key(app, INPUT_KEY_DOWN, first, utf8_str);
+                            }
                         }
                     }
                 }
@@ -4466,7 +4524,7 @@ void gui_handle_events(VortexApp *app)
         renderer_flush_dirty(app);
 
         if (app->win) {
-            if (app->ctx_menu.link_url[0] == '\0' && app->hover_url[0] != '\0') {
+            if (!app->ctx_menu_ready && app->ctx_menu.link_url[0] == '\0' && app->hover_url[0] != '\0') {
                 strncpy(app->ctx_menu.link_url, app->hover_url, sizeof(app->ctx_menu.link_url) - 1);
                 app->ctx_menu.link_url[sizeof(app->ctx_menu.link_url) - 1] = '\0';
                 if (app->ctx_menu.link_text[0] == '\0') {
@@ -4531,6 +4589,10 @@ void gui_handle_events(VortexApp *app)
                         PMITEM(GetVString(MSG_CTX_COPY_LINK)), PMIA_ID, CTX_COPY_LINK_URL, PMEND,
                         PMITEM(GetVString(MSG_CTX_FAV_LINK)), PMIA_ID, CTX_FAV_LINK, PMEND,
                         PMBAR(), PMEND,
+                        PMITEM(GetVString(MSG_MENU_CUT)), PMIA_ID, CTX_EDIT_CUT, PMEND,
+                        PMITEM(GetVString(MSG_MENU_COPY)), PMIA_ID, CTX_EDIT_COPY, PMEND,
+                        PMITEM(GetVString(MSG_MENU_PASTE)), PMIA_ID, CTX_EDIT_PASTE, PMEND,
+                        PMBAR(), PMEND,
                         PMITEM(GetVString(MSG_MENU_TAB_CLOSE)), PMIA_ID, CTX_CLOSE_TAB, PMEND,
                         PMBAR(), PMEND,
                         PMITEM(GetVString(MSG_MENU_BACK)), PMIA_ID, CTX_BACK, PMEND,
@@ -4546,6 +4608,10 @@ void gui_handle_events(VortexApp *app)
                         PMA_MenuHandler, &pm_hook,
                         PMITEM(GetVString(MSG_CTX_OPEN_MEDIA)), PMIA_ID, CTX_OPEN_MEDIA, PMEND,
                         PMITEM(GetVString(MSG_CTX_DOWNLOAD_IMAGE)), PMIA_ID, CTX_DOWNLOAD_MEDIA, PMEND,
+                        PMBAR(), PMEND,
+                        PMITEM(GetVString(MSG_MENU_CUT)), PMIA_ID, CTX_EDIT_CUT, PMEND,
+                        PMITEM(GetVString(MSG_MENU_COPY)), PMIA_ID, CTX_EDIT_COPY, PMEND,
+                        PMITEM(GetVString(MSG_MENU_PASTE)), PMIA_ID, CTX_EDIT_PASTE, PMEND,
                         PMBAR(), PMEND,
                         PMITEM(GetVString(MSG_MENU_TAB_NEW)), PMIA_ID, CTX_NEW_TAB, PMEND,
                         PMITEM(GetVString(MSG_MENU_TAB_CLOSE)), PMIA_ID, CTX_CLOSE_TAB, PMEND,
