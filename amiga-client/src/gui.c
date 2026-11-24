@@ -54,6 +54,28 @@
 
 extern struct SocketIFace *ISocket;
 
+static void send_amiga_clipboard_paste(VortexApp *app)
+{
+    if (!app) return;
+    char *clip_str = clipboard_read_text();
+    if (clip_str && clip_str[0] != '\0') {
+        size_t src_len  = strlen(clip_str);
+        size_t utf8_cap = src_len * 4 + 4;
+        char *utf8_buf  = (char *)malloc(utf8_cap);
+        if (utf8_buf) {
+            vb_local_to_utf8(clip_str, utf8_buf, utf8_cap);
+            net_send_clipboard(app, utf8_buf);
+            free(utf8_buf);
+        } else {
+            net_send_clipboard(app, clip_str);
+        }
+        free(clip_str);
+    } else {
+        if (clip_str) free(clip_str);
+        net_send_key(app, INPUT_KEY_DOWN, 22, "Paste");
+    }
+}
+
 static void handle_menu_command(VortexApp *app, uint32 item_id);
 static void open_main_menu_popup(VortexApp *app, int16_t mx, int16_t my);
 static void open_quicklink_popup(VortexApp *app, int qidx, int16_t mx, int16_t my);
@@ -979,7 +1001,7 @@ static void dispatch_viewport_mouse_btn(VortexApp *app, int16_t win_x, int16_t w
         return;
     }
 
-    int16_t rx = 0, ry = 0;
+    int16_t rx = app->last_remote_x, ry = app->last_remote_y;
     if (!renderer_map_window_to_remote(app, win_x, win_y, &rx, &ry)) {
         if (!is_down && (s_mouse_lmb_down || app->mouse_lmb_down) && btn == 1) {
             s_mouse_lmb_down = FALSE;
@@ -1744,14 +1766,9 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
             net_send_key(app, INPUT_KEY_DOWN, 3, "Copy");
             break;
 
-        case MID_EDIT_PASTE: {
-            char *clip_str = clipboard_read_text();
-            if (clip_str) {
-                net_send_clipboard(app, clip_str);
-                free(clip_str);
-            }
+        case MID_EDIT_PASTE:
+            send_amiga_clipboard_paste(app);
             break;
-        }
 
         case MID_NAV_BACK:
             net_send_url(app, "@BACK");
@@ -2359,15 +2376,10 @@ void gui_tabs_reset(VortexApp *app)
     gui_tabs_rebuild(app);
 }
 
-void gui_tab_add(VortexApp *app, const char *title, const char *url, BOOL switch_to)
+static int tab_append_local(VortexApp *app, const char *title, const char *url, int target_idx)
 {
-    if (!app) return;
-    if (app->num_tabs >= VB_MAX_TABS) {
-        app_set_status(GetVString(MSG_STATUS_MAX_TABS), VB_MAX_TABS);
-        return;
-    }
-
-    int idx = app->num_tabs++;
+    if (!app || app->num_tabs >= VB_MAX_TABS) return -1;
+    int idx = (target_idx >= 0 && target_idx < app->num_tabs) ? target_idx : (int)app->num_tabs++;
     app->tabs[idx].id = (uint32_t)idx;
     if (title && title[0]) {
         vb_utf8_to_local(title, app->tabs[idx].title, sizeof(app->tabs[0].title));
@@ -2378,6 +2390,19 @@ void gui_tab_add(VortexApp *app, const char *title, const char *url, BOOL switch
     /* Empty URL = server portal/start page (never "about:blank") */
     strncpy(app->tabs[idx].url, url ? url : "", sizeof(app->tabs[0].url) - 1);
     app->tabs[idx].url[sizeof(app->tabs[0].url) - 1] = '\0';
+    return idx;
+}
+
+void gui_tab_add(VortexApp *app, const char *title, const char *url, BOOL switch_to)
+{
+    if (!app) return;
+    if (app->num_tabs >= VB_MAX_TABS) {
+        app_set_status(GetVString(MSG_STATUS_MAX_TABS), VB_MAX_TABS);
+        return;
+    }
+
+    int idx = tab_append_local(app, title, url, -1);
+    if (idx < 0) return;
 
     if (switch_to) {
         app->active_tab_idx = (uint16)idx;
@@ -2390,15 +2415,26 @@ void gui_tab_add(VortexApp *app, const char *title, const char *url, BOOL switch
     gui_tabs_rebuild(app);
 }
 
-void gui_tab_switch(VortexApp *app, uint16 idx)
+void gui_tab_add_remote(VortexApp *app, const char *title, const char *url, uint16 idx, BOOL switch_to)
 {
-    if (!app || idx >= app->num_tabs) return;
+    if (!app) return;
+    int added = tab_append_local(app, title, url, (int)idx);
+    if (added < 0) return;
 
+    if (switch_to) {
+        app->active_tab_idx = (uint16)added;
+        snprintf(app->current_url, sizeof(app->current_url), "%s", app->tabs[added].url);
+        gui_update_url_bar(app, app->tabs[added].url);
+    }
+
+    gui_tabs_rebuild(app);
+}
+
+static void apply_tab_switch_ui(VortexApp *app, uint16 idx)
+{
     app->active_tab_idx = idx;
+    snprintf(app->current_url, sizeof(app->current_url), "%s", app->tabs[idx].url);
     gui_update_url_bar(app, app->tabs[idx].url);
-    char cmd[32];
-    snprintf(cmd, sizeof(cmd), "@SWITCHTAB:%u", (unsigned)idx);
-    net_send_url(app, cmd);
     app_set_status(GetVString(MSG_STATUS_TAB_SWITCH), (int)idx + 1, app->tabs[idx].title);
 
     if (app->gad_clicktab && app->win) {
@@ -2407,6 +2443,22 @@ void gui_tab_switch(VortexApp *app, uint16 idx)
                                    TAG_DONE);
         IIntuition->RefreshGList((struct Gadget *)app->gad_clicktab, app->win, NULL, 1);
     }
+}
+
+void gui_tab_switch(VortexApp *app, uint16 idx)
+{
+    if (!app || idx >= app->num_tabs) return;
+
+    apply_tab_switch_ui(app, idx);
+    char cmd[32];
+    snprintf(cmd, sizeof(cmd), "@SWITCHTAB:%u", (unsigned)idx);
+    net_send_url(app, cmd);
+}
+
+void gui_tab_switch_remote(VortexApp *app, uint16 idx)
+{
+    if (!app || idx >= app->num_tabs) return;
+    apply_tab_switch_ui(app, idx);
 }
 
 void gui_tab_close(VortexApp *app, uint16 idx)
@@ -2431,6 +2483,7 @@ void gui_tab_close(VortexApp *app, uint16 idx)
 
     for (int i = idx; i < app->num_tabs - 1; i++) {
         app->tabs[i] = app->tabs[i + 1];
+        app->tabs[i].id = (uint32_t)i;
     }
     app->num_tabs--;
 
@@ -2445,6 +2498,34 @@ void gui_tab_close(VortexApp *app, uint16 idx)
     snprintf(cmd, sizeof(cmd), "@SWITCHTAB:%u", (unsigned)app->active_tab_idx);
     net_send_url(app, cmd);
 
+    gui_tabs_rebuild(app);
+    gui_update_url_bar(app, app->tabs[app->active_tab_idx].url);
+}
+
+void gui_tab_close_remote(VortexApp *app, uint16 idx, uint16 new_active_idx)
+{
+    if (!app || app->num_tabs == 0) return;
+
+    if (app->num_tabs <= 1) {
+        snprintf(app->tabs[0].title, sizeof(app->tabs[0].title), "%s", GetVString(MSG_MENU_HOME));
+        app->tabs[0].url[0] = '\0';
+        app->active_tab_idx = 0;
+        app->current_url[0] = '\0';
+        gui_update_url_bar(app, "");
+        gui_tabs_rebuild(app);
+        return;
+    }
+
+    if (idx < app->num_tabs) {
+        for (int i = idx; i < app->num_tabs - 1; i++) {
+            app->tabs[i] = app->tabs[i + 1];
+            app->tabs[i].id = (uint32_t)i;
+        }
+        app->num_tabs--;
+    }
+
+    app->active_tab_idx = (new_active_idx < app->num_tabs) ? new_active_idx : (uint16)(app->num_tabs - 1);
+    snprintf(app->current_url, sizeof(app->current_url), "%s", app->tabs[app->active_tab_idx].url);
     gui_tabs_rebuild(app);
     gui_update_url_bar(app, app->tabs[app->active_tab_idx].url);
 }
@@ -3845,7 +3926,19 @@ void gui_handle_events(VortexApp *app)
 
             case WMHI_VANILLAKEY: {
                 uint16 ascii = (uint16)(result & WMHI_KEYMASK);
-                if (ascii == 0x08) {
+                if (ascii == 0x01) { /* Ctrl+A */
+                    net_send_key(app, INPUT_KEY_DOWN, ascii, "Control+a");
+                } else if (ascii == 0x03) { /* Ctrl+C */
+                    net_send_key(app, INPUT_KEY_DOWN, ascii, "Copy");
+                } else if (ascii == 0x16) { /* Ctrl+V: Paste Amiga clipboard */
+                    send_amiga_clipboard_paste(app);
+                } else if (ascii == 0x18) { /* Ctrl+X */
+                    net_send_key(app, INPUT_KEY_DOWN, ascii, "Cut");
+                } else if (ascii == 0x19) { /* Ctrl+Y */
+                    net_send_key(app, INPUT_KEY_DOWN, ascii, "Control+y");
+                } else if (ascii == 0x1A) { /* Ctrl+Z */
+                    net_send_key(app, INPUT_KEY_DOWN, ascii, "Control+z");
+                } else if (ascii == 0x08) {
                     net_send_key(app, INPUT_KEY_DOWN, ascii, "Backspace");
                 } else if (ascii == 0x09) {
                     net_send_key(app, INPUT_KEY_DOWN, ascii, "Tab");

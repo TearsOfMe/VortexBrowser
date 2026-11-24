@@ -91,6 +91,12 @@ MSG_UPLOAD_RESPONSE   = 0x0D
 MSG_UPLOAD_CHUNK      = 0x0E
 MSG_PASSWORD_SAVE     = 0x0F
 MSG_SERVER_INFO       = 0x10
+MSG_TAB_SYNC          = 0x11
+
+TAB_SYNC_ADD          = 1
+TAB_SYNC_CLOSE        = 2
+TAB_SYNC_SWITCH       = 3
+VB_MAX_TABS           = 16
 
 FMT_ARGB32 = 1
 FMT_RGB565 = 2
@@ -133,6 +139,7 @@ STRUCT_MSG_UPLOAD_RESP  = struct.Struct(">IIBB256s")
 STRUCT_MSG_UPLOAD_CHUNK = struct.Struct(">BII")
 STRUCT_MSG_PASSWORD_SAVE = struct.Struct(">B256s128s128s")
 STRUCT_MSG_SERVER_INFO   = struct.Struct(">B64s")
+STRUCT_MSG_TAB_SYNC      = struct.Struct(">BBBHHH512s128s")
 
 DOWNLOAD_CHUNK_SIZE = 64 * 1024
 AUDIO_SAMPLE_RATE   = 44100
@@ -1987,6 +1994,11 @@ class DirectCDPSession:
                 if not fut.done():
                     fut.set_exception(RuntimeError("DirectCDP WebSocket closed"))
             self._pending.clear()
+            for cb in list(self._listeners.get("_disconnected", [])):
+                try:
+                    cb({})
+                except Exception:
+                    pass
 
     def on(self, event: str, callback) -> None:
         self._listeners.setdefault(event, []).append(callback)
@@ -2795,6 +2807,9 @@ class AmigaClientSession:
         self._last_click_x: int = -1
         self._last_click_y: int = -1
         self._click_count: int = 1
+        self._scrollbar_drag_offset: Optional[float] = None
+        self._popup_adopt_lock = asyncio.Lock()
+        self._adopting_popups: set = set()
         self.last_upload_intercept_time: float = 0.0
 
         # Pre-allocated pixel conversion buffers (reused across frames to avoid alloc churn)
@@ -2929,7 +2944,7 @@ class AmigaClientSession:
                                 await self.cdp.send("Page.setInterceptFileChooserDialog", {"enabled": True})
                             except Exception:
                                 pass
-                        # Listen for Page.fileChooserOpened on DirectCDP
+                        # Listen for Page.fileChooserOpened, Page.windowOpen & unexpected close on DirectCDP
                         if (
                             self.cdp is direct
                             and self._tab_generation == gen
@@ -2937,6 +2952,11 @@ class AmigaClientSession:
                             and self.running
                         ):
                             self.cdp.on("Page.fileChooserOpened", self._on_cdp_file_chooser_opened)
+                            self.cdp.on("Page.windowOpen", self._on_cdp_window_open)
+                            self.cdp.on(
+                                "_disconnected",
+                                lambda _=None, tp=target_page, g=gen: self._on_cdp_unexpected_disconnect(tp, g),
+                            )
                         return
                     await direct.close()
 
@@ -3010,6 +3030,143 @@ class AmigaClientSession:
             await self.send_packet(pkt)
 
         t = asyncio.create_task(_do_send())
+        self.background_tasks.add(t)
+        t.add_done_callback(self.background_tasks.discard)
+
+    def _send_tab_sync(
+        self,
+        action: int,
+        tab_idx: int,
+        active_idx: int,
+        make_active: bool = True,
+        url: str = "",
+        title: str = "",
+    ) -> None:
+        if not self.running:
+            return
+        url_str = (url or "").strip()
+        if url_str.startswith("about:") and action != TAB_SYNC_ADD:
+            url_str = ""
+        url_bytes = url_str.encode("utf-8", errors="replace")[:511].ljust(512, b"\x00")
+        title_bytes = (title or "").encode("utf-8", errors="replace")[:127].ljust(128, b"\x00")
+        pkt = STRUCT_MSG_TAB_SYNC.pack(
+            MSG_TAB_SYNC,
+            int(action),
+            1 if make_active else 0,
+            max(0, int(tab_idx)),
+            max(0, int(active_idx)),
+            max(1, len(self.tabs)),
+            url_bytes,
+            title_bytes,
+        )
+        t = asyncio.create_task(self.send_packet(pkt))
+        self.background_tasks.add(t)
+        t.add_done_callback(self.background_tasks.discard)
+
+    @staticmethod
+    def _page_identity(page: Any) -> Tuple[str, Any]:
+        raw = getattr(page, "_sync", page)
+        tid = getattr(raw, "_target_id", None) or getattr(page, "_target_id", None)
+        if tid:
+            return ("target_id", str(tid))
+        return ("obj", id(raw))
+
+    def _find_tab_index(self, page: Any) -> int:
+        if page is None:
+            return -1
+        try:
+            return self.tabs.index(page)
+        except ValueError:
+            pass
+        key = self._page_identity(page)
+        for i, tab in enumerate(self.tabs):
+            if self._page_identity(tab) == key:
+                return i
+        return -1
+
+    async def _fetch_live_page_target_ids(self) -> Optional[set]:
+        try:
+            def _get():
+                with urllib.request.urlopen(f"http://127.0.0.1:{self.cdp_port}/json/list", timeout=0.6) as r:
+                    return json.loads(r.read().decode("utf-8", errors="replace"))
+            targets = await asyncio.to_thread(_get)
+            return {str(t["id"]) for t in targets if t.get("type") == "page" and t.get("id")}
+        except Exception:
+            return None
+
+    async def _adopt_rustwright_popups(self) -> None:
+        """Pump Rustwright's target discovery so popups/target=_blank opened during DirectCDP clicks are adopted."""
+        if not self.running or not self.context or getattr(self, "_creating_tab", False):
+            return
+        async with self._popup_adopt_lock:
+            if not self.running or not self.context or getattr(self, "_creating_tab", False):
+                return
+            try:
+                live_ids = await self._fetch_live_page_target_ids() if self.engine == "chromium" else None
+                known = {self._page_identity(t) for t in self.tabs}
+                if live_ids is not None:
+                    known_tid_strs = {v for kind, v in known if kind == "target_id"}
+                    if live_ids.issubset(known_tid_strs):
+                        return
+
+                sync_ctx = getattr(self.context, "_sync", None)
+                if self.use_rustwright and sync_ctx is not None and hasattr(sync_ctx, "_adopt_existing_pages"):
+                    await asyncio.wait_for(asyncio.to_thread(sync_ctx._adopt_existing_pages), timeout=0.6)
+                pages = list(getattr(self.context, "pages", []) or [])
+                for p in pages:
+                    pkey = self._page_identity(p)
+                    if pkey not in known and pkey not in self._adopting_popups:
+                        self._on_popup_page(p)
+            except Exception as exc:
+                logger.debug("Popup target adopt notice: %s", exc)
+
+    def _on_cdp_unexpected_disconnect(self, target_page: Page, gen: int) -> None:
+        if not self.running or self._switching_tab or self._tab_generation != gen:
+            return
+
+        async def _check_closed() -> None:
+            await asyncio.sleep(0.12)
+            if not self.running or self._switching_tab or self._tab_generation != gen:
+                return
+            live_ids = await self._fetch_live_page_target_ids()
+            if live_ids is None:
+                return
+            for tab in list(self.tabs):
+                kind, val = self._page_identity(tab)
+                if kind == "target_id" and str(val) not in live_ids:
+                    self._on_page_closed(tab)
+
+        t = asyncio.create_task(_check_closed())
+        self.background_tasks.add(t)
+        t.add_done_callback(self.background_tasks.discard)
+
+    def _on_cdp_window_open(self, params: Optional[Dict[str, Any]] = None) -> None:
+        if not self.running or getattr(self, "_creating_tab", False):
+            return
+
+        async def _check() -> None:
+            for delay in (0.05, 0.15, 0.35):
+                await asyncio.sleep(delay)
+                if not self.running or getattr(self, "_creating_tab", False):
+                    return
+                await self._adopt_rustwright_popups()
+
+        t = asyncio.create_task(_check())
+        self.background_tasks.add(t)
+        t.add_done_callback(self.background_tasks.discard)
+
+    def _schedule_popup_adopt_check(self) -> None:
+        if not (self.running and self.use_rustwright and self.engine == "chromium"):
+            return
+
+        async def _poll() -> None:
+            for delay in (0.10, 0.30):
+                await asyncio.sleep(delay)
+                if not self.running or getattr(self, "_creating_tab", False):
+                    return
+                await self._adopt_rustwright_popups()
+
+        t = asyncio.create_task(_poll())
         self.background_tasks.add(t)
         t.add_done_callback(self.background_tasks.discard)
 
@@ -3148,9 +3305,11 @@ class AmigaClientSession:
         self._detach_page_listeners(closed_page)
         if not self.tabs or closed_page not in self.tabs:
             return
-        idx = self.tabs.index(closed_page)
+        idx = self._find_tab_index(closed_page)
+        if idx < 0:
+            return
         self.tabs.pop(idx)
-        was_active = (closed_page == self.page)
+        was_active = (self._page_identity(closed_page) == self._page_identity(self.page)) if self.page else False
         if idx < self.active_tab_idx:
             self.active_tab_idx -= 1
         elif self.active_tab_idx >= len(self.tabs):
@@ -3158,16 +3317,30 @@ class AmigaClientSession:
         if was_active:
             if self.running and self.tabs:
                 self.page = self.tabs[self.active_tab_idx]
+                self._send_tab_sync(
+                    TAB_SYNC_CLOSE,
+                    idx,
+                    self.active_tab_idx,
+                    make_active=True,
+                    url=(self.page.url or ""),
+                )
                 t = asyncio.create_task(self._activate_tab(self.active_tab_idx))
                 self.background_tasks.add(t)
                 t.add_done_callback(self.background_tasks.discard)
             else:
                 self.page = None
+                self._send_tab_sync(TAB_SYNC_CLOSE, idx, 0, make_active=True)
+        elif self.running:
+            self._send_tab_sync(TAB_SYNC_CLOSE, idx, self.active_tab_idx, make_active=False)
 
     def _on_page_loaded(self, *args) -> None:
         if not self.running:
             return
-        if args and args[0] != self.page:
+        sender = args[0] if args else self.page
+        if self.page and self._page_identity(sender) != self._page_identity(self.page):
+            tidx = self._find_tab_index(sender)
+            if tidx >= 0 and getattr(sender, "url", None):
+                self._send_nav_update(sender.url, tab_idx=tidx)
             return
         self._send_progress(100, "Fertig")
         self._on_page_updated()
@@ -3178,7 +3351,11 @@ class AmigaClientSession:
     def _on_dom_content_loaded(self, *args) -> None:
         if not self.running:
             return
-        if args and args[0] != self.page:
+        sender = args[0] if args else self.page
+        if self.page and self._page_identity(sender) != self._page_identity(self.page):
+            tidx = self._find_tab_index(sender)
+            if tidx >= 0 and getattr(sender, "url", None):
+                self._send_nav_update(sender.url, tab_idx=tidx)
             return
         self._send_progress(75, "Erstelle Seite...")
         self._on_page_updated()
@@ -3238,55 +3415,75 @@ class AmigaClientSession:
             t.add_done_callback(self.background_tasks.discard)
 
     def _on_popup_page(self, new_page: Page) -> None:
-        """Redirects any target='_blank' or window.open popup into the main streamed page."""
+        """Adopts target='_blank' links and window.open() popups as real tabs while preserving window.opener."""
         if not self.running or getattr(self, "_creating_tab", False):
             return
-        if self.tabs and new_page in self.tabs:
+        if not self.page:
             return
-        if not self.page or new_page == self.page:
+        pkey = self._page_identity(new_page)
+        if pkey == self._page_identity(self.page) or self._find_tab_index(new_page) >= 0:
             return
+        if pkey in self._adopting_popups:
+            return
+        self._adopting_popups.add(pkey)
 
         async def _adopt_popup():
             try:
                 if not self.running or getattr(self, "_creating_tab", False):
                     return
-                if self.tabs and new_page in self.tabs:
+                if not self.page or self._find_tab_index(new_page) >= 0:
                     return
-                if not self.page or new_page == self.page:
-                    return
-                # Wait for the popup page to receive its target URL before redirecting
+                # Wait briefly for initial navigation URL if blank (keep new_page alive for window.opener / document.write popups)
                 popup_url = (new_page.url or "").strip()
                 if not popup_url or popup_url == "about:blank":
-                    for _ in range(15):
-                        await asyncio.sleep(0.1)
+                    for _ in range(10):
+                        await asyncio.sleep(0.05)
                         if not self.running or getattr(self, "_creating_tab", False):
                             return
-                        if self.tabs and new_page in self.tabs:
+                        if self._find_tab_index(new_page) >= 0:
                             return
                         popup_url = (new_page.url or "").strip()
                         if popup_url and popup_url != "about:blank":
                             break
                 if not self.running or getattr(self, "_creating_tab", False):
                     return
-                if self.tabs and new_page in self.tabs:
+                if self._find_tab_index(new_page) >= 0:
                     return
+                if popup_url.startswith("chrome:") or popup_url.startswith("resource:"):
+                    try:
+                        await new_page.close()
+                    except Exception:
+                        pass
+                    return
+
+                # Fallback if max client tabs (VB_MAX_TABS=16) reached
+                if len(self.tabs) >= VB_MAX_TABS:
+                    try:
+                        await new_page.close()
+                    except Exception:
+                        pass
+                    if popup_url and not popup_url.startswith("about:") and self.page and popup_url != self.page.url:
+                        logger.info("Max tabs reached (%d); opening popup in current tab: %s", VB_MAX_TABS, popup_url)
+                        await self._handle_navigation(popup_url)
+                    return
+
+                old_page = self.page
+                self.tabs.append(new_page)
+                new_idx = len(self.tabs) - 1
+                self._setup_page_listeners(new_page)
+                tab_url = "" if (not popup_url or popup_url.startswith("about:")) else popup_url
+                title = ""
                 try:
-                    await new_page.close()
+                    title = (await asyncio.wait_for(new_page.title(), timeout=0.3) or "").strip()
                 except Exception:
-                    pass
-                if (
-                    popup_url
-                    and not popup_url.startswith("about:")
-                    and not popup_url.startswith("chrome:")
-                    and not popup_url.startswith("resource:")
-                    and self.page
-                ):
-                    if popup_url == self.page.url:
-                        return
-                    logger.info("Redirecting popup tab to main viewport: %s", popup_url)
-                    await self._handle_navigation(popup_url)
+                    title = ""
+                logger.info("Adopted popup/new-tab [%d]: %s", new_idx, tab_url or "Popup")
+                self._send_tab_sync(TAB_SYNC_ADD, new_idx, new_idx, make_active=True, url=tab_url, title=title)
+                await self._activate_tab(new_idx, old_page=old_page)
             except Exception as exc:
                 logger.debug("Popup adoption error: %s", exc)
+            finally:
+                self._adopting_popups.discard(pkey)
 
         t = asyncio.create_task(_adopt_popup())
         self.background_tasks.add(t)
@@ -3402,18 +3599,11 @@ class AmigaClientSession:
                     ];
                     Object.defineProperty(navigator, 'plugins', { get: () => fakePlugins });
                 }
-                try {
+                try:
                     const _defaultLangs = """ + nav_langs_json + """;
                     Object.defineProperty(navigator, 'languages', { get: () => window.__vortex_languages || _defaultLangs });
                     Object.defineProperty(navigator, 'language', { get: () => (window.__vortex_languages || _defaultLangs)[0] });
                 } catch (e) {}
-
-                document.addEventListener('click', function(e) {
-                    const a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
-                    if (a && a.target && a.target !== '_self') {
-                        a.target = '_self';
-                    }
-                }, true);
 
                 // Media & YouTube Performance Turbo (H.264 only, block 60fps & VP9/AV1, disable Ambient Mode)
                 try {
@@ -4093,15 +4283,23 @@ class AmigaClientSession:
         click_count: int = 0,
         delta_y: float = 0.0,
         timeout: float = 0.25,
+        buttons: Optional[int] = None,
     ) -> bool:
         """Dispatch mouse events directly via DirectCDP WebSocket, bypassing Rustwright PyO3/Tokio locks."""
         if not (isinstance(self.cdp, DirectCDPSession) and self.cdp.connected):
             return False
+        btn_mask_map = {"left": 1, "right": 2, "middle": 4}
+        if buttons is None:
+            if cdp_type == "mousePressed" or (cdp_type == "mouseMoved" and button != "none"):
+                buttons = btn_mask_map.get(button, 0)
+            else:
+                buttons = 0
         params: Dict[str, Any] = {
             "type": cdp_type,
             "x": float(x),
             "y": float(y),
             "button": button,
+            "buttons": int(buttons),
         }
         if click_count > 0:
             params["clickCount"] = int(click_count)
@@ -5408,10 +5606,24 @@ class AmigaClientSession:
                     (text_len,) = struct.unpack(">I", clip_hdr)
                     if 0 < text_len <= 1048576:
                         clip_bytes = await self.reader.readexactly(text_len)
-                        clip_text = clip_bytes.decode("utf-8", errors="replace")
+                        try:
+                            clip_text = clip_bytes.decode("utf-8")
+                        except UnicodeDecodeError:
+                            clip_text = clip_bytes.decode("latin-1", errors="replace")
                         logger.info("Received MSG_CLIPBOARD from Amiga (%d chars): %r", len(clip_text), clip_text[:60])
                         if self.page:
-                            await self.page.keyboard.insert_text(clip_text)
+                            inserted = False
+                            if isinstance(self.cdp, DirectCDPSession) and self.cdp.connected:
+                                try:
+                                    await asyncio.wait_for(
+                                        self.cdp.send("Input.insertText", {"text": clip_text}),
+                                        timeout=1.0,
+                                    )
+                                    inserted = True
+                                except Exception:
+                                    inserted = False
+                            if not inserted:
+                                await asyncio.wait_for(self.page.keyboard.insert_text(clip_text), timeout=1.5)
                             self._trigger_full_refresh(True)
                 except (asyncio.IncompleteReadError, Exception) as e:
                     logger.warning("Error reading MSG_CLIPBOARD: %s", e)
@@ -5461,7 +5673,7 @@ class AmigaClientSession:
                 if btn == "left" and cx >= (self.width - 20):
                     ratio = float(cy) / float(max(1, self.height))
                     await self._safe_eval(
-                        f"window.scrollTo(0, Math.max(0, (document.documentElement.scrollHeight - window.innerHeight) * {ratio:.4f}))"
+                        f"(() => {{ const se = document.scrollingElement || document.documentElement || document.body; if (se) window.scrollTo(0, Math.max(0, (se.scrollHeight - window.innerHeight) * {ratio:.4f})); }})()"
                     )
                 else:
                     if not await self._cdp_mouse("mouseMoved", cx, cy, "none", 0):
@@ -5471,6 +5683,8 @@ class AmigaClientSession:
                         await self._cdp_mouse("mouseReleased", cx, cy, btn, 1)
                     if btn == "left":
                         self._schedule_storage_save(delay=3.5)
+                    if btn in ("left", "middle"):
+                        self._schedule_popup_adopt_check()
                 self._trigger_full_refresh(True)
                 self._schedule_delayed_frames()
 
@@ -5498,17 +5712,44 @@ class AmigaClientSession:
                 self._mouse_down_y = cy
                 self._mouse_down_btn = btn
                 self._mouse_down_time = now
+                self._scrollbar_drag_offset = None
 
                 if btn == "right":
                     await self._send_native_context_menu(cx, cy)
                     return
 
+                sb_handled = False
                 if btn == "left" and cx >= (self.width - 20):
-                    ratio = float(cy) / float(max(1, self.height))
-                    await self._safe_eval(
-                        f"window.scrollTo(0, Math.max(0, (document.documentElement.scrollHeight - window.innerHeight) * {ratio:.4f}))"
+                    sb_res = await self._safe_eval(
+                        """([cy]) => {
+                            const se = document.scrollingElement || document.documentElement || document.body;
+                            if (!se) return { scrollable: false };
+                            const sh = se.scrollHeight || 0;
+                            const ch = window.innerHeight || document.documentElement.clientHeight || 0;
+                            if (sh <= ch + 1) return { scrollable: false };
+                            const maxScroll = sh - ch;
+                            const thumbH = Math.max(20, Math.round(ch * (ch / sh)));
+                            const trackSpan = Math.max(1, ch - thumbH);
+                            const thumbTop = (se.scrollTop / Math.max(1, maxScroll)) * trackSpan;
+                            let grabOffset;
+                            if (cy >= thumbTop - 4 && cy <= thumbTop + thumbH + 4) {
+                                grabOffset = cy - thumbTop;
+                            } else {
+                                grabOffset = thumbH * 0.5;
+                                const newTop = Math.max(0, Math.min(trackSpan, cy - grabOffset));
+                                window.scrollTo({ top: (newTop / trackSpan) * maxScroll, left: se.scrollLeft || 0, behavior: 'instant' });
+                            }
+                            return { scrollable: true, grabOffset: grabOffset };
+                        }""",
+                        [cy],
+                        timeout=0.35,
+                        default=None,
                     )
-                else:
+                    if isinstance(sb_res, dict) and sb_res.get("scrollable"):
+                        self._scrollbar_drag_offset = float(sb_res.get("grabOffset", 0.0))
+                        sb_handled = True
+
+                if not sb_handled:
                     if btn == "left":
                         await self._safe_eval("([x, y]) => window.__vortex_selection && window.__vortex_selection.start(x, y)", [cx, cy], timeout=0.4)
                     if not await self._cdp_mouse("mouseMoved", cx, cy, "none", 0):
@@ -5526,6 +5767,13 @@ class AmigaClientSession:
                 elif key_code == 3:
                     btn = "right"
                 logger.info("INPUT_MOUSE_UP (%s) at (%d, %d)", btn, cx, cy)
+
+                if btn == "left" and self._scrollbar_drag_offset is not None:
+                    self._scrollbar_drag_offset = None
+                    self._mouse_down_btn = ""
+                    self._trigger_full_refresh(True)
+                    self._schedule_delayed_frames()
+                    return
 
                 if btn != "right":
                     down_x = self._mouse_down_x if self._mouse_down_x >= 0 else cx
@@ -5555,7 +5803,7 @@ class AmigaClientSession:
                     now_up = time.monotonic()
                     if btn == "left" and dist <= 10 and not dragged and not self.pending_uploads and (now_up - self.last_upload_intercept_time) >= 3.0:
                         try:
-                            upload_hit = await self.page.evaluate("""([x, y]) => {
+                            upload_hit = await self._safe_eval("""([x, y]) => {
                                 let el = document.elementFromPoint(x, y);
                                 if (!el) return false;
                                 let elem = el.nodeType === 1 ? el : el.parentElement;
@@ -5608,12 +5856,15 @@ class AmigaClientSession:
                                     }
                                 }
                                 return false;
-                            }""", [down_x, down_y])
+                            }""", [down_x, down_y], timeout=0.35, default=False)
                             if upload_hit:
                                 logger.info("Fallback upload click triggered at (%d, %d)", down_x, down_y)
                                 self.last_upload_intercept_time = time.monotonic()
                         except Exception as e:
                             logger.info("Upload element check notice: %s", e)
+
+                    if btn in ("left", "middle") and dist <= 10:
+                        self._schedule_popup_adopt_check()
 
                     if btn == "left":
                         if sel_text and len(sel_text.strip()) > 0:
@@ -5644,19 +5895,37 @@ class AmigaClientSession:
             elif event_type == INPUT_MOUSE_MOVE:
                 try:
                     if self._mouse_down_btn == "left":
-                        # If user moves mouse with button down, update selection directly via caretRangeFromPoint
-                        dist = ((cx - self._mouse_down_x) ** 2 + (cy - self._mouse_down_y) ** 2) ** 0.5
-                        if dist > 4:
-                            self._click_count = 1
-                            await self._safe_eval("([x, y]) => window.__vortex_selection && window.__vortex_selection.update(x, y)", [cx, cy], timeout=0.25)
-                        if not await self._cdp_mouse("mouseMoved", cx, cy, "left", 0, timeout=0.2):
-                            await asyncio.wait_for(self.page.mouse.move(cx, cy), timeout=0.2)
-                        self._trigger_full_refresh(False)
+                        if self._scrollbar_drag_offset is not None:
+                            await self._safe_eval(
+                                """([cy, grabOffset]) => {
+                                    const se = document.scrollingElement || document.documentElement || document.body;
+                                    if (!se) return;
+                                    const sh = se.scrollHeight || 0;
+                                    const ch = window.innerHeight || document.documentElement.clientHeight || 0;
+                                    if (sh <= ch + 1) return;
+                                    const maxScroll = sh - ch;
+                                    const thumbH = Math.max(20, Math.round(ch * (ch / sh)));
+                                    const trackSpan = Math.max(1, ch - thumbH);
+                                    const newTop = Math.max(0, Math.min(trackSpan, cy - grabOffset));
+                                    window.scrollTo({ top: (newTop / trackSpan) * maxScroll, left: se.scrollLeft || 0, behavior: 'instant' });
+                                }""",
+                                [cy, self._scrollbar_drag_offset],
+                                timeout=0.25,
+                            )
+                            self._trigger_full_refresh(False)
+                        else:
+                            # If user moves mouse with button down, update selection directly via caretRangeFromPoint
+                            dist = ((cx - self._mouse_down_x) ** 2 + (cy - self._mouse_down_y) ** 2) ** 0.5
+                            if dist > 4:
+                                self._click_count = 1
+                                await self._safe_eval("([x, y]) => window.__vortex_selection && window.__vortex_selection.update(x, y)", [cx, cy], timeout=0.25)
+                            if not await self._cdp_mouse("mouseMoved", cx, cy, "left", 0, timeout=0.2):
+                                await asyncio.wait_for(self.page.mouse.move(cx, cy), timeout=0.2)
+                            self._trigger_full_refresh(False)
                     else:
                         if not await self._cdp_mouse("mouseMoved", cx, cy, "none", 0, timeout=0.15):
                             await asyncio.wait_for(self.page.mouse.move(cx, cy), timeout=0.15)
                 except Exception:
-                    pass
                     pass
 
                 now = time.monotonic()
@@ -5853,23 +6122,43 @@ class AmigaClientSession:
                 "ArrowLeft", "ArrowRight",
                 "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10",
             ):
-                await self.page.keyboard.press(text_or_url)
+                await asyncio.wait_for(self.page.keyboard.press(text_or_url), timeout=1.5)
                 return
-            elif text_or_url in ("Copy", "Control+c", "Control+C") or key_code == 3:
+            elif text_or_url in ("Copy", "Control+c", "Control+C", "Cut", "Control+x", "Control+X") or key_code in (3, 24):
+                is_cut = text_or_url in ("Cut", "Control+x", "Control+X") or key_code == 24
                 try:
-                    sel = await self.page.evaluate("window.getSelection() ? window.getSelection().toString() : ''")
+                    sel = await self._safe_eval(
+                        """() => {
+                            let s = window.getSelection() ? window.getSelection().toString() : '';
+                            if (s && s.length > 0) return s;
+                            let el = document.activeElement;
+                            if (el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT')) {
+                                try {
+                                    return el.value.substring(el.selectionStart, el.selectionEnd);
+                                } catch (e) {}
+                            }
+                            return '';
+                        }""",
+                        timeout=0.35,
+                        default="",
+                    )
                     if sel and len(sel.strip()) > 0:
                         logger.info("Copying selection (%d chars) to Amiga clipboard", len(sel))
                         await self.send_clipboard_to_amiga(sel)
                 except Exception:
                     pass
-                await self.page.keyboard.press("Control+c")
+                await asyncio.wait_for(self.page.keyboard.press("Control+x" if is_cut else "Control+c"), timeout=1.5)
                 return
             elif text_or_url in ("Paste", "Control+v", "Control+V") or key_code == 22:
-                await self.page.keyboard.press("Control+v")
+                await asyncio.wait_for(self.page.keyboard.press("Control+v"), timeout=1.5)
+                return
+            elif text_or_url in ("Control+a", "Control+A", "Control+z", "Control+Z", "Control+y", "Control+Y") or key_code in (1, 25, 26):
+                ctrl_map = {1: "Control+a", 25: "Control+y", 26: "Control+z"}
+                combo = text_or_url if text_or_url.startswith("Control+") else ctrl_map.get(key_code, "Control+a")
+                await asyncio.wait_for(self.page.keyboard.press(combo.lower().replace("control+", "Control+")), timeout=1.5)
                 return
             else:
-                await self.page.keyboard.type(text_or_url)
+                await asyncio.wait_for(self.page.keyboard.type(text_or_url), timeout=1.5)
                 return
 
         # 2. Fallback when text_or_url is empty: check ASCII / Latin-1 FIRST before AMIGA_RAWKEY_MAP
@@ -5947,6 +6236,7 @@ class AmigaClientSession:
         self._trigger_full_refresh(True)
         cur_page = self.page
         if cur_page is not None:
+            self._cached_page_url = (cur_page.url or "").lower()
             self._send_nav_update(cur_page.url or "", tab_idx=tidx)
         self._schedule_delayed_frames()
 
@@ -7998,8 +8288,12 @@ async def run_server(args: argparse.Namespace) -> None:
                     "args": launch_args,
                     "viewport": {"width": args.width, "height": args.height},
                     "accept_downloads": True,
-                    "locale": server_locale,
                 }
+                if use_rustwright:
+                    # Avoid Rustwright calling Emulation.setLocaleOverride per popup (--process-per-site shares renderers)
+                    launch_kwargs["extra_http_headers"] = {"Accept-Language": build_accept_language(server_locale)}
+                else:
+                    launch_kwargs["locale"] = server_locale
                 detected_ua = _detect_chromium_ua(full_chrome)
                 if detected_ua:
                     launch_kwargs["user_agent"] = detected_ua
@@ -8039,8 +8333,11 @@ async def run_server(args: argparse.Namespace) -> None:
                     "args": fallback_args,
                     "viewport": {"width": args.width, "height": args.height},
                     "accept_downloads": True,
-                    "locale": server_locale,
                 }
+                if use_rustwright:
+                    fallback_kwargs["extra_http_headers"] = {"Accept-Language": build_accept_language(server_locale)}
+                else:
+                    fallback_kwargs["locale"] = server_locale
                 detected_ua = _detect_chromium_ua(getattr(pw.chromium, "executable_path", None))
                 if detected_ua:
                     fallback_kwargs["user_agent"] = detected_ua

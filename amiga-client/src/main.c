@@ -392,7 +392,8 @@ int main(int argc, char **argv)
         /* Send debounced/throttled mouse move to remote browser outside the IDCMP input task */
         if (g_app.connected && g_app.pending_mouse_move) {
             int16_t rx = 0, ry = 0;
-            if (renderer_map_window_to_remote(&g_app, g_app.pending_win_mouse_x, g_app.pending_win_mouse_y, &rx, &ry)) {
+            BOOL in_vp = renderer_map_window_to_remote(&g_app, g_app.pending_win_mouse_x, g_app.pending_win_mouse_y, &rx, &ry);
+            if (in_vp || (g_app.mouse_lmb_down && g_app.cached_space_box.Width > 0)) {
                 uint32 s = 0, us = 0;
                 IIntuition->CurrentTime(&s, &us);
                 int32 diff_us = ((int32)s - (int32)g_app.last_move_secs) * 1000000 +

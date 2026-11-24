@@ -1984,10 +1984,8 @@ BOOL renderer_map_window_to_remote(
         }
     }
 
-    if (win_mouse_x < area.Left || win_mouse_x >= (area.Left + area.Width) ||
-        win_mouse_y < area.Top  || win_mouse_y >= (area.Top + area.Height)) {
-        return FALSE;
-    }
+    BOOL inside = (win_mouse_x >= area.Left && win_mouse_x < (area.Left + area.Width) &&
+                   win_mouse_y >= area.Top  && win_mouse_y < (area.Top + area.Height));
 
     int32_t rel_x = (int32_t)(win_mouse_x - area.Left);
     int32_t rel_y = (int32_t)(win_mouse_y - area.Top);
@@ -2005,5 +2003,5 @@ BOOL renderer_map_window_to_remote(
 
     *out_remote_x = (int16_t)rx;
     *out_remote_y = (int16_t)ry;
-    return TRUE;
+    return inside;
 }

@@ -44,6 +44,11 @@ extern "C" {
 #define MSG_UPLOAD_CHUNK      0x0E  /* Amiga -> Server: 64KB data chunk of file being uploaded */
 #define MSG_PASSWORD_SAVE     0x0F  /* Server -> Amiga: Captured submitted login credentials for saving */
 #define MSG_SERVER_INFO       0x10  /* Server -> Amiga: Active browser automation core / engine info */
+#define MSG_TAB_SYNC          0x11  /* Server -> Amiga: Sync server-initiated tab add/close/switch */
+
+#define TAB_SYNC_ADD          1     /* Server opened a popup or target=_blank tab */
+#define TAB_SYNC_CLOSE        2     /* Server-side tab closed (e.g. window.close()) */
+#define TAB_SYNC_SWITCH       3     /* Server switched active tab */
 
 /* Pixel Formats for MSG_FRAME.format */
 #define FMT_ARGB32            1     /* 32-bit Big-Endian ARGB (PIXF_A8R8G8B8, 4 bytes/px) */
@@ -257,6 +262,20 @@ typedef struct MsgServerInfo {
     char engine_name[64]; /* Active engine, e.g. "Chromium (Rustwright DirectCDP)" or "Chromium (Playwright)" */
 } MsgServerInfo;
 
+/* 0x11: MSG_TAB_SYNC (648 bytes)
+ * Wire layout: [uint8_t msg_type=0x11] [MsgTabSync (648B)]
+ * Python struct format: ">BBHHH512s128s"
+ */
+typedef struct MsgTabSync {
+    uint8_t  action;      /* TAB_SYNC_ADD, TAB_SYNC_CLOSE, or TAB_SYNC_SWITCH */
+    uint8_t  make_active; /* Non-zero if client should switch active tab to active_idx */
+    uint16_t tab_idx;     /* Target tab index (ADD/CLOSE/SWITCH, Big-Endian) */
+    uint16_t active_idx;  /* Resulting active tab index (Big-Endian) */
+    uint16_t tab_count;   /* Resulting server tab count (Big-Endian) */
+    char     url[512];    /* Null-terminated URL */
+    char     title[128];  /* Null-terminated UTF-8 page title */
+} MsgTabSync;
+
 #pragma pack(pop)
 
 /* Compile-time size verification to ensure binary compatibility between PPC C and Python */
@@ -277,6 +296,7 @@ typedef char vb_assert_msg_upload_chunk_size[(sizeof(MsgUploadChunk) == 8) ? 1 :
 typedef char vb_assert_msg_rect_size[(sizeof(MsgRectHdr) == 8) ? 1 : -1];
 typedef char vb_assert_msg_pw_save_size[(sizeof(MsgPasswordSave) == 512) ? 1 : -1];
 typedef char vb_assert_msg_server_info_size[(sizeof(MsgServerInfo) == 64) ? 1 : -1];
+typedef char vb_assert_msg_tab_sync_size[(sizeof(MsgTabSync) == 648) ? 1 : -1];
 
 #ifdef __cplusplus
 }

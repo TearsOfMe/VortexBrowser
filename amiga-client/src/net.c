@@ -191,6 +191,37 @@ void net_disconnect(VortexApp *app)
     app->connected = FALSE;
 }
 
+static const char *format_nav_url_title(const char *raw_url, const char *raw_title, char *clean_title, size_t clean_title_cap)
+{
+    BOOL is_portal = (!raw_url ||
+                      strncmp(raw_url, "http://127.0.0.1:", 17) == 0 ||
+                      strncmp(raw_url, "http://localhost:", 17) == 0 ||
+                      strncmp(raw_url, "about:", 6) == 0 ||
+                      raw_url[0] == '\0' || raw_url[0] == '@');
+    const char *clean_url = is_portal ? "" : raw_url;
+
+    if (is_portal) {
+        snprintf(clean_title, clean_title_cap, "%s", GetVString(MSG_MENU_HOME));
+    } else if (raw_title && raw_title[0] != '\0') {
+        vb_utf8_to_local(raw_title, clean_title, clean_title_cap);
+        clean_title[clean_title_cap - 1] = '\0';
+        if (clean_title[0] == '\0') {
+            snprintf(clean_title, clean_title_cap, "%s", GetVString(MSG_MENU_HOME));
+        }
+    } else {
+        const char *p = clean_url;
+        if (strncmp(p, "http://", 7) == 0) p += 7;
+        else if (strncmp(p, "https://", 8) == 0) p += 8;
+        if (strncmp(p, "www.", 4) == 0) p += 4;
+        char host[64];
+        size_t hi = 0;
+        while (*p && *p != '/' && *p != ':' && hi < sizeof(host) - 1) host[hi++] = *p++;
+        host[hi] = '\0';
+        snprintf(clean_title, clean_title_cap, "%s", host[0] ? host : "Webseite");
+    }
+    return clean_url;
+}
+
 BOOL net_handle_incoming(VortexApp *app)
 {
     if (!app->connected || app->sock_fd < 0) {
@@ -358,31 +389,8 @@ BOOL net_handle_incoming(VortexApp *app)
             nav.url[sizeof(nav.url) - 1] = '\0';
             nav.title[sizeof(nav.title) - 1] = '\0';
 
-            BOOL is_portal = (strncmp(nav.url, "http://127.0.0.1:", 17) == 0 ||
-                              strncmp(nav.url, "http://localhost:", 17) == 0 ||
-                              nav.url[0] == '\0' || nav.url[0] == '@');
-            const char *clean_url = is_portal ? "" : nav.url;
-
             char clean_title[64];
-            if (is_portal) {
-                snprintf(clean_title, sizeof(clean_title), "%s", GetVString(MSG_MENU_HOME));
-            } else if (nav.title[0] != '\0') {
-                vb_utf8_to_local(nav.title, clean_title, sizeof(clean_title));
-                clean_title[sizeof(clean_title) - 1] = '\0';
-                if (clean_title[0] == '\0') {
-                    snprintf(clean_title, sizeof(clean_title), "%s", GetVString(MSG_MENU_HOME));
-                }
-            } else {
-                const char *p = clean_url;
-                if (strncmp(p, "http://", 7) == 0) p += 7;
-                else if (strncmp(p, "https://", 8) == 0) p += 8;
-                if (strncmp(p, "www.", 4) == 0) p += 4;
-                char host[64];
-                size_t hi = 0;
-                while (*p && *p != '/' && *p != ':' && hi < sizeof(host) - 1) host[hi++] = *p++;
-                host[hi] = '\0';
-                snprintf(clean_title, sizeof(clean_title), "%s", host[0] ? host : "Webseite");
-            }
+            const char *clean_url = format_nav_url_title(nav.url, nav.title, clean_title, sizeof(clean_title));
 
             /* Update specific tab URL & title so each tab stays completely in sync */
             if (tidx < app->num_tabs) {
@@ -413,6 +421,32 @@ BOOL net_handle_incoming(VortexApp *app)
 
             /* Rebuild tab bar display so updated title is visible immediately */
             gui_tabs_rebuild(app);
+            break;
+        }
+
+        case MSG_TAB_SYNC: {
+            MsgTabSync ts;
+            if (!recv_exact(app->sock_fd, &ts, sizeof(MsgTabSync))) {
+                net_disconnect(app);
+                return FALSE;
+            }
+            ts.url[sizeof(ts.url) - 1]     = '\0';
+            ts.title[sizeof(ts.title) - 1] = '\0';
+            uint16 tidx       = VB_BE16(ts.tab_idx);
+            uint16 active_idx = VB_BE16(ts.active_idx);
+
+            char clean_title[64];
+            const char *clean_url = format_nav_url_title(ts.url, ts.title, clean_title, sizeof(clean_title));
+
+            if (ts.action == TAB_SYNC_ADD) {
+                /* Pass original UTF-8 title (or clean_title fallback if portal/empty) so gui_tab_add_remote converts cleanly */
+                const char *title_utf8 = (clean_url[0] == '\0') ? GetVString(MSG_MENU_HOME) : (ts.title[0] ? ts.title : clean_title);
+                gui_tab_add_remote(app, title_utf8, clean_url, tidx, ts.make_active != 0);
+            } else if (ts.action == TAB_SYNC_CLOSE) {
+                gui_tab_close_remote(app, tidx, active_idx);
+            } else if (ts.action == TAB_SYNC_SWITCH) {
+                gui_tab_switch_remote(app, active_idx);
+            }
             break;
         }
 
@@ -477,8 +511,16 @@ BOOL net_handle_incoming(VortexApp *app)
                 if (clip_buf) {
                     if (recv_exact(app->sock_fd, clip_buf, tlen)) {
                         clip_buf[tlen] = '\0';
-                        clipboard_write_text(clip_buf);
-                        app_set_status("Text in Zwischenablage kopiert (%u Zeichen)", (unsigned)tlen);
+                        char *local_buf = (char *)malloc(tlen + 1);
+                        if (local_buf) {
+                            vb_utf8_to_local(clip_buf, local_buf, tlen + 1);
+                            clipboard_write_text(local_buf);
+                            app_set_status("Text in Zwischenablage kopiert (%u Zeichen)", (unsigned)strlen(local_buf));
+                            free(local_buf);
+                        } else {
+                            clipboard_write_text(clip_buf);
+                            app_set_status("Text in Zwischenablage kopiert (%u Zeichen)", (unsigned)tlen);
+                        }
                     }
                     free(clip_buf);
                 }
