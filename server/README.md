@@ -64,6 +64,15 @@ docker compose -f docker-compose.macos.yml up -d
 ```
 *(Oder direkt via: `docker run -d --name vortexbrowser-macos --shm-size=2g -e VORTEX_PLATFORM=macos -p 7788:7788 -p 9757:9757 vortexbrowser-server:macos-arm64`)*
 
+### 🪟 Schnellstart & Installation (Windows 10/11 Nativ mit NVENC / AMF / QSV & WASAPI)
+
+1. Entpacken Sie `VortexBrowser-1.0-Server-Windows.zip` (oder wechseln Sie in `server/`) und starten Sie den Installer in PowerShell:
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\install_windows.ps1
+   ```
+   *Richtet `.venv`, `PyAudioWPatch` (WASAPI-Loopback), `ffmpeg`, Browser sowie die Firewall-Freigabe (TCP 7788/9757) ein und nutzt die vorkompilierten `fast_pixconv_avx2.dll` / `fast_pixconv.dll`.*
+2. Starten Sie den Server per Doppelklick auf `run_windows.bat` (Details: [README_WINDOWS.md](README_WINDOWS.md)).
+
 ### 🍎 Schnellstart & Installation (macOS Nativ mit Apple VideoToolbox)
 
 1. Wechseln Sie in den Ordner `server/` und installieren Sie die macOS-Abhängigkeiten:
@@ -160,6 +169,15 @@ docker compose --profile rpi up -d vortex-rpi
 docker compose -f docker-compose.macos.yml up -d
 ```
 *(Or via docker run: `docker run -d --name vortexbrowser-macos --shm-size=2g -e VORTEX_PLATFORM=macos -p 7788:7788 -p 9757:9757 vortexbrowser-server:macos-arm64`)*
+
+### 🪟 Quickstart & Native Installation (Windows 10/11 with NVENC / AMF / QSV & WASAPI)
+
+1. Unpack `VortexBrowser-1.0-Server-Windows.zip` (or open PowerShell in `server/`) and run the Windows installer:
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\install_windows.ps1
+   ```
+   *Sets up `.venv`, `PyAudioWPatch` (WASAPI loopback), `ffmpeg`, Chromium/Chrome/Edge, and TCP 7788/9757 firewall rules using the prebuilt `fast_pixconv_avx2.dll` / `fast_pixconv.dll`.*
+2. Launch the server by double-clicking `run_windows.bat` (full guide: [README_WINDOWS.md](README_WINDOWS.md)).
 
 ### 🍎 Quickstart & Native Installation (macOS with Apple VideoToolbox)
 

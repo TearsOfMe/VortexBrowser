@@ -1,5 +1,5 @@
 # VortexBrowser 1.0 – High-Performance Headless Web Browser Streaming System
-**(Universeller Linux / macOS Server [AMD/Intel/Apple Silicon/Raspberry Pi/Docker] $\rightarrow$ AmigaOS 4.1 PowerPC Client)**
+**(Universeller Linux / Windows / macOS Server [AMD/Intel/NVIDIA/Apple Silicon/Raspberry Pi/Docker] $\rightarrow$ AmigaOS 4.1 PowerPC Client)**
 
 [English version below / Zur englischen Version wechseln](#english-version)
 
@@ -7,7 +7,18 @@
 
 ## Deutsch
 
-VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwright / Rustwright + DirectCDP WebSocket) auf einem **universellen Linux- / macOS-Server oder im Docker-Container** (automatische Hardware-Erkennung für AMD Ryzen Vulkan, Intel QuickSync VA-API, **Apple VideoToolbox** und Raspberry Pi 4/5 V3D) und streamt die Bilddaten hocheffizient komprimiert per **Planar YUV420P + 2D Dirty-Rect + LZ4** an einen nativen **AmigaOS 4.1 PowerPC Reaction-Client**.
+VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwright / Rustwright + DirectCDP WebSocket) auf einem **universellen Linux-, Windows- oder macOS-Server sowie im Docker-Container** (automatische Hardware-Erkennung für AMD Ryzen Vulkan/AMF, Intel QuickSync VA-API/QSV, NVIDIA NVENC, **Apple VideoToolbox**, Windows D3D11 und Raspberry Pi 3/4/5 V3D) und streamt die Bilddaten hocheffizient komprimiert per **Planar YUV420P + 2D Dirty-Rect + LZ4** bzw. **H.264** an einen nativen **AmigaOS 4.1 PowerPC ReAction-Client**.
+
+---
+
+### Neueste Updates & Fixes (November 2026)
+
+* **WebGL 1 & WebGL 2 Stabilität unter Linux (GPU-Crash-Fix):** Behebt Abstürze des Headless-Chromium-`gpu-process` durch `VaapiVideoDecoder` / `--enable-zero-copy` bei H.264-Webvideos (die zuvor nach 3 Abstürzen in `--use-gl=disabled` führten und WebGL 1 & 2 abschalteten). Hardware-ANGLE-Vulkan (AMD RADV) / GLES-EGL (Intel/RPi) für WebGL 1/2 sowie FFmpeg-`h264_vaapi`-Encoding bleiben dauerhaft aktiv.
+* **Multi-Tab-Navigations-Lockup (`net::ERR_ABORTED`) behoben:** Automatisches Akzeptieren von `beforeunload`-Dialogen über Rustwright & DirectCDP, sauberes Abbrechen laufender Navigationen bei Tab-Wechsel/Schließen, automatischer Ersatz feststeckender/geschlossener Tabs (`context.new_page()` + CDP-Re-Attach nach zweimaligem `net::ERR_ABORTED`) sowie vollständiger Tab-Reset beim Client-Reconnect.
+* **Nativer Windows 10/11 (x64) Companion-Server:** Eigenständige, vorkompilierte SIMD-DLLs (`fast_pixconv.dll` SSE2 & `fast_pixconv_avx2.dll` AVX2+FMA inkl. statischem `libjpeg-turbo` & `liblz4`, ohne Compiler/VM/WSL), automatisches GPU-H.264 (`h264_nvenc`, `h264_amf`, `h264_qsv`, `h264_mf`, `libx264`), D3D11-ANGLE-Rendering (`--headless=new`), Audio-Streaming via nativem Windows-WASAPI-Loopback (`PyAudioWPatch`) oder VB-Cable DirectShow sowie 1-Klick-Installer (`install_windows.ps1` + `run_windows.bat`). Siehe [server/README_WINDOWS.md](server/README_WINDOWS.md).
+* **Zuverlässiges Copy/Paste & Editor-Tastenkürzel auf AmigaOS 4:** Umstellung auf reines `IDCMP_RAWKEY` mit live `WINDOW_InputEvent`/`WINDOW_Qualifier` + `MapRawKey` für zuverlässige `RAmiga`/`LAmiga`/`Ctrl`-Kürzel (`A`/`C`/`X`/`V`/`Z`/`Y`), Maus-Drag-Markierung in `<textarea>`- und TinyMCE-Iframe-Foreneditoren, UTF-8/Latin-1-Clipboard-Sync sowie Fokus-Wiederherstellung bei Rechtsklick-Kontextmenüs.
+* **Foren-Login & Cookie-Deduplizierung (z. B. `os4welt.de` / phpBB):** Automatische Bereinigung doppelter Host- und Dot-Domain-Cookies verhindert ungültige Formular-Tokens beim Anmelden.
+* **Scrollbar-Drag, Popups & `target="_blank"`-Tabs:** Flüssiges Greifen/Ziehen der Browser-Scrollbar, korrektes Übernehmen von JS-Popups (`window.opener`, `window.close()`) und `target="_blank"`-Links als eigene Tabs.
 
 ---
 
@@ -26,8 +37,8 @@ VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwrigh
 * **System-Bibliotheken:** Standard AmigaOS 4.1 ReAction-Klassen (`window.class`, `layout.gadget`, `clicktab.gadget`, `listbrowser.gadget`, `chooser.gadget`, `popupmenu.class`, `locale.library`, `icon.library`); optional `codesets.library` (v5/6) für erweiterte Zeichensatzkonvertierung. Alle Codecs (`libavcodec`, `liblz4`, `libjpeg`) sind statisch einkompiliert – keine externen `.so`-Bibliotheken nötig.
 
 #### Rendering-Server (Backend)
-* **Hardware:** Beliebiger x86_64/ARM64 Linux-PC, Mac (Apple Silicon / Intel) oder **Raspberry Pi 3 / 4 / 5** (min. **1 GB RAM** mit ZRAM auf Pi 3; **2–8 GB RAM** auf Pi 4/5 oder Desktop optimal).
-* **Software:** Linux/macOS mit Python 3.10+, **Rustwright** + Playwright, **Ungoogled-Chromium** (Standard) oder **Firefox**, `pulseaudio`/`pipewire-pulse` – oder fertig geflashtes [Raspberry-Pi-SD-Image](server/README_RASPI_IMAGE.md).
+* **Hardware:** Beliebiger x86_64/ARM64 Linux-PC, **Windows 10/11 PC (x64)**, Mac (Apple Silicon / Intel) oder **Raspberry Pi 3 / 4 / 5** (min. **1 GB RAM** mit ZRAM auf Pi 3; **2–8 GB RAM** auf Pi 4/5 oder Desktop optimal).
+* **Software:** Linux/Windows/macOS mit Python 3.10+, **Rustwright** + Playwright, **Ungoogled-Chromium** / Chrome / Edge (Standard) oder **Firefox**, `pulseaudio`/`pipewire-pulse` (Linux) bzw. `PyAudioWPatch`/VB-Cable (Windows) – oder fertig geflashtes [Raspberry-Pi-SD-Image](server/README_RASPI_IMAGE.md).
 
 ---
 
@@ -116,7 +127,15 @@ cd server
 ./run_server.sh               # Server starten (oder ./run_linux.sh im Hauptverzeichnis)
 ```
 
-#### 2. Nativ auf macOS (Apple Silicon M1–M4 & Intel mit Apple VideoToolbox)
+#### 2. Nativ auf Windows 10 / 11 (x64 mit NVENC / AMF / QSV / WASAPI & vorkompilierter SIMD-DLL)
+```powershell
+cd server
+powershell -ExecutionPolicy Bypass -File .\install_windows.ps1   # Einrichtung (Python-venv, FFmpeg, Browser, Firewall)
+.\run_windows.bat                                                # Oder per Doppelklick starten
+```
+*(Ausführliche Anleitung: [server/README_WINDOWS.md](server/README_WINDOWS.md))*
+
+#### 3. Nativ auf macOS (Apple Silicon M1–M4 & Intel mit Apple VideoToolbox)
 ```bash
 cd server
 chmod +x install_macos.sh run_macos.sh
@@ -124,7 +143,7 @@ chmod +x install_macos.sh run_macos.sh
 ./run_macos.sh                # Startet mit h264_videotoolbox Hardware-Encoding
 ```
 
-#### 3. Mit Docker oder Docker Compose (Linux x86_64, Raspberry Pi 4/5 & macOS Docker Desktop)
+#### 4. Mit Docker oder Docker Compose (Linux x86_64, Raspberry Pi 4/5 & macOS Docker Desktop)
 ```bash
 cd server
 
@@ -141,7 +160,7 @@ docker compose --profile rpi up -d vortex-rpi
 docker compose -f docker-compose.macos.yml up -d
 ```
 
-#### 4. Client auf AmigaOS 4.1 starten
+#### 5. Client auf AmigaOS 4.1 starten
 1. Archiv `VortexBrowser-1.0-AmigaOS4.lha` (oder das Komplettpaket `VortexBrowser-1.0-Complete.zip`) auf dem Amiga entpacken (z. B. nach `Work:Internet/VortexBrowser`).
 2. Doppelklick auf `VortexBrowser` (Universal für alle AmigaOS-4-Systeme) bzw. `VortexBrowser-AltiVec` (für G4 / G5 / AmigaOne X1000).
 3. Server-IP eintragen (oder `Amiga+1` drücken) und auf **Verbinden** klicken.
@@ -152,7 +171,18 @@ docker compose -f docker-compose.macos.yml up -d
 <a name="english-version"></a>
 ## English Version
 
-VortexBrowser 1.0 renders modern websites via headless Chromium (Playwright / Rustwright + DirectCDP WebSocket) on a **universal Linux / macOS server or Docker container** (with automatic hardware acceleration for AMD Ryzen Vulkan, Intel QuickSync VA-API, **Apple VideoToolbox**, and Raspberry Pi 4/5 V3D) and streams compressed video data using **Planar YUV420P + 2D Dirty-Rect + LZ4** to a native **AmigaOS 4.1 PowerPC ReAction client**.
+VortexBrowser 1.0 renders modern websites via headless Chromium (Playwright / Rustwright + DirectCDP WebSocket) on a **universal Linux, Windows, or macOS server or Docker container** (with automatic hardware acceleration for AMD Ryzen Vulkan/AMF, Intel QuickSync VA-API/QSV, NVIDIA NVENC, **Apple VideoToolbox**, Windows D3D11, and Raspberry Pi 3/4/5 V3D) and streams compressed video data using **Planar YUV420P + 2D Dirty-Rect + LZ4** or **H.264** to a native **AmigaOS 4.1 PowerPC ReAction client**.
+
+---
+
+### Latest Updates & Fixes (November 2026)
+
+* **Linux Headless WebGL 1 & WebGL 2 Stability (GPU Crash Fix):** Fixes headless Chromium `gpu-process` crashes triggered by `VaapiVideoDecoder` / `--enable-zero-copy` during H.264 web video playback (which previously caused Chromium to fall back to `--use-gl=disabled` after 3 crashes, disabling WebGL 1 & 2). Hardware ANGLE Vulkan (AMD RADV) / GLES-EGL (Intel/RPi) WebGL 1 & 2 and FFmpeg `h264_vaapi` stream encoding now stay permanently active.
+* **Multi-Tab Navigation Lockup (`net::ERR_ABORTED`) Fixed:** Automatically accepts `beforeunload` dialogs via Rustwright & DirectCDP, cancels in-flight navigations on tab switch/close, automatically replaces wedged or closed `Page` instances (`context.new_page()` + CDP screencast re-attach after repeated `net::ERR_ABORTED`), and resets/replaces stuck tabs cleanly on client disconnect/reconnect.
+* **Native Windows 10/11 (x64) Companion Server:** Ships prebuilt standalone SIMD DLLs (`fast_pixconv.dll` SSE2 & `fast_pixconv_avx2.dll` AVX2+FMA with statically linked `libjpeg-turbo` & `liblz4`, requiring no compiler/VM/WSL), automatic Windows GPU H.264 encoding (`h264_nvenc`, `h264_amf`, `h264_qsv`, `h264_mf`, `libx264`), D3D11 ANGLE rendering (`--headless=new`), native Windows WASAPI loopback audio (`PyAudioWPatch`) or VB-Cable DirectShow capture, plus 1-click setup (`install_windows.ps1` + `run_windows.bat`). See [server/README_WINDOWS.md](server/README_WINDOWS.md).
+* **Reliable AmigaOS 4 Copy/Paste & Forum Editor Shortcuts:** Switched Amiga keyboard input to pure `IDCMP_RAWKEY` with live `WINDOW_InputEvent`/`WINDOW_Qualifier` + `MapRawKey` for reliable `RAmiga`/`LAmiga`/`Ctrl` editing shortcuts (`A`/`C`/`X`/`V`/`Z`/`Y`), mouse-drag selection copy in `<textarea>` and TinyMCE iframe editors, UTF-8/Latin-1 clipboard sync, and caret focus restoration for right-click context menus.
+* **Forum Login & Cookie Deduplication (e.g. `os4welt.de` / phpBB):** Automatically deduplicates conflicting host-only vs. dot-domain cookies to prevent invalid form-token errors during login.
+* **Scrollbar Drag, Popups & `target="_blank"` Tabs:** Smooth scrollbar thumb grabbing/dragging, proper JS popup adoption (`window.opener`, `window.close()`), and `target="_blank"` links opening as dedicated tabs.
 
 ---
 
@@ -171,8 +201,8 @@ VortexBrowser 1.0 renders modern websites via headless Chromium (Playwright / Ru
 * **System Libraries:** Standard AmigaOS 4.1 ReAction classes (`window.class`, `layout.gadget`, `clicktab.gadget`, `listbrowser.gadget`, `chooser.gadget`, `popupmenu.class`, `locale.library`, `icon.library`); optional `codesets.library` (v5/6) for extended charset conversion. All codecs (`libavcodec`, `liblz4`, `libjpeg`) are statically linked — no external `.so` files required.
 
 #### Rendering Server (Backend)
-* **Hardware:** Any x86_64/ARM64 Linux PC, Mac (Apple Silicon / Intel), or **Raspberry Pi 3 / 4 / 5** (1 GB RAM minimum with ZRAM on Pi 3; 2–8 GB RAM optimal).
-* **Software:** Linux/macOS with Python 3.10+, **Rustwright** + Playwright, **Ungoogled-Chromium** (default) or **Firefox**, `pulseaudio`/`pipewire-pulse` — or ready-to-flash [Raspberry Pi SD images](server/README_RASPI_IMAGE.md).
+* **Hardware:** Any x86_64/ARM64 Linux PC, **Windows 10/11 PC (x64)**, Mac (Apple Silicon / Intel), or **Raspberry Pi 3 / 4 / 5** (1 GB RAM minimum with ZRAM on Pi 3; 2–8 GB RAM optimal).
+* **Software:** Linux/Windows/macOS with Python 3.10+, **Rustwright** + Playwright, **Ungoogled-Chromium** / Chrome / Edge (default) or **Firefox**, `pulseaudio`/`pipewire-pulse` (Linux) or `PyAudioWPatch`/VB-Cable (Windows) — or ready-to-flash [Raspberry Pi SD images](server/README_RASPI_IMAGE.md).
 
 ---
 
@@ -260,7 +290,15 @@ cd server
 ./run_server.sh               # Starts the server (or ./run_linux.sh from repo root)
 ```
 
-#### 2. Native on macOS (Apple Silicon M1–M4 & Intel with Apple VideoToolbox)
+#### 2. Native on Windows 10 / 11 (x64 with NVENC / AMF / QSV / WASAPI & prebuilt SIMD DLL)
+```powershell
+cd server
+powershell -ExecutionPolicy Bypass -File .\install_windows.ps1   # Installs venv, FFmpeg, browser, firewall rule
+.\run_windows.bat                                                # Or double-click run_windows.bat
+```
+*(Full Windows guide: [server/README_WINDOWS.md](server/README_WINDOWS.md))*
+
+#### 3. Native on macOS (Apple Silicon M1–M4 & Intel with Apple VideoToolbox)
 ```bash
 cd server
 chmod +x install_macos.sh run_macos.sh
@@ -268,7 +306,7 @@ chmod +x install_macos.sh run_macos.sh
 ./run_macos.sh                # Launches with h264_videotoolbox hardware encoding
 ```
 
-#### 3. Using Docker or Docker Compose (Linux x86_64, Raspberry Pi 4/5 & macOS Docker Desktop)
+#### 4. Using Docker or Docker Compose (Linux x86_64, Raspberry Pi 4/5 & macOS Docker Desktop)
 ```bash
 cd server
 
@@ -285,7 +323,7 @@ docker compose --profile rpi up -d vortex-rpi
 docker compose -f docker-compose.macos.yml up -d
 ```
 
-#### 4. Starting the Client on AmigaOS 4.1
+#### 5. Starting the Client on AmigaOS 4.1
 1. Unpack `VortexBrowser-1.0-AmigaOS4.lha` (or the full package `VortexBrowser-1.0-Complete.zip`) on your Amiga (e.g. into `Work:Internet/VortexBrowser`).
 2. Double-click `VortexBrowser` (universal for all AmigaOS 4 machines) or `VortexBrowser-AltiVec` (for G4 / G5 / AmigaOne X1000).
 3. Enter your Linux/Docker server IP (or press `Amiga+1`) and click **Connect**.
