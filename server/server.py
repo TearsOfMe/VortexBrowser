@@ -33,6 +33,7 @@ import platform
 import queue
 import re
 import select
+import shutil
 import signal
 import socket
 import subprocess
@@ -3288,6 +3289,14 @@ class AmigaClientSession:
 
         self.next_download_id: int = 1
         self.pending_downloads: Dict[int, asyncio.Future] = {}
+        self._active_download_cancels: Dict[int, asyncio.Event] = {}
+        self._browser_dl_ws: Any = None
+        self._browser_dl_task: Optional[asyncio.Task] = None
+        self._browser_dl_dir: str = ""
+        self._browser_dl_cmd_id: int = 10
+        self._cdp_downloads: Dict[str, Dict[str, Any]] = {}
+        self._cdp_handled_guids: Set[str] = set()
+        self._cdp_handled_keys: Dict[Tuple[str, str], float] = {}
         self.next_upload_id: int = 1
         self.pending_uploads: Dict[int, Tuple[FileChooser, asyncio.Future]] = {}
         self.background_tasks: set = set()
@@ -4887,6 +4896,7 @@ class AmigaClientSession:
             self.context.on("page", self._on_popup_page)
             if self.engine == "chromium":
                 await self._attach_direct_cdp(self.page)
+                await self._start_browser_download_monitor()
             else:
                 self.cdp = None
 
@@ -4955,6 +4965,7 @@ class AmigaClientSession:
                     self._h264_encoder = None
                 await self._stop_screencast()
                 await self._detach_cdp()
+                await self._stop_browser_download_monitor()
                 if self.context:
                     try:
                         self.context.remove_listener("page", self._on_popup_page)
@@ -4966,6 +4977,9 @@ class AmigaClientSession:
                     if not fut.done():
                         fut.cancel()
                 self.pending_downloads.clear()
+                for ev in self._active_download_cancels.values():
+                    ev.set()
+                self._active_download_cancels.clear()
                 for entry in self.pending_uploads.values():
                     if len(entry) >= 2 and entry[1] and not entry[1].done():
                         entry[1].cancel()
@@ -6190,6 +6204,9 @@ class AmigaClientSession:
             if self._switching_tab:
                 await asyncio.sleep(0.02)
                 continue
+            if self.pending_downloads and any(not f.done() for f in self.pending_downloads.values()):
+                await asyncio.sleep(0.04)
+                continue
 
             now_tick = time.monotonic()
             if now_tick - self._sec_start_time >= 1.0:
@@ -6613,6 +6630,11 @@ class AmigaClientSession:
                 fut = self.pending_downloads.get(download_id)
                 if fut and not fut.done():
                     fut.set_result(bool(accepted == 1))
+                elif accepted == 0:
+                    cancel_ev = self._active_download_cancels.get(download_id)
+                    if cancel_ev is not None:
+                        logger.info("Mid-transfer cancel requested by Amiga for download id=%d", download_id)
+                        cancel_ev.set()
 
             elif msg_type == MSG_UPLOAD_RESPONSE:
                 try:
@@ -8492,10 +8514,343 @@ class AmigaClientSession:
             self._send_progress(100, "Auto-Login Fehler")
 
     # ------------------------------------------------------------------------
-    # Download Interceptor & Direct URL ASL Download Streamer (Server -> Amiga)
+    # Instant Browser-CDP Download Interceptor & Live Streamer (Server -> Amiga)
     # ------------------------------------------------------------------------
+    async def _start_browser_download_monitor(self) -> None:
+        """Subscribes to Chromium Browser.downloadWillBegin / Browser.downloadProgress via
+        a browser-level CDP WebSocket so the Amiga ASL requester pops up within milliseconds
+        of clicking any download link, instead of waiting for Chromium to finish downloading
+        the entire file first."""
+        if self.engine != "chromium" or not _HAS_WEBSOCKETS or websockets is None:
+            return
+        await self._stop_browser_download_monitor()
+        try:
+            def _get_browser_ws_url() -> Optional[str]:
+                with urllib.request.urlopen(f"http://127.0.0.1:{self.cdp_port}/json/version", timeout=2.0) as resp:
+                    info = json.loads(resp.read().decode("utf-8", errors="ignore"))
+                    return info.get("webSocketDebuggerUrl")
+
+            ws_url = await asyncio.get_running_loop().run_in_executor(None, _get_browser_ws_url)
+            if not ws_url:
+                return
+            dl_dir = tempfile.mkdtemp(prefix="vb_cdp_dl_")
+            ws = await websockets.connect(ws_url, max_size=4 * 1024 * 1024, open_timeout=3.0)
+            self._browser_dl_dir = dl_dir
+            self._browser_dl_ws = ws
+            self._browser_dl_cmd_id = 1
+            await ws.send(json.dumps({
+                "id": 1,
+                "method": "Browser.setDownloadBehavior",
+                "params": {
+                    "behavior": "allowAndName",
+                    "downloadPath": dl_dir,
+                    "eventsEnabled": True,
+                },
+            }))
+
+            async def _reader_loop() -> None:
+                try:
+                    async for raw in ws:
+                        if not self.running:
+                            break
+                        try:
+                            msg = json.loads(raw)
+                        except Exception:
+                            continue
+                        meth = msg.get("method")
+                        if not meth:
+                            continue
+                        params = msg.get("params") or {}
+                        if meth == "Browser.downloadWillBegin":
+                            guid = str(params.get("guid") or "")
+                            if not guid or guid in self._cdp_downloads:
+                                continue
+                            self._last_download_time = time.monotonic()
+                            url = str(params.get("url") or "")
+                            suggested = str(params.get("suggestedFilename") or "").strip()
+                            if not suggested and url:
+                                parsed = urlparse(url)
+                                suggested = unquote(os.path.basename(parsed.path)).strip()
+                            entry = {
+                                "guid": guid,
+                                "url": url,
+                                "suggested": suggested,
+                                "total_bytes": 0,
+                                "received_bytes": 0,
+                                "state": "inProgress",
+                                "file_path": "",
+                                "got_total_event": asyncio.Event(),
+                                "progress_event": asyncio.Event(),
+                                "done_event": asyncio.Event(),
+                            }
+                            self._cdp_downloads[guid] = entry
+                            self._cdp_handled_guids.add(guid)
+                            self._cdp_handled_keys[(url, suggested)] = time.monotonic()
+                            t = asyncio.create_task(self._process_cdp_download(entry))
+                            self.background_tasks.add(t)
+                            t.add_done_callback(self.background_tasks.discard)
+                        elif meth == "Browser.downloadProgress":
+                            guid = str(params.get("guid") or "")
+                            entry = self._cdp_downloads.get(guid)
+                            if not entry:
+                                continue
+                            tb = params.get("totalBytes")
+                            if isinstance(tb, (int, float)) and tb > 0:
+                                entry["total_bytes"] = int(tb)
+                            rb = params.get("receivedBytes")
+                            if isinstance(rb, (int, float)) and rb >= 0:
+                                entry["received_bytes"] = int(rb)
+                            fp = params.get("filePath")
+                            if fp:
+                                entry["file_path"] = str(fp)
+                            st = str(params.get("state") or "inProgress")
+                            entry["state"] = st
+                            if entry["total_bytes"] > 0 or st in ("completed", "canceled"):
+                                entry["got_total_event"].set()
+                            entry["progress_event"].set()
+                            if st in ("completed", "canceled"):
+                                entry["done_event"].set()
+                except asyncio.CancelledError:
+                    pass
+                except Exception as exc:
+                    logger.debug("Browser CDP download monitor loop ended: %s", exc)
+
+            self._browser_dl_task = asyncio.create_task(_reader_loop())
+            logger.info("Instant Browser-CDP download monitor active (dir=%s)", dl_dir)
+        except Exception as exc:
+            logger.debug("Browser-CDP download monitor unavailable (%s); using Playwright fallback", exc)
+            await self._stop_browser_download_monitor()
+
+    async def _stop_browser_download_monitor(self) -> None:
+        task = self._browser_dl_task
+        self._browser_dl_task = None
+        if task is not None and not task.done():
+            task.cancel()
+            try:
+                await task
+            except Exception:
+                pass
+        ws = self._browser_dl_ws
+        self._browser_dl_ws = None
+        if ws is not None:
+            try:
+                await ws.close()
+            except Exception:
+                pass
+        for entry in self._cdp_downloads.values():
+            entry["done_event"].set()
+            entry["got_total_event"].set()
+            entry["progress_event"].set()
+        self._cdp_downloads.clear()
+        dl_dir = self._browser_dl_dir
+        self._browser_dl_dir = ""
+        if dl_dir and os.path.isdir(dl_dir):
+            try:
+                shutil.rmtree(dl_dir, ignore_errors=True)
+            except Exception:
+                pass
+
+    async def _cdp_cancel_download(self, guid: str) -> None:
+        ws = self._browser_dl_ws
+        if ws is None or not guid:
+            return
+        try:
+            self._browser_dl_cmd_id += 1
+            await ws.send(json.dumps({
+                "id": self._browser_dl_cmd_id,
+                "method": "Browser.cancelDownload",
+                "params": {"guid": guid},
+            }))
+        except Exception:
+            pass
+
+    async def _process_cdp_download(self, entry: Dict[str, Any]) -> None:
+        """Immediately opens the Amiga ASL FileRequester upon Browser.downloadWillBegin,
+        then live-streams chunks as Chromium writes them (or cancels Chromium if rejected)."""
+        guid = entry["guid"]
+        download_id = self.next_download_id
+        self.next_download_id += 1
+        suggested = entry["suggested"] or f"download_{download_id}.bin"
+        dl_dir = self._browser_dl_dir
+        cr_path = os.path.join(dl_dir, f"{guid}.crdownload") if dl_dir else ""
+        final_path = os.path.join(dl_dir, guid) if dl_dir else ""
+        cancel_ev = asyncio.Event()
+        self._active_download_cancels[download_id] = cancel_ev
+
+        try:
+            # Wait briefly (max 150ms) for the first Browser.downloadProgress event carrying Content-Length
+            try:
+                await asyncio.wait_for(entry["got_total_event"].wait(), timeout=0.15)
+            except asyncio.TimeoutError:
+                pass
+
+            total_size = int(entry.get("total_bytes") or 0)
+            if total_size == 0 and entry.get("state") == "completed":
+                fp = entry.get("file_path") or final_path
+                if fp and os.path.isfile(fp):
+                    try:
+                        total_size = os.path.getsize(fp)
+                    except Exception:
+                        pass
+
+            logger.info(
+                "Instant Download id=%d ready for Amiga ASL: '%s' (%d bytes, state=%s)",
+                download_id, suggested, total_size, entry.get("state"),
+            )
+            self._send_progress(100, f"Download: {suggested[:40]}")
+
+            loop = asyncio.get_running_loop()
+            resp_future = loop.create_future()
+            self.pending_downloads[download_id] = resp_future
+
+            fname_bytes = suggested.encode("utf-8", errors="replace")[:255]
+            fname_padded = fname_bytes.ljust(256, b"\x00")
+            start_pkt = STRUCT_MSG_DL_START.pack(
+                MSG_DOWNLOAD_START,
+                download_id,
+                total_size,
+                fname_padded,
+            )
+            if not await self.send_packet(start_pkt):
+                await self._cdp_cancel_download(guid)
+                return
+
+            try:
+                accepted = await asyncio.wait_for(resp_future, timeout=300.0)
+            finally:
+                self.pending_downloads.pop(download_id, None)
+
+            if not accepted:
+                logger.info("Download id=%d rejected/cancelled by Amiga user; cancelling browser transfer.", download_id)
+                await self._cdp_cancel_download(guid)
+                return
+
+            # Stream chunks live from the growing .crdownload file -> final completed file!
+            sent_bytes = 0
+            f_handle = None
+            try:
+                while self.running and not cancel_ev.is_set():
+                    state = entry.get("state", "inProgress")
+                    target_final = entry.get("file_path") or final_path
+
+                    # Determine readable source file
+                    if _IS_WINDOWS:
+                        # On Windows avoid holding an open handle across awaits so Chromium can rename .crdownload -> final
+                        src_path = target_final if (target_final and os.path.isfile(target_final)) else (cr_path if (cr_path and os.path.isfile(cr_path)) else "")
+                        chunk = b""
+                        if src_path:
+                            try:
+                                with open(src_path, "rb") as wf:
+                                    wf.seek(sent_bytes)
+                                    chunk = wf.read(DOWNLOAD_CHUNK_SIZE)
+                            except OSError:
+                                chunk = b""
+                    else:
+                        if f_handle is None:
+                            open_path = target_final if (target_final and os.path.isfile(target_final)) else (cr_path if (cr_path and os.path.isfile(cr_path)) else "")
+                            if open_path:
+                                try:
+                                    f_handle = open(open_path, "rb")
+                                    if sent_bytes > 0:
+                                        f_handle.seek(sent_bytes)
+                                except OSError:
+                                    f_handle = None
+                        chunk = f_handle.read(DOWNLOAD_CHUNK_SIZE) if f_handle is not None else b""
+
+                    if chunk:
+                        chunk_hdr = STRUCT_MSG_DL_CHUNK.pack(MSG_DOWNLOAD_CHUNK, download_id, len(chunk))
+                        if not await self.send_packet(chunk_hdr + chunk):
+                            await self._cdp_cancel_download(guid)
+                            return
+                        sent_bytes += len(chunk)
+                        await asyncio.sleep(0.001)
+                        continue
+
+                    # Caught up to current EOF on disk
+                    if state == "completed":
+                        # Verify final renamed file has no unread tail bytes
+                        if f_handle is not None:
+                            try:
+                                f_handle.close()
+                            except Exception:
+                                pass
+                            f_handle = None
+                        if target_final and os.path.isfile(target_final):
+                            final_size = os.path.getsize(target_final)
+                            if sent_bytes < final_size:
+                                with open(target_final, "rb") as tf:
+                                    tf.seek(sent_bytes)
+                                    while self.running and not cancel_ev.is_set():
+                                        tail = tf.read(DOWNLOAD_CHUNK_SIZE)
+                                        if not tail:
+                                            break
+                                        chunk_hdr = STRUCT_MSG_DL_CHUNK.pack(MSG_DOWNLOAD_CHUNK, download_id, len(tail))
+                                        if not await self.send_packet(chunk_hdr + tail):
+                                            return
+                                        sent_bytes += len(tail)
+                                        await asyncio.sleep(0.001)
+                        break
+
+                    if state == "canceled":
+                        logger.warning("Browser download id=%d was canceled before completion (%d bytes sent).", download_id, sent_bytes)
+                        return
+
+                    # Wait for more bytes from Chromium (or poll every 50ms since Chromium batches progress events)
+                    entry["progress_event"].clear()
+                    try:
+                        await asyncio.wait_for(entry["progress_event"].wait(), timeout=0.05)
+                    except asyncio.TimeoutError:
+                        pass
+            finally:
+                if f_handle is not None:
+                    try:
+                        f_handle.close()
+                    except Exception:
+                        pass
+
+            if cancel_ev.is_set():
+                await self._cdp_cancel_download(guid)
+                logger.info("Download id=%d stopped mid-transfer by Amiga user (%d bytes sent).", download_id, sent_bytes)
+                return
+
+            comp_pkt = STRUCT_MSG_DL_COMPLETE.pack(MSG_DOWNLOAD_COMPLETE, download_id)
+            await self.send_packet(comp_pkt)
+            logger.info("Instant Download id=%d completed (%d bytes streamed live to Amiga).", download_id, sent_bytes)
+        except asyncio.TimeoutError:
+            logger.warning("Download id=%d timed out waiting for Amiga ASL response.", download_id)
+            await self._cdp_cancel_download(guid)
+        except asyncio.CancelledError:
+            await self._cdp_cancel_download(guid)
+            raise
+        except Exception as exc:
+            logger.error("Error in instant CDP download id=%d: %s", download_id, exc)
+        finally:
+            self.pending_downloads.pop(download_id, None)
+            self._active_download_cancels.pop(download_id, None)
+            self._cdp_downloads.pop(guid, None)
+            for p in (entry.get("file_path") or "", final_path, cr_path):
+                if p and os.path.isfile(p):
+                    try:
+                        os.remove(p)
+                    except Exception:
+                        pass
+
     def _on_download_event(self, download: Download) -> None:
         self._last_download_time = time.monotonic()
+        # Skip duplicates already intercepted instantaneously by the Browser-CDP download monitor
+        try:
+            raw_sync = getattr(download, "_sync", download)
+            dl_path = str(getattr(raw_sync, "_path", "") or "")
+            if dl_path and os.path.basename(dl_path) in self._cdp_handled_guids:
+                logger.debug("Skipping duplicate page.on(download) already handled via Browser-CDP (%s)", os.path.basename(dl_path))
+                return
+            key = (str(getattr(download, "url", "") or ""), str(getattr(download, "suggested_filename", "") or "").strip())
+            ts = self._cdp_handled_keys.get(key)
+            if ts is not None and (time.monotonic() - ts) < 600.0:
+                logger.debug("Skipping duplicate page.on(download) for %s (already handled via Browser-CDP)", key[1])
+                return
+        except Exception:
+            pass
         t = asyncio.create_task(self._process_download(download))
         self.background_tasks.add(t)
         t.add_done_callback(self.background_tasks.discard)
@@ -8605,7 +8960,10 @@ class AmigaClientSession:
                 return
 
             # 3. Wait for user response from ASL requester
-            accepted = await asyncio.wait_for(resp_future, timeout=300.0)
+            try:
+                accepted = await asyncio.wait_for(resp_future, timeout=300.0)
+            finally:
+                self.pending_downloads.pop(download_id, None)
             if not accepted:
                 logger.info("Download id=%d cancelled by Amiga user.", download_id)
                 resp.close()
@@ -8641,6 +8999,8 @@ class AmigaClientSession:
             self.pending_downloads.pop(download_id, None)
 
     async def _process_download(self, download: Download) -> None:
+        """Fallback download handler (Firefox / non-CDP): opens the Amiga ASL requester
+        immediately while saving the browser download concurrently in the background."""
         download_id = self.next_download_id
         self.next_download_id += 1
 
@@ -8650,18 +9010,75 @@ class AmigaClientSession:
         tmp_fd, tmp_path = tempfile.mkstemp(prefix=f"vb_dl_{download_id}_")
         os.close(tmp_fd)
 
+        save_task = asyncio.create_task(download.save_as(tmp_path))
         try:
-            await download.save_as(tmp_path)
+            # Open Amiga ASL immediately while download.save_as runs in background
+            loop = asyncio.get_running_loop()
+            resp_future = loop.create_future()
+            self.pending_downloads[download_id] = resp_future
+
+            fname_bytes = suggested.encode("utf-8", errors="replace")[:255]
+            fname_padded = fname_bytes.ljust(256, b"\x00")
+            total_size = 0
+            if save_task.done() and not save_task.exception() and os.path.isfile(tmp_path):
+                total_size = os.path.getsize(tmp_path)
+
+            start_pkt = STRUCT_MSG_DL_START.pack(
+                MSG_DOWNLOAD_START,
+                download_id,
+                total_size,
+                fname_padded,
+            )
+            if not await self.send_packet(start_pkt):
+                save_task.cancel()
+                return
+
+            try:
+                accepted = await asyncio.wait_for(resp_future, timeout=300.0)
+            finally:
+                self.pending_downloads.pop(download_id, None)
+
+            if not accepted:
+                logger.info("Download id=%d rejected/cancelled by Amiga user.", download_id)
+                try:
+                    await download.cancel()
+                except Exception:
+                    pass
+                save_task.cancel()
+                return
+
+            await save_task
+            total_size = os.path.getsize(tmp_path)
+            logger.info("Download id=%d accepted! Streaming %d bytes in 64KB chunks...", download_id, total_size)
+            sent_bytes = 0
+            with open(tmp_path, "rb") as f:
+                while self.running:
+                    chunk = f.read(DOWNLOAD_CHUNK_SIZE)
+                    if not chunk:
+                        break
+                    chunk_hdr = STRUCT_MSG_DL_CHUNK.pack(MSG_DOWNLOAD_CHUNK, download_id, len(chunk))
+                    if not await self.send_packet(chunk_hdr + chunk):
+                        return
+                    sent_bytes += len(chunk)
+                    await asyncio.sleep(0.002)
+
+            comp_pkt = STRUCT_MSG_DL_COMPLETE.pack(MSG_DOWNLOAD_COMPLETE, download_id)
+            await self.send_packet(comp_pkt)
+            logger.info("Download id=%d completed (%d bytes streamed to Amiga).", download_id, sent_bytes)
+        except asyncio.TimeoutError:
+            logger.warning("Download id=%d timed out waiting for Amiga ASL response.", download_id)
+            save_task.cancel()
         except Exception as exc:
-            logger.error("Error saving browser download id=%d: %s", download_id, exc)
+            logger.error("Error processing browser download id=%d: %s", download_id, exc)
+            if not save_task.done():
+                save_task.cancel()
+        finally:
+            self.pending_downloads.pop(download_id, None)
             try:
                 if os.path.exists(tmp_path):
                     os.remove(tmp_path)
             except Exception:
                 pass
-            return
-
-        await self._stream_cached_file_to_amiga(download_id, tmp_path, suggested)
 
     async def _stream_cached_file_to_amiga(self, download_id: int, tmp_path: str, suggested: str) -> None:
         try:
@@ -8684,7 +9101,10 @@ class AmigaClientSession:
             if not await self.send_packet(start_pkt):
                 return
 
-            accepted = await asyncio.wait_for(resp_future, timeout=300.0)
+            try:
+                accepted = await asyncio.wait_for(resp_future, timeout=300.0)
+            finally:
+                self.pending_downloads.pop(download_id, None)
             if not accepted:
                 logger.info("Download id=%d rejected/cancelled by Amiga user.", download_id)
                 return
