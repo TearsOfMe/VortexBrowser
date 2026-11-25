@@ -16,8 +16,12 @@ import atexit
 import base64
 import concurrent.futures
 import ctypes
-import fcntl
+try:
+    import fcntl
+except ImportError:
+    fcntl = None  # type: ignore
 import gc
+import getpass
 import glob
 import hashlib
 import html
@@ -26,6 +30,7 @@ import io
 import logging
 import os
 import platform
+import queue
 import re
 import select
 import signal
@@ -34,8 +39,12 @@ import subprocess
 import struct
 import sys
 import tempfile
+import threading
 import time
 import urllib.request
+
+_IS_WINDOWS: bool = (platform.system() == "Windows")
+_SUBPROC_NO_WINDOW: int = getattr(subprocess, "CREATE_NO_WINDOW", 0) if _IS_WINDOWS else 0
 from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.parse import parse_qs, quote_plus, unquote, urlencode, urlparse
 
@@ -196,7 +205,7 @@ class CPUGovernorManager:
     disconnect or on shutdown.
     """
     def __init__(self, enabled: bool = True):
-        self.enabled = enabled
+        self.enabled = enabled and (platform.system() == "Linux")
         self.prev_profile: Optional[str] = None
         self.active_count = 0
         self.is_performance = False
@@ -295,6 +304,8 @@ atexit.register(_cleanup_cpu_gov)
 # ============================================================================
 def setup_audio_environment() -> None:
     """Ensures XDG_RUNTIME_DIR and PulseAudio socket directory exist (crucial on DietPi/headless)."""
+    if _IS_WINDOWS or not hasattr(os, "getuid"):
+        return
     if "XDG_RUNTIME_DIR" not in os.environ or not os.path.isdir(os.environ["XDG_RUNTIME_DIR"]):
         uid = os.getuid()
         candidate = f"/run/user/{uid}"
@@ -307,6 +318,85 @@ def setup_audio_environment() -> None:
                 os.environ["XDG_RUNTIME_DIR"] = tmp_xdg
             except Exception:
                 pass
+
+
+def _find_windows_dshow_audio_device(explicit_device: str = "") -> Optional[str]:
+    """Finds a DirectShow loopback/virtual audio device on Windows (VB-Cable, Stereo Mix, etc.)."""
+    explicit = (explicit_device or os.environ.get("VORTEX_AUDIO_DEVICE", "")).strip()
+    if explicit and explicit.lower() != "wasapi":
+        return explicit
+    try:
+        res = subprocess.run(
+            ["ffmpeg", "-list_devices", "true", "-f", "dshow", "-i", "dummy"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            creationflags=_SUBPROC_NO_WINDOW,
+        )
+        output = (res.stderr or "") + "\n" + (res.stdout or "")
+        devices: List[str] = []
+        in_audio = False
+        for line in output.splitlines():
+            if "DirectShow audio devices" in line:
+                in_audio = True
+                continue
+            if "DirectShow video devices" in line:
+                in_audio = False
+                continue
+            m = re.search(r'"([^"]+)"', line)
+            if m and (in_audio or "(audio)" in line.lower()):
+                name = m.group(1).strip()
+                if name and not name.startswith("@device_"):
+                    devices.append(name)
+        preferred = (
+            "cable output (vb-audio virtual cable)",
+            "vb-audio virtual cable",
+            "vb-audio",
+            "stereo mix",
+            "stereomix",
+            "what u hear",
+            "wave out mix",
+        )
+        for pat in preferred:
+            for dev in devices:
+                if pat in dev.lower():
+                    return dev
+    except Exception:
+        pass
+    return None
+
+
+def _has_windows_wasapi_loopback() -> bool:
+    """Checks whether PyAudioWPatch native WASAPI loopback capture is available on Windows."""
+    if not _IS_WINDOWS:
+        return False
+    try:
+        import pyaudiowpatch as pyaudio  # type: ignore
+        pa = pyaudio.PyAudio()
+        try:
+            dev = pa.get_default_wasapi_loopback()
+            return bool(dev)
+        finally:
+            pa.terminate()
+    except Exception:
+        return False
+
+
+def _select_windows_audio_backend(explicit_device: str = "") -> Tuple[str, Optional[str]]:
+    """Returns ('dshow', device_name), ('wasapi', None), or ('none', None)."""
+    explicit = (explicit_device or os.environ.get("VORTEX_AUDIO_DEVICE", "")).strip()
+    if explicit.lower() == "wasapi":
+        return ("wasapi", None) if _has_windows_wasapi_loopback() else ("none", None)
+    if explicit:
+        return ("dshow", explicit)
+    dshow_dev = _find_windows_dshow_audio_device()
+    if dshow_dev and "vb-audio" in dshow_dev.lower():
+        return ("dshow", dshow_dev)
+    if _has_windows_wasapi_loopback():
+        return ("wasapi", None)
+    if dshow_dev:
+        return ("dshow", dshow_dev)
+    return ("none", None)
 
 
 def _find_macos_audio_device() -> Optional[str]:
@@ -331,8 +421,20 @@ def _find_macos_audio_device() -> Optional[str]:
     return None
 
 
-def ensure_audio_sink() -> bool:
-    """Creates and unmutes a dedicated PipeWire/PulseAudio null-sink (Linux) or checks BlackHole (macOS)."""
+def ensure_audio_sink(audio_device: str = "") -> bool:
+    """Creates/checks audio capture backend on Linux (PipeWire/PulseAudio), macOS (BlackHole), or Windows (WASAPI/DirectShow)."""
+    if _IS_WINDOWS:
+        backend, dev = _select_windows_audio_backend(audio_device)
+        if backend == "wasapi":
+            logger.info("Windows WASAPI loopback (PyAudioWPatch) ready for AHI streaming (no virtual driver required).")
+            return True
+        if backend == "dshow" and dev:
+            logger.info("Windows DirectShow audio device '%s' detected for AHI streaming.", dev)
+            return True
+        logger.warning("No Windows audio loopback backend found. Audio streaming disabled.")
+        logger.info("Tip for Windows audio: install 'PyAudioWPatch' (pip install PyAudioWPatch) or VB-Cable.")
+        return False
+
     if platform.system() == "Darwin":
         dev = _find_macos_audio_device()
         if dev:
@@ -388,7 +490,7 @@ def ensure_audio_sink() -> bool:
 
 def unmute_all_browser_sink_inputs() -> None:
     """Ensures PipeWire module-stream-restore never leaves Chromium sink-inputs muted at 0%."""
-    if platform.system() == "Darwin":
+    if platform.system() in ("Darwin", "Windows"):
         return
     try:
         out = subprocess.check_output(["pactl", "list", "short", "sink-inputs"], text=True, timeout=2)
@@ -442,8 +544,23 @@ def find_full_chromium_executable(custom_bin: Optional[str] = None) -> Optional[
         except Exception:
             pass
 
-    # Tier 1: Real native installed browsers (.deb / native packages / macOS .app bundles)
-    if platform.system() == "Darwin":
+    # Tier 1: Real native installed browsers (.deb / native packages / macOS .app / Windows .exe)
+    if _IS_WINDOWS:
+        local_app = os.environ.get("LOCALAPPDATA", os.path.expanduser("~\\AppData\\Local"))
+        prog_files = os.environ.get("PROGRAMFILES", r"C:\Program Files")
+        prog_files_x86 = os.environ.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)")
+        native_patterns = [
+            os.path.join(local_app, "Chromium", "Application", "chrome.exe"),
+            os.path.join(prog_files, "Chromium", "Application", "chrome.exe"),
+            os.path.join(prog_files, "Google", "Chrome", "Application", "chrome.exe"),
+            os.path.join(prog_files_x86, "Google", "Chrome", "Application", "chrome.exe"),
+            os.path.join(local_app, "Google", "Chrome", "Application", "chrome.exe"),
+            os.path.join(prog_files, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+            os.path.join(local_app, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+            os.path.join(prog_files_x86, "Microsoft", "Edge", "Application", "msedge.exe"),
+            os.path.join(prog_files, "Microsoft", "Edge", "Application", "msedge.exe"),
+        ]
+    elif platform.system() == "Darwin":
         native_patterns = [
             "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
             "/Applications/Chromium.app/Contents/MacOS/Chromium",
@@ -470,11 +587,17 @@ def find_full_chromium_executable(custom_bin: Optional[str] = None) -> Optional[
             "/usr/lib/chromium/chromium",
         ]
     for p in native_patterns:
-        if os.path.isfile(p) and os.access(p, os.X_OK) and not is_snap_binary(p):
+        if os.path.isfile(p) and (_IS_WINDOWS or (os.access(p, os.X_OK) and not is_snap_binary(p))):
             return p
 
     # Tier 2: Playwright native Chromium (clean, standalone, no snap confinement, has audio!)
-    if platform.system() == "Darwin":
+    if _IS_WINDOWS:
+        local_app = os.environ.get("LOCALAPPDATA", os.path.expanduser("~\\AppData\\Local"))
+        pw_patterns = [
+            os.path.join(local_app, "ms-playwright", "chromium-*", "chrome-win64", "chrome.exe"),
+            os.path.join(local_app, "ms-playwright", "chromium-*", "chrome-win", "chrome.exe"),
+        ]
+    elif platform.system() == "Darwin":
         pw_patterns = [
             os.path.expanduser("~/Library/Caches/ms-playwright/chromium-*/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"),
             os.path.expanduser("~/Library/Caches/ms-playwright/chromium-*/chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"),
@@ -490,19 +613,20 @@ def find_full_chromium_executable(custom_bin: Optional[str] = None) -> Optional[
         candidates.extend(glob.glob(pat))
     candidates.sort(reverse=True)
     for c in candidates:
-        if os.path.isfile(c) and os.access(c, os.X_OK):
+        if os.path.isfile(c) and (_IS_WINDOWS or os.access(c, os.X_OK)):
             return c
 
-    # Tier 3: Ubuntu Snap Chromium as last fallback (may have confinement issues)
-    snap_patterns = [
-        "/usr/bin/chromium-browser",
-        "/usr/bin/chromium",
-        "/snap/bin/chromium",
-    ]
-    for p in snap_patterns:
-        if os.path.isfile(p) and os.access(p, os.X_OK):
-            logger.warning("Using Ubuntu Snap Chromium (%s) as fallback. Snap may enforce strict AppArmor restrictions.", p)
-            return p
+    # Tier 3: Ubuntu Snap Chromium as last fallback (Linux only)
+    if platform.system() == "Linux":
+        snap_patterns = [
+            "/usr/bin/chromium-browser",
+            "/usr/bin/chromium",
+            "/snap/bin/chromium",
+        ]
+        for p in snap_patterns:
+            if os.path.isfile(p) and os.access(p, os.X_OK):
+                logger.warning("Using Ubuntu Snap Chromium (%s) as fallback. Snap may enforce strict AppArmor restrictions.", p)
+                return p
 
     return None
 
@@ -1315,6 +1439,16 @@ def detect_system_locale(explicit_locale: str = "") -> Tuple[str, bool]:
             except Exception:
                 pass
 
+    if _IS_WINDOWS:
+        try:
+            buf = ctypes.create_unicode_buffer(85)
+            if ctypes.windll.kernel32.GetUserDefaultLocaleName(buf, len(buf)):
+                norm = normalize_bcp47_locale(buf.value)
+                if norm:
+                    return norm, False
+        except Exception:
+            pass
+
     if platform.system() == "Darwin":
         try:
             res = subprocess.run(
@@ -1720,7 +1854,20 @@ try:
     _base_dir = os.path.dirname(os.path.abspath(__file__))
     _is_macos = (platform.system() == "Darwin")
     _is_arm = platform.machine().lower().startswith(("aarch64", "arm"))
-    if _is_macos:
+    if _IS_WINDOWS:
+        if hasattr(os, "add_dll_directory"):
+            try:
+                os.add_dll_directory(_base_dir)
+            except Exception:
+                pass
+        _has_win_avx2 = False
+        try:
+            # PF_AVX2_INSTRUCTIONS_AVAILABLE == 40 on Windows 10/11
+            _has_win_avx2 = bool(ctypes.windll.kernel32.IsProcessorFeaturePresent(40))
+        except Exception:
+            _has_win_avx2 = False
+        _candidates = ["fast_pixconv_avx2.dll", "fast_pixconv.dll"] if _has_win_avx2 else ["fast_pixconv.dll"]
+    elif _is_macos:
         _candidates = ["fast_pixconv.dylib", "fast_pixconv_arm64.dylib", "fast_pixconv.so"]
     elif _is_arm:
         _candidates = ["fast_pixconv_aarch64.so", "fast_pixconv.so"]
@@ -1743,14 +1890,21 @@ try:
     if _FAST_PIXCONV is None or not _HAS_NATIVE_PACKET_ENCODER:
         _c_src = os.path.join(_base_dir, "fast_pixconv.c")
         if os.path.exists(_c_src):
-            if _is_macos:
+            if _IS_WINDOWS:
+                _target_so_name = "fast_pixconv.dll"
+            elif _is_macos:
                 _target_so_name = "fast_pixconv.dylib"
             else:
                 _target_so_name = "fast_pixconv_aarch64.so" if _is_arm else "fast_pixconv.so"
             _target_so_path = os.path.join(_base_dir, _target_so_name)
             try:
                 logger.info("Attempting auto-compilation of native SIMD + TurboJPEG + LZ4 helper (%s)...", _target_so_name)
-                if _is_macos:
+                if _IS_WINDOWS:
+                    _compile_cmds = [
+                        ["gcc", "-O3", "-march=native", "-DHAVE_TURBOJPEG_LZ4", "-shared", "-o", _target_so_path, _c_src, "-lturbojpeg", "-llz4"],
+                        ["gcc", "-O3", "-msse2", "-shared", "-o", _target_so_path, _c_src],
+                    ]
+                elif _is_macos:
                     _hb_prefix = "/opt/homebrew" if os.path.isdir("/opt/homebrew") else "/usr/local"
                     _hb_tj = f"{_hb_prefix}/opt/jpeg-turbo"
                     _hb_lz4 = f"{_hb_prefix}/opt/lz4"
@@ -1773,7 +1927,7 @@ try:
                         ["gcc", "-O3", "-march=native", "-shared", "-fPIC", "-o", _target_so_path, _c_src],
                     ]
                 for _cmd in _compile_cmds:
-                    _ret = subprocess.run(_cmd, capture_output=True, timeout=15)
+                    _ret = subprocess.run(_cmd, capture_output=True, timeout=15, creationflags=_SUBPROC_NO_WINDOW)
                     if _ret.returncode == 0 and os.path.exists(_target_so_path):
                         _lib = ctypes.CDLL(_target_so_path)
                         _bind_fast_pixconv_symbols(_lib)
@@ -1798,7 +1952,11 @@ except Exception as _exc:
 _TURBO_JPEG = None
 try:
     from turbojpeg import TurboJPEG, TJPF_RGB, TJSAMP_420
-    _TURBO_JPEG = TurboJPEG()
+    _win_tj_dll = os.path.join(os.path.dirname(os.path.abspath(__file__)), "turbojpeg.dll")
+    if _IS_WINDOWS and os.path.isfile(_win_tj_dll):
+        _TURBO_JPEG = TurboJPEG(_win_tj_dll)
+    else:
+        _TURBO_JPEG = TurboJPEG()
     logger.info("Loaded native libjpeg-turbo SIMD decoder (ultra-fast direct JPEG/YUV pipeline)")
 except Exception as _tj_init_err:
     logger.debug("TurboJPEG initialization skipped (%s), using Pillow fallback", _tj_init_err)
@@ -2088,7 +2246,8 @@ class H264LiveStreamEncoder:
                 input=frame_bytes,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL,
-                timeout=4,
+                timeout=5,
+                creationflags=_SUBPROC_NO_WINDOW,
             )
             return res.returncode == 0 and len(res.stdout) > 0
         except Exception:
@@ -2102,7 +2261,35 @@ class H264LiveStreamEncoder:
         test_w, test_h = 128, 128
         test_yuv = b"\x80" * (test_w * test_h * 3 // 2)
 
-        if platform.system() == "Darwin":
+        if _IS_WINDOWS:
+            win_probes = [
+                ("nvenc", "NVIDIA NVENC hardware", [
+                    "ffmpeg", "-y", "-loglevel", "error",
+                    "-f", "rawvideo", "-pix_fmt", "yuv420p", "-s", f"{test_w}x{test_h}", "-r", "25", "-i", "-",
+                    "-frames:v", "1", "-c:v", "h264_nvenc", "-preset", "p1", "-tune", "ull", "-zerolatency", "1", "-f", "h264", "-"
+                ]),
+                ("amf", "AMD AMF hardware", [
+                    "ffmpeg", "-y", "-loglevel", "error",
+                    "-f", "rawvideo", "-pix_fmt", "yuv420p", "-s", f"{test_w}x{test_h}", "-r", "25", "-i", "-",
+                    "-frames:v", "1", "-c:v", "h264_amf", "-usage", "ultralowlatency", "-quality", "speed", "-f", "h264", "-"
+                ]),
+                ("qsv", "Intel QuickSync hardware", [
+                    "ffmpeg", "-y", "-loglevel", "error",
+                    "-f", "rawvideo", "-pix_fmt", "yuv420p", "-s", f"{test_w}x{test_h}", "-r", "25", "-i", "-",
+                    "-frames:v", "1", "-c:v", "h264_qsv", "-preset", "veryfast", "-f", "h264", "-"
+                ]),
+                ("mf", "Windows Media Foundation hardware", [
+                    "ffmpeg", "-y", "-loglevel", "error",
+                    "-f", "rawvideo", "-pix_fmt", "yuv420p", "-s", f"{test_w}x{test_h}", "-r", "25", "-i", "-",
+                    "-frames:v", "1", "-c:v", "h264_mf", "-rate_control", "cbr", "-f", "h264", "-"
+                ]),
+            ]
+            for bname, label, pcmd in win_probes:
+                if cls._test_ffmpeg_cmd(pcmd, test_yuv):
+                    cls._cached_backend = (bname, None)
+                    logger.info("H.264 Encoder Backend: h264_%s (%s)", bname, label)
+                    return cls._cached_backend
+        elif platform.system() == "Darwin":
             if cls._test_ffmpeg_cmd([
                 "ffmpeg", "-y", "-loglevel", "error",
                 "-f", "rawvideo", "-pix_fmt", "yuv420p", "-s", f"{test_w}x{test_h}", "-r", "25", "-i", "-",
@@ -2129,7 +2316,7 @@ class H264LiveStreamEncoder:
             "-frames:v", "1", "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency", "-f", "h264", "-"
         ], test_yuv):
             cls._cached_backend = ("libx264", None)
-            logger.info("H.264 Encoder Backend: libx264 (CPU ultrafast zerolatency; VA-API H.264 encode unavailable on GPU)")
+            logger.info("H.264 Encoder Backend: libx264 (CPU ultrafast zerolatency)")
             return cls._cached_backend
 
         if cls._test_ffmpeg_cmd([
@@ -2142,7 +2329,7 @@ class H264LiveStreamEncoder:
             return cls._cached_backend
 
         cls._cached_backend = ("none", None)
-        logger.warning("No working H.264 encoder found in ffmpeg (check VA-API/libx264); using LZ4+DirtySlice.")
+        logger.warning("No working H.264 encoder found in ffmpeg; using LZ4+DirtySlice.")
         return cls._cached_backend
 
     def __init__(self, width: int, height: int, fps: int = 25, bitrate_k: int = 8000):
@@ -2152,12 +2339,81 @@ class H264LiveStreamEncoder:
         self.bitrate_k = bitrate_k
         self.proc: Optional[subprocess.Popen] = None
         self._fd: Optional[int] = None
+        self._use_reader_thread: bool = (_IS_WINDOWS or fcntl is None)
+        self._out_queue: "queue.Queue[bytes]" = queue.Queue(maxsize=64)
+        self._reader_thread: Optional[threading.Thread] = None
         self._backend: str = "none"
         self._device: Optional[str] = None
         self._consecutive_failures: int = 0
         self._start_encoder()
 
     def _build_cmd(self, backend: str, device: Optional[str]) -> Optional[List[str]]:
+        if backend == "nvenc":
+            return [
+                "ffmpeg", "-y", "-loglevel", "error",
+                "-f", "rawvideo", "-pix_fmt", "yuv420p",
+                "-s", f"{self.width}x{self.height}",
+                "-r", str(self.fps),
+                "-i", "-",
+                "-c:v", "h264_nvenc",
+                "-preset", "p1",
+                "-tune", "ull",
+                "-rc", "cbr",
+                "-zerolatency", "1",
+                "-b:v", f"{self.bitrate_k}k",
+                "-maxrate", f"{self.bitrate_k * 3 // 2}k",
+                "-bufsize", f"{self.bitrate_k // 2}k",
+                "-g", str(self.fps),
+                "-bf", "0",
+                "-f", "h264", "-"
+            ]
+        if backend == "amf":
+            return [
+                "ffmpeg", "-y", "-loglevel", "error",
+                "-f", "rawvideo", "-pix_fmt", "yuv420p",
+                "-s", f"{self.width}x{self.height}",
+                "-r", str(self.fps),
+                "-i", "-",
+                "-c:v", "h264_amf",
+                "-usage", "ultralowlatency",
+                "-quality", "speed",
+                "-b:v", f"{self.bitrate_k}k",
+                "-maxrate", f"{self.bitrate_k * 3 // 2}k",
+                "-bufsize", f"{self.bitrate_k // 2}k",
+                "-g", str(self.fps),
+                "-bf", "0",
+                "-f", "h264", "-"
+            ]
+        if backend == "qsv":
+            return [
+                "ffmpeg", "-y", "-loglevel", "error",
+                "-f", "rawvideo", "-pix_fmt", "yuv420p",
+                "-s", f"{self.width}x{self.height}",
+                "-r", str(self.fps),
+                "-i", "-",
+                "-c:v", "h264_qsv",
+                "-preset", "veryfast",
+                "-b:v", f"{self.bitrate_k}k",
+                "-maxrate", f"{self.bitrate_k * 3 // 2}k",
+                "-bufsize", f"{self.bitrate_k // 2}k",
+                "-g", str(self.fps),
+                "-bf", "0",
+                "-f", "h264", "-"
+            ]
+        if backend == "mf":
+            return [
+                "ffmpeg", "-y", "-loglevel", "error",
+                "-f", "rawvideo", "-pix_fmt", "yuv420p",
+                "-s", f"{self.width}x{self.height}",
+                "-r", str(self.fps),
+                "-i", "-",
+                "-c:v", "h264_mf",
+                "-rate_control", "cbr",
+                "-scenario", "live_streaming",
+                "-b:v", f"{self.bitrate_k}k",
+                "-g", str(self.fps),
+                "-f", "h264", "-"
+            ]
         if backend == "videotoolbox":
             return [
                 "ffmpeg", "-y", "-loglevel", "error",
@@ -2227,6 +2483,26 @@ class H264LiveStreamEncoder:
             ]
         return None
 
+    def _pipe_reader_worker(self, stdout_pipe: Any, q: "queue.Queue[bytes]") -> None:
+        try:
+            while True:
+                data = stdout_pipe.read1(65536) if hasattr(stdout_pipe, "read1") else os.read(stdout_pipe.fileno(), 65536)
+                if not data:
+                    break
+                try:
+                    q.put_nowait(data)
+                except queue.Full:
+                    try:
+                        q.get_nowait()
+                    except queue.Empty:
+                        pass
+                    try:
+                        q.put_nowait(data)
+                    except queue.Full:
+                        pass
+        except Exception:
+            pass
+
     def _start_encoder(self) -> None:
         self.stop()
         backend, device = self._probe_backend()
@@ -2239,7 +2515,12 @@ class H264LiveStreamEncoder:
             return
         try:
             self.proc = subprocess.Popen(
-                cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
+                cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                bufsize=0,
+                creationflags=_SUBPROC_NO_WINDOW,
             )
             self._backend = backend
             self._device = device
@@ -2250,13 +2531,23 @@ class H264LiveStreamEncoder:
 
         if self.proc and self.proc.stdout:
             self._fd = self.proc.stdout.fileno()
-            fl = fcntl.fcntl(self._fd, fcntl.F_GETFL)
-            fcntl.fcntl(self._fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+            if self._use_reader_thread:
+                self._out_queue = queue.Queue(maxsize=64)
+                self._reader_thread = threading.Thread(
+                    target=self._pipe_reader_worker,
+                    args=(self.proc.stdout, self._out_queue),
+                    daemon=True,
+                    name="vb_h264_reader",
+                )
+                self._reader_thread.start()
+            elif fcntl is not None:
+                fl = fcntl.fcntl(self._fd, fcntl.F_GETFL)
+                fcntl.fcntl(self._fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
 
     def _handle_proc_failure(self) -> None:
         self._consecutive_failures += 1
-        if self._backend == "vaapi":
-            logger.warning("VA-API H.264 encoder failed at runtime on %s; permanently switching to libx264.", self._device)
+        if self._backend in ("vaapi", "nvenc", "amf", "qsv", "mf", "videotoolbox"):
+            logger.warning("Hardware H.264 encoder (%s) failed at runtime; permanently switching to libx264.", self._backend)
             H264LiveStreamEncoder._cached_backend = ("libx264", None)
             self._consecutive_failures = 0
             self._start_encoder()
@@ -2285,17 +2576,29 @@ class H264LiveStreamEncoder:
             return None
 
         # Wait up to 40ms for ffmpeg to output the encoded NAL frame
-        r, _, _ = select.select([self._fd], [], [], 0.04)
-        chunks = []
-        if r:
-            for _ in range(30):
-                try:
-                    chunk = os.read(self._fd, 65536)
-                    if not chunk:
+        chunks: List[bytes] = []
+        if self._use_reader_thread:
+            try:
+                first = self._out_queue.get(timeout=0.04)
+                chunks.append(first)
+                for _ in range(30):
+                    try:
+                        chunks.append(self._out_queue.get_nowait())
+                    except queue.Empty:
                         break
-                    chunks.append(chunk)
-                except (BlockingIOError, OSError):
-                    break
+            except queue.Empty:
+                pass
+        else:
+            r, _, _ = select.select([self._fd], [], [], 0.04)
+            if r:
+                for _ in range(30):
+                    try:
+                        chunk = os.read(self._fd, 65536)
+                        if not chunk:
+                            break
+                        chunks.append(chunk)
+                    except (BlockingIOError, OSError):
+                        break
         if chunks:
             self._consecutive_failures = 0
             return b"".join(chunks)
@@ -2321,9 +2624,15 @@ class H264LiveStreamEncoder:
 # Persistent Profile, Session Storage & Security Helpers
 # ============================================================================
 def get_vortex_config_dir() -> str:
-    """Returns the user config/profile directory (~/.config/vortexbrowse or $VORTEX_PROFILE_DIR)."""
+    """Returns the user config/profile directory (~/.config/vortexbrowse, %APPDATA%\\VortexBrowser, or $VORTEX_PROFILE_DIR)."""
     env_dir = os.environ.get("VORTEX_PROFILE_DIR", "").strip()
-    cfg_dir = os.path.expanduser(env_dir) if env_dir else os.path.expanduser("~/.config/vortexbrowse")
+    if env_dir:
+        cfg_dir = os.path.expanduser(env_dir)
+    elif _IS_WINDOWS:
+        base = os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+        cfg_dir = os.path.join(base, "VortexBrowser")
+    else:
+        cfg_dir = os.path.expanduser("~/.config/vortexbrowse")
     os.makedirs(cfg_dir, mode=0o700, exist_ok=True)
     return cfg_dir
 
@@ -2794,8 +3103,46 @@ async def deduplicate_context_cookies(context: BrowserContext) -> None:
 
 
 def _detect_chromium_ua(executable_path: Optional[str]) -> Optional[str]:
-    """Detects installed Chromium major version for a consistent Linux Desktop User-Agent."""
+    """Detects installed Chromium major version for a consistent Desktop User-Agent."""
     if not executable_path:
+        return None
+    major: Optional[str] = None
+    if _IS_WINDOWS:
+        # On Windows, chrome.exe is a GUI subsystem binary (--version prints nothing to stdout).
+        # Inspect sibling version directories (e.g. Application\134.0.6998.89) or parent path first.
+        try:
+            exe_dir = os.path.dirname(os.path.abspath(executable_path))
+            ver_candidates: List[Tuple[int, str]] = []
+            if os.path.isdir(exe_dir):
+                for entry in os.listdir(exe_dir):
+                    m = re.match(r"^(\d+)\.\d+\.\d+\.\d+$", entry)
+                    if m:
+                        ver_candidates.append((int(m.group(1)), m.group(1)))
+            if ver_candidates:
+                ver_candidates.sort(reverse=True)
+                major = ver_candidates[0][1]
+        except Exception:
+            pass
+        if not major:
+            try:
+                ps_cmd = f"(Get-Item '{executable_path.replace(chr(39), chr(39)*2)}').VersionInfo.ProductVersion"
+                out = subprocess.check_output(
+                    ["powershell", "-NoProfile", "-Command", ps_cmd],
+                    text=True,
+                    stderr=subprocess.DEVNULL,
+                    timeout=3,
+                    creationflags=_SUBPROC_NO_WINDOW,
+                )
+                m = re.search(r"\b(\d+)\.\d+\.\d+\.\d+\b", out)
+                if m:
+                    major = m.group(1)
+            except Exception:
+                pass
+        if major:
+            return (
+                f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                f"(KHTML, like Gecko) Chrome/{major}.0.0.0 Safari/537.36"
+            )
         return None
     try:
         out = subprocess.check_output(
@@ -2807,6 +3154,11 @@ def _detect_chromium_ua(executable_path: Optional[str]) -> Optional[str]:
         m = re.search(r"\b(\d+)\.\d+\.\d+\.\d+\b", out)
         if m:
             major = m.group(1)
+            if platform.system() == "Darwin":
+                return (
+                    f"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+                    f"(KHTML, like Gecko) Chrome/{major}.0.0.0 Safari/537.36"
+                )
             return (
                 f"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
                 f"(KHTML, like Gecko) Chrome/{major}.0.0.0 Safari/537.36"
@@ -2869,6 +3221,7 @@ class AmigaClientSession:
         browser_locale: str = "",
         locale_explicit: bool = False,
         use_rustwright: bool = False,
+        audio_device: str = "",
     ):
         self.reader = reader
         self.writer = writer
@@ -2880,6 +3233,7 @@ class AmigaClientSession:
         self.browser_locale: str = normalize_bcp47_locale(browser_locale) or _SERVER_LOCALE
         self.locale_explicit: bool = bool(locale_explicit)
         self.use_rustwright: bool = bool(use_rustwright)
+        self.audio_device: str = audio_device
         self.width = width
         self.height = height
         self.pixel_format = pixel_format
@@ -4985,13 +5339,219 @@ class AmigaClientSession:
                 logger.debug("Periodic storage sync warning: %s", e)
 
     # ------------------------------------------------------------------------
-    # Real-Time Audio Capture & Streaming Loop (PipeWire -> Amiga AHI)
+    # Real-Time Audio Capture & Streaming Loop (PipeWire / macOS / Windows WASAPI -> Amiga AHI)
     # ------------------------------------------------------------------------
+    async def _send_pcm_chunk(self, chunk: bytes, state: Dict[str, int]) -> None:
+        if _FAST_PIXCONV is not None:
+            if _FAST_PIXCONV.pcm_s16be_is_silent(chunk, len(chunk), 10) == 1:
+                state["silent_streak"] += 1
+                return
+        else:
+            if chunk == b"\x00" * len(chunk):
+                state["silent_streak"] += 1
+                return
+        state["silent_streak"] = 0
+
+        comp = lz4.block.compress(chunk, store_size=False)
+        if len(comp) < len(chunk):
+            codec = CODEC_LZ4
+            payload = comp
+        else:
+            codec = CODEC_RAW
+            payload = chunk
+
+        hdr = STRUCT_MSG_AUDIO.pack(
+            MSG_AUDIO,
+            AUDIO_SAMPLE_RATE,
+            AUDIO_CHANNELS,
+            codec,
+            len(chunk),
+            len(payload),
+        )
+        await self.send_packet(hdr + payload)
+        self.last_audio_time = time.monotonic()
+        state["chunks_sent"] += 1
+        if state["chunks_sent"] == 1 or state["chunks_sent"] % 50 == 0:
+            logger.info("Streamed %d audio chunks to Amiga AHI (latest=%dB)", state["chunks_sent"], len(payload))
+
+    async def _audio_stream_windows_wasapi(self) -> None:
+        """Captures native Windows WASAPI loopback via PyAudioWPatch (zero virtual audio driver required)."""
+        import array
+        import pyaudiowpatch as pyaudio  # type: ignore
+
+        loop = asyncio.get_running_loop()
+        pcm_q: asyncio.Queue = asyncio.Queue(maxsize=32)
+        stop_flag = threading.Event()
+        resampler: Optional[subprocess.Popen] = None
+
+        def _wasapi_worker() -> None:
+            nonlocal resampler
+            pa = None
+            stream = None
+            try:
+                pa = pyaudio.PyAudio()
+                dev = pa.get_default_wasapi_loopback()
+                if not dev:
+                    return
+                src_rate = int(round(float(dev.get("defaultSampleRate", AUDIO_SAMPLE_RATE))))
+                src_ch = max(1, int(dev.get("maxInputChannels", AUDIO_CHANNELS)))
+                dev_name = str(dev.get("name", "WASAPI Loopback"))
+                need_resample = (src_rate != AUDIO_SAMPLE_RATE or src_ch != AUDIO_CHANNELS)
+                frames_per_buf = max(512, int(src_rate * 0.04))
+
+                if need_resample:
+                    resampler = subprocess.Popen(
+                        [
+                            "ffmpeg", "-loglevel", "error",
+                            "-f", "s16le", "-ar", str(src_rate), "-ac", str(src_ch), "-i", "-",
+                            "-ar", str(AUDIO_SAMPLE_RATE), "-ac", str(AUDIO_CHANNELS),
+                            "-f", "s16be", "-",
+                        ],
+                        stdin=subprocess.PIPE,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.DEVNULL,
+                        bufsize=0,
+                        creationflags=_SUBPROC_NO_WINDOW,
+                    )
+
+                    def _drain_resampled() -> None:
+                        buf = bytearray()
+                        try:
+                            while not stop_flag.is_set() and resampler and resampler.stdout:
+                                data = resampler.stdout.read(AUDIO_CHUNK_BYTES)
+                                if not data:
+                                    break
+                                buf.extend(data)
+                                while len(buf) >= AUDIO_CHUNK_BYTES:
+                                    pkt = bytes(buf[:AUDIO_CHUNK_BYTES])
+                                    del buf[:AUDIO_CHUNK_BYTES]
+                                    def _put(b=pkt):
+                                        if pcm_q.full():
+                                            try:
+                                                pcm_q.get_nowait()
+                                            except asyncio.QueueEmpty:
+                                                pass
+                                        try:
+                                            pcm_q.put_nowait(b)
+                                        except asyncio.QueueFull:
+                                            pass
+                                    loop.call_soon_threadsafe(_put)
+                        except Exception:
+                            pass
+
+                    threading.Thread(target=_drain_resampled, daemon=True, name="vb_wasapi_resample").start()
+
+                logger.info(
+                    "Windows WASAPI loopback active ('%s', %dHz %dch -> %dHz S16BE Stereo)",
+                    dev_name, src_rate, src_ch, AUDIO_SAMPLE_RATE,
+                )
+                stream = pa.open(
+                    format=pyaudio.paInt16,
+                    channels=src_ch,
+                    rate=src_rate,
+                    input=True,
+                    input_device_index=int(dev["index"]),
+                    frames_per_buffer=frames_per_buf,
+                )
+                direct_buf = bytearray()
+                while not stop_flag.is_set() and self.running:
+                    raw = stream.read(frames_per_buf, exception_on_overflow=False)
+                    if not raw:
+                        continue
+                    if need_resample and resampler and resampler.stdin:
+                        try:
+                            resampler.stdin.write(raw)
+                            resampler.stdin.flush()
+                        except Exception:
+                            break
+                    else:
+                        # Already 44100Hz stereo S16LE -> fast in-place byteswap to S16BE
+                        arr = array.array("h")
+                        arr.frombytes(raw)
+                        arr.byteswap()
+                        direct_buf.extend(arr.tobytes())
+                        while len(direct_buf) >= AUDIO_CHUNK_BYTES:
+                            pkt = bytes(direct_buf[:AUDIO_CHUNK_BYTES])
+                            del direct_buf[:AUDIO_CHUNK_BYTES]
+                            def _put_direct(b=pkt):
+                                if pcm_q.full():
+                                    try:
+                                        pcm_q.get_nowait()
+                                    except asyncio.QueueEmpty:
+                                        pass
+                                try:
+                                    pcm_q.put_nowait(b)
+                                except asyncio.QueueFull:
+                                    pass
+                            loop.call_soon_threadsafe(_put_direct)
+            except Exception as exc:
+                logger.debug("Windows WASAPI loopback worker ended: %s", exc)
+            finally:
+                if stream is not None:
+                    try:
+                        stream.stop_stream()
+                        stream.close()
+                    except Exception:
+                        pass
+                if pa is not None:
+                    try:
+                        pa.terminate()
+                    except Exception:
+                        pass
+                if resampler is not None:
+                    try:
+                        if resampler.stdin:
+                            resampler.stdin.close()
+                        resampler.terminate()
+                    except Exception:
+                        pass
+                try:
+                    loop.call_soon_threadsafe(pcm_q.put_nowait, None)
+                except Exception:
+                    pass
+
+        worker = threading.Thread(target=_wasapi_worker, daemon=True, name="vb_wasapi_cap")
+        worker.start()
+        state = {"chunks_sent": 0, "silent_streak": 0}
+        try:
+            while self.running:
+                chunk = await pcm_q.get()
+                if chunk is None or not self.running:
+                    break
+                await self._send_pcm_chunk(chunk, state)
+        finally:
+            stop_flag.set()
+
     async def _audio_stream_loop(self) -> None:
         proc: Optional[asyncio.subprocess.Process] = None
         try:
             unmute_all_browser_sink_inputs()
-            if platform.system() == "Darwin":
+            if _IS_WINDOWS:
+                win_backend, win_dev = _select_windows_audio_backend(self.audio_device)
+                if win_backend == "wasapi":
+                    await self._audio_stream_windows_wasapi()
+                    return
+                if win_backend == "dshow" and win_dev:
+                    proc = await asyncio.create_subprocess_exec(
+                        "ffmpeg", "-loglevel", "error",
+                        "-f", "dshow",
+                        "-i", f"audio={win_dev}",
+                        "-ar", str(AUDIO_SAMPLE_RATE),
+                        "-ac", str(AUDIO_CHANNELS),
+                        "-f", "s16be",
+                        "-",
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.DEVNULL,
+                        creationflags=_SUBPROC_NO_WINDOW,
+                    )
+                    logger.info(
+                        "Windows DirectShow audio capture active ('%s' -> %dHz S16BE Stereo)",
+                        win_dev,
+                        AUDIO_SAMPLE_RATE,
+                    )
+                else:
+                    return
+            elif platform.system() == "Darwin":
                 mac_dev = _find_macos_audio_device()
                 if not mac_dev:
                     return
@@ -5027,9 +5587,8 @@ class AmigaClientSession:
                     AUDIO_SINK_NAME,
                     AUDIO_SAMPLE_RATE,
                 )
-            chunks_sent = 0
+            state = {"chunks_sent": 0, "silent_streak": 0}
             loop_iter = 0
-            silent_streak = 0
             audio_loop = asyncio.get_running_loop()
             while self.running and proc.stdout:
                 chunk = await proc.stdout.readexactly(AUDIO_CHUNK_BYTES)
@@ -5037,40 +5596,10 @@ class AmigaClientSession:
                     break
 
                 loop_iter += 1
-                if loop_iter == 1 or (silent_streak >= 25 and loop_iter % 120 == 1):
+                if loop_iter == 1 or (state["silent_streak"] >= 25 and loop_iter % 120 == 1):
                     await audio_loop.run_in_executor(None, unmute_all_browser_sink_inputs)
 
-                if _FAST_PIXCONV is not None:
-                    if _FAST_PIXCONV.pcm_s16be_is_silent(chunk, len(chunk), 10) == 1:
-                        silent_streak += 1
-                        continue
-                else:
-                    if chunk == b"\x00" * len(chunk):
-                        silent_streak += 1
-                        continue
-                silent_streak = 0
-
-                comp = lz4.block.compress(chunk, store_size=False)
-                if len(comp) < len(chunk):
-                    codec = CODEC_LZ4
-                    payload = comp
-                else:
-                    codec = CODEC_RAW
-                    payload = chunk
-
-                hdr = STRUCT_MSG_AUDIO.pack(
-                    MSG_AUDIO,
-                    AUDIO_SAMPLE_RATE,
-                    AUDIO_CHANNELS,
-                    codec,
-                    len(chunk),
-                    len(payload),
-                )
-                await self.send_packet(hdr + payload)
-                self.last_audio_time = time.monotonic()
-                chunks_sent += 1
-                if chunks_sent == 1 or chunks_sent % 50 == 0:
-                    logger.info("Streamed %d audio chunks to Amiga AHI (latest=%dB)", chunks_sent, len(payload))
+                await self._send_pcm_chunk(chunk, state)
         except asyncio.CancelledError:
             pass
         except asyncio.IncompleteReadError:
@@ -8461,8 +8990,19 @@ def detect_hardware_profile() -> dict:
         "recommended_driver": None,
     }
 
-    # 1. Inspect /proc/cpuinfo on Linux
-    if os.path.exists("/proc/cpuinfo"):
+    # 1. Inspect /proc/cpuinfo on Linux or platform.processor() on Windows/macOS
+    if _IS_WINDOWS:
+        proc_str = (platform.processor() or os.environ.get("PROCESSOR_IDENTIFIER", "")).strip()
+        if proc_str:
+            profile["cpu_model"] = proc_str
+            low_p = proc_str.lower()
+            if "intel" in low_p:
+                profile["cpu_vendor"] = "Intel"
+            elif "amd" in low_p:
+                profile["cpu_vendor"] = "AMD"
+        profile["has_dri"] = True
+        profile["drm_drivers"] = ["d3d11"]
+    elif os.path.exists("/proc/cpuinfo"):
         try:
             with open("/proc/cpuinfo", "r", encoding="utf-8", errors="ignore") as f:
                 content = f.read()
@@ -8564,6 +9104,17 @@ def get_gpu_launch_flags(disable_gpu: bool = False, hw_profile: Optional[dict] =
     if hw_profile is None:
         hw_profile = detect_hardware_profile()
 
+    if _IS_WINDOWS:
+        return [
+            "--enable-gpu",
+            "--ignore-gpu-blocklist",
+            "--enable-gpu-rasterization",
+            "--use-gl=angle",
+            "--use-angle=d3d11",
+            "--enable-unsafe-swiftshader",
+            "--enable-features=CanvasOopRasterization",
+        ], True
+
     has_dri = hw_profile.get("has_dri", False)
     drm_drivers = hw_profile.get("drm_drivers", [])
 
@@ -8579,15 +9130,23 @@ def get_gpu_launch_flags(disable_gpu: bool = False, hw_profile: Optional[dict] =
     )
     if is_legacy_radeon:
         if os.environ.get("VORTEX_FORCE_LEGACY_RADEON_GPU", "0") == "1":
-            return ["--enable-gpu", "--use-gl=angle", "--use-angle=gles-egl"], has_dri
+            return ["--enable-gpu", "--use-gl=angle", "--use-angle=gles-egl", "--disable-accelerated-video-decode", "--enable-unsafe-swiftshader"], has_dri
         return ["--disable-gpu", "--disable-software-rasterizer"], False
 
+    # Under Linux --ozone-platform=headless, Chromium's VaapiVideoDecoder + --enable-zero-copy
+    # crashes gpu-process on H.264 video playback (after 3 crashes Chromium falls back to
+    # --use-gl=disabled, breaking WebGL 1 & WebGL 2). Keeping hardware ANGLE GPU rasterization
+    # & WebGL 1/2 active while disabling in-browser VA-API video decode prevents GPU crashes
+    # (FFmpeg H.264 stream encoding still uses /dev/dri VA-API independently).
+    enable_chrome_vaapi = (os.environ.get("VORTEX_ENABLE_CHROME_VAAPI", "0").strip() == "1")
     gpu_flags = [
         "--enable-gpu",
         "--ignore-gpu-blocklist",
         "--enable-gpu-rasterization",
-        "--enable-zero-copy",
+        "--enable-unsafe-swiftshader",
     ]
+    if not enable_chrome_vaapi:
+        gpu_flags.append("--disable-accelerated-video-decode")
 
     if hw_profile.get("is_rpi"):
         # Raspberry Pi (Broadcom VC4 / V3D GPU): ANGLE on OpenGL ES / EGL (no VA-API on Pi)
@@ -8597,11 +9156,12 @@ def get_gpu_launch_flags(disable_gpu: bool = False, hw_profile: Optional[dict] =
             "--enable-features=CanvasOopRasterization",
         ])
     elif hw_profile.get("has_intel_gpu") and not hw_profile.get("has_amd_gpu") and not hw_profile.get("has_nvidia_gpu"):
-        # Intel GPU: ANGLE GLES/EGL backend + VA-API decoder & encoder
+        # Intel GPU: ANGLE GLES/EGL backend (WebGL 1/2 + hardware rasterization)
+        feats = "CanvasOopRasterization,VaapiVideoDecoder,VaapiVideoEncoder" if enable_chrome_vaapi else "CanvasOopRasterization"
         gpu_flags.extend([
             "--use-gl=angle",
             "--use-angle=gles-egl",
-            "--enable-features=CanvasOopRasterization,VaapiVideoDecoder,VaapiVideoEncoder,VaapiIgnoreDriverChecks",
+            f"--enable-features={feats}",
             "--disable-features=UseChromeOSDirectVideoDecoder",
         ])
     elif hw_profile.get("has_amd_gpu"):
@@ -8613,40 +9173,62 @@ def get_gpu_launch_flags(disable_gpu: bool = False, hw_profile: Optional[dict] =
                 "--enable-features=CanvasOopRasterization",
             ])
         else:
-            # Modern AMD amdgpu DRM: ANGLE with Vulkan backend + VA-API
+            # Modern AMD amdgpu DRM: ANGLE Vulkan (RADV) for WebGL 1/2 & GPU rasterization
+            feats = "CanvasOopRasterization,Vulkan,VaapiVideoDecoder" if enable_chrome_vaapi else "CanvasOopRasterization"
             gpu_flags.extend([
                 "--use-gl=angle",
                 "--use-angle=vulkan",
-                "--enable-features=CanvasOopRasterization,VaapiVideoDecoder,VaapiVideoEncoder,VaapiIgnoreDriverChecks",
+                f"--enable-features={feats}",
             ])
     else:
         # Generic Mesa / NVIDIA / ARM GPU: ANGLE GLES/EGL
+        feats = "CanvasOopRasterization,VaapiVideoDecoder" if enable_chrome_vaapi else "CanvasOopRasterization"
         gpu_flags.extend([
             "--use-gl=angle",
             "--use-angle=gles-egl",
-            "--enable-features=CanvasOopRasterization,VaapiVideoDecoder,VaapiVideoEncoder,VaapiIgnoreDriverChecks",
+            f"--enable-features={feats}",
         ])
 
     return gpu_flags, has_dri
 
 
+def _is_pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    if _IS_WINDOWS:
+        try:
+            PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+            STILL_ACTIVE = 259
+            h = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, int(pid))
+            if not h:
+                return False
+            try:
+                code = ctypes.c_ulong(0)
+                if ctypes.windll.kernel32.GetExitCodeProcess(h, ctypes.byref(code)):
+                    return code.value == STILL_ACTIVE
+                return False
+            finally:
+                ctypes.windll.kernel32.CloseHandle(h)
+        except Exception:
+            return False
+    return os.path.exists(f"/proc/{pid}")
+
+
 def _wait_pids_exit(pids: List[int], timeout: float) -> List[int]:
-    """Polls /proc until all PIDs exit or timeout elapses; returns remaining alive PIDs."""
+    """Polls until all PIDs exit or timeout elapses; returns remaining alive PIDs."""
     deadline = time.monotonic() + timeout
     remaining = list(pids)
     while remaining and time.monotonic() < deadline:
-        still_alive = []
-        for pid in remaining:
-            if os.path.exists(f"/proc/{pid}"):
-                still_alive.append(pid)
-        remaining = still_alive
+        remaining = [pid for pid in remaining if _is_pid_alive(pid)]
         if not remaining:
             break
         time.sleep(0.1)
-    return [pid for pid in remaining if os.path.exists(f"/proc/{pid}")]
+    return [pid for pid in remaining if _is_pid_alive(pid)]
 
 
 def _find_proc_pids_matching(predicate) -> List[int]:
+    if _IS_WINDOWS or not os.path.isdir("/proc"):
+        return []
     my_pid = os.getpid()
     parent_pid = os.getppid()
     matches: List[int] = []
@@ -8689,16 +9271,20 @@ def _cleanup_existing_server_and_locks(port: int, profile_dir: str, config_dir: 
     """Gracefully stops older matching server.py or orphaned browser locks without corrupting SQLite."""
     pid_file = os.path.join(config_dir, "server.pid")
     other_pids: List[int] = []
+    sig_kill = getattr(signal, "SIGKILL", signal.SIGTERM)
 
     if os.path.isfile(pid_file):
         try:
             with open(pid_file, "r", encoding="utf-8") as f:
                 recorded_pid = int(f.read().strip())
-            if recorded_pid != os.getpid() and os.path.exists(f"/proc/{recorded_pid}"):
-                with open(f"/proc/{recorded_pid}/cmdline", "rb") as cf:
-                    argv = [p.decode("utf-8", errors="ignore") for p in cf.read().split(b"\x00") if p]
-                if any(os.path.basename(a) == "server.py" for a in argv):
+            if recorded_pid != os.getpid() and _is_pid_alive(recorded_pid):
+                if _IS_WINDOWS:
                     other_pids.append(recorded_pid)
+                else:
+                    with open(f"/proc/{recorded_pid}/cmdline", "rb") as cf:
+                        argv = [p.decode("utf-8", errors="ignore") for p in cf.read().split(b"\x00") if p]
+                    if any(os.path.basename(a) == "server.py" for a in argv):
+                        other_pids.append(recorded_pid)
         except Exception:
             pass
 
@@ -8714,14 +9300,23 @@ def _cleanup_existing_server_and_locks(port: int, profile_dir: str, config_dir: 
         logger.info("Gracefully stopping previous VortexBrowser server instance(s) %s...", other_pids)
         for pid in other_pids:
             try:
-                os.kill(pid, signal.SIGTERM)
+                if _IS_WINDOWS:
+                    subprocess.run(
+                        ["taskkill", "/PID", str(pid), "/T", "/F"],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        timeout=4,
+                        creationflags=_SUBPROC_NO_WINDOW,
+                    )
+                else:
+                    os.kill(pid, signal.SIGTERM)
             except Exception:
                 pass
         remaining = _wait_pids_exit(other_pids, timeout=5.0)
         for pid in remaining:
-            logger.warning("Previous server PID %d did not exit after SIGTERM timeout; sending SIGKILL", pid)
+            logger.warning("Previous server PID %d did not exit after SIGTERM timeout; forcing exit", pid)
             try:
-                os.kill(pid, signal.SIGKILL)
+                os.kill(pid, sig_kill)
             except Exception:
                 pass
         if remaining:
@@ -8758,14 +9353,14 @@ def _cleanup_existing_server_and_locks(port: int, profile_dir: str, config_dir: 
         remaining_chrome = _wait_pids_exit(stray_pids, timeout=2.0)
         for pid in remaining_chrome:
             try:
-                os.kill(pid, signal.SIGKILL)
+                os.kill(pid, sig_kill)
             except Exception:
                 pass
         if remaining_chrome:
             _wait_pids_exit(remaining_chrome, timeout=0.5)
 
-    # Clean stale Chromium SingletonLock
-    for lock_name in ("SingletonLock", "SingletonCookie", "SingletonSocket"):
+    # Clean stale Chromium SingletonLock / Windows lockfile
+    for lock_name in ("SingletonLock", "SingletonCookie", "SingletonSocket", "lockfile"):
         lp = os.path.join(profile_dir, lock_name)
         if os.path.lexists(lp):
             try:
@@ -8852,7 +9447,8 @@ async def run_server(args: argparse.Namespace) -> None:
             f.write("ok")
         os.unlink(test_file)
     except Exception as e:
-        fallback_dir = os.path.join(tempfile.gettempdir(), f"vortexbrowse_{engine}_profile_{os.getuid()}")
+        user_tag = str(os.getuid()) if hasattr(os, "getuid") else re.sub(r"[^a-zA-Z0-9_-]", "_", getpass.getuser() or "user")
+        fallback_dir = os.path.join(tempfile.gettempdir(), f"vortexbrowse_{engine}_profile_{user_tag}")
         logger.warning("Profile directory '%s' is not writable (%s). Falling back to temporary directory '%s'", profile_dir, e, fallback_dir)
         profile_dir = fallback_dir
         is_fallback_profile = True
@@ -8865,14 +9461,35 @@ async def run_server(args: argparse.Namespace) -> None:
     loop = asyncio.get_running_loop()
     stop_event = asyncio.Event()
     registered_signals = []
+    win_prev_sig_handlers: Dict[int, Any] = {}
     for sig in (signal.SIGTERM, signal.SIGINT):
         try:
             loop.add_signal_handler(sig, stop_event.set)
             registered_signals.append(sig)
         except NotImplementedError:
+            try:
+                def _win_sig_handler(_signum, _frame):
+                    loop.call_soon_threadsafe(stop_event.set)
+                win_prev_sig_handlers[sig] = signal.getsignal(sig)
+                signal.signal(sig, _win_sig_handler)
+            except Exception:
+                pass
+    if _IS_WINDOWS and hasattr(signal, "SIGBREAK"):
+        try:
+            sig_brk = signal.SIGBREAK
+            def _win_brk_handler(_signum, _frame):
+                loop.call_soon_threadsafe(stop_event.set)
+            win_prev_sig_handlers[sig_brk] = signal.getsignal(sig_brk)
+            signal.signal(sig_brk, _win_brk_handler)
+        except Exception:
             pass
 
-    audio_ready = ensure_audio_sink()
+    audio_device = getattr(args, "audio_device", "") or ""
+    if getattr(args, "no_audio", False):
+        audio_ready = False
+        logger.info("Audio streaming disabled by --no-audio / VORTEX_NO_AUDIO.")
+    else:
+        audio_ready = ensure_audio_sink(audio_device)
     portal = LocalPortalHTTPServer(host="127.0.0.1", port=args.portal_port)
     portal_url = await portal.start()
 
@@ -8890,7 +9507,7 @@ async def run_server(args: argparse.Namespace) -> None:
         pixel_fmt = FMT_YUV420P
 
     browser_env = dict(os.environ)
-    if audio_ready:
+    if audio_ready and platform.system() == "Linux":
         browser_env["PULSE_SINK"] = AUDIO_SINK_NAME
 
     if engine == "chromium":
@@ -8900,7 +9517,7 @@ async def run_server(args: argparse.Namespace) -> None:
         all_exts = find_all_extension_paths() if enable_exts else []
 
         # Clean up stale SingletonLock/Socket/Cookie from prior crashes or killed processes
-        for lock_file in ("SingletonLock", "SingletonCookie", "SingletonSocket"):
+        for lock_file in ("SingletonLock", "SingletonCookie", "SingletonSocket", "lockfile"):
             lp = os.path.join(profile_dir, lock_file)
             if os.path.exists(lp) or os.path.islink(lp):
                 try:
@@ -8909,7 +9526,7 @@ async def run_server(args: argparse.Namespace) -> None:
                 except Exception as e:
                     logger.warning("Could not remove lock file %s: %s", lp, e)
 
-        if os.getuid() == 0:
+        if hasattr(os, "getuid") and os.getuid() == 0:
             logger.warning("=" * 68)
             logger.warning(" HINWEIS: Der VortexBrowser Server laeuft als ROOT (UID 0)!")
             logger.warning(" Es wird dringend empfohlen, den Server als normaler Benutzer")
@@ -8979,7 +9596,13 @@ async def run_server(args: argparse.Namespace) -> None:
         else:
             raster_threads = 4
 
-        ozone_flags = ["--ozone-platform=headless"] if platform.system() == "Linux" else []
+        if platform.system() == "Linux":
+            ozone_flags = ["--ozone-platform=headless"]
+        elif _IS_WINDOWS and os.environ.get("VORTEX_SHOW_BROWSER", "0") != "1":
+            # Full Chromium headless=new on Windows: supports extensions, D3D11 GPU & WASAPI audio with zero visible window
+            ozone_flags = ["--headless=new"]
+        else:
+            ozone_flags = []
         launch_args = _merge_chromium_feature_flags(ozone_flags + [
             f"--lang={server_locale}",
             "--remote-debugging-port=9222",
@@ -9177,6 +9800,7 @@ async def run_server(args: argparse.Namespace) -> None:
                             browser_locale=server_locale,
                             locale_explicit=locale_explicit,
                             use_rustwright=use_rustwright,
+                            audio_device=audio_device,
                         )
                         active_session = session
 
@@ -9202,6 +9826,14 @@ async def run_server(args: argparse.Namespace) -> None:
             for s in extra_servers:
                 all_socks.extend(s.sockets or [])
             addrs = ", ".join(str(sock.getsockname()) for sock in all_socks)
+            if audio_ready:
+                audio_desc = (
+                    "ON (Windows WASAPI/DirectShow -> AHI)" if _IS_WINDOWS
+                    else ("ON (macOS AVFoundation -> AHI)" if platform.system() == "Darwin"
+                          else "ON (Full Browser -> PipeWire -> AHI)")
+                )
+            else:
+                audio_desc = "OFF"
             logger.info(
                 "VortexBrowse Server ready on %s | Engine: %s | Viewport: %dx%d (1:1 Auto-Sync) | Format: %s | Codec: LZ4+DirtySlice | Audio: %s",
                 addrs,
@@ -9209,7 +9841,7 @@ async def run_server(args: argparse.Namespace) -> None:
                 args.width,
                 args.height,
                 "YUV420P" if pixel_fmt == FMT_YUV420P else ("RGB565" if pixel_fmt == FMT_RGB565 else "ARGB32"),
-                "ON (Full Browser -> PipeWire -> AHI)" if audio_ready else "OFF",
+                audio_desc,
             )
 
             try:
@@ -9258,12 +9890,17 @@ async def run_server(args: argparse.Namespace) -> None:
                 loop.remove_signal_handler(sig)
             except Exception:
                 pass
+        for sig, prev_h in win_prev_sig_handlers.items():
+            try:
+                signal.signal(sig, prev_h)
+            except Exception:
+                pass
         await portal.stop()
         _remove_server_pid(pid_file)
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="VortexBrowse CachyOS HP EliteDesk 805 G6 (AMD Ryzen PRO) 1080p@25fps Server")
+    parser = argparse.ArgumentParser(description="VortexBrowse Universal Companion Server (Linux / Raspberry Pi / macOS / Windows)")
     parser.add_argument("--host", default="0.0.0.0", help="Bind address (default: 0.0.0.0)")
     parser.add_argument("--port", type=int, default=7788, help="TCP port (default: 7788, plus 9757 for LAN)")
     parser.add_argument("--portal-port", type=int, default=8089, help="Local start portal HTTP port")
@@ -9282,6 +9919,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--disable-extensions", dest="enable_extensions", action="store_false", help="Disable all browser extensions")
     parser.add_argument("--disable-gpu", action="store_true", help="Disable GPU hardware acceleration (forces CPU software rasterization)")
     parser.add_argument("--no-cpu-governor", action="store_true", help="Disable automatic switching of CPU governor to performance during client sessions")
+    parser.add_argument(
+        "--no-audio",
+        action="store_true",
+        default=os.environ.get("VORTEX_NO_AUDIO", "").strip().lower() in ("1", "true", "yes"),
+        help="Disable audio streaming [env: VORTEX_NO_AUDIO=1]",
+    )
+    parser.add_argument(
+        "--audio-device",
+        default=os.environ.get("VORTEX_AUDIO_DEVICE", ""),
+        help="Optional audio device override on Windows ('wasapi' or DirectShow device name e.g. 'CABLE Output (VB-Audio Virtual Cable)') [env: VORTEX_AUDIO_DEVICE]",
+    )
     parser.add_argument(
         "--no-rustwright",
         dest="no_rustwright",

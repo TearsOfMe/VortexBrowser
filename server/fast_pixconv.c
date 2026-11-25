@@ -16,6 +16,20 @@
 #include <string.h>
 #include <stdio.h>
 
+#if defined(_WIN32)
+#define VORTEX_EXPORT __declspec(dllexport)
+#else
+#define VORTEX_EXPORT
+#endif
+
+#if defined(_MSC_VER)
+#define VORTEX_TLS      __declspec(thread)
+#define VORTEX_RESTRICT __restrict
+#else
+#define VORTEX_TLS      __thread
+#define VORTEX_RESTRICT restrict
+#endif
+
 #if defined(__x86_64__) || defined(_M_X64)
 #include <immintrin.h>
 #endif
@@ -113,7 +127,7 @@ static inline int fast_memeq(const uint8_t *a, const uint8_t *b, size_t len)
 #endif
 }
 
-void rgb24_to_be_argb32(const uint8_t * restrict src_rgb, uint8_t * restrict dst_argb, size_t num_pixels)
+VORTEX_EXPORT void rgb24_to_be_argb32(const uint8_t * VORTEX_RESTRICT src_rgb, uint8_t * VORTEX_RESTRICT dst_argb, size_t num_pixels)
 {
     #pragma omp parallel for schedule(static) if (num_pixels >= 500000)
     for (size_t i = 0; i < num_pixels; i++) {
@@ -124,7 +138,7 @@ void rgb24_to_be_argb32(const uint8_t * restrict src_rgb, uint8_t * restrict dst
     }
 }
 
-void rgb24_to_be_rgb565(const uint8_t * restrict src_rgb, uint8_t * restrict dst_rgb565, size_t num_pixels)
+VORTEX_EXPORT void rgb24_to_be_rgb565(const uint8_t * VORTEX_RESTRICT src_rgb, uint8_t * VORTEX_RESTRICT dst_rgb565, size_t num_pixels)
 {
     #pragma omp parallel for schedule(static) if (num_pixels >= 500000)
     for (size_t i = 0; i < num_pixels; i++) {
@@ -137,11 +151,11 @@ void rgb24_to_be_rgb565(const uint8_t * restrict src_rgb, uint8_t * restrict dst
     }
 }
 
-void rgb24_to_yuv420p(
-    const uint8_t * restrict src_rgb,
-    uint8_t       * restrict dst_yuv,
-    int                      width,
-    int                      height
+VORTEX_EXPORT void rgb24_to_yuv420p(
+    const uint8_t * VORTEX_RESTRICT src_rgb,
+    uint8_t       * VORTEX_RESTRICT dst_yuv,
+    int                             width,
+    int                             height
 )
 {
     uint8_t *dst_y = dst_yuv;
@@ -185,9 +199,9 @@ void rgb24_to_yuv420p(
     }
 }
 
-int find_and_update_dirty_slice(
-    const uint8_t * restrict cur_buf,
-    uint8_t * restrict prev_buf,
+VORTEX_EXPORT int find_and_update_dirty_slice(
+    const uint8_t * VORTEX_RESTRICT cur_buf,
+    uint8_t * VORTEX_RESTRICT prev_buf,
     int width,
     int height,
     int bpp,
@@ -242,9 +256,9 @@ static inline uint64_t load_u64_unaligned(const void *p)
     return v;
 }
 
-int find_and_update_dirty_rect(
-    const uint8_t * restrict cur_buf,
-    uint8_t * restrict prev_buf,
+VORTEX_EXPORT int find_and_update_dirty_rect(
+    const uint8_t * VORTEX_RESTRICT cur_buf,
+    uint8_t * VORTEX_RESTRICT prev_buf,
     int width,
     int height,
     int bpp,
@@ -501,9 +515,9 @@ int find_and_update_dirty_rect(
     return 1;
 }
 
-void pack_sub_rect(
-    const uint8_t * restrict src_buf,
-    uint8_t * restrict dst_buf,
+VORTEX_EXPORT void pack_sub_rect(
+    const uint8_t * VORTEX_RESTRICT src_buf,
+    uint8_t * VORTEX_RESTRICT dst_buf,
     int src_width,
     int bpp,
     int rx,
@@ -521,15 +535,15 @@ void pack_sub_rect(
     }
 }
 
-void pack_sub_rect_yuv420p(
-    const uint8_t * restrict src_yuv,
-    uint8_t       * restrict dst_buf,
-    int                      src_width,
-    int                      src_height,
-    int                      rx,
-    int                      ry,
-    int                      rw,
-    int                      rh
+VORTEX_EXPORT void pack_sub_rect_yuv420p(
+    const uint8_t * VORTEX_RESTRICT src_yuv,
+    uint8_t       * VORTEX_RESTRICT dst_buf,
+    int                             src_width,
+    int                             src_height,
+    int                             rx,
+    int                             ry,
+    int                             rw,
+    int                             rh
 )
 {
     /* 1. Y plane: rw x rh bytes */
@@ -568,7 +582,7 @@ void pack_sub_rect_yuv420p(
     }
 }
 
-int pcm_s16be_is_silent(const uint8_t *pcm, size_t byte_len, int threshold)
+VORTEX_EXPORT int pcm_s16be_is_silent(const uint8_t *pcm, size_t byte_len, int threshold)
 {
     size_t num_samples = byte_len / 2;
     for (size_t i = 0; i < num_samples; i++) {
@@ -582,11 +596,11 @@ int pcm_s16be_is_silent(const uint8_t *pcm, size_t byte_len, int threshold)
 }
 
 #ifdef HAVE_TURBOJPEG_LZ4
-static __thread tjhandle s_tls_tjd = NULL;
-static __thread uint8_t *s_tls_rgb_scratch = NULL;
-static __thread size_t   s_tls_rgb_cap = 0;
-static __thread uint8_t *s_tls_rect_scratch = NULL;
-static __thread size_t   s_tls_rect_cap = 0;
+static VORTEX_TLS tjhandle s_tls_tjd = NULL;
+static VORTEX_TLS uint8_t *s_tls_rgb_scratch = NULL;
+static VORTEX_TLS size_t   s_tls_rgb_cap = 0;
+static VORTEX_TLS uint8_t *s_tls_rect_scratch = NULL;
+static VORTEX_TLS size_t   s_tls_rect_cap = 0;
 
 static inline void write_msg_frame_hdr(
     uint8_t *dst,
@@ -636,13 +650,13 @@ static inline void write_rect_hdr(
  * rounding noise temporally and vertically so LZ4 finds long scanline matches.
  */
 static void filter_plane_for_lz4(
-    uint8_t       * restrict plane,
-    const uint8_t * restrict prev_plane,
-    int                      w,
-    int                      h,
-    int                      force_full,
-    int                      video_mode,
-    int                      is_chroma
+    uint8_t       * VORTEX_RESTRICT plane,
+    const uint8_t * VORTEX_RESTRICT prev_plane,
+    int                             w,
+    int                             h,
+    int                             force_full,
+    int                             video_mode,
+    int                             is_chroma
 )
 {
     if (force_full || !prev_plane || w <= 0 || h <= 0) {
@@ -806,12 +820,12 @@ static void filter_plane_for_lz4(
 }
 
 static void filter_yuv420p_for_lz4(
-    uint8_t       * restrict work_buf,
-    const uint8_t * restrict prev_buf,
-    int                      width,
-    int                      height,
-    int                      force_full,
-    int                      video_mode
+    uint8_t       * VORTEX_RESTRICT work_buf,
+    const uint8_t * VORTEX_RESTRICT prev_buf,
+    int                             width,
+    int                             height,
+    int                             force_full,
+    int                             video_mode
 )
 {
     size_t y_size  = (size_t)width * (size_t)height;
@@ -846,7 +860,7 @@ static void filter_yuv420p_for_lz4(
  *     0 : Success (width * height * 3 / 2 bytes written to out_yuv)
  *   < 0 : Error / dimension mismatch
  */
-int decode_jpeg_to_yuv420p(
+VORTEX_EXPORT int decode_jpeg_to_yuv420p(
     const uint8_t *jpeg_buf,
     size_t         jpeg_len,
     int            width,
@@ -917,7 +931,7 @@ int decode_jpeg_to_yuv420p(
  *     0 : Frame is identical to prev_buf (skip sending)
  *   < 0 : Error / dimension mismatch (caller can fallback)
  */
-int encode_jpeg_to_frame_packet(
+VORTEX_EXPORT int encode_jpeg_to_frame_packet(
     const uint8_t *jpeg_buf,
     size_t         jpeg_len,
     int            width,
@@ -1094,7 +1108,7 @@ int encode_jpeg_to_frame_packet(
 }
 
 /* Releases thread-local libturbojpeg handle and scratch buffers for the calling worker thread. */
-void fast_pixconv_release_tls(void)
+VORTEX_EXPORT void fast_pixconv_release_tls(void)
 {
     if (s_tls_tjd != NULL) {
         tjDestroy(s_tls_tjd);

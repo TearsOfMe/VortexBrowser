@@ -4,3 +4,4 @@ websockets>=12.0
 lz4>=4.3.0
 Pillow>=10.0.0
 PyTurboJPEG>=1.7.0
+PyAudioWPatch>=0.2.12.6; sys_platform == "win32"

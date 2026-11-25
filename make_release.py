@@ -18,6 +18,7 @@ RELEASE_DATE = "22.11.2026"
 STAGING_DIR = os.path.join(DIST_DIR, "staging")
 AMIGA_DRAWER = os.path.join(STAGING_DIR, "VortexBrowser")
 SERVER_LINUX_DRAWER = os.path.join(STAGING_DIR, "Server-Linux")
+SERVER_WINDOWS_DRAWER = os.path.join(STAGING_DIR, "Server-Windows")
 
 print(f"=== [1/6] Preparing Staging Directories for {APP_NAME} {VER_STR} ===")
 if os.path.exists(STAGING_DIR):
@@ -26,6 +27,7 @@ os.makedirs(DIST_DIR, exist_ok=True)
 os.makedirs(AMIGA_DRAWER, exist_ok=True)
 os.makedirs(os.path.join(AMIGA_DRAWER, "icons"), exist_ok=True)
 os.makedirs(SERVER_LINUX_DRAWER, exist_ok=True)
+os.makedirs(SERVER_WINDOWS_DRAWER, exist_ok=True)
 
 # -------------------------------------------------------------
 # AmigaGuide Documentation
@@ -1209,8 +1211,34 @@ os.chmod(os.path.join(SERVER_LINUX_DRAWER, "run_server.sh"), 0o755)
 if os.path.exists("server/README.md"):
     shutil.copy2("server/README.md", os.path.join(SERVER_LINUX_DRAWER, "README.txt"))
 
+# -------------------------------------------------------------
+# Populate Native Server-Windows Drawer from single server/ codebase
+# -------------------------------------------------------------
+shutil.copy2("server/server.py", os.path.join(SERVER_WINDOWS_DRAWER, "server.py"))
+shutil.copy2("server/fast_pixconv.c", os.path.join(SERVER_WINDOWS_DRAWER, "fast_pixconv.c"))
+for _dll in ("fast_pixconv.dll", "fast_pixconv_avx2.dll"):
+    if os.path.exists(os.path.join("server", _dll)):
+        shutil.copy2(os.path.join("server", _dll), os.path.join(SERVER_WINDOWS_DRAWER, _dll))
+shutil.copy2("server/darkreader.js", os.path.join(SERVER_WINDOWS_DRAWER, "darkreader.js"))
+shutil.copy2("server/requirements.txt", os.path.join(SERVER_WINDOWS_DRAWER, "requirements.txt"))
+shutil.copy2("server/sync_twitch_login.py", os.path.join(SERVER_WINDOWS_DRAWER, "sync_twitch_login.py"))
+if os.path.exists("server/extensions"):
+    shutil.copytree(
+        "server/extensions",
+        os.path.join(SERVER_WINDOWS_DRAWER, "extensions"),
+        dirs_exist_ok=True,
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo", "*.log", ".DS_Store", "*.sqlite*", "*.ldb"),
+    )
+if os.path.exists("server/install_windows.ps1"):
+    shutil.copy2("server/install_windows.ps1", os.path.join(SERVER_WINDOWS_DRAWER, "install_windows.ps1"))
+if os.path.exists("server/run_windows.bat"):
+    shutil.copy2("server/run_windows.bat", os.path.join(SERVER_WINDOWS_DRAWER, "run_windows.bat"))
+if os.path.exists("server/README_WINDOWS.md"):
+    shutil.copy2("server/README_WINDOWS.md", os.path.join(SERVER_WINDOWS_DRAWER, "README_WINDOWS.md"))
+
 assert_tree_clean(AMIGA_DRAWER, "Amiga drawer")
 assert_tree_clean(SERVER_LINUX_DRAWER, "Server-Linux drawer")
+assert_tree_clean(SERVER_WINDOWS_DRAWER, "Server-Windows drawer")
 
 # -------------------------------------------------------------
 # Overall German and English Readmes for Complete Archive
@@ -1268,9 +1296,9 @@ if res.returncode != 0:
 print(f"[+] Created AmigaOS 4 LHA: {LHA_ARCHIVE} ({os.path.getsize(LHA_ARCHIVE)} bytes)")
 
 # -------------------------------------------------------------
-# Create 2: Universal Linux Server Zip Archive
+# Create 2: Universal Linux Server & Native Windows Server Zip Archives
 # -------------------------------------------------------------
-print(f"=== [5/6] Creating Universal Linux Server & Complete Archives ===")
+print(f"=== [5/6] Creating Linux Server, Windows Server & Complete Archives ===")
 LINUX_ZIP = os.path.join(DIST_DIR, f"{APP_NAME}-{VER_STR}-Server-Linux.zip")
 with zipfile.ZipFile(LINUX_ZIP, "w", zipfile.ZIP_DEFLATED) as zf:
     for root, dirs, files in os.walk(SERVER_LINUX_DRAWER):
@@ -1283,6 +1311,19 @@ with zipfile.ZipFile(LINUX_ZIP, "w", zipfile.ZIP_DEFLATED) as zf:
             rel_path = os.path.join("Server-Linux", rel_sub)
             zf.write(full_path, rel_path)
 print(f"[+] Created Universal Linux Server Zip: {LINUX_ZIP} ({os.path.getsize(LINUX_ZIP)} bytes)")
+
+WINDOWS_ZIP = os.path.join(DIST_DIR, f"{APP_NAME}-{VER_STR}-Server-Windows.zip")
+with zipfile.ZipFile(WINDOWS_ZIP, "w", zipfile.ZIP_DEFLATED) as zf:
+    for root, dirs, files in os.walk(SERVER_WINDOWS_DRAWER):
+        dirs[:] = [d for d in dirs if not is_sensitive_relpath(os.path.relpath(os.path.join(root, d), SERVER_WINDOWS_DRAWER))]
+        for file in files:
+            full_path = os.path.join(root, file)
+            rel_sub = os.path.relpath(full_path, SERVER_WINDOWS_DRAWER)
+            if is_sensitive_relpath(rel_sub):
+                continue
+            rel_path = os.path.join("Server-Windows", rel_sub)
+            zf.write(full_path, rel_path)
+print(f"[+] Created Native Windows Server Zip: {WINDOWS_ZIP} ({os.path.getsize(WINDOWS_ZIP)} bytes)")
 
 # -------------------------------------------------------------
 # Create 3: Complete Zip Archive
@@ -1304,7 +1345,7 @@ res = subprocess.run(["lha", "v", LHA_ARCHIVE], capture_output=True, text=True)
 print(res.stdout)
 
 audit_errors = []
-for zpath in (LINUX_ZIP, COMPLETE_ZIP):
+for zpath in (LINUX_ZIP, WINDOWS_ZIP, COMPLETE_ZIP):
     with zipfile.ZipFile(zpath, "r") as zf:
         for entry in zf.namelist():
             if is_sensitive_relpath(entry):
@@ -1319,10 +1360,10 @@ for raw_line in lha_q.stdout.splitlines():
 if audit_errors:
     for err in audit_errors:
         print(f"[SECURITY AUDIT FAILED] {err}", file=sys.stderr)
-    for bad in (LHA_ARCHIVE, LINUX_ZIP, COMPLETE_ZIP):
+    for bad in (LHA_ARCHIVE, LINUX_ZIP, WINDOWS_ZIP, COMPLETE_ZIP):
         if os.path.exists(bad):
             os.unlink(bad)
     sys.exit(1)
 
 print("[+] Security audit passed: zero credentials, tokens, cookies, or browser profiles in archives.")
-print("\nRelease packaging successfully completed for AmigaOS 4 and Universal Linux Server!")
+print("\nRelease packaging successfully completed for AmigaOS 4, Linux Server, and Windows Server!")
