@@ -2944,6 +2944,10 @@ class AmigaClientSession:
         self._cdp_lock = asyncio.Lock()
         self._switching_tab: bool = False
         self._tab_generation: int = 0
+        self._nav_task: Optional[asyncio.Task] = None
+        self._err_aborted_counts: Dict[Tuple[str, Any], int] = {}
+        self._wedged_pages: Set[Tuple[str, Any]] = set()
+        self._last_download_time: float = 0.0
         self._pending_ack_tasks: int = 0
         self.last_audio_time: float = 0.0
         self._encode_executor = concurrent.futures.ThreadPoolExecutor(
@@ -3130,6 +3134,7 @@ class AmigaClientSession:
                         ):
                             self.cdp.on("Page.fileChooserOpened", self._on_cdp_file_chooser_opened)
                             self.cdp.on("Page.windowOpen", self._on_cdp_window_open)
+                            self.cdp.on("Page.javascriptDialogOpening", self._on_cdp_js_dialog)
                             self.cdp.on(
                                 "_disconnected",
                                 lambda _=None, tp=target_page, g=gen: self._on_cdp_unexpected_disconnect(tp, g),
@@ -3172,10 +3177,8 @@ class AmigaClientSession:
             t_idx = tab_idx
             if t_idx < 0:
                 try:
-                    if self.page and self.tabs and self.page in self.tabs:
-                        t_idx = self.tabs.index(self.page)
-                    else:
-                        t_idx = self.active_tab_idx
+                    found_idx = self._find_tab_index(self.page) if (self.page and self.tabs) else -1
+                    t_idx = found_idx if found_idx >= 0 else self.active_tab_idx
                 except Exception:
                     t_idx = 0
 
@@ -3332,6 +3335,280 @@ class AmigaClientSession:
         self.background_tasks.add(t)
         t.add_done_callback(self.background_tasks.discard)
 
+    def _on_cdp_js_dialog(self, params: Optional[Dict[str, Any]] = None) -> None:
+        """Auto-accept beforeunload dialogs and dismiss blocking JS dialogs on DirectCDP."""
+        if not self.running or not isinstance(self.cdp, DirectCDPSession) or not self.cdp.connected:
+            return
+        dtype = str((params or {}).get("type") or "").lower()
+        accept = (dtype == "beforeunload")
+        cdp_ref = self.cdp
+
+        async def _reply() -> None:
+            try:
+                await asyncio.wait_for(
+                    cdp_ref.send("Page.handleJavaScriptDialog", {"accept": accept}),
+                    timeout=1.0,
+                )
+            except Exception:
+                pass
+
+        t = asyncio.create_task(_reply())
+        self.background_tasks.add(t)
+        t.add_done_callback(self.background_tasks.discard)
+
+    def _on_dialog_event(self, dialog: Any) -> None:
+        """Accept beforeunload prompts (prevents Rustwright net::ERR_ABORTED lockup) and dismiss modal alerts."""
+        if dialog is None:
+            return
+
+        async def _handle_dlg() -> None:
+            try:
+                dtype = str(getattr(dialog, "type", "") or "").lower()
+                if dtype == "beforeunload":
+                    await dialog.accept()
+                else:
+                    await dialog.dismiss()
+            except Exception:
+                pass
+
+        t = asyncio.create_task(_handle_dlg())
+        self.background_tasks.add(t)
+        t.add_done_callback(self.background_tasks.discard)
+
+    @staticmethod
+    def _is_page_closed(page: Any) -> bool:
+        if page is None:
+            return True
+        try:
+            return bool(page.is_closed())
+        except Exception:
+            return True
+
+    def _cancel_nav_task(self) -> None:
+        t = self._nav_task
+        self._nav_task = None
+        if t is not None and not t.done():
+            t.cancel()
+
+    async def _force_close_page(self, page: Any) -> None:
+        if page is None:
+            return
+        pkey = self._page_identity(page)
+        self._err_aborted_counts.pop(pkey, None)
+        self._wedged_pages.discard(pkey)
+        self._detach_page_listeners(page)
+        if not self._is_page_closed(page):
+            closed = False
+            try:
+                await asyncio.wait_for(page.close(run_before_unload=False), timeout=2.0)
+                closed = True
+            except TypeError:
+                try:
+                    await asyncio.wait_for(page.close(), timeout=2.0)
+                    closed = True
+                except Exception:
+                    pass
+            except Exception:
+                pass
+            if not closed and not self._is_page_closed(page):
+                kind, tid = pkey
+                if kind == "target_id" and isinstance(self.cdp, DirectCDPSession) and self.cdp.connected:
+                    try:
+                        await asyncio.wait_for(
+                            self.cdp.send("Target.closeTarget", {"targetId": str(tid)}),
+                            timeout=1.5,
+                        )
+                    except Exception:
+                        pass
+
+    async def _stop_page_loading(self, target_page: Page) -> None:
+        if self._is_page_closed(target_page):
+            return
+        if (
+            self.page is not None
+            and self._page_identity(self.page) == self._page_identity(target_page)
+            and isinstance(self.cdp, DirectCDPSession)
+            and self.cdp.connected
+        ):
+            try:
+                await asyncio.wait_for(self.cdp.send("Page.stopLoading"), timeout=0.6)
+            except Exception:
+                pass
+        try:
+            await asyncio.wait_for(
+                target_page.evaluate("() => { try { window.onbeforeunload = null; } catch(e) {} try { window.stop(); } catch(e) {} }"),
+                timeout=0.5,
+            )
+        except Exception:
+            pass
+
+    async def _replace_tab_page(self, tidx: int, reason: str = "wedged") -> Optional[Page]:
+        """Replaces a wedged/closed Page with a fresh context.new_page() and rebinds CDP screencast."""
+        if not self.running or not self.context:
+            return None
+        old_page = self.tabs[tidx] if (0 <= tidx < len(self.tabs)) else self.page
+        was_active = (
+            (tidx == self.active_tab_idx)
+            or (
+                old_page is not None
+                and self.page is not None
+                and self._page_identity(old_page) == self._page_identity(self.page)
+            )
+        )
+        old_key = self._page_identity(old_page) if old_page is not None else None
+        if old_key is not None:
+            self._err_aborted_counts.pop(old_key, None)
+            self._wedged_pages.discard(old_key)
+
+        prev_creating = getattr(self, "_creating_tab", False)
+        self._creating_tab = True
+        try:
+            new_page = await asyncio.wait_for(self.context.new_page(), timeout=5.0)
+        except Exception as exc:
+            logger.warning("Failed spawning replacement Page for tab [%d] (%s): %s", tidx, reason, exc)
+            return None
+        finally:
+            self._creating_tab = prev_creating
+
+        try:
+            await new_page.set_viewport_size({"width": self.width, "height": self.height})
+        except Exception:
+            pass
+        self._setup_page_listeners(new_page)
+
+        if 0 <= tidx < len(self.tabs):
+            self.tabs[tidx] = new_page
+        else:
+            self.tabs.append(new_page)
+            tidx = len(self.tabs) - 1
+
+        if was_active:
+            self._tab_generation += 1
+            self._switching_tab = True
+            try:
+                await self._stop_screencast()
+                await self._detach_cdp()
+                self.page = new_page
+                self.active_tab_idx = tidx
+                self._video_element_playing = False
+                self._last_video_eval_time = 0.0
+                self.last_frame_hash = None
+                self.force_full_frame = True
+                try:
+                    await new_page.bring_to_front()
+                except Exception:
+                    pass
+                if self.engine == "chromium":
+                    await self._attach_direct_cdp(new_page)
+                    await self._start_screencast()
+                else:
+                    self.cdp = None
+            finally:
+                self._switching_tab = False
+            await self._apply_dark_mode(new_page)
+        else:
+            await self._apply_dark_mode(new_page)
+
+        if old_page is not None and self._page_identity(old_page) != self._page_identity(new_page):
+            await self._force_close_page(old_page)
+
+        logger.warning("Replaced %s tab [%d] with a fresh browser Page", reason, tidx)
+        return new_page
+
+    async def _safe_page_goto(
+        self,
+        target_page: Page,
+        url: str,
+        *,
+        wait_until: str = "commit",
+        timeout: int = 15000,
+        allow_replace: bool = True,
+    ) -> Page:
+        """Navigates target_page resiliently, recovering from closed pages or repeated net::ERR_ABORTED."""
+        tidx = self._find_tab_index(target_page)
+        if tidx < 0:
+            tidx = self.active_tab_idx
+
+        if self._is_page_closed(target_page):
+            if not allow_replace:
+                raise RuntimeError("Target page is closed")
+            fresh = await self._replace_tab_page(tidx, reason="closed")
+            if fresh is None:
+                raise RuntimeError("Could not replace closed page")
+            target_page = fresh
+
+        for attempt in range(2):
+            pkey = self._page_identity(target_page)
+            try:
+                await target_page.goto(url, wait_until=wait_until, timeout=timeout)
+                self._err_aborted_counts.pop(pkey, None)
+                self._wedged_pages.discard(pkey)
+                return target_page
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                err_s = str(exc)
+                is_download_abort = (
+                    (time.monotonic() - self._last_download_time) < 1.5
+                    or bool(self.pending_downloads)
+                    or "Download is starting" in err_s
+                )
+                if is_download_abort:
+                    raise
+
+                is_dead = (
+                    self._is_page_closed(target_page)
+                    or "Session with given id not found" in err_s
+                    or "Target closed" in err_s
+                    or "has been closed" in err_s
+                )
+                if is_dead and allow_replace:
+                    cur_tidx = self._find_tab_index(target_page)
+                    if cur_tidx < 0:
+                        if not self.running or not self.tabs or self.page is None or self._page_identity(self.page) != pkey:
+                            raise
+                        cur_tidx = self.active_tab_idx
+                    fresh = await self._replace_tab_page(cur_tidx, reason="closed/detached")
+                    if fresh is None:
+                        raise
+                    await fresh.goto(url, wait_until=wait_until, timeout=timeout)
+                    fkey = self._page_identity(fresh)
+                    self._err_aborted_counts.pop(fkey, None)
+                    self._wedged_pages.discard(fkey)
+                    return fresh
+
+                if "ERR_ABORTED" in err_s and allow_replace:
+                    cnt = self._err_aborted_counts.get(pkey, 0) + 1
+                    self._err_aborted_counts[pkey] = cnt
+                    cur_tidx = self._find_tab_index(target_page)
+                    if cur_tidx < 0:
+                        if not self.running or not self.tabs or self.page is None or self._page_identity(self.page) != pkey:
+                            raise
+                        cur_tidx = self.active_tab_idx
+                    if cnt >= 2:
+                        self._wedged_pages.add(pkey)
+                        logger.warning(
+                            "Page.goto hit net::ERR_ABORTED %d times on tab [%d]; replacing wedged Page for %s",
+                            cnt, cur_tidx, url,
+                        )
+                        fresh = await self._replace_tab_page(cur_tidx, reason="ERR_ABORTED wedged")
+                        if fresh is None:
+                            raise
+                        await fresh.goto(url, wait_until=wait_until, timeout=timeout)
+                        fkey = self._page_identity(fresh)
+                        self._err_aborted_counts.pop(fkey, None)
+                        self._wedged_pages.discard(fkey)
+                        return fresh
+                    if attempt == 0:
+                        logger.info(
+                            "Page.goto aborted once on tab [%d] (%s); stopping pending load and retrying",
+                            cur_tidx, url,
+                        )
+                        await self._stop_page_loading(target_page)
+                        continue
+                raise
+        return target_page
+
     def _schedule_popup_adopt_check(self) -> None:
         if not (self.running and self.use_rustwright and self.engine == "chromium"):
             return
@@ -3383,6 +3660,7 @@ class AmigaClientSession:
         self._schedule_storage_save(delay=1.5)
 
     def _setup_page_listeners(self, page: Page) -> None:
+        page.on("dialog", self._on_dialog_event)
         page.on("filechooser", self._on_filechooser_event)
         page.on("download", self._on_download_event)
         page.on("framenavigated", self._on_main_frame_navigated)
@@ -3395,6 +3673,7 @@ class AmigaClientSession:
         if page is None:
             return
         for ev, cb in (
+            ("dialog", self._on_dialog_event),
             ("filechooser", self._on_filechooser_event),
             ("download", self._on_download_event),
             ("framenavigated", self._on_main_frame_navigated),
@@ -3422,40 +3701,11 @@ class AmigaClientSession:
         async def _recover_crashed_tab() -> None:
             if not self.running or not self.context:
                 return
+            found = self._find_tab_index(crashed_page)
+            idx = found if found >= 0 else self.active_tab_idx
             try:
-                idx = self.tabs.index(crashed_page) if (crashed_page and crashed_page in self.tabs) else self.active_tab_idx
-            except Exception:
-                idx = self.active_tab_idx
-            try:
-                self._detach_page_listeners(crashed_page)
-            except Exception:
-                pass
-            try:
-                new_page = await self.context.new_page()
-                try:
-                    await new_page.set_viewport_size({"width": self.width, "height": self.height})
-                except Exception:
-                    pass
-                self._setup_page_listeners(new_page)
-                await self._apply_dark_mode(new_page)
-                if 0 <= idx < len(self.tabs):
-                    self.tabs[idx] = new_page
-                else:
-                    self.tabs.append(new_page)
-                    idx = len(self.tabs) - 1
-                if crashed_page == self.page or idx == self.active_tab_idx:
-                    self._switching_tab = True
-                    self._tab_generation += 1
-                    try:
-                        await self._stop_screencast()
-                        await self._detach_cdp()
-                        self.page = new_page
-                        self.active_tab_idx = idx
-                        if self.engine == "chromium":
-                            await self._attach_direct_cdp(new_page)
-                            await self._start_screencast()
-                    finally:
-                        self._switching_tab = False
+                new_page = await self._replace_tab_page(idx, reason="crashed")
+                if new_page is not None and self.page is not None and self._page_identity(self.page) == self._page_identity(new_page):
                     try:
                         await new_page.goto(self.portal_url, wait_until="domcontentloaded", timeout=8000)
                     except Exception:
@@ -3463,11 +3713,6 @@ class AmigaClientSession:
                     self._send_progress(100, "Tab wiederhergestellt")
                     self._send_nav_update(self.portal_url)
                     self._trigger_full_refresh(True)
-                try:
-                    if crashed_page and not crashed_page.is_closed():
-                        await crashed_page.close()
-                except Exception:
-                    pass
             except Exception as rec_exc:
                 logger.warning("Tab crash recovery warning: %s", rec_exc)
 
@@ -3480,7 +3725,10 @@ class AmigaClientSession:
         if closed_page is None:
             return
         self._detach_page_listeners(closed_page)
-        if not self.tabs or closed_page not in self.tabs:
+        ckey = self._page_identity(closed_page)
+        self._err_aborted_counts.pop(ckey, None)
+        self._wedged_pages.discard(ckey)
+        if not self.tabs:
             return
         idx = self._find_tab_index(closed_page)
         if idx < 0:
@@ -4265,19 +4513,21 @@ class AmigaClientSession:
                     pass
                 self._context_state["scripts_initialized"] = True
 
-            if self.is_persistent_context and self.context.pages:
-                self.page = self.context.pages[0]
-                for stray in list(self.context.pages[1:]):
-                    try:
-                        await stray.close()
-                    except Exception:
-                        pass
+            live_pages = [p for p in list(getattr(self.context, "pages", []) or []) if not self._is_page_closed(p)]
+            if self.is_persistent_context and live_pages:
+                self.page = live_pages[0]
+                for stray in live_pages[1:]:
+                    await self._force_close_page(stray)
                 try:
                     await self.page.set_viewport_size({"width": self.width, "height": self.height})
                 except Exception:
                     pass
             else:
                 self.page = await self.context.new_page()
+            try:
+                await self.page.bring_to_front()
+            except Exception:
+                pass
             self.tabs = [self.page]
             self.active_tab_idx = 0
             self.context.on("page", self._on_popup_page)
@@ -4311,23 +4561,26 @@ class AmigaClientSession:
             initial_url = self.start_url if self.start_url else self.portal_url
             logger.info("Navigating initial viewport (%dx%d) to %s (has_existing_page=%s)", self.width, self.height, initial_url, has_existing_page)
             async def _init_nav():
-                if not has_existing_page:
+                if not has_existing_page and self.page is not None:
                     try:
-                        await self.page.goto(initial_url, wait_until="domcontentloaded", timeout=12000)
+                        await self._safe_page_goto(self.page, initial_url, wait_until="domcontentloaded", timeout=12000)
+                    except asyncio.CancelledError:
+                        return
                     except Exception as nav_exc:
                         logger.warning("Initial navigation warning (%s), falling back to portal", nav_exc)
-                        if initial_url != self.portal_url:
+                        if initial_url != self.portal_url and self.page is not None:
                             try:
-                                await self.page.goto(self.portal_url, wait_until="domcontentloaded", timeout=8000)
+                                await self._safe_page_goto(self.page, self.portal_url, wait_until="domcontentloaded", timeout=8000)
                             except Exception:
                                 pass
-                else:
+                elif self.page is not None:
                     self._send_nav_update(self.page.url)
                 self.active_until = time.monotonic() + 3.0
                 self._trigger_full_refresh(True)
                 self._schedule_delayed_frames()
 
             t_init = asyncio.create_task(_init_nav())
+            self._nav_task = t_init
             self.background_tasks.add(t_init)
             t_init.add_done_callback(self.background_tasks.discard)
 
@@ -4363,6 +4616,7 @@ class AmigaClientSession:
                     if len(entry) >= 2 and entry[1] and not entry[1].done():
                         entry[1].cancel()
                 self.pending_uploads.clear()
+                self._cancel_nav_task()
                 if self._pending_storage_save_task and not self._pending_storage_save_task.done():
                     self._pending_storage_save_task.cancel()
                 for t in list(self.background_tasks):
@@ -4376,30 +4630,37 @@ class AmigaClientSession:
                     except Exception:
                         pass
                     for tab in list(self.tabs[1:]):
-                        try:
-                            if not tab.is_closed():
-                                await tab.close()
-                        except Exception:
-                            pass
+                        await self._force_close_page(tab)
                     if self.context:
                         try:
-                            for stray in list(getattr(self.context, "pages", []) or [])[1:]:
-                                self._detach_page_listeners(stray)
-                                try:
-                                    if not stray.is_closed():
-                                        await stray.close()
-                                except Exception:
-                                    pass
+                            tab0_id = self._page_identity(self.tabs[0]) if self.tabs else None
+                            for stray in list(getattr(self.context, "pages", []) or []):
+                                if tab0_id is None or self._page_identity(stray) != tab0_id:
+                                    await self._force_close_page(stray)
                         except Exception:
                             pass
                     if self.tabs:
-                        try:
-                            await asyncio.wait_for(
-                                self.tabs[0].goto("about:blank", wait_until="commit", timeout=3000),
-                                timeout=3.5,
-                            )
-                        except Exception:
-                            pass
+                        tab0 = self.tabs[0]
+                        tab0_clean = False
+                        t0_key = self._page_identity(tab0)
+                        if not self._is_page_closed(tab0) and t0_key not in self._wedged_pages:
+                            try:
+                                await self._stop_page_loading(tab0)
+                                await asyncio.wait_for(
+                                    tab0.goto("about:blank", wait_until="commit", timeout=3000),
+                                    timeout=3.5,
+                                )
+                                tab0_clean = True
+                            except Exception:
+                                tab0_clean = False
+                        if not tab0_clean and self.context:
+                            try:
+                                logger.info("Teardown: replacing wedged/unresettable tab[0] with fresh blank Page")
+                                fresh0 = await asyncio.wait_for(self.context.new_page(), timeout=3.0)
+                                await self._force_close_page(tab0)
+                                self.tabs[0] = fresh0
+                            except Exception:
+                                pass
                 elif self.context:
                     try:
                         await self.context.close()
@@ -6628,11 +6889,27 @@ class AmigaClientSession:
     async def _activate_tab(self, tidx: int, old_page=None) -> None:
         if tidx < 0 or tidx >= len(self.tabs):
             return
+        self._cancel_nav_task()
+        target_page = self.tabs[tidx]
+        if self._is_page_closed(target_page):
+            fresh = await self._replace_tab_page(tidx, reason="closed on switch")
+            if fresh is None:
+                return
+            if (
+                self.active_tab_idx == tidx
+                and self.page is not None
+                and self._page_identity(self.page) == self._page_identity(fresh)
+            ):
+                self._cached_page_url = (fresh.url or "").lower()
+                self._trigger_full_refresh(True)
+                self._send_nav_update(fresh.url or self.portal_url, tab_idx=tidx)
+                self._schedule_delayed_frames()
+                return
+            target_page = fresh
         self._tab_generation += 1
         self._switching_tab = True
-        target_page = self.tabs[tidx]
         try:
-            if old_page and old_page != target_page:
+            if old_page and self._page_identity(old_page) != self._page_identity(target_page):
                 try:
                     await asyncio.wait_for(self._pause_page_media(old_page), timeout=0.6)
                 except Exception:
@@ -7269,12 +7546,13 @@ class AmigaClientSession:
             elif not (target.startswith("http://") or target.startswith("https://") or target.startswith("file://")):
                 target = "https://" + target
             if self.context:
+                self._cancel_nav_task()
                 try:
                     self._creating_tab = True
                     self._tab_generation += 1
                     self._switching_tab = True
                     old_page = self.page
-                    if old_page:
+                    if old_page and not self._is_page_closed(old_page):
                         try:
                             await asyncio.wait_for(self._pause_page_media(old_page), timeout=0.6)
                         except Exception:
@@ -7304,10 +7582,14 @@ class AmigaClientSession:
                         await self._start_screencast()
                     else:
                         self.cdp = None
+                    self._switching_tab = False
                     await self._apply_dark_mode(new_page)
                     self._send_progress(20, f"Lade {target}...")
-                    await new_page.goto(target, wait_until="commit", timeout=15000)
-                    self._send_nav_update(new_page.url or target)
+                    new_page = await self._safe_page_goto(new_page, target, wait_until="commit", timeout=15000)
+                    nav_u = (new_page.url or "").strip()
+                    if not nav_u or nav_u.startswith("about:"):
+                        nav_u = target
+                    self._send_nav_update(nav_u)
                 except Exception as exc:
                     logger.warning("New tab creation error: %s", exc)
                 finally:
@@ -7330,7 +7612,15 @@ class AmigaClientSession:
                             and (not isinstance(self.cdp, DirectCDPSession) or self.cdp.connected)
                         )
                     )
-                    if tidx == self.active_tab_idx and self.page is self.tabs[tidx] and cdp_ok:
+                    target_tab = self.tabs[tidx]
+                    same_tab = (
+                        tidx == self.active_tab_idx
+                        and self.page is not None
+                        and self._page_identity(self.page) == self._page_identity(target_tab)
+                        and not self._is_page_closed(target_tab)
+                        and cdp_ok
+                    )
+                    if same_tab:
                         self._trigger_full_refresh(True)
                         return
                     old_page = self.page if tidx != self.active_tab_idx else None
@@ -7343,8 +7633,12 @@ class AmigaClientSession:
             try:
                 tidx = int(cmd.split(":", 1)[1].strip())
                 if 0 <= tidx < len(self.tabs) and len(self.tabs) > 1:
+                    self._cancel_nav_task()
                     p_to_close = self.tabs.pop(tidx)
-                    was_active = (p_to_close == self.page)
+                    was_active = (
+                        self.page is not None
+                        and self._page_identity(p_to_close) == self._page_identity(self.page)
+                    )
                     if was_active:
                         self._tab_generation += 1
                         self._switching_tab = True
@@ -7353,11 +7647,7 @@ class AmigaClientSession:
                             await self._detach_cdp()
                         except Exception:
                             self._switching_tab = False
-                    self._detach_page_listeners(p_to_close)
-                    try:
-                        await p_to_close.close()
-                    except Exception:
-                        pass
+                    await self._force_close_page(p_to_close)
                     if tidx < self.active_tab_idx:
                         self.active_tab_idx -= 1
                     elif self.active_tab_idx >= len(self.tabs):
@@ -7421,44 +7711,64 @@ class AmigaClientSession:
                 return
 
         logger.info("INPUT_GOTO_URL: %s (history idx=%d/%d)", cmd, self.nav_idx, len(self.nav_history))
+        self._cancel_nav_task()
         self._trigger_full_refresh()
         self._schedule_delayed_frames()
 
+        nav_page_init = self.page
+        nav_tab_gen = self._tab_generation
+
         async def _nav_bg():
+            nav_page = nav_page_init
+            resolved_target = ""
             try:
+                if nav_page is None:
+                    return
                 self._send_progress(25, f"Lade {cmd[:30]}...")
                 if cmd.upper() == "@BACK":
                     if self.nav_idx > 0:
                         self.nav_idx -= 1
                         target_url = self.nav_history[self.nav_idx]
+                        resolved_target = target_url
                         logger.info("Navigating @BACK to history[%d]: %s", self.nav_idx, target_url)
                         self._in_history_jump = True
                         try:
-                            await self.page.goto(target_url, wait_until="commit", timeout=12000)
+                            nav_page = await self._safe_page_goto(nav_page, target_url, wait_until="commit", timeout=12000)
                         finally:
                             self._in_history_jump = False
-                    elif self.page.url != self.portal_url:
+                    elif (nav_page.url or "") != self.portal_url:
+                        resolved_target = self.portal_url
                         logger.info("Navigating @BACK fallback to portal: %s", self.portal_url)
-                        await self.page.goto(self.portal_url, wait_until="commit", timeout=10000)
+                        nav_page = await self._safe_page_goto(nav_page, self.portal_url, wait_until="commit", timeout=10000)
                 elif cmd.upper() == "@FORWARD":
                     if self.nav_idx + 1 < len(self.nav_history):
                         self.nav_idx += 1
                         target_url = self.nav_history[self.nav_idx]
+                        resolved_target = target_url
                         logger.info("Navigating @FORWARD to history[%d]: %s", self.nav_idx, target_url)
                         self._in_history_jump = True
                         try:
-                            await self.page.goto(target_url, wait_until="commit", timeout=12000)
+                            nav_page = await self._safe_page_goto(nav_page, target_url, wait_until="commit", timeout=12000)
                         finally:
                             self._in_history_jump = False
                 elif cmd.upper() == "@RELOAD":
-                    await self.page.reload(wait_until="commit", timeout=15000)
-                elif cmd.upper() == "@STOP":
                     try:
-                        await self.page.evaluate("window.stop()")
+                        if self._is_page_closed(nav_page):
+                            raise RuntimeError("Target page is closed")
+                        await nav_page.reload(wait_until="commit", timeout=15000)
+                    except asyncio.CancelledError:
+                        raise
                     except Exception:
-                        pass
+                        reload_url = (nav_page.url or "") if not self._is_page_closed(nav_page) else ""
+                        if not reload_url or reload_url.startswith("about:"):
+                            reload_url = self._cached_page_url or self.portal_url
+                        resolved_target = reload_url
+                        nav_page = await self._safe_page_goto(nav_page, reload_url, wait_until="commit", timeout=15000)
+                elif cmd.upper() == "@STOP":
+                    await self._stop_page_loading(nav_page)
                 elif cmd.upper() == "@HOME":
-                    await self.page.goto(self.portal_url, wait_until="commit", timeout=10000)
+                    resolved_target = self.portal_url
+                    nav_page = await self._safe_page_goto(nav_page, self.portal_url, wait_until="commit", timeout=10000)
                 else:
                     target = cmd
                     if (
@@ -7480,18 +7790,41 @@ class AmigaClientSession:
                             target = f"https://duckduckgo.com/?q={quote_plus(target)}"
                         else:
                             target = "https://" + target
-                    await self.page.goto(target, wait_until="commit", timeout=15000)
+                    resolved_target = target
+                    nav_page = await self._safe_page_goto(nav_page, target, wait_until="commit", timeout=15000)
+            except asyncio.CancelledError:
+                return
             except Exception as exc:
                 logger.warning("Navigation warning for '%s': %s", cmd, exc)
             finally:
-                self._send_progress(100, "Fertig")
-                if self.page and self.page.url:
-                    self._send_nav_update(self.page.url)
-                self.active_until = time.monotonic() + 3.0
-                self._trigger_full_refresh(True)
-                self._schedule_delayed_frames()
+                if self._nav_task is asyncio.current_task():
+                    self._nav_task = None
+                still_active = (
+                    self.running
+                    and self.page is not None
+                    and nav_page is not None
+                    and (
+                        self._page_identity(self.page) == self._page_identity(nav_page)
+                        or self._tab_generation == nav_tab_gen
+                    )
+                )
+                if still_active:
+                    self._send_progress(100, "Fertig")
+                    cur_u = ""
+                    try:
+                        cur_u = (nav_page.url or "").strip() if not self._is_page_closed(nav_page) else ""
+                    except Exception:
+                        cur_u = ""
+                    if (not cur_u or cur_u.startswith("about:")) and resolved_target:
+                        cur_u = resolved_target
+                    if cur_u:
+                        self._send_nav_update(cur_u)
+                    self.active_until = time.monotonic() + 3.0
+                    self._trigger_full_refresh(True)
+                    self._schedule_delayed_frames()
 
         t = asyncio.create_task(_nav_bg())
+        self._nav_task = t
         self.background_tasks.add(t)
         t.add_done_callback(self.background_tasks.discard)
 
@@ -7633,6 +7966,7 @@ class AmigaClientSession:
     # Download Interceptor & Direct URL ASL Download Streamer (Server -> Amiga)
     # ------------------------------------------------------------------------
     def _on_download_event(self, download: Download) -> None:
+        self._last_download_time = time.monotonic()
         t = asyncio.create_task(self._process_download(download))
         self.background_tasks.add(t)
         t.add_done_callback(self.background_tasks.discard)
