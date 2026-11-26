@@ -37,7 +37,7 @@ echo ===========================================================================
 echo  VortexBrowser Native Windows Companion Server (x64)
 echo  Resolution: %VORTEX_WIDTH%x%VORTEX_HEIGHT% @ %VORTEX_FPS% FPS ^| Format: YUV420P
 echo  GPU H.264:  Auto (NVENC / AMF / QSV / Media Foundation / libx264)
-echo  Audio:      Auto (Windows WASAPI Loopback / VB-Cable DirectShow)
+echo  Audio:      Auto (Silent Browser TabCapture -> AHI; Windows Speakers Muted)
 echo  Ports:      %VORTEX_PORT% (Primary) ^& 9757 (LAN)
 echo  Press Ctrl+C to stop cleanly.
 echo ============================================================================

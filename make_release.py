@@ -1233,6 +1233,12 @@ if os.path.exists("server/install_windows.ps1"):
     shutil.copy2("server/install_windows.ps1", os.path.join(SERVER_WINDOWS_DRAWER, "install_windows.ps1"))
 if os.path.exists("server/run_windows.bat"):
     shutil.copy2("server/run_windows.bat", os.path.join(SERVER_WINDOWS_DRAWER, "run_windows.bat"))
+if os.path.exists("server/run_windows_tray.pyw"):
+    shutil.copy2("server/run_windows_tray.pyw", os.path.join(SERVER_WINDOWS_DRAWER, "run_windows_tray.pyw"))
+if os.path.exists("server/run_windows_hidden.vbs"):
+    shutil.copy2("server/run_windows_hidden.vbs", os.path.join(SERVER_WINDOWS_DRAWER, "run_windows_hidden.vbs"))
+if os.path.exists("server/stop_windows.bat"):
+    shutil.copy2("server/stop_windows.bat", os.path.join(SERVER_WINDOWS_DRAWER, "stop_windows.bat"))
 if os.path.exists("server/README_WINDOWS.md"):
     shutil.copy2("server/README_WINDOWS.md", os.path.join(SERVER_WINDOWS_DRAWER, "README_WINDOWS.md"))
 

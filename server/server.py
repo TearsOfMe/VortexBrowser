@@ -422,8 +422,473 @@ def _find_macos_audio_device() -> Optional[str]:
     return None
 
 
-def ensure_audio_sink(audio_device: str = "") -> bool:
-    """Creates/checks audio capture backend on Linux (PipeWire/PulseAudio), macOS (BlackHole), or Windows (WASAPI/DirectShow)."""
+_VORTEX_AUDIO_EXT_ID = "iodkfnmlbdjplhjddnpdpffogmgpceme"
+_VORTEX_AUDIO_EXT_PUBKEY_B64 = (
+    "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAp/aoCc4i+knAUyBbQ1wuNQ2BBw8Io1eiAHg+ssZv23/9JV8JVfqIO3Wb225ffx9Apy8+"
+    "blICGrCTqMnL/gmDiXIQh6f7dTfE4FM6txx2petVjPNvjUuOK7d3VUFiTrDkiHaaSLUOWCVgIBO1ys0Jf+Zyhn7nqeUeo9+f3poSPWKqT2DyblW/"
+    "f4hjOQAmM63yKHElL7pNKYSxSrMwOWR9VrBVVcb+uqZx5XRC18Krh444ydWqJfPlO3aD+DT4ERTaNdsiULVc7B/SGc8oo8rT88GBgb66fabsM0yr"
+    "yJ6+8/xvoTD7dkAKKNNtifCD7FYERvmwF9XlNqIddyQHtkwhLQIDAQAB"
+)
+
+
+def _should_use_tabcapture_audio(engine: str, audio_device: str = "", no_audio: bool = False) -> bool:
+    """Determines whether silent browser-internal MV3 TabCapture audio should be used."""
+    if no_audio or engine.lower() != "chromium" or not _HAS_WEBSOCKETS or websockets is None:
+        return False
+    explicit = (audio_device or os.environ.get("VORTEX_AUDIO_DEVICE", "")).strip().lower()
+    if explicit in ("tabcapture", "silent", "browser"):
+        return True
+    if explicit:
+        # User explicitly requested 'wasapi' or a specific DirectShow/system audio device
+        return False
+    if _IS_WINDOWS:
+        return True
+    if platform.system() == "Darwin":
+        # Zero-driver silent fallback on macOS when no BlackHole virtual cable is installed
+        return _find_macos_audio_device() is None
+    return False
+
+
+class SilentTabAudioBridge:
+    """
+    Browser-internal MV3 chrome.tabCapture + Offscreen Document audio bridge.
+    Captures 44100Hz 16-bit Big-Endian Stereo PCM directly from Chromium tabs over
+    localhost WebSocket while automatically muting captured tabs on the host machine's
+    speakers (zero virtual audio driver required, zero double-audio on Windows/macOS).
+    """
+
+    def __init__(self) -> None:
+        self.ext_dir: Optional[str] = None
+        self.ws_port: int = 0
+        self._ws_server: Any = None
+        self._consumer_queue: Optional[asyncio.Queue] = None
+        self.connected_event: asyncio.Event = asyncio.Event()
+        self.has_connected: bool = False
+        self._active_ws_count: int = 0
+
+    @property
+    def allowlist_flag(self) -> str:
+        return f"--allowlisted-extension-id={_VORTEX_AUDIO_EXT_ID}"
+
+    def attach_consumer(self, maxsize: int = 24) -> asyncio.Queue:
+        q: asyncio.Queue = asyncio.Queue(maxsize=maxsize)
+        self._consumer_queue = q
+        return q
+
+    def detach_consumer(self, q: Optional[asyncio.Queue]) -> None:
+        if q is None or self._consumer_queue is q:
+            self._consumer_queue = None
+
+    async def _ws_handler(self, websocket: Any, *_args: Any) -> None:
+        self._active_ws_count += 1
+        self.has_connected = True
+        self.connected_event.set()
+        logger.info("SilentTabAudioBridge: MV3 TabCapture extension connected (ws://127.0.0.1:%d)", self.ws_port)
+        buf = bytearray()
+        try:
+            async for msg in websocket:
+                if isinstance(msg, (bytes, bytearray)):
+                    q = self._consumer_queue
+                    if q is None:
+                        buf.clear()
+                        continue
+                    if len(msg) == AUDIO_CHUNK_BYTES and not buf:
+                        pkt = bytes(msg)
+                        if q.full():
+                            try:
+                                q.get_nowait()
+                            except asyncio.QueueEmpty:
+                                pass
+                        try:
+                            q.put_nowait(pkt)
+                        except asyncio.QueueFull:
+                            pass
+                    else:
+                        buf.extend(msg)
+                        while len(buf) >= AUDIO_CHUNK_BYTES:
+                            pkt = bytes(buf[:AUDIO_CHUNK_BYTES])
+                            del buf[:AUDIO_CHUNK_BYTES]
+                            if q.full():
+                                try:
+                                    q.get_nowait()
+                                except asyncio.QueueEmpty:
+                                    pass
+                            try:
+                                q.put_nowait(pkt)
+                            except asyncio.QueueFull:
+                                pass
+                elif isinstance(msg, str):
+                    if msg == "vortex-audio-ready":
+                        self.has_connected = True
+                        self.connected_event.set()
+        except Exception as exc:
+            logger.debug("SilentTabAudioBridge WebSocket client disconnected: %s", exc)
+        finally:
+            self._active_ws_count = max(0, self._active_ws_count - 1)
+
+    def _write_extension_files(self, ext_dir: str, ws_port: int) -> None:
+        manifest = {
+            "manifest_version": 3,
+            "name": "VortexBrowser Silent Audio Bridge",
+            "version": "1.0.0",
+            "key": _VORTEX_AUDIO_EXT_PUBKEY_B64,
+            "permissions": ["tabCapture", "offscreen", "tabs"],
+            "background": {"service_worker": "sw.js"},
+        }
+        sw_js = """
+const capturedTabs = new Set();
+const capturingTabs = new Set();
+let creatingOffscreen = null;
+
+function isCapturableUrl(url) {
+  return typeof url === 'string' && /^(https?|file):/i.test(url);
+}
+
+async function hasOffscreenDoc() {
+  if (chrome.runtime && typeof chrome.runtime.getContexts === 'function') {
+    try {
+      const ctxs = await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] });
+      if (ctxs && ctxs.length > 0) return true;
+    } catch (_) {}
+  }
+  if (chrome.offscreen && typeof chrome.offscreen.hasDocument === 'function') {
+    try {
+      return await chrome.offscreen.hasDocument();
+    } catch (_) {}
+  }
+  return false;
+}
+
+async function ensureOffscreen() {
+  if (await hasOffscreenDoc()) return;
+  if (creatingOffscreen) {
+    await creatingOffscreen;
+    return;
+  }
+  creatingOffscreen = chrome.offscreen.createDocument({
+    url: 'offscreen.html',
+    reasons: ['USER_MEDIA'],
+    justification: 'Stream browser tab audio silently to AmigaOS 4 AHI without host speaker playback'
+  }).catch(() => {}).finally(() => {
+    creatingOffscreen = null;
+  });
+  await creatingOffscreen;
+}
+
+async function captureTab(tabId, url) {
+  if (typeof tabId !== 'number' || tabId < 0) return;
+  if (!isCapturableUrl(url)) return;
+  if (capturedTabs.has(tabId) || capturingTabs.has(tabId)) return;
+  capturingTabs.add(tabId);
+  try {
+    await ensureOffscreen();
+    const streamId = await new Promise((resolve) => {
+      try {
+        chrome.tabCapture.getMediaStreamId({ targetTabId: tabId }, (sid) => {
+          const err = chrome.runtime.lastError;
+          if (err) {
+            if (err.message && /active stream/i.test(err.message)) {
+              capturedTabs.add(tabId);
+            }
+            resolve(null);
+            return;
+          }
+          resolve(sid || null);
+        });
+      } catch (_) {
+        resolve(null);
+      }
+    });
+    if (!streamId) return;
+    const resp = await new Promise((resolve) => {
+      try {
+        chrome.runtime.sendMessage({ type: 'capture', tabId, streamId }, (r) => {
+          void chrome.runtime.lastError;
+          resolve(r || null);
+        });
+      } catch (_) {
+        resolve(null);
+      }
+    });
+    if (resp && resp.ok) {
+      capturedTabs.add(tabId);
+    }
+  } finally {
+    capturingTabs.delete(tabId);
+  }
+}
+
+function captureAllTabs() {
+  chrome.tabs.query({}, (tabs) => {
+    void chrome.runtime.lastError;
+    if (!Array.isArray(tabs)) return;
+    for (const t of tabs) {
+      if (t && typeof t.id === 'number' && isCapturableUrl(t.url)) {
+        captureTab(t.id, t.url);
+      }
+    }
+  });
+}
+
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (!msg || typeof msg !== 'object') return false;
+  if (msg.type === 'offscreen-ready') {
+    capturedTabs.clear();
+    captureAllTabs();
+    sendResponse({ ok: true });
+    return false;
+  }
+  if (msg.type === 'track-ended' && typeof msg.tabId === 'number') {
+    capturedTabs.delete(msg.tabId);
+    sendResponse({ ok: true });
+    return false;
+  }
+  if (msg.type === 'ping') {
+    sendResponse({ ok: true });
+    return false;
+  }
+  return false;
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  const url = (changeInfo && changeInfo.url) || (tab && tab.url) || '';
+  if (isCapturableUrl(url) && (changeInfo.audible || changeInfo.status === 'loading' || changeInfo.status === 'complete' || changeInfo.url)) {
+    captureTab(tabId, url);
+  }
+});
+
+chrome.tabs.onActivated.addListener(({ tabId }) => {
+  chrome.tabs.get(tabId, (tab) => {
+    void chrome.runtime.lastError;
+    if (tab && isCapturableUrl(tab.url)) {
+      captureTab(tabId, tab.url);
+    }
+  });
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  capturedTabs.delete(tabId);
+  capturingTabs.delete(tabId);
+  try {
+    chrome.runtime.sendMessage({ type: 'release', tabId }, () => { void chrome.runtime.lastError; });
+  } catch (_) {}
+});
+
+ensureOffscreen().then(() => captureAllTabs()).catch(() => {});
+""".lstrip()
+
+        offscreen_html = "<!doctype html><html><head><meta charset='utf-8'></head><body><script src='offscreen.js'></script></body></html>\n"
+
+        offscreen_js = f"""
+const WS_URL = "ws://127.0.0.1:{int(ws_port)}";
+const SAMPLE_RATE = {AUDIO_SAMPLE_RATE};
+const BUF_FRAMES = 2048; // 2048 stereo S16BE frames = 8192 bytes (AUDIO_CHUNK_BYTES)
+
+let ws = null;
+let ac = null;
+let mixGain = null;
+let procNode = null;
+let silentGain = null;
+const tabStreams = new Map();
+
+function connectWs() {{
+  try {{
+    const s = new WebSocket(WS_URL);
+    s.binaryType = 'arraybuffer';
+    s.onopen = () => {{
+      ws = s;
+      try {{ s.send('vortex-audio-ready'); }} catch (_) {{}}
+    }};
+    s.onclose = () => {{
+      if (ws === s) ws = null;
+      setTimeout(connectWs, 1000);
+    }};
+    s.onerror = () => {{
+      try {{ s.close(); }} catch (_) {{}}
+    }};
+  }} catch (_) {{
+    setTimeout(connectWs, 1000);
+  }}
+}}
+
+function ensureAudioGraph() {{
+  if (ac) return;
+  ac = new AudioContext({{ sampleRate: SAMPLE_RATE }});
+  mixGain = ac.createGain();
+  mixGain.gain.value = 1.0;
+
+  procNode = ac.createScriptProcessor(BUF_FRAMES, 2, 2);
+  // Zero-gain sink: guarantees Chromium executes onaudioprocess while outputting 0.0 to host speakers
+  silentGain = ac.createGain();
+  silentGain.gain.value = 0.0;
+
+  const pcmBuf = new ArrayBuffer(BUF_FRAMES * 4);
+  const pcmView = new DataView(pcmBuf);
+
+  procNode.onaudioprocess = (ev) => {{
+    if (!ws || ws.readyState !== 1 || ws.bufferedAmount > 65536) return;
+    const inBuf = ev.inputBuffer;
+    const chL = inBuf.getChannelData(0);
+    const chR = inBuf.numberOfChannels > 1 ? inBuf.getChannelData(1) : chL;
+    let peak = 0.0;
+    for (let i = 0; i < BUF_FRAMES; i++) {{
+      const al = Math.abs(chL[i]);
+      const ar = Math.abs(chR[i]);
+      if (al > peak) peak = al;
+      if (ar > peak) peak = ar;
+    }}
+    if (peak < 0.0003) return;
+    for (let i = 0; i < BUF_FRAMES; i++) {{
+      const sl = Math.max(-1, Math.min(1, chL[i]));
+      const sr = Math.max(-1, Math.min(1, chR[i]));
+      const il = sl < 0 ? Math.round(sl * 32768) : Math.round(sl * 32767);
+      const ir = sr < 0 ? Math.round(sr * 32768) : Math.round(sr * 32767);
+      pcmView.setInt16(i * 4, il, false);
+      pcmView.setInt16(i * 4 + 2, ir, false);
+    }}
+    try {{
+      ws.send(pcmBuf.slice(0));
+    }} catch (_) {{}}
+  }};
+
+  mixGain.connect(procNode);
+  procNode.connect(silentGain);
+  silentGain.connect(ac.destination);
+  if (ac.state === 'suspended') {{
+    ac.resume().catch(() => {{}});
+  }}
+}}
+
+function releaseTab(tabId) {{
+  const entry = tabStreams.get(tabId);
+  if (!entry) return;
+  tabStreams.delete(tabId);
+  try {{ entry.src.disconnect(); }} catch (_) {{}}
+  try {{
+    for (const tr of entry.stream.getTracks()) {{
+      tr.onended = null;
+      tr.stop();
+    }}
+  }} catch (_) {{}}
+}}
+
+async function captureTabStream(tabId, streamId) {{
+  releaseTab(tabId);
+  ensureAudioGraph();
+  const stream = await navigator.mediaDevices.getUserMedia({{
+    audio: {{
+      mandatory: {{
+        chromeMediaSource: 'tab',
+        chromeMediaSourceId: streamId
+      }}
+    }},
+    video: false
+  }});
+  if (ac && ac.state === 'suspended') {{
+    await ac.resume().catch(() => {{}});
+  }}
+  const src = ac.createMediaStreamSource(stream);
+  src.connect(mixGain);
+  tabStreams.set(tabId, {{ stream, src }});
+  for (const tr of stream.getAudioTracks()) {{
+    tr.onended = () => {{
+      releaseTab(tabId);
+      try {{
+        chrome.runtime.sendMessage({{ type: 'track-ended', tabId }}, () => {{ void chrome.runtime.lastError; }});
+      }} catch (_) {{}}
+    }};
+  }}
+}}
+
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {{
+  if (!msg || typeof msg !== 'object') return false;
+  if (msg.type === 'capture' && typeof msg.tabId === 'number' && msg.streamId) {{
+    captureTabStream(msg.tabId, msg.streamId)
+      .then(() => sendResponse({{ ok: true }}))
+      .catch((err) => sendResponse({{ ok: false, error: String(err) }}));
+    return true;
+  }}
+  if (msg.type === 'release' && typeof msg.tabId === 'number') {{
+    releaseTab(msg.tabId);
+    sendResponse({{ ok: true }});
+    return false;
+  }}
+  return false;
+}});
+
+connectWs();
+ensureAudioGraph();
+try {{
+  chrome.runtime.sendMessage({{ type: 'offscreen-ready' }}, () => {{ void chrome.runtime.lastError; }});
+}} catch (_) {{}}
+setInterval(() => {{
+  try {{
+    chrome.runtime.sendMessage({{ type: 'ping' }}, () => {{ void chrome.runtime.lastError; }});
+  }} catch (_) {{}}
+}}, 20000);
+""".lstrip()
+
+        with open(os.path.join(ext_dir, "manifest.json"), "w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=2)
+        with open(os.path.join(ext_dir, "sw.js"), "w", encoding="utf-8") as f:
+            f.write(sw_js)
+        with open(os.path.join(ext_dir, "offscreen.html"), "w", encoding="utf-8") as f:
+            f.write(offscreen_html)
+        with open(os.path.join(ext_dir, "offscreen.js"), "w", encoding="utf-8") as f:
+            f.write(offscreen_js)
+
+    async def start(self) -> bool:
+        if not _HAS_WEBSOCKETS or websockets is None:
+            return False
+        try:
+            self._ws_server = await websockets.serve(
+                self._ws_handler,
+                "127.0.0.1",
+                0,
+                max_size=262144,
+                ping_interval=20,
+                ping_timeout=20,
+            )
+            socks = getattr(self._ws_server, "sockets", None) or []
+            if not socks:
+                await self.stop()
+                return False
+            self.ws_port = int(socks[0].getsockname()[1])
+            self.ext_dir = tempfile.mkdtemp(prefix="vortex_audio_ext_")
+            self._write_extension_files(self.ext_dir, self.ws_port)
+            logger.info(
+                "SilentTabAudioBridge ready (MV3 TabCapture -> ws://127.0.0.1:%d, host speakers muted)",
+                self.ws_port,
+            )
+            return True
+        except Exception as exc:
+            logger.warning("Failed to start SilentTabAudioBridge: %s", exc)
+            await self.stop()
+            return False
+
+    async def stop(self) -> None:
+        self._consumer_queue = None
+        if self._ws_server is not None:
+            try:
+                self._ws_server.close()
+                await self._ws_server.wait_closed()
+            except Exception:
+                pass
+            self._ws_server = None
+        if self.ext_dir and os.path.isdir(self.ext_dir):
+            try:
+                shutil.rmtree(self.ext_dir, ignore_errors=True)
+            except Exception:
+                pass
+            self.ext_dir = None
+
+
+def ensure_audio_sink(audio_device: str = "", tabcapture_active: bool = False) -> bool:
+    """Creates/checks audio capture backend on Linux (PipeWire/PulseAudio), macOS (BlackHole/TabCapture), or Windows (Silent TabCapture / WASAPI / DirectShow)."""
+    if tabcapture_active:
+        logger.info("Silent Browser TabCapture audio ready for AHI streaming (host speakers muted, no virtual driver required).")
+        return True
+
     if _IS_WINDOWS:
         backend, dev = _select_windows_audio_backend(audio_device)
         if backend == "wasapi":
@@ -550,14 +1015,32 @@ def find_full_chromium_executable(custom_bin: Optional[str] = None) -> Optional[
         local_app = os.environ.get("LOCALAPPDATA", os.path.expanduser("~\\AppData\\Local"))
         prog_files = os.environ.get("PROGRAMFILES", r"C:\Program Files")
         prog_files_x86 = os.environ.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)")
-        native_patterns = [
+        # On Windows, prioritize Ungoogled-Chromium and Playwright Chromium ("Chrome for Testing")
+        # BEFORE branded Google Chrome / Edge because Chrome 137+ disables --load-extension in
+        # branded builds (which would block Silent TabCapture Audio and uBlock Origin).
+        unbranded_cands = [
             os.path.join(local_app, "Chromium", "Application", "chrome.exe"),
             os.path.join(prog_files, "Chromium", "Application", "chrome.exe"),
+        ]
+        for p in unbranded_cands:
+            if os.path.isfile(p):
+                return p
+        pw_win_cands: List[str] = []
+        for pat in (
+            os.path.join(local_app, "ms-playwright", "chromium-*", "chrome-win64", "chrome.exe"),
+            os.path.join(local_app, "ms-playwright", "chromium-*", "chrome-win", "chrome.exe"),
+        ):
+            pw_win_cands.extend(glob.glob(pat))
+        pw_win_cands.sort(reverse=True)
+        for c in pw_win_cands:
+            if os.path.isfile(c):
+                return c
+        native_patterns = [
+            os.path.join(prog_files, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+            os.path.join(local_app, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
             os.path.join(prog_files, "Google", "Chrome", "Application", "chrome.exe"),
             os.path.join(prog_files_x86, "Google", "Chrome", "Application", "chrome.exe"),
             os.path.join(local_app, "Google", "Chrome", "Application", "chrome.exe"),
-            os.path.join(prog_files, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
-            os.path.join(local_app, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
             os.path.join(prog_files_x86, "Microsoft", "Edge", "Application", "msedge.exe"),
             os.path.join(prog_files, "Microsoft", "Edge", "Application", "msedge.exe"),
         ]
@@ -3223,6 +3706,7 @@ class AmigaClientSession:
         locale_explicit: bool = False,
         use_rustwright: bool = False,
         audio_device: str = "",
+        tab_audio_bridge: Optional[SilentTabAudioBridge] = None,
     ):
         self.reader = reader
         self.writer = writer
@@ -3235,6 +3719,7 @@ class AmigaClientSession:
         self.locale_explicit: bool = bool(locale_explicit)
         self.use_rustwright: bool = bool(use_rustwright)
         self.audio_device: str = audio_device
+        self.tab_audio_bridge: Optional[SilentTabAudioBridge] = tab_audio_bridge
         self.width = width
         self.height = height
         self.pixel_format = pixel_format
@@ -3281,11 +3766,8 @@ class AmigaClientSession:
         self.last_hover_time: float = 0.0
         self.hover_task: Optional[asyncio.Task] = None
 
-        # Explicit Navigation History Stack (immune to HTTP/JS redirect loops)
-        self.nav_history: List[str] = []
-        self.nav_times: List[float] = []
-        self.nav_idx: int = -1
-        self._in_history_jump: bool = False
+        # Per-Tab Explicit Navigation History Stacks (immune to redirect loops & cross-tab mixing)
+        self._tab_histories: Dict[Tuple[str, Any], Dict[str, Any]] = {}
 
         self.next_download_id: int = 1
         self.pending_downloads: Dict[int, asyncio.Future] = {}
@@ -3753,12 +4235,76 @@ class AmigaClientSession:
         if t is not None and not t.done():
             t.cancel()
 
+    def _get_tab_history(self, page: Any) -> Dict[str, Any]:
+        pkey = self._page_identity(page)
+        hist = self._tab_histories.get(pkey)
+        if hist is None:
+            hist = {
+                "history": [],
+                "times": [],
+                "idx": -1,
+                "jumping": False,
+                "force_push": False,
+            }
+            self._tab_histories[pkey] = hist
+        return hist
+
+    def _record_tab_history(self, tab_page: Page, url: str) -> None:
+        if tab_page is None:
+            return
+        url = (url or "").strip()
+        if not url or url.startswith("about:") or url.startswith("javascript:"):
+            return
+        hist = self._get_tab_history(tab_page)
+        now = time.monotonic()
+        tidx = self._find_tab_index(tab_page)
+        h_list: List[str] = hist["history"]
+        h_times: List[float] = hist["times"]
+        h_idx: int = hist["idx"]
+
+        if hist["jumping"]:
+            if 0 <= h_idx < len(h_list):
+                h_list[h_idx] = url
+                h_times[h_idx] = now
+            return
+
+        if 0 <= h_idx < len(h_list):
+            if h_list[h_idx] == url:
+                return
+            force_push = bool(hist.get("force_push", False))
+            hist["force_push"] = False
+            # If the previous navigation occurred < 1.2s ago (and wasn't the portal or an explicit user URL),
+            # treat this as an automatic HTTP/JS redirect and update the top entry in-place
+            # so clicking Back doesn't get stuck in a redirect loop!
+            elapsed = now - h_times[h_idx]
+            prev_url = h_list[h_idx]
+            if not force_push and elapsed < 1.2 and prev_url != self.portal_url:
+                h_list[h_idx] = url
+                h_times[h_idx] = now
+                logger.info("Tab[%d] history updated redirect in-place [%d]: %s", tidx, h_idx, url)
+                return
+        else:
+            hist["force_push"] = False
+
+        # Push new history entry (bounded to 200 entries per tab)
+        h_list[:] = h_list[: h_idx + 1]
+        h_times[:] = h_times[: h_idx + 1]
+        if len(h_list) >= 200:
+            overflow = len(h_list) - 199
+            del h_list[:overflow]
+            del h_times[:overflow]
+        h_list.append(url)
+        h_times.append(now)
+        hist["idx"] = len(h_list) - 1
+        logger.info("Tab[%d] history push [%d/%d]: %s", tidx, hist["idx"], len(h_list), url)
+
     async def _force_close_page(self, page: Any) -> None:
         if page is None:
             return
         pkey = self._page_identity(page)
         self._err_aborted_counts.pop(pkey, None)
         self._wedged_pages.discard(pkey)
+        self._tab_histories.pop(pkey, None)
         self._detach_page_listeners(page)
         if not self._is_page_closed(page):
             closed = False
@@ -3819,19 +4365,26 @@ class AmigaClientSession:
             )
         )
         old_key = self._page_identity(old_page) if old_page is not None else None
+        migrated_hist = None
         if old_key is not None:
             self._err_aborted_counts.pop(old_key, None)
             self._wedged_pages.discard(old_key)
+            migrated_hist = self._tab_histories.pop(old_key, None)
 
         prev_creating = getattr(self, "_creating_tab", False)
         self._creating_tab = True
         try:
             new_page = await asyncio.wait_for(self.context.new_page(), timeout=5.0)
         except Exception as exc:
+            if old_key is not None and migrated_hist is not None:
+                self._tab_histories[old_key] = migrated_hist
             logger.warning("Failed spawning replacement Page for tab [%d] (%s): %s", tidx, reason, exc)
             return None
         finally:
             self._creating_tab = prev_creating
+
+        if migrated_hist is not None:
+            self._tab_histories[self._page_identity(new_page)] = migrated_hist
 
         try:
             await new_page.set_viewport_size({"width": self.width, "height": self.height})
@@ -4091,6 +4644,7 @@ class AmigaClientSession:
         ckey = self._page_identity(closed_page)
         self._err_aborted_counts.pop(ckey, None)
         self._wedged_pages.discard(ckey)
+        self._tab_histories.pop(ckey, None)
         if not self.tabs:
             return
         idx = self._find_tab_index(closed_page)
@@ -4151,10 +4705,63 @@ class AmigaClientSession:
             self._send_nav_update(self.page.url)
 
     def _on_main_frame_navigated(self, frame: Frame) -> None:
-        if not self.running or not self.page or frame != self.page.main_frame:
+        if not self.running or frame is None:
             return
+        # Ignore sub-frames (iframes)
+        try:
+            if getattr(frame, "parent_frame", None) is not None:
+                return
+        except Exception:
+            pass
+
+        tab_page: Optional[Page] = None
+        try:
+            fp = getattr(frame, "page", None)
+            if fp is not None:
+                tidx_fp = self._find_tab_index(fp)
+                if tidx_fp >= 0:
+                    tab_page = self.tabs[tidx_fp]
+                elif self.page is not None and self._page_identity(fp) == self._page_identity(self.page):
+                    tab_page = self.page
+        except Exception:
+            tab_page = None
+
+        if tab_page is None:
+            for p in list(self.tabs):
+                try:
+                    if p.main_frame == frame:
+                        tab_page = p
+                        break
+                except Exception:
+                    continue
+        if tab_page is None and self.page is not None:
+            try:
+                if self.page.main_frame == frame:
+                    tab_page = self.page
+            except Exception:
+                pass
+        if tab_page is None:
+            return
+        try:
+            if tab_page.main_frame != frame:
+                return
+        except Exception:
+            pass
+
         url = (frame.url or "").strip()
         if not url or url.startswith("about:") or url.startswith("javascript:"):
+            return
+
+        self._record_tab_history(tab_page, url)
+
+        is_active = (
+            self.page is not None
+            and self._page_identity(tab_page) == self._page_identity(self.page)
+        )
+        if not is_active:
+            tidx = self._find_tab_index(tab_page)
+            if tidx >= 0:
+                self._send_nav_update(url, tab_idx=tidx)
             return
 
         now = time.monotonic()
@@ -4164,38 +4771,6 @@ class AmigaClientSession:
         self._schedule_delayed_frames()
         self._send_nav_update(url)
         self._schedule_storage_save(delay=3.0)
-
-        if self._in_history_jump:
-            if 0 <= self.nav_idx < len(self.nav_history):
-                self.nav_history[self.nav_idx] = url
-                self.nav_times[self.nav_idx] = now
-            return
-
-        if self.nav_idx >= 0 and self.nav_idx < len(self.nav_history):
-            if self.nav_history[self.nav_idx] == url:
-                return
-            # If the previous navigation occurred < 1.2s ago (and wasn't the portal),
-            # treat this as an automatic HTTP/JS redirect and update the top entry in-place
-            # so clicking Back doesn't get stuck in a redirect loop!
-            elapsed = now - self.nav_times[self.nav_idx]
-            prev_url = self.nav_history[self.nav_idx]
-            if elapsed < 1.2 and prev_url != self.portal_url:
-                self.nav_history[self.nav_idx] = url
-                self.nav_times[self.nav_idx] = now
-                logger.info("History updated redirect in-place [%d]: %s", self.nav_idx, url)
-                return
-
-        # Push new history entry (bounded to 200 entries)
-        self.nav_history = self.nav_history[: self.nav_idx + 1]
-        self.nav_times = self.nav_times[: self.nav_idx + 1]
-        if len(self.nav_history) >= 200:
-            overflow = len(self.nav_history) - 199
-            self.nav_history = self.nav_history[overflow:]
-            self.nav_times = self.nav_times[overflow:]
-        self.nav_history.append(url)
-        self.nav_times.append(now)
-        self.nav_idx = len(self.nav_history) - 1
-        logger.info("History push [%d/%d]: %s", self.nav_idx, len(self.nav_history), url)
 
         if self.dark_mode == 1 and self.page:
             t = asyncio.create_task(self._apply_dark_mode(self.page))
@@ -4260,6 +4835,8 @@ class AmigaClientSession:
                 new_idx = len(self.tabs) - 1
                 self._setup_page_listeners(new_page)
                 tab_url = "" if (not popup_url or popup_url.startswith("about:")) else popup_url
+                if tab_url:
+                    self._record_tab_history(new_page, tab_url)
                 title = ""
                 try:
                     title = (await asyncio.wait_for(new_page.title(), timeout=0.3) or "").strip()
@@ -4938,6 +5515,7 @@ class AmigaClientSession:
                             except Exception:
                                 pass
                 elif self.page is not None:
+                    self._record_tab_history(self.page, self.page.url)
                     self._send_nav_update(self.page.url)
                 self.active_until = time.monotonic() + 3.0
                 self._trigger_full_refresh(True)
@@ -5036,8 +5614,7 @@ class AmigaClientSession:
                         pass
                 self.tabs.clear()
                 self.page = None
-                self.nav_history.clear()
-                self.nav_times.clear()
+                self._tab_histories.clear()
                 self.prev_raw_buf = None
                 self._argb_buf = None
                 self._rgb565_buf = None
@@ -5536,9 +6113,51 @@ class AmigaClientSession:
         finally:
             stop_flag.set()
 
+    async def _audio_stream_tabcapture(self) -> bool:
+        """Streams silent browser-internal MV3 TabCapture PCM directly to Amiga AHI.
+        Returns True if the extension connected and streamed, False if fallback is needed."""
+        bridge = self.tab_audio_bridge
+        if bridge is None:
+            return False
+        pcm_q = bridge.attach_consumer(maxsize=24)
+        try:
+            if not bridge.connected_event.is_set():
+                try:
+                    await asyncio.wait_for(bridge.connected_event.wait(), timeout=4.5)
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        "SilentTabAudioBridge did not connect within 4.5s (branded Chrome/Edge may block --load-extension). "
+                        "Install Playwright Chromium / Ungoogled-Chromium for silent Windows-speaker-free audio; falling back to OS audio capture."
+                    )
+                    return False
+            if not self.running:
+                return True
+            logger.info(
+                "Silent Browser TabCapture audio active (ws://127.0.0.1:%d -> %dHz S16BE Stereo; host speakers muted)",
+                bridge.ws_port,
+                AUDIO_SAMPLE_RATE,
+            )
+            state = {"chunks_sent": 0, "silent_streak": 0}
+            while self.running:
+                try:
+                    chunk = await asyncio.wait_for(pcm_q.get(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    continue
+                if not self.running:
+                    break
+                await self._send_pcm_chunk(chunk, state)
+            return True
+        finally:
+            bridge.detach_consumer(pcm_q)
+
     async def _audio_stream_loop(self) -> None:
         proc: Optional[asyncio.subprocess.Process] = None
         try:
+            if self.tab_audio_bridge is not None:
+                if await self._audio_stream_tabcapture():
+                    return
+                if not self.running:
+                    return
             unmute_all_browser_sink_inputs()
             if _IS_WINDOWS:
                 win_backend, win_dev = _select_windows_audio_backend(self.audio_device)
@@ -8136,10 +8755,12 @@ class AmigaClientSession:
                     self._switching_tab = False
                     await self._apply_dark_mode(new_page)
                     self._send_progress(20, f"Lade {target}...")
+                    self._get_tab_history(new_page)["force_push"] = True
                     new_page = await self._safe_page_goto(new_page, target, wait_until="commit", timeout=15000)
                     nav_u = (new_page.url or "").strip()
                     if not nav_u or nav_u.startswith("about:"):
                         nav_u = target
+                    self._record_tab_history(new_page, nav_u)
                     self._send_nav_update(nav_u)
                 except Exception as exc:
                     logger.warning("New tab creation error: %s", exc)
@@ -8261,7 +8882,14 @@ class AmigaClientSession:
                 logger.warning("Ignoring unhandled internal '@' command: %s", cmd.split(":", 1)[0])
                 return
 
-        logger.info("INPUT_GOTO_URL: %s (history idx=%d/%d)", cmd, self.nav_idx, len(self.nav_history))
+        cur_hist = self._get_tab_history(self.page) if self.page else {"history": [], "idx": -1}
+        logger.info(
+            "INPUT_GOTO_URL: %s (tab[%d] history idx=%d/%d)",
+            cmd,
+            self.active_tab_idx,
+            cur_hist["idx"],
+            len(cur_hist["history"]),
+        )
         self._cancel_nav_task()
         self._trigger_full_refresh()
         self._schedule_delayed_frames()
@@ -8272,37 +8900,62 @@ class AmigaClientSession:
         async def _nav_bg():
             nav_page = nav_page_init
             resolved_target = ""
+            cmd_upper = cmd.upper()
             try:
                 if nav_page is None:
                     return
                 self._send_progress(25, f"Lade {cmd[:30]}...")
-                if cmd.upper() == "@BACK":
-                    if self.nav_idx > 0:
-                        self.nav_idx -= 1
-                        target_url = self.nav_history[self.nav_idx]
+                if cmd_upper == "@BACK":
+                    hist = self._get_tab_history(nav_page)
+                    if hist["idx"] > 0:
+                        hist["idx"] -= 1
+                        target_url = hist["history"][hist["idx"]]
                         resolved_target = target_url
-                        logger.info("Navigating @BACK to history[%d]: %s", self.nav_idx, target_url)
-                        self._in_history_jump = True
+                        logger.info(
+                            "Navigating tab[%d] @BACK to history[%d]: %s",
+                            self._find_tab_index(nav_page),
+                            hist["idx"],
+                            target_url,
+                        )
+                        hist["jumping"] = True
                         try:
                             nav_page = await self._safe_page_goto(nav_page, target_url, wait_until="commit", timeout=12000)
                         finally:
-                            self._in_history_jump = False
+                            hist["jumping"] = False
                     elif (nav_page.url or "") != self.portal_url:
                         resolved_target = self.portal_url
-                        logger.info("Navigating @BACK fallback to portal: %s", self.portal_url)
-                        nav_page = await self._safe_page_goto(nav_page, self.portal_url, wait_until="commit", timeout=10000)
-                elif cmd.upper() == "@FORWARD":
-                    if self.nav_idx + 1 < len(self.nav_history):
-                        self.nav_idx += 1
-                        target_url = self.nav_history[self.nav_idx]
+                        logger.info(
+                            "Navigating tab[%d] @BACK fallback to portal: %s",
+                            self._find_tab_index(nav_page),
+                            self.portal_url,
+                        )
+                        if not hist["history"] or hist["history"][0] != self.portal_url:
+                            hist["history"].insert(0, self.portal_url)
+                            hist["times"].insert(0, time.monotonic())
+                        hist["idx"] = 0
+                        hist["jumping"] = True
+                        try:
+                            nav_page = await self._safe_page_goto(nav_page, self.portal_url, wait_until="commit", timeout=10000)
+                        finally:
+                            hist["jumping"] = False
+                elif cmd_upper == "@FORWARD":
+                    hist = self._get_tab_history(nav_page)
+                    if hist["idx"] + 1 < len(hist["history"]):
+                        hist["idx"] += 1
+                        target_url = hist["history"][hist["idx"]]
                         resolved_target = target_url
-                        logger.info("Navigating @FORWARD to history[%d]: %s", self.nav_idx, target_url)
-                        self._in_history_jump = True
+                        logger.info(
+                            "Navigating tab[%d] @FORWARD to history[%d]: %s",
+                            self._find_tab_index(nav_page),
+                            hist["idx"],
+                            target_url,
+                        )
+                        hist["jumping"] = True
                         try:
                             nav_page = await self._safe_page_goto(nav_page, target_url, wait_until="commit", timeout=12000)
                         finally:
-                            self._in_history_jump = False
-                elif cmd.upper() == "@RELOAD":
+                            hist["jumping"] = False
+                elif cmd_upper == "@RELOAD":
                     try:
                         if self._is_page_closed(nav_page):
                             raise RuntimeError("Target page is closed")
@@ -8315,10 +8968,11 @@ class AmigaClientSession:
                             reload_url = self._cached_page_url or self.portal_url
                         resolved_target = reload_url
                         nav_page = await self._safe_page_goto(nav_page, reload_url, wait_until="commit", timeout=15000)
-                elif cmd.upper() == "@STOP":
+                elif cmd_upper == "@STOP":
                     await self._stop_page_loading(nav_page)
-                elif cmd.upper() == "@HOME":
+                elif cmd_upper == "@HOME":
                     resolved_target = self.portal_url
+                    self._get_tab_history(nav_page)["force_push"] = True
                     nav_page = await self._safe_page_goto(nav_page, self.portal_url, wait_until="commit", timeout=10000)
                 else:
                     target = cmd
@@ -8342,6 +8996,7 @@ class AmigaClientSession:
                         else:
                             target = "https://" + target
                     resolved_target = target
+                    self._get_tab_history(nav_page)["force_push"] = True
                     nav_page = await self._safe_page_goto(nav_page, target, wait_until="commit", timeout=15000)
             except asyncio.CancelledError:
                 return
@@ -8350,6 +9005,15 @@ class AmigaClientSession:
             finally:
                 if self._nav_task is asyncio.current_task():
                     self._nav_task = None
+                cur_u = ""
+                try:
+                    cur_u = (nav_page.url or "").strip() if (nav_page is not None and not self._is_page_closed(nav_page)) else ""
+                except Exception:
+                    cur_u = ""
+                if (not cur_u or cur_u.startswith("about:")) and resolved_target:
+                    cur_u = resolved_target
+                if nav_page is not None and cur_u and cmd_upper not in ("@BACK", "@FORWARD", "@STOP", "@RELOAD"):
+                    self._record_tab_history(nav_page, cur_u)
                 still_active = (
                     self.running
                     and self.page is not None
@@ -8361,13 +9025,6 @@ class AmigaClientSession:
                 )
                 if still_active:
                     self._send_progress(100, "Fertig")
-                    cur_u = ""
-                    try:
-                        cur_u = (nav_page.url or "").strip() if not self._is_page_closed(nav_page) else ""
-                    except Exception:
-                        cur_u = ""
-                    if (not cur_u or cur_u.startswith("about:")) and resolved_target:
-                        cur_u = resolved_target
                     if cur_u:
                         self._send_nav_update(cur_u)
                     self.active_until = time.monotonic() + 3.0
@@ -9904,12 +10561,33 @@ async def run_server(args: argparse.Namespace) -> None:
         except Exception:
             pass
 
+    if getattr(args, "exit_on_stdin_eof", False):
+        def _watch_stdin_eof() -> None:
+            try:
+                while True:
+                    chunk = sys.stdin.buffer.read(1) if hasattr(sys.stdin, "buffer") else sys.stdin.read(1)
+                    if not chunk:
+                        break
+            except Exception:
+                pass
+            try:
+                loop.call_soon_threadsafe(stop_event.set)
+            except Exception:
+                pass
+
+        threading.Thread(target=_watch_stdin_eof, daemon=True, name="vb_stdin_eof").start()
+
     audio_device = getattr(args, "audio_device", "") or ""
+    tab_audio_bridge: Optional[SilentTabAudioBridge] = None
     if getattr(args, "no_audio", False):
         audio_ready = False
         logger.info("Audio streaming disabled by --no-audio / VORTEX_NO_AUDIO.")
     else:
-        audio_ready = ensure_audio_sink(audio_device)
+        if _should_use_tabcapture_audio(engine, audio_device, no_audio=False):
+            bridge = SilentTabAudioBridge()
+            if await bridge.start():
+                tab_audio_bridge = bridge
+        audio_ready = ensure_audio_sink(audio_device, tabcapture_active=(tab_audio_bridge is not None))
     portal = LocalPortalHTTPServer(host="127.0.0.1", port=args.portal_port)
     portal_url = await portal.start()
 
@@ -9927,14 +10605,16 @@ async def run_server(args: argparse.Namespace) -> None:
         pixel_fmt = FMT_YUV420P
 
     browser_env = dict(os.environ)
-    if audio_ready and platform.system() == "Linux":
+    if audio_ready and tab_audio_bridge is None and platform.system() == "Linux":
         browser_env["PULSE_SINK"] = AUDIO_SINK_NAME
 
     if engine == "chromium":
         custom_bin = getattr(args, "browser_bin", None)
         full_chrome = find_full_chromium_executable(custom_bin)
         enable_exts = getattr(args, "enable_extensions", False)
-        all_exts = find_all_extension_paths() if enable_exts else []
+        all_exts = list(find_all_extension_paths()) if enable_exts else []
+        if tab_audio_bridge is not None and tab_audio_bridge.ext_dir:
+            all_exts.append(tab_audio_bridge.ext_dir)
 
         # Clean up stale SingletonLock/Socket/Cookie from prior crashes or killed processes
         for lock_file in ("SingletonLock", "SingletonCookie", "SingletonSocket", "lockfile"):
@@ -10048,6 +10728,8 @@ async def run_server(args: argparse.Namespace) -> None:
             logger.info("Enabling unpacked Chrome extensions (%d): %s", len(all_exts), ext_list)
             launch_args.append(f"--disable-extensions-except={ext_list}")
             launch_args.append(f"--load-extension={ext_list}")
+            if tab_audio_bridge is not None:
+                launch_args.append(tab_audio_bridge.allowlist_flag)
         else:
             logger.info("Browser extensions (uBlock Origin, h264ify): DISABLED as requested")
             launch_args.append("--disable-extensions")
@@ -10144,6 +10826,8 @@ async def run_server(args: argparse.Namespace) -> None:
                     ext_list = ",".join(all_exts)
                     fallback_args.append(f"--disable-extensions-except={ext_list}")
                     fallback_args.append(f"--load-extension={ext_list}")
+                    if tab_audio_bridge is not None:
+                        fallback_args.append(tab_audio_bridge.allowlist_flag)
                 else:
                     fallback_args.append("--disable-extensions")
                 fallback_kwargs: Dict[str, Any] = {
@@ -10221,6 +10905,7 @@ async def run_server(args: argparse.Namespace) -> None:
                             locale_explicit=locale_explicit,
                             use_rustwright=use_rustwright,
                             audio_device=audio_device,
+                            tab_audio_bridge=tab_audio_bridge,
                         )
                         active_session = session
 
@@ -10247,11 +10932,14 @@ async def run_server(args: argparse.Namespace) -> None:
                 all_socks.extend(s.sockets or [])
             addrs = ", ".join(str(sock.getsockname()) for sock in all_socks)
             if audio_ready:
-                audio_desc = (
-                    "ON (Windows WASAPI/DirectShow -> AHI)" if _IS_WINDOWS
-                    else ("ON (macOS AVFoundation -> AHI)" if platform.system() == "Darwin"
-                          else "ON (Full Browser -> PipeWire -> AHI)")
-                )
+                if tab_audio_bridge is not None:
+                    audio_desc = "ON (Silent Browser TabCapture -> AHI; Host Speakers Muted)"
+                elif _IS_WINDOWS:
+                    audio_desc = "ON (Windows WASAPI/DirectShow -> AHI)"
+                elif platform.system() == "Darwin":
+                    audio_desc = "ON (macOS AVFoundation -> AHI)"
+                else:
+                    audio_desc = "ON (Full Browser -> PipeWire -> AHI)"
             else:
                 audio_desc = "OFF"
             logger.info(
@@ -10315,6 +11003,8 @@ async def run_server(args: argparse.Namespace) -> None:
                 signal.signal(sig, prev_h)
             except Exception:
                 pass
+        if tab_audio_bridge is not None:
+            await tab_audio_bridge.stop()
         await portal.stop()
         _remove_server_pid(pid_file)
 
@@ -10348,7 +11038,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--audio-device",
         default=os.environ.get("VORTEX_AUDIO_DEVICE", ""),
-        help="Optional audio device override on Windows ('wasapi' or DirectShow device name e.g. 'CABLE Output (VB-Audio Virtual Cable)') [env: VORTEX_AUDIO_DEVICE]",
+        help="Optional audio backend/device override: 'tabcapture' (silent browser-only audio, Windows default), 'wasapi' (Windows system loopback), or DirectShow device name [env: VORTEX_AUDIO_DEVICE]",
     )
     parser.add_argument(
         "--no-rustwright",
@@ -10367,6 +11057,12 @@ def parse_args() -> argparse.Namespace:
         choices=["chromium", "firefox"],
         default=os.environ.get("VORTEX_ENGINE", "chromium"),
         help="Headless browser engine: 'chromium' (default, CDP-accelerated) or 'firefox' (Playwright Firefox) [env: VORTEX_ENGINE]",
+    )
+    parser.add_argument(
+        "--exit-on-stdin-eof",
+        action="store_true",
+        default=False,
+        help=argparse.SUPPRESS,
     )
     return parser.parse_args()
 

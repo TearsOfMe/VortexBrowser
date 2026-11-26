@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 # VortexBrowser Native Windows 10/11 (x64) Companion Server Installer
 # - Installs/verifies Python 3.10+ venv, Rustwright, Playwright, PyAudioWPatch
 # - Checks/installs FFmpeg (NVENC / AMF / QSV / Media Foundation / libx264)
@@ -9,6 +9,8 @@
 [CmdletBinding()]
 param(
     [switch]$InstallPlaywrightChromium,
+    [switch]$UseSystemBrowser,
+    [switch]$InstallAutostart,
     [switch]$SkipFirewall,
     [switch]$SkipFFmpeg
 )
@@ -102,35 +104,43 @@ if (-not $SkipFFmpeg) {
 }
 
 # 4. Chromium / Browser Check
-Write-Host "[4/6] Checking Chromium / Chrome / Edge browser..." -ForegroundColor Yellow
-$BrowserFound = $null
-$BrowserCands = @(
+# Prefer Ungoogled-Chromium or Playwright Chromium ("Chrome for Testing") because
+# Google Chrome 137+ disables --load-extension in branded builds, which is required
+# for Silent Amiga-Only TabCapture Audio (host speakers muted) and uBlock Origin.
+Write-Host "[4/6] Checking Chromium browser (with --load-extension support)..." -ForegroundColor Yellow
+$UnbrandedFound = $null
+foreach ($b in @(
     "$env:LOCALAPPDATA\Chromium\Application\chrome.exe",
-    "$env:PROGRAMFILES\Chromium\Application\chrome.exe",
-    "$env:PROGRAMFILES\Google\Chrome\Application\chrome.exe",
-    "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe",
-    "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe",
-    "$env:PROGRAMFILES\BraveSoftware\Brave-Browser\Application\brave.exe",
-    "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe",
-    "$env:PROGRAMFILES\Microsoft\Edge\Application\msedge.exe"
-)
-foreach ($b in $BrowserCands) {
+    "$env:PROGRAMFILES\Chromium\Application\chrome.exe"
+)) {
     if ($b -and (Test-Path $b)) {
-        $BrowserFound = $b
+        $UnbrandedFound = $b
         break
     }
 }
-if ($InstallPlaywrightChromium -or (-not $BrowserFound)) {
-    Write-Host "  Installing Playwright Chromium..." -ForegroundColor Cyan
-    & $VenvPy -m playwright install chromium
-} else {
-    Write-Host "  Detected native browser: $BrowserFound" -ForegroundColor Green
-    Write-Host "  (Tip: Run with -InstallPlaywrightChromium to install standalone Playwright Chromium instead.)" -ForegroundColor DarkGray
+if (-not $UnbrandedFound) {
+    $pwCands = @(
+        Get-ChildItem "$env:LOCALAPPDATA\ms-playwright\chromium-*\chrome-win64\chrome.exe" -ErrorAction SilentlyContinue
+        Get-ChildItem "$env:LOCALAPPDATA\ms-playwright\chromium-*\chrome-win\chrome.exe" -ErrorAction SilentlyContinue
+    ) | Sort-Object FullName -Descending
+    if ($pwCands -and $pwCands.Count -gt 0) {
+        $UnbrandedFound = $pwCands[0].FullName
+    }
 }
 
-# 5. Verify native SIMD DLL & server.py syntax
-Write-Host "[5/6] Verifying native SIMD DLL & server.py..." -ForegroundColor Yellow
-& $VenvPy -m py_compile (Join-Path $ScriptDir "server.py")
+if ($InstallPlaywrightChromium -or ((-not $UnbrandedFound) -and (-not $UseSystemBrowser))) {
+    Write-Host "  Installing Playwright Chromium (Chrome for Testing — enables Silent Windows Audio & uBlock Origin)..." -ForegroundColor Cyan
+    & $VenvPy -m playwright install chromium
+} elseif ($UnbrandedFound) {
+    Write-Host "  Detected Chromium with full extension support: $UnbrandedFound" -ForegroundColor Green
+} else {
+    Write-Host "  -UseSystemBrowser specified: will use system Chrome/Edge/Brave if installed." -ForegroundColor DarkYellow
+    Write-Host "  (Note: Chrome 137+ blocks unpacked extensions; re-run without -UseSystemBrowser if Windows speakers still play audio.)" -ForegroundColor DarkGray
+}
+
+# 5. Verify native SIMD DLL & server scripts
+Write-Host "[5/6] Verifying native SIMD DLL, server.py & tray launcher..." -ForegroundColor Yellow
+& $VenvPy -m py_compile (Join-Path $ScriptDir "server.py") (Join-Path $ScriptDir "run_windows_tray.pyw")
 & $VenvPy -c @"
 import ctypes, os
 base = r'$ScriptDir'
@@ -174,6 +184,23 @@ if (-not $SkipFirewall) {
     }
 }
 
+if ($InstallAutostart) {
+    try {
+        $StartupDir = [Environment]::GetFolderPath("Startup")
+        $ShortcutPath = Join-Path $StartupDir "VortexBrowser Server.lnk"
+        $WshShell = New-Object -ComObject WScript.Shell
+        $Shortcut = $WshShell.CreateShortcut($ShortcutPath)
+        $Shortcut.TargetPath = "$env:SystemRoot\System32\wscript.exe"
+        $Shortcut.Arguments = "`"$(Join-Path $ScriptDir 'run_windows_hidden.vbs')`""
+        $Shortcut.WorkingDirectory = $ScriptDir
+        $Shortcut.Description = "VortexBrowser Amiga Companion Server (Background Tray)"
+        $Shortcut.Save()
+        Write-Host "  Created Windows Startup autostart shortcut: $ShortcutPath" -ForegroundColor Green
+    } catch {
+        Write-Host "  WARNING: Could not create Startup shortcut: $_" -ForegroundColor DarkYellow
+    }
+}
+
 # Print local LAN IPv4 addresses
 $LanIPs = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
     Where-Object { $_.IPAddress -notlike "127.*" -and $_.IPAddress -notlike "169.254.*" -and $_.PrefixOrigin -ne "WellKnown" } |
@@ -182,9 +209,13 @@ $LanIPs = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
 Write-Host ""
 Write-Host "============================================================================" -ForegroundColor Green
 Write-Host " VortexBrowser Windows Server installation complete!" -ForegroundColor Green
-Write-Host " Start server:  double-click run_windows.bat  (or .\run_windows.bat)" -ForegroundColor Green
+Write-Host " Start silently (background + tray): double-click run_windows_hidden.vbs" -ForegroundColor Green
+Write-Host " Start with console window:          double-click run_windows.bat" -ForegroundColor Green
+Write-Host " Stop background server:             double-click stop_windows.bat" -ForegroundColor Green
+Write-Host " Audio mode:                         Silent Browser TabCapture (Amiga only, PC speakers muted)" -ForegroundColor Cyan
 if ($LanIPs) {
     Write-Host " Your Windows LAN IP(s) for AmigaOS 4:  $($LanIPs -join ', ')" -ForegroundColor Cyan
 }
-Write-Host " Ports:         7788 (Primary) & 9757 (LAN Secondary)" -ForegroundColor Green
+Write-Host " Ports:                              7788 (Primary) & 9757 (LAN Secondary)" -ForegroundColor Green
+Write-Host " Tip: Re-run with -InstallAutostart to launch silently when Windows starts." -ForegroundColor DarkGray
 Write-Host "============================================================================" -ForegroundColor Green
