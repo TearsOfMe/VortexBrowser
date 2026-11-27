@@ -2497,11 +2497,15 @@ static uint32 find_rtg_screen_mode(uint16 req_w, uint16 req_h, uint16 *io_depth)
  * The list builder guarantees that no live node ever reuses the address of
  * the already-handled (freed) node. */
 static struct Node *s_handled_close_node = NULL;
-static BOOL         s_tabs_compact_close = FALSE;
 static uint16       s_last_tabs_win_w    = 0;
 
 static int gui_get_clicktab_avail_width(VortexApp *app)
 {
+    int gad_w = (app && app->gad_clicktab) ? (int)((struct Gadget *)app->gad_clicktab)->Width : 0;
+    if (gad_w > 60 && app && app->win && app->win->Width == s_last_tabs_win_w) {
+        return gad_w;
+    }
+
     int win_inner_w = 1000;
     if (app && app->win) {
         win_inner_w = (int)app->win->Width - (int)app->win->BorderLeft - (int)app->win->BorderRight;
@@ -2511,102 +2515,27 @@ static int gui_get_clicktab_avail_width(VortexApp *app)
             win_inner_w = (int)app->prefs.resolution.win_w - 8;
         } else if (app->custom_screen) {
             win_inner_w = (int)app->custom_screen->Width - 8;
-        } else if (app->prefs.resolution.width >= 200) {
-            win_inner_w = (int)app->prefs.resolution.width - 8;
+        } else if (IIntuition) {
+            struct Screen *wb_scr = IIntuition->LockPubScreen(NULL);
+            if (wb_scr) {
+                win_inner_w = (int)wb_scr->Width - 8;
+                IIntuition->UnlockPubScreen(NULL, wb_scr);
+            }
         }
     }
 
-    int plus_w = 34;
+    int plus_w = 28;
     if (app && app->gad_tab_new && ((struct Gadget *)app->gad_tab_new)->Width > 0) {
-        plus_w = (int)((struct Gadget *)app->gad_tab_new)->Width + 6;
+        plus_w = (int)((struct Gadget *)app->gad_tab_new)->Width;
     }
-    int est_bar_w = win_inner_w - plus_w - 16;
-    int gad_w = (app && app->gad_clicktab) ? (int)((struct Gadget *)app->gad_clicktab)->Width : 0;
-
-    int avail_w = (gad_w > 60) ? gad_w : est_bar_w;
-    if (est_bar_w > 60 && avail_w > est_bar_w) {
-        avail_w = est_bar_w;
+    int avail_w = win_inner_w - plus_w - 8;
+    if (gad_w > avail_w) {
+        avail_w = gad_w;
     }
     if (avail_w < 120) {
         avail_w = 120;
     }
     return avail_w;
-}
-
-static int measure_tab_text_px(struct RastPort *rp, const char *str, size_t len)
-{
-    if (!str || len == 0) return 0;
-    if (rp && IGraphics) {
-        int base_px = (int)IGraphics->TextLength(rp, (CONST_STRPTR)str, (uint32)len);
-        /* Add small allowance for bold active tab rendering (CLICKTAB_ACTIVEBOLD) */
-        return base_px + (int)((len * 3 + 3) / 4);
-    }
-    return (int)(len * 9);
-}
-
-static void truncate_tab_label_to_px(struct RastPort *rp, const char *src, int max_px, char *out, size_t out_cap)
-{
-    if (!out || out_cap == 0) return;
-    out[0] = '\0';
-
-    if (!src) src = "Tab";
-    while (*src == ' ' || *src == '\t') src++;
-    if (*src == '\0') src = "Tab";
-
-    size_t full_len = strlen(src);
-    while (full_len > 0 && (src[full_len - 1] == ' ' || src[full_len - 1] == '\t')) {
-        full_len--;
-    }
-    if (full_len == 0) {
-        src = "Tab";
-        full_len = 3;
-    }
-
-    if (measure_tab_text_px(rp, src, full_len) <= max_px) {
-        if (full_len >= out_cap) full_len = out_cap - 1;
-        memcpy(out, src, full_len);
-        out[full_len] = '\0';
-        return;
-    }
-
-    int dots_px = measure_tab_text_px(rp, "..", 2);
-    if (max_px >= dots_px + 12 && out_cap > 4) {
-        size_t max_chars = full_len;
-        if (max_chars > out_cap - 3) max_chars = out_cap - 3;
-        size_t best_len = 0;
-        for (size_t l = 1; l <= max_chars; l++) {
-            if (measure_tab_text_px(rp, src, l) + dots_px <= max_px) {
-                best_len = l;
-            } else {
-                break;
-            }
-        }
-        if (best_len >= 1) {
-            while (best_len > 1 && (src[best_len - 1] == ' ' || src[best_len - 1] == '.' ||
-                                    src[best_len - 1] == '-' || src[best_len - 1] == '_')) {
-                best_len--;
-            }
-            memcpy(out, src, best_len);
-            out[best_len]     = '.';
-            out[best_len + 1] = '.';
-            out[best_len + 2] = '\0';
-            return;
-        }
-    }
-
-    /* Very narrow budget: fit as many characters as possible without dots */
-    size_t max_chars = full_len;
-    if (max_chars >= out_cap) max_chars = out_cap - 1;
-    size_t best_len = 1;
-    for (size_t l = 1; l <= max_chars; l++) {
-        if (measure_tab_text_px(rp, src, l) <= max_px) {
-            best_len = l;
-        } else {
-            break;
-        }
-    }
-    memcpy(out, src, best_len);
-    out[best_len] = '\0';
 }
 
 static void tabs_build_list(VortexApp *app, struct List *out)
@@ -2616,99 +2545,42 @@ static void tabs_build_list(VortexApp *app, struct List *out)
 
     BOOL use_dark_pen = (app->prefs.dark_theme == 1 && s_dark_pens.allocated && s_dark_pens.txt_pen >= 0);
 
-    struct RastPort *rp = NULL;
-    struct Screen *locked_scr = NULL;
-    if (app->win && app->win->RPort) {
-        rp = app->win->RPort;
-    } else if (app->custom_screen) {
-        rp = &app->custom_screen->RastPort;
-    } else if (IIntuition) {
-        locked_scr = IIntuition->LockPubScreen(NULL);
-        if (locked_scr) {
-            rp = &locked_scr->RastPort;
-        }
-    }
-
     int n = (int)app->num_tabs;
     if (n > VB_MAX_TABS) n = VB_MAX_TABS;
 
+    /* Per clicktab.gadget V53 disassembly (GM_DOMAIN @ 0x10056b0, GM_LAYOUT @ 0x1001c10,
+     * GM_RENDER @ 0x1002040 & 0x10032f4):
+     * 1. clicktab.gadget ONLY renders and activates the close gadget on the currently
+     *    active tab (is_active == 1), but reserves +21px of blank space in GM_DOMAIN on
+     *    any node that has TNA_CloseGadget == TRUE. Passing TNA_CloseGadget only on the
+     *    active tab eliminates 21px of wasted blank space per inactive tab.
+     * 2. When CLICKTAB_LabelTruncate is TRUE and CLICKTAB_EvenSize is FALSE, clicktab.gadget
+     *    itself shrinks the widest tabs pixel-by-pixel in GM_LAYOUT until their sum equals
+     *    gad_clicktab->Width to the exact pixel (0 wasted space) and uses IGraphics->TextFit()
+     *    in GM_RENDER, provided gad_clicktab->Width >= sum(node->min_w).
+     * 3. node->min_w is TextExtent(first 3 chars) + 26 (or +47 for active tab), unless
+     *    strlen(TNA_Text) <= 2. Only when the window is extremely narrow relative to tab
+     *    count (< 52px per tab) do we shorten labels to 2 chars so sum(min_w) still fits. */
     int avail_bar_w = gui_get_clicktab_avail_width(app);
-    int usable_w = avail_bar_w - 36; /* Reserve outer ClickTab gadget margins */
-    if (usable_w < n * 34) {
-        usable_w = n * 34;
-    }
-
-    /* When many tabs are open relative to window width (< 84px per tab),
-     * only attach the close gadget to the active tab so inactive tabs don't
-     * reserve ~18px of blank close-gadget padding each. */
-    s_tabs_compact_close = ((usable_w / n) < 84 && n > 2) ? TRUE : FALSE;
-
-    int total_chrome_w = 0;
-    for (int i = 0; i < n; i++) {
-        BOOL has_close = (!s_tabs_compact_close || i == (int)app->active_tab_idx);
-        total_chrome_w += has_close ? 50 : 32;
-    }
-
-    int total_text_budget = usable_w - total_chrome_w;
-    if (total_text_budget < n * 10) {
-        total_text_budget = n * 10;
-    }
-
-    int max_single_tab_text_w = (n == 1) ? 260 : 220;
-    int nat_w[VB_MAX_TABS];
-    int alloc_w[VB_MAX_TABS];
-    BOOL fixed[VB_MAX_TABS];
-    int sum_nat_w = 0;
-
-    for (int i = 0; i < n; i++) {
-        const char *t = (app->tabs[i].title[0] != '\0') ? app->tabs[i].title : "Tab";
-        int w = measure_tab_text_px(rp, t, strlen(t));
-        if (w > max_single_tab_text_w) w = max_single_tab_text_w;
-        if (w < 10) w = 10;
-        nat_w[i]   = w;
-        alloc_w[i] = w;
-        fixed[i]   = FALSE;
-        sum_nat_w += w;
-    }
-
-    if (sum_nat_w > total_text_budget) {
-        /* Water-filling algorithm: short tabs keep their natural width,
-         * and longer tabs share the remaining horizontal space equally. */
-        int rem_budget = total_text_budget;
-        int rem_tabs   = n;
-
-        while (rem_tabs > 0) {
-            int fair_share = rem_budget / rem_tabs;
-            if (fair_share < 10) fair_share = 10;
-            BOOL any_fixed = FALSE;
-
-            for (int i = 0; i < n; i++) {
-                if (!fixed[i] && nat_w[i] <= fair_share) {
-                    alloc_w[i] = nat_w[i];
-                    fixed[i]   = TRUE;
-                    rem_budget -= nat_w[i];
-                    rem_tabs--;
-                    any_fixed = TRUE;
-                }
-            }
-            if (!any_fixed) {
-                for (int i = 0; i < n; i++) {
-                    if (!fixed[i]) {
-                        alloc_w[i] = fair_share;
-                        fixed[i]   = TRUE;
-                    }
-                }
-                break;
-            }
-        }
-    }
+    BOOL ultra_narrow = (n > 4 && avail_bar_w < (n * 52 + 24));
 
     for (int i = 0; i < n; i++) {
         char disp_title[64];
         const char *raw_title = (app->tabs[i].title[0] != '\0') ? app->tabs[i].title : "Tab";
-        truncate_tab_label_to_px(rp, raw_title, alloc_w[i], disp_title, sizeof(disp_title));
+        while (*raw_title == ' ' || *raw_title == '\t') raw_title++;
+        if (*raw_title == '\0') raw_title = "Tab";
 
-        BOOL has_close = (!s_tabs_compact_close || i == (int)app->active_tab_idx);
+        if (ultra_narrow) {
+            size_t max_c = (avail_bar_w < (n * 38 + 24)) ? 1 : 2;
+            size_t rlen = strlen(raw_title);
+            if (rlen > max_c) rlen = max_c;
+            memcpy(disp_title, raw_title, rlen);
+            disp_title[rlen] = '\0';
+        } else {
+            snprintf(disp_title, sizeof(disp_title), "%s", raw_title);
+        }
+
+        BOOL has_close = (i == (int)app->active_tab_idx);
 
         struct Node *quarantine = NULL;
         struct Node *node = IClickTab->AllocClickTabNode(
@@ -2733,9 +2605,6 @@ static void tabs_build_list(VortexApp *app, struct List *out)
         }
     }
 
-    if (locked_scr && IIntuition) {
-        IIntuition->UnlockPubScreen(NULL, locked_scr);
-    }
     if (app->win) {
         s_last_tabs_win_w = app->win->Width;
     }
@@ -2957,14 +2826,7 @@ static void apply_tab_switch_ui(VortexApp *app, uint16 idx)
     gui_update_url_bar(app, app->tabs[idx].url);
     app_set_status(GetVString(MSG_STATUS_TAB_SWITCH), (int)idx + 1, app->tabs[idx].title);
 
-    if (s_tabs_compact_close) {
-        gui_tabs_rebuild(app);
-    } else if (app->gad_clicktab && app->win) {
-        IIntuition->SetGadgetAttrs((struct Gadget *)app->gad_clicktab, app->win, NULL,
-                                   CLICKTAB_Current, (uint32)idx,
-                                   TAG_DONE);
-        IIntuition->RefreshGList((struct Gadget *)app->gad_clicktab, app->win, NULL, 1);
-    }
+    gui_tabs_rebuild(app);
 }
 
 void gui_tab_switch(VortexApp *app, uint16 idx)
