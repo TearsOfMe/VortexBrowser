@@ -1,4 +1,4 @@
-# VortexBrowser 1.0 – High-Performance Headless Web Browser Streaming System
+# VortexBrowser 1.1 – High-Performance Headless Web Browser Streaming System
 **(Universeller Linux / Windows / macOS Server [AMD/Intel/NVIDIA/Apple Silicon/Raspberry Pi/Docker] $\rightarrow$ AmigaOS 4.1 PowerPC Client)**
 
 [English version below / Zur englischen Version wechseln](#english-version)
@@ -114,7 +114,7 @@ Um die ToolTypes zu bearbeiten:
   # oder direkt: python server.py --no-rustwright
   ```
 * **GPU-Treiber-Freeze unter Linux:** Sollte der Browser bei bestimmten Grafiktreibern einfrieren, hilft ein Start mit `--disable-gpu`.
-* **Schwere Webseiten (z. B. `cnn.com`) / Docker-SHM:** Im Server 1.0 ist das V8-Heap-Limit auf 1536 MB (512 MB auf Low-Power/Pi) angehoben und eine automatische Tab-Crash-Wiederherstellung aktiv. Bei manuellem `docker run` immer `--shm-size=2g` übergeben.
+* **Schwere Webseiten (z. B. `cnn.com`) / Docker-SHM:** Im Server 1.1 ist das V8-Heap-Limit auf 1536 MB (512 MB auf Low-Power/Pi) angehoben und eine automatische Tab-Crash-Wiederherstellung aktiv. Bei manuellem `docker run` immer `--shm-size=2g` übergeben.
 
 ---
 
@@ -161,7 +161,7 @@ docker compose -f docker-compose.macos.yml up -d
 ```
 
 #### 5. Client auf AmigaOS 4.1 starten
-1. Archiv `VortexBrowser-1.0-AmigaOS4.lha` (oder das Komplettpaket `VortexBrowser-1.0-Complete.zip`) auf dem Amiga entpacken (z. B. nach `Work:Internet/VortexBrowser`).
+1. Archiv `VortexBrowser-1.1-AmigaOS4.lha` (oder das Komplettpaket `VortexBrowser-1.1-Complete.zip`) auf dem Amiga entpacken (z. B. nach `Work:Internet/VortexBrowser`).
 2. Doppelklick auf `VortexBrowser` (Universal für alle AmigaOS-4-Systeme) bzw. `VortexBrowser-AltiVec` (für G4 / G5 / AmigaOne X1000).
 3. Server-IP eintragen (oder `Amiga+1` drücken) und auf **Verbinden** klicken.
 
@@ -171,7 +171,7 @@ docker compose -f docker-compose.macos.yml up -d
 <a name="english-version"></a>
 ## English Version
 
-VortexBrowser 1.0 renders modern websites via headless Chromium (Playwright / Rustwright + DirectCDP WebSocket) on a **universal Linux, Windows, or macOS server or Docker container** (with automatic hardware acceleration for AMD Ryzen Vulkan/AMF, Intel QuickSync VA-API/QSV, NVIDIA NVENC, **Apple VideoToolbox**, Windows D3D11, and Raspberry Pi 3/4/5 V3D) and streams compressed video data using **Planar YUV420P + 2D Dirty-Rect + LZ4** or **H.264** to a native **AmigaOS 4.1 PowerPC ReAction client**.
+VortexBrowser 1.1 renders modern websites via headless Chromium (Playwright / Rustwright + DirectCDP WebSocket) on a **universal Linux, Windows, or macOS server or Docker container** (with automatic hardware acceleration for AMD Ryzen Vulkan/AMF, Intel QuickSync VA-API/QSV, NVIDIA NVENC, **Apple VideoToolbox**, Windows D3D11, and Raspberry Pi 3/4/5 V3D) and streams compressed video data using **Planar YUV420P + 2D Dirty-Rect + LZ4** or **H.264** to a native **AmigaOS 4.1 PowerPC ReAction client**.
 
 ---
 
@@ -277,7 +277,7 @@ VortexBrowser supports configuration via standard AmigaOS 4 **ToolTypes** in `.i
   # or directly: python server.py --no-rustwright
   ```
 * **Linux GPU Driver Freeze:** If Chromium freezes on certain GPU drivers, try launching with `--disable-gpu`.
-* **Heavy Websites (e.g. `cnn.com`) / Docker SHM:** Server 1.0 raises the V8 JS heap limit to 1536 MB (512 MB on low-power/Pi) and automatically recovers crashed tabs without dropping the Amiga session. When using `docker run` manually, always pass `--shm-size=2g`.
+* **Heavy Websites (e.g. `cnn.com`) / Docker SHM:** Server 1.1 raises the V8 JS heap limit to 1536 MB (512 MB on low-power/Pi) and automatically recovers crashed tabs without dropping the Amiga session. When using `docker run` manually, always pass `--shm-size=2g`.
 
 ---
 
@@ -324,6 +324,6 @@ docker compose -f docker-compose.macos.yml up -d
 ```
 
 #### 5. Starting the Client on AmigaOS 4.1
-1. Unpack `VortexBrowser-1.0-AmigaOS4.lha` (or the full package `VortexBrowser-1.0-Complete.zip`) on your Amiga (e.g. into `Work:Internet/VortexBrowser`).
+1. Unpack `VortexBrowser-1.1-AmigaOS4.lha` (or the full package `VortexBrowser-1.1-Complete.zip`) on your Amiga (e.g. into `Work:Internet/VortexBrowser`).
 2. Double-click `VortexBrowser` (universal for all AmigaOS 4 machines) or `VortexBrowser-AltiVec` (for G4 / G5 / AmigaOne X1000).
 3. Enter your Linux/Docker server IP (or press `Amiga+1`) and click **Connect**.

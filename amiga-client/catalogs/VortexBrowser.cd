@@ -563,7 +563,7 @@ MSG_ABOUT_ALTIVEC_NO (667//)
 Scalar Baseline (Safe for X5000/A1222+/Sam460/G3)
 ;
 MSG_ABOUT_SEC_SERVER (668//)
-VortexBrowser for AmigaOS 4\nVersion 1.0\n\n=== SERVER INFORMATION ===\nServer Address: %s:%u\nConnection Status: %s\nServer Engine: %s\n\n
+VortexBrowser for AmigaOS 4\nVersion 1.1\n\n=== SERVER INFORMATION ===\nServer Address: %s:%u\nConnection Status: %s\nServer Engine: %s\n\n
 ;
 MSG_ABOUT_SEC_GRAPHICS (669//)
 === RESOLUTION & GRAPHICS ===\nScreen: %ux%u (%u-bit, %s)\nWindow Size: %ux%u (Pos: %d,%d)\nBrowser Viewport: %ux%u px (1:1 Auto-Sync)\nServer Stream: %ux%u (%s)\nDecoded Frames: %u\nActive Language: %s\n\n

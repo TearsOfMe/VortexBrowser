@@ -66,7 +66,7 @@ docker compose -f docker-compose.macos.yml up -d
 
 ### 🪟 Schnellstart & Installation (Windows 10/11 Nativ mit NVENC / AMF / QSV & WASAPI)
 
-1. Entpacken Sie `VortexBrowser-1.0-Server-Windows.zip` (oder wechseln Sie in `server/`) und starten Sie den Installer in PowerShell:
+1. Entpacken Sie `VortexBrowser-1.1-Server-Windows.zip` (oder wechseln Sie in `server/`) und starten Sie den Installer in PowerShell:
    ```powershell
    powershell -ExecutionPolicy Bypass -File .\install_windows.ps1
    ```
@@ -172,7 +172,7 @@ docker compose -f docker-compose.macos.yml up -d
 
 ### 🪟 Quickstart & Native Installation (Windows 10/11 with NVENC / AMF / QSV & WASAPI)
 
-1. Unpack `VortexBrowser-1.0-Server-Windows.zip` (or open PowerShell in `server/`) and run the Windows installer:
+1. Unpack `VortexBrowser-1.1-Server-Windows.zip` (or open PowerShell in `server/`) and run the Windows installer:
    ```powershell
    powershell -ExecutionPolicy Bypass -File .\install_windows.ps1
    ```

@@ -145,7 +145,10 @@ BOOL net_connect(VortexApp *app, const char *host, uint16_t port)
             tv.tv_usec = 0;
             ULONG sigs = SIGBREAKF_CTRL_C;
             LONG sel = ISocket->WaitSelect(sock + 1, NULL, &wfds, NULL, &tv, &sigs);
-            if (sel > 0 && FD_ISSET(sock, &wfds)) {
+            if ((sel >= 0 && (sigs & SIGBREAKF_CTRL_C)) ||
+                (IExec->SetSignal(0, SIGBREAKF_CTRL_C) & SIGBREAKF_CTRL_C)) {
+                app->running = FALSE;
+            } else if (sel > 0 && FD_ISSET(sock, &wfds)) {
                 int so_err = 0;
                 socklen_t so_len = sizeof(so_err);
                 if (ISocket->getsockopt(sock, SOL_SOCKET, SO_ERROR, (APTR)&so_err, &so_len) == 0 && so_err == 0) {
@@ -174,10 +177,11 @@ BOOL net_connect(VortexApp *app, const char *host, uint16_t port)
     app_set_status("Verbunden mit %s:%u - Synchronisiere Viewport...",
                    app->server_host, (unsigned)app->server_port);
 
-    /* Immediately sync Amiga window's space.gadget size or fixed resolution to server */
+    /* Immediately sync Amiga window's space.gadget size or fixed resolution to server.
+     * Note: caller invokes net_sync_tabs() right after net_connect() so saved tabs are
+     * sent immediately without triggering a premature startpage/refresh race. */
     prefs_apply(app);
     renderer_sync_viewport_size(app);
-    net_send_url(app, "@REFRESH");
 
     return TRUE;
 }
@@ -193,11 +197,7 @@ void net_disconnect(VortexApp *app)
 
 static const char *format_nav_url_title(const char *raw_url, const char *raw_title, char *clean_title, size_t clean_title_cap)
 {
-    BOOL is_portal = (!raw_url ||
-                      strncmp(raw_url, "http://127.0.0.1:", 17) == 0 ||
-                      strncmp(raw_url, "http://localhost:", 17) == 0 ||
-                      strncmp(raw_url, "about:", 6) == 0 ||
-                      raw_url[0] == '\0' || raw_url[0] == '@');
+    BOOL is_portal = prefs_is_startpage_url(raw_url);
     const char *clean_url = is_portal ? "" : raw_url;
 
     if (is_portal) {
@@ -266,7 +266,7 @@ BOOL net_handle_incoming(VortexApp *app)
                 return FALSE;
             }
 
-            if (renderer_decode_and_present(app, &hdr, r->lz4_comp_buf, payload_len)) {
+            if (!app->is_iconified && renderer_decode_and_present(app, &hdr, r->lz4_comp_buf, payload_len)) {
                 if (r->frames_decoded == 1) {
                     /* Immediately flush first frame to screen RastPort and refresh space gadget */
                     renderer_flush_dirty(app);
@@ -391,6 +391,15 @@ BOOL net_handle_incoming(VortexApp *app)
 
             char clean_title[64];
             const char *clean_url = format_nav_url_title(nav.url, nav.title, clean_title, sizeof(clean_title));
+
+            /* While a saved tab is restoring its real URL, ignore any transient startpage/blank
+             * update from the server so the startpage never replaces a restored tab. */
+            if (tidx < VB_MAX_TABS && (app->restore_tab_mask & (1UL << tidx))) {
+                if (clean_url[0] == '\0') {
+                    break;
+                }
+                app->restore_tab_mask &= ~(1UL << tidx);
+            }
 
             /* Update specific tab URL & title so each tab stays completely in sync */
             if (tidx < app->num_tabs) {
@@ -807,31 +816,43 @@ void net_sync_tabs(VortexApp *app)
 {
     if (!app || !app->connected || app->sock_fd < 0) return;
 
+    app->restore_tab_mask = 0;
+
     if (app->num_tabs == 0) {
-        const char *su = (app->current_url[0] && app->current_url[0] != '@') ? app->current_url : "@HOME";
+        const char *su = !prefs_is_startpage_url(app->current_url) ? app->current_url : "@HOME";
         gui_update_url_bar(app, (su[0] != '@') ? su : "");
         net_send_url(app, su);
         return;
     }
 
+    /* Mark every tab with a real saved URL so stray startpage updates cannot overwrite it */
+    for (int i = 0; i < app->num_tabs && i < VB_MAX_TABS; i++) {
+        if (!prefs_is_startpage_url(app->tabs[i].url)) {
+            app->restore_tab_mask |= (1UL << i);
+        }
+    }
+
     /* Tab 0 is the initial tab created on server connect */
-    const char *u0 = (app->tabs[0].url[0] && app->tabs[0].url[0] != '@') ? app->tabs[0].url : "@HOME";
+    const char *u0 = !prefs_is_startpage_url(app->tabs[0].url) ? app->tabs[0].url : "@HOME";
     net_send_url(app, u0);
 
     /* Open additional restored tabs on the server */
     for (int i = 1; i < app->num_tabs; i++) {
-        const char *ui = (app->tabs[i].url[0] && app->tabs[i].url[0] != '@') ? app->tabs[i].url : "@HOME";
+        const char *ui = !prefs_is_startpage_url(app->tabs[i].url) ? app->tabs[i].url : "@HOME";
         char cmd[VB_MAX_URL_LEN + 16];
         snprintf(cmd, sizeof(cmd), "@NEWTAB:%s", ui);
         net_send_url(app, cmd);
     }
 
-    /* Switch remote server to the active tab */
+    /* Switch remote server to the active tab (only needed if multiple tabs exist) */
     if (app->active_tab_idx < app->num_tabs) {
-        char cmd[32];
-        snprintf(cmd, sizeof(cmd), "@SWITCHTAB:%u", (unsigned)app->active_tab_idx);
-        net_send_url(app, cmd);
-        gui_update_url_bar(app, app->tabs[app->active_tab_idx].url);
+        if (app->num_tabs > 1) {
+            char cmd[32];
+            snprintf(cmd, sizeof(cmd), "@SWITCHTAB:%u", (unsigned)app->active_tab_idx);
+            net_send_url(app, cmd);
+        }
+        const char *act_u = app->tabs[app->active_tab_idx].url;
+        gui_update_url_bar(app, !prefs_is_startpage_url(act_u) ? act_u : "");
     }
 }
 

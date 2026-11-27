@@ -1540,7 +1540,12 @@ void gui_prefs_open(VortexApp *app)
     uint32 sigmask = 0;
     while (!done) {
         IIntuition->GetAttr(WINDOW_SigMask, win_obj, &sigmask);
-        IExec->Wait(sigmask | SIGBREAKF_CTRL_C);
+        uint32 got_sigs = IExec->Wait(sigmask | SIGBREAKF_CTRL_C);
+        if (got_sigs & SIGBREAKF_CTRL_C) {
+            done = TRUE;
+            app->running = FALSE;
+            break;
+        }
 
         uint32 res;
         int16 code = 0;

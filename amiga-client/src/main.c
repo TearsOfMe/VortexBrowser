@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
 
 #include <proto/exec.h>
 #include <proto/dos.h>
@@ -12,7 +13,11 @@
 #include <proto/chooser.h>
 #include <proto/popupmenu.h>
 #include <proto/listbrowser.h>
+#include <proto/application.h>
+#include <proto/commodities.h>
 #include <gadgets/listbrowser.h>
+#include <libraries/application.h>
+#include <libraries/commodities.h>
 
 #include <sys/select.h>
 #include <sys/time.h>
@@ -21,6 +26,7 @@
 #include "app.h"
 #include "prefs.h"
 #include "gui.h"
+#include "gui_prefs.h"
 #include "net.h"
 #include "renderer.h"
 #include "favorites.h"
@@ -30,17 +36,21 @@
 #include "passwords.h"
 #include "locale_strings.h"
 
-static const char *used_verstag __attribute__((used)) = "\0$VER: VortexBrowser 1.0 (22.11.2026)";
+static const char *used_verstag __attribute__((used)) = "\0$VER: VortexBrowser 1.1 (27.11.2026)";
 static const char *used_stack   __attribute__((used)) = "\0$STACK:524288";
 uint32 __stack = 524288;
 
 VortexApp g_app;
 
 /* Explicitly managed libraries & interfaces (in addition to newlib auto-init) */
-struct Library        *SocketBase    = NULL;
-struct SocketIFace    *ISocket       = NULL;
-struct Library        *PopupMenuBase = NULL;
-struct PopupMenuIFace *IPopupMenu    = NULL;
+struct Library          *SocketBase      = NULL;
+struct SocketIFace      *ISocket         = NULL;
+struct Library          *PopupMenuBase   = NULL;
+struct PopupMenuIFace   *IPopupMenu      = NULL;
+struct Library          *ApplicationBase = NULL;
+struct ApplicationIFace *IApplication    = NULL;
+struct Library          *CxBase          = NULL;
+struct CommoditiesIFace *ICommodities    = NULL;
 
 static struct ClassLibrary *s_WindowBase        = NULL;
 static struct ClassLibrary *s_LayoutBase        = NULL;
@@ -71,6 +81,12 @@ static BOOL open_libs_and_classes(void)
         DBG_LOG("[Main] ERROR: Could not obtain ISocket interface!\n");
         return FALSE;
     }
+
+    /* Disable bsdsocket's default CTRL-C break mask so WaitSelect() delivers
+     * SIGBREAKF_CTRL_C cleanly via the user signal mask instead of returning
+     * -1 (EINTR) with undefined sigs and leaving SIGBREAKF_CTRL_C posted.
+     */
+    ISocket->SocketBaseTags(SBTM_SETVAL(SBTC_BREAKMASK), 0, TAG_DONE);
 
     Class *dummy = NULL;
     s_WindowBase    = IIntuition->OpenClass("window.class", 53, &dummy);
@@ -127,6 +143,27 @@ static BOOL open_libs_and_classes(void)
         IPopupMenu = (struct PopupMenuIFace *)IExec->GetInterface(PopupMenuBase, "main", 1, NULL);
     }
 
+    ApplicationBase = IExec->OpenLibrary("application.library", 53);
+    if (ApplicationBase) {
+        IApplication = (struct ApplicationIFace *)IExec->GetInterface(
+            ApplicationBase, "application", 2, NULL);
+        if (!IApplication) {
+            DBG_LOG("[Main] WARNING: Could not obtain application.library v2 interface\n");
+            IExec->CloseLibrary(ApplicationBase);
+            ApplicationBase = NULL;
+        }
+    }
+
+    CxBase = IExec->OpenLibrary("commodities.library", 37);
+    if (CxBase) {
+        ICommodities = (struct CommoditiesIFace *)IExec->GetInterface(
+            CxBase, "main", 1, NULL);
+        if (!ICommodities) {
+            IExec->CloseLibrary(CxBase);
+            CxBase = NULL;
+        }
+    }
+
     return TRUE;
 }
 
@@ -173,14 +210,30 @@ static void close_libs_and_classes(void)
         IExec->DropInterface((struct Interface *)IChooser);
         IChooser = NULL;
     }
-    if (s_FuelGaugeBase) IIntuition->CloseClass(s_FuelGaugeBase);
-    if (s_ChooserBase)   IIntuition->CloseClass(s_ChooserBase);
-    if (s_SpaceBase)     IIntuition->CloseClass(s_SpaceBase);
-    if (s_StringBase)    IIntuition->CloseClass(s_StringBase);
-    if (s_ButtonBase)    IIntuition->CloseClass(s_ButtonBase);
-    if (s_LayoutBase)    IIntuition->CloseClass(s_LayoutBase);
-    if (s_WindowBase)    IIntuition->CloseClass(s_WindowBase);
+    if (s_FuelGaugeBase) { IIntuition->CloseClass(s_FuelGaugeBase); s_FuelGaugeBase = NULL; }
+    if (s_ChooserBase)   { IIntuition->CloseClass(s_ChooserBase);   s_ChooserBase   = NULL; }
+    if (s_SpaceBase)     { IIntuition->CloseClass(s_SpaceBase);     s_SpaceBase     = NULL; }
+    if (s_StringBase)    { IIntuition->CloseClass(s_StringBase);    s_StringBase    = NULL; }
+    if (s_ButtonBase)    { IIntuition->CloseClass(s_ButtonBase);    s_ButtonBase    = NULL; }
+    if (s_LayoutBase)    { IIntuition->CloseClass(s_LayoutBase);    s_LayoutBase    = NULL; }
+    if (s_WindowBase)    { IIntuition->CloseClass(s_WindowBase);    s_WindowBase    = NULL; }
 
+    if (ICommodities) {
+        IExec->DropInterface((struct Interface *)ICommodities);
+        ICommodities = NULL;
+    }
+    if (CxBase) {
+        IExec->CloseLibrary(CxBase);
+        CxBase = NULL;
+    }
+    if (IApplication) {
+        IExec->DropInterface((struct Interface *)IApplication);
+        IApplication = NULL;
+    }
+    if (ApplicationBase) {
+        IExec->CloseLibrary(ApplicationBase);
+        ApplicationBase = NULL;
+    }
     if (ISocket) {
         IExec->DropInterface((struct Interface *)ISocket);
         ISocket = NULL;
@@ -188,6 +241,208 @@ static void close_libs_and_classes(void)
     if (SocketBase) {
         IExec->CloseLibrary(SocketBase);
         SocketBase = NULL;
+    }
+}
+
+void app_sync_hidden_state(VortexApp *app, BOOL hidden)
+{
+    if (app && app->applib_id && IApplication) {
+        IApplication->SetApplicationAttrs(app->applib_id,
+            APPATTR_Hidden, hidden ? TRUE : FALSE,
+            TAG_DONE);
+    }
+}
+
+static void app_os4_register(VortexApp *app, int argc, char **argv)
+{
+    if (!app) return;
+
+    if (IApplication) {
+        app->applib_id = IApplication->RegisterApplication("VortexBrowser",
+            REGAPP_URLIdentifier,     (Tag)"vortexbrowser.amiga",
+            REGAPP_Description,       (Tag)"Remote-rendered Web Browser for AmigaOS 4",
+            REGAPP_UniqueApplication, FALSE,
+            REGAPP_HasIconifyFeature, TRUE,
+            REGAPP_HasPrefsWindow,    TRUE,
+            REGAPP_NoIcon,            FALSE,
+            REGAPP_Hidden,            FALSE,
+            (argc == 0) ? REGAPP_WBStartup : REGAPP_FileName,
+            (argc == 0) ? (Tag)argv : (Tag)argv[0],
+            TAG_DONE);
+        if (app->applib_id) {
+            IApplication->GetApplicationAttrs(app->applib_id,
+                APPATTR_Port, (Tag)&app->applib_port,
+                TAG_DONE);
+        }
+    }
+
+    if (ICommodities) {
+        app->cx_port = (struct MsgPort *)IExec->AllocSysObjectTags(ASOT_PORT, TAG_DONE);
+        if (app->cx_port) {
+            struct NewBroker nb;
+            memset(&nb, 0, sizeof(nb));
+            nb.nb_Version = NB_VERSION;
+            nb.nb_Name    = (STRPTR)"VortexBrowser";
+            nb.nb_Title   = (STRPTR)"VortexBrowser 1.1";
+            nb.nb_Descr   = (STRPTR)"Remote-rendered Web Browser for AmigaOS 4";
+            nb.nb_Unique  = 0;
+            nb.nb_Flags   = COF_SHOW_HIDE;
+            nb.nb_Pri     = 0;
+            nb.nb_Port    = app->cx_port;
+            int32 cx_err  = 0;
+            app->cx_broker = (APTR)ICommodities->CxBroker(&nb, &cx_err);
+            if (app->cx_broker) {
+                ICommodities->ActivateCxObj((CxObj *)app->cx_broker, TRUE);
+            } else {
+                IExec->FreeSysObject(ASOT_PORT, app->cx_port);
+                app->cx_port = NULL;
+            }
+        }
+    }
+}
+
+static void app_os4_handle_messages(VortexApp *app)
+{
+    if (!app) return;
+
+    if (IApplication && app->applib_port) {
+        struct Message *msg;
+        while ((msg = IExec->GetMsg(app->applib_port)) != NULL) {
+            struct ApplicationMsg *amsg = (struct ApplicationMsg *)msg;
+            uint32 mtype = amsg->type;
+            IExec->ReplyMsg(msg);
+            switch (mtype) {
+                case APPLIBMT_Quit:
+                case APPLIBMT_ForceQuit:
+                    app->running = FALSE;
+                    break;
+                case APPLIBMT_Hide:
+                    app->iconify_needed = TRUE;
+                    break;
+                case APPLIBMT_Unhide:
+                    app->uniconify_needed = TRUE;
+                    break;
+                case APPLIBMT_ToFront:
+                case APPLIBMT_Unique:
+                    if (app->is_iconified) {
+                        app->uniconify_needed = TRUE;
+                    } else {
+                        app->to_front_needed = TRUE;
+                    }
+                    break;
+                case APPLIBMT_OpenPrefs:
+                    app->open_prefs_needed = TRUE;
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+
+    if (ICommodities && app->cx_port) {
+        struct Message *msg;
+        while ((msg = IExec->GetMsg(app->cx_port)) != NULL) {
+            CxMsg *cxm = (CxMsg *)msg;
+            uint32 mtype = ICommodities->CxMsgType(cxm);
+            int32  mid   = ICommodities->CxMsgID(cxm);
+            IExec->ReplyMsg(msg);
+            if (mtype == CXM_COMMAND) {
+                switch (mid) {
+                    case CXCMD_DISAPPEAR:
+                        app->iconify_needed = TRUE;
+                        break;
+                    case CXCMD_APPEAR:
+                    case CXCMD_UNIQUE:
+                        if (app->is_iconified) {
+                            app->uniconify_needed = TRUE;
+                        } else {
+                            app->to_front_needed = TRUE;
+                        }
+                        break;
+                    case CXCMD_KILL:
+                        app->running = FALSE;
+                        break;
+                    case CXCMD_ENABLE:
+                        if (app->cx_broker) {
+                            ICommodities->ActivateCxObj((CxObj *)app->cx_broker, TRUE);
+                        }
+                        break;
+                    case CXCMD_DISABLE:
+                        if (app->cx_broker) {
+                            ICommodities->ActivateCxObj((CxObj *)app->cx_broker, FALSE);
+                        }
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+    }
+}
+
+static void app_os4_unregister(VortexApp *app)
+{
+    if (!app) return;
+
+    if (app->cx_broker && ICommodities) {
+        ICommodities->DeleteCxObjAll((CxObj *)app->cx_broker);
+        app->cx_broker = NULL;
+    }
+    if (app->cx_port) {
+        struct Message *msg;
+        while ((msg = IExec->GetMsg(app->cx_port)) != NULL) {
+            IExec->ReplyMsg(msg);
+        }
+        IExec->FreeSysObject(ASOT_PORT, app->cx_port);
+        app->cx_port = NULL;
+    }
+    if (app->applib_id && IApplication) {
+        if (app->applib_port) {
+            struct Message *msg;
+            while ((msg = IExec->GetMsg(app->applib_port)) != NULL) {
+                IExec->ReplyMsg(msg);
+            }
+        }
+        IApplication->UnregisterApplication(app->applib_id,
+            UNREGAPP_WaitForUnlock, TRUE,
+            TAG_DONE);
+        app->applib_id   = 0;
+        app->applib_port = NULL;
+    }
+}
+
+static void process_deferred_gui_actions(VortexApp *app)
+{
+    if (!app || !app->running) return;
+
+    if (app->iconify_needed) {
+        app->iconify_needed = FALSE;
+        gui_iconify(app);
+    }
+    if (app->uniconify_needed && app->running) {
+        app->uniconify_needed = FALSE;
+        gui_uniconify(app);
+    }
+    if (app->to_front_needed && app->running) {
+        app->to_front_needed = FALSE;
+        gui_to_front(app);
+    }
+    if (app->open_prefs_needed && app->running) {
+        app->open_prefs_needed = FALSE;
+        if (app->is_iconified) {
+            gui_uniconify(app);
+        }
+        if (app->win) {
+            gui_prefs_open(app);
+        }
+    }
+    if (app->reopen_screen_needed && app->running) {
+        app->reopen_screen_needed = FALSE;
+        app->reopen_gui_needed    = FALSE;
+        gui_reopen_screen(app);
+    } else if (app->reopen_gui_needed && app->running) {
+        app->reopen_gui_needed = FALSE;
+        gui_rebuild_window(app);
     }
 }
 
@@ -244,6 +499,12 @@ static void run_autotest_step(VortexApp *app)
 
 int main(int argc, char **argv)
 {
+    /* Prevent newlib from aborting out of main() via SIGINT/exit() on CTRL-C,
+     * which would bypass AmigaOS library/socket/AHI/GUI teardown and trigger
+     * a bsdsocket/newlib exit DSI. We handle SIGBREAKF_CTRL_C cleanly ourselves.
+     */
+    signal(SIGINT, SIG_IGN);
+
     /* If launched from Workbench (argc == 0), silence stdio to prevent
      * AmigaOS / newlib from auto-opening a console window ("CON:")
      */
@@ -346,9 +607,12 @@ int main(int argc, char **argv)
 
     if (!gui_init(&g_app)) {
         gui_cleanup(&g_app);
+        passwords_cleanup(&g_app);
+        download_cleanup(&g_app);
+        clipboard_cleanup();
         audio_cleanup(&g_app);
         renderer_cleanup(&g_app);
-        download_cleanup(&g_app);
+        locale_close_catalog();
         close_libs_and_classes();
         return 1;
     }
@@ -356,6 +620,7 @@ int main(int argc, char **argv)
     /* Rebuild chooser labels now that gad_fav_chooser exists */
     favorites_rebuild_chooser_list(&g_app);
     prefs_apply(&g_app);
+    app_os4_register(&g_app, argc, argv);
     gui_handle_events(&g_app);
 
     /* Set initial status bar message with active streaming system */
@@ -368,8 +633,6 @@ int main(int argc, char **argv)
         if (net_connect(&g_app, g_app.server_host, g_app.server_port)) {
             app_set_status(GetVString(MSG_STATUS_CONNECTED_STREAM),
                            g_app.server_host, (unsigned)g_app.server_port, sm_label, (unsigned)g_app.prefs.video_bitrate_k);
-            renderer_sync_viewport_size(&g_app);
-            net_send_url(&g_app, "@REFRESH");
             net_sync_tabs(&g_app);
         }
     } else {
@@ -378,19 +641,15 @@ int main(int argc, char **argv)
     }
 
     /* Main Multiplexed Event Loop (bsdsocket WaitSelect + Reaction WINDOW_SigMask) */
+    int iconify_poll_ticks = 0;
     while (g_app.running) {
-        /* Drain any pending Intuition/Reaction events first */
+        /* Drain any pending Intuition/Reaction/Application/Commodity events first */
         gui_handle_events(&g_app);
-        if (g_app.reopen_screen_needed && g_app.running) {
-            g_app.reopen_screen_needed = FALSE;
-            g_app.reopen_gui_needed    = FALSE;
-            gui_reopen_screen(&g_app);
-        } else if (g_app.reopen_gui_needed && g_app.running) {
-            g_app.reopen_gui_needed = FALSE;
-            gui_rebuild_window(&g_app);
-        }
+        app_os4_handle_messages(&g_app);
+        process_deferred_gui_actions(&g_app);
+
         /* Send debounced/throttled mouse move to remote browser outside the IDCMP input task */
-        if (g_app.connected && g_app.pending_mouse_move) {
+        if (g_app.connected && !g_app.is_iconified && g_app.pending_mouse_move) {
             int16_t rx = 0, ry = 0;
             BOOL in_vp = renderer_map_window_to_remote(&g_app, g_app.pending_win_mouse_x, g_app.pending_win_mouse_y, &rx, &ry);
             if (in_vp || (g_app.mouse_lmb_down && g_app.cached_space_box.Width > 0)) {
@@ -421,12 +680,12 @@ int main(int argc, char **argv)
         }
 
         /* Flush debounced viewport @RESIZE once rate-limit interval elapses */
-        if (g_app.connected && g_app.renderer.resize_pending) {
+        if (g_app.connected && !g_app.is_iconified && g_app.renderer.resize_pending) {
             renderer_sync_viewport_size(&g_app);
         }
 
         /* If a frame is dirty or waiting to be blitted, flush it now */
-        if (g_app.renderer.dirty && g_app.renderer.has_frame) {
+        if (!g_app.is_iconified && g_app.renderer.dirty && g_app.renderer.has_frame) {
             renderer_flush_dirty(&g_app);
         }
         audio_poll(&g_app);
@@ -440,6 +699,7 @@ int main(int argc, char **argv)
         uint32 win_sig   = gui_get_signal_mask(&g_app);
         uint32 audio_sig = audio_get_signal_mask(&g_app);
         ULONG  sigs      = win_sig | audio_sig | SIGBREAKF_CTRL_C;
+        LONG   sel       = 0;
 
         if (g_app.connected && g_app.sock_fd >= 0) {
             fd_set rfds;
@@ -450,7 +710,7 @@ int main(int argc, char **argv)
             tv.tv_sec  = 0;
             tv.tv_usec = 20000; /* 20ms tick for low-latency audio & video */
 
-            LONG sel = ISocket->WaitSelect(g_app.sock_fd + 1, &rfds, NULL, NULL, &tv, &sigs);
+            sel = ISocket->WaitSelect(g_app.sock_fd + 1, &rfds, NULL, NULL, &tv, &sigs);
 
             if (sel > 0 && g_app.sock_fd >= 0 && FD_ISSET(g_app.sock_fd, &rfds)) {
                 uint32_t prev_frames = g_app.renderer.frames_decoded;
@@ -470,16 +730,29 @@ int main(int argc, char **argv)
             struct timeval tv_idle;
             tv_idle.tv_sec  = 0;
             tv_idle.tv_usec = 100000; /* 100ms idle tick */
-            ISocket->WaitSelect(0, NULL, NULL, NULL, &tv_idle, &sigs);
+            sel = ISocket->WaitSelect(0, NULL, NULL, NULL, &tv_idle, &sigs);
         }
 
-        if (sigs & SIGBREAKF_CTRL_C) {
+        /* Note: If WaitSelect returns -1 (EINTR), *sigs is undefined and
+         * SIGBREAKF_CTRL_C may remain posted on the task; always clear it.
+         */
+        BOOL got_ctrl_c = ((sel >= 0 && (sigs & SIGBREAKF_CTRL_C)) ||
+                           (IExec->SetSignal(0, SIGBREAKF_CTRL_C) & SIGBREAKF_CTRL_C)) ? TRUE : FALSE;
+        if (got_ctrl_c) {
             DBG_LOG("[Main] CTRL-C received, exiting.\n");
             g_app.running = FALSE;
+            break;
         }
 
-        /* Always drain GUI events and reap AHI audio after WaitSelect */
+        /* Always drain GUI, Application, Commodity events and reap AHI audio after WaitSelect */
         gui_handle_events(&g_app);
+        app_os4_handle_messages(&g_app);
+        process_deferred_gui_actions(&g_app);
+        if (g_app.is_iconified && g_app.custom_screen != NULL) {
+            if ((++iconify_poll_ticks % 10) == 0) {
+                gui_try_close_pending_screen(&g_app);
+            }
+        }
         audio_poll(&g_app);
 
         if (g_app.autotest) {
@@ -487,12 +760,20 @@ int main(int argc, char **argv)
         }
     }
 
-    const char *last_u = (g_app.current_url[0] && g_app.current_url[0] != '@') ? g_app.current_url :
-                         (g_app.num_tabs > 0 && g_app.tabs[g_app.active_tab_idx].url[0] && g_app.tabs[g_app.active_tab_idx].url[0] != '@') ?
+    /* Clear any pending break signal before shutdown file I/O (prefs_save) */
+    IExec->SetSignal(0, SIGBREAKF_CTRL_C);
+
+    const char *last_u = !prefs_is_startpage_url(g_app.current_url) ? g_app.current_url :
+                         (g_app.num_tabs > 0 && !prefs_is_startpage_url(g_app.tabs[g_app.active_tab_idx].url)) ?
                          g_app.tabs[g_app.active_tab_idx].url : NULL;
-    if (g_app.prefs.save_last_url && last_u) {
-        strncpy(g_app.prefs.start_url, last_u, sizeof(g_app.prefs.start_url) - 1);
-        g_app.prefs.start_url[sizeof(g_app.prefs.start_url) - 1] = '\0';
+    if (g_app.prefs.save_last_url) {
+        if (last_u) {
+            strncpy(g_app.prefs.start_url, last_u, sizeof(g_app.prefs.start_url) - 1);
+            g_app.prefs.start_url[sizeof(g_app.prefs.start_url) - 1] = '\0';
+        } else {
+            strncpy(g_app.prefs.start_url, "@HOME", sizeof(g_app.prefs.start_url) - 1);
+            g_app.prefs.start_url[sizeof(g_app.prefs.start_url) - 1] = '\0';
+        }
     }
 
     prefs_capture_tabs(&g_app);
@@ -506,6 +787,7 @@ int main(int argc, char **argv)
     clipboard_cleanup();
     download_cleanup(&g_app);
     passwords_cleanup(&g_app);
+    app_os4_unregister(&g_app);
     gui_cleanup(&g_app);
     renderer_cleanup(&g_app);
     locale_close_catalog();

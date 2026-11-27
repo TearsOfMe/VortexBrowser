@@ -35,6 +35,7 @@ LDFLAGS = -L../sdk_va -L$(SDK)/local/newlib/lib -lavcodec -lavutil -lva -llz4 -l
 
 SRCS_COMMON = src/net.c src/renderer.c src/favorites.c src/download.c src/audio.c src/prefs.c src/clipboard.c src/passwords.c src/locale_strings.c
 SRCS_ALL    = src/main.c src/gui.c src/gui_prefs.c src/gui_passwords.c src/gui_download.c $(SRCS_COMMON)
+HDRS_ALL    = $(wildcard src/*.h ../common/*.h)
 
 # Universal objects (Hybrid: scalar app code + isolated AltiVec SIMD unit for dynamic dispatch)
 OBJS_UNIVERSAL = $(SRCS_ALL:.c=.o) src/renderer_altivec.o
@@ -64,16 +65,16 @@ $(TARGET_UNIVERSAL): $(OBJS_UNIVERSAL)
 	$(CC) $(OBJS_UNIVERSAL) -o $(TARGET_UNIVERSAL) $(LDFLAGS)
 	$(STRIP) -s -R.comment -R.note $(TARGET_UNIVERSAL) -o $(TARGET_UNIVERSAL).stripped
 
-src/renderer_altivec.o: src/renderer_altivec.c src/renderer_altivec.h
+src/renderer_altivec.o: src/renderer_altivec.c src/renderer_altivec.h $(HDRS_ALL)
 	$(CC) $(CFLAGS_ALTIVEC) -c $< -o $@
 
-src/%.o: src/%.c
+src/%.o: src/%.c $(HDRS_ALL)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(OBJS_ALTIVEC_DIR):
 	mkdir -p $(OBJS_ALTIVEC_DIR)
 
-$(OBJS_ALTIVEC_DIR)/%.o: src/%.c | $(OBJS_ALTIVEC_DIR)
+$(OBJS_ALTIVEC_DIR)/%.o: src/%.c $(HDRS_ALL) | $(OBJS_ALTIVEC_DIR)
 	$(CC) $(CFLAGS_ALTIVEC) -c $< -o $@
 
 $(TARGET_ALTIVEC): $(OBJS_PURE_ALTIVEC)

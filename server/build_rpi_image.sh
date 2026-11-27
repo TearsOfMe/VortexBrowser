@@ -279,7 +279,7 @@ mount --bind /dev /mnt/rpi/dev
 mount --bind /dev/pts /mnt/rpi/dev/pts
 
 # Sync latest server sources into cached rootfs (preserving browser_bin.txt and .venv)
-for fname in server.py fast_pixconv.c run_server.sh install_server.sh README.md darkreader.js requirements.txt; do
+for fname in server.py startpage.html fast_pixconv.c run_server.sh install_server.sh README.md darkreader.js requirements.txt; do
     if [ -f "/src_server/${fname}" ]; then
         cp -f "/src_server/${fname}" "/mnt/rpi/home/pi/vortexbrowse/server/${fname}"
     fi

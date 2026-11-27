@@ -46,8 +46,9 @@ import urllib.request
 
 _IS_WINDOWS: bool = (platform.system() == "Windows")
 _SUBPROC_NO_WINDOW: int = getattr(subprocess, "CREATE_NO_WINDOW", 0) if _IS_WINDOWS else 0
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
-from urllib.parse import parse_qs, quote_plus, unquote, urlencode, urlparse
+from urllib.parse import parse_qs, quote_plus, unquote, urlencode, urljoin, urlparse
 
 import json
 import lz4.block
@@ -530,7 +531,7 @@ class SilentTabAudioBridge:
         manifest = {
             "manifest_version": 3,
             "name": "VortexBrowser Silent Audio Bridge",
-            "version": "1.0.0",
+            "version": "1.1.0",
             "key": _VORTEX_AUDIO_EXT_PUBKEY_B64,
             "permissions": ["tabCapture", "offscreen", "tabs"],
             "background": {"service_worker": "sw.js"},
@@ -1165,654 +1166,53 @@ except Exception as exc:
 # ============================================================================
 # Built-in Local Portal & Test HTTP Server
 # ============================================================================
-PORTAL_HTML = """<!DOCTYPE html>
+DEFAULT_STARTPAGE_HTML = """<!DOCTYPE html>
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<title>VortexBrowser - AmigaOS 4 Startseite &amp; Schnellwahl</title>
+<title>VortexBrowser - Startseite</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: 'DejaVu Sans', 'Liberation Sans', Arial, Helvetica, sans-serif;
-    background: linear-gradient(180deg, #e6eaf0 0%, #d3dae4 100%);
-    color: #1e293b;
-    min-height: 100vh;
-    padding: 14px 20px 22px 20px;
-  }
-  .header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: linear-gradient(180deg, #375375 0%, #20354f 100%);
-    border: 1px solid #1a2c42;
-    border-radius: 6px;
-    padding: 10px 16px;
-    margin-bottom: 12px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.18);
-  }
-  .title-box h1 {
-    font-size: 19px;
-    color: #ffffff;
-    letter-spacing: 0.4px;
-    text-shadow: 1px 1px 2px #0f172a;
-  }
-  .title-box p {
-    font-size: 11.5px;
-    color: #cbd5e1;
-    margin-top: 2px;
-  }
-  .badge {
-    background: linear-gradient(180deg, #dc2626 0%, #991b1b 100%);
-    border: 1px solid #ef4444;
-    color: #ffffff;
-    padding: 5px 12px;
-    border-radius: 4px;
-    font-weight: bold;
-    font-size: 11px;
-    letter-spacing: 0.5px;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.3);
-    white-space: nowrap;
-  }
-  .search-wrap {
-    margin-bottom: 14px;
-    background: #f8fafc;
-    border: 1px solid #94a3b8;
-    border-radius: 6px;
-    padding: 7px;
-    box-shadow: inset 0 1px 3px rgba(0,0,0,0.12);
-  }
-  .engine-pills {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-    margin-bottom: 6px;
-  }
-  .engine-pill {
-    padding: 4px 10px;
-    border-radius: 4px;
-    border: 1px solid #94a3b8;
-    background: #e2e8f0;
-    color: #1e293b;
-    font-size: 11.5px;
-    font-weight: bold;
-    cursor: pointer;
-  }
-  .engine-pill:hover { background: #cbd5e1; }
-  .engine-pill.active {
-    background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
-    border-color: #1e40af;
-    color: #ffffff;
-  }
-  .search-bar {
-    display: flex;
-    gap: 8px;
-  }
-  .search-bar input {
-    flex: 1;
-    padding: 8px 12px;
-    border-radius: 4px;
-    border: 1px solid #cbd5e1;
-    background: #ffffff;
-    color: #0f172a;
-    font-size: 13.5px;
-  }
-  .search-bar input:focus {
-    outline: none;
-    border-color: #2563eb;
-    box-shadow: 0 0 0 2px rgba(37,99,235,0.25);
-  }
-  .btn-search, .btn-action {
-    padding: 6px 13px;
-    border-radius: 4px;
-    border: 1px solid #64748b;
-    background: linear-gradient(180deg, #f1f5f9 0%, #cbd5e1 100%);
-    color: #0f172a;
-    font-weight: bold;
-    font-size: 12px;
-    cursor: pointer;
-    text-decoration: none;
-    display: inline-block;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.12);
-  }
-  .btn-search { padding: 8px 16px; font-size: 13px; }
-  .btn-search:hover, .btn-action:hover {
-    background: linear-gradient(180deg, #ffffff 0%, #e2e8f0 100%);
-    border-color: #475569;
-  }
-  .btn-search:active, .btn-action:active {
-    background: #cbd5e1;
-    box-shadow: inset 0 1px 3px rgba(0,0,0,0.25);
-  }
-  .section-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin: 14px 0 8px 0;
-    padding: 4px 10px;
-    background: #cbd5e1;
-    border-left: 4px solid #20354f;
-    border-radius: 4px;
-  }
-  .section-head h2 {
-    font-size: 13px;
-    font-weight: bold;
-    color: #0f172a;
-    letter-spacing: 0.3px;
-  }
-  .section-head .lang-tag {
-    font-size: 10.5px;
-    font-weight: bold;
-    color: #334155;
-    background: #e2e8f0;
-    padding: 2px 7px;
-    border-radius: 3px;
-    border: 1px solid #94a3b8;
-  }
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
-    margin-bottom: 10px;
-  }
-  @media (max-width: 820px) {
-    .grid { grid-template-columns: repeat(2, 1fr); }
-  }
-  .card {
-    background: #ffffff;
-    border: 1px solid #94a3b8;
-    border-radius: 6px;
-    overflow: hidden;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.08);
-    display: flex;
-    flex-direction: column;
-  }
-  .card-top { height: 4px; }
-  .card-top-blue   { background: #2563eb; }
-  .card-top-orange { background: #ea580c; }
-  .card-top-red    { background: #dc2626; }
-  .card-top-teal   { background: #0d9488; }
-  .card-top-green  { background: #16a34a; }
-  .card-top-purple { background: #7c3aed; }
-  .card-top-amber  { background: #d97706; }
-  .card-top-slate  { background: #475569; }
-  .card-body {
-    padding: 9px 12px;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-  }
-  .card-body h3 {
-    color: #1e3a8a;
-    font-size: 14px;
-    margin-bottom: 3px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 6px;
-  }
-  .badge-lang {
-    font-size: 10px;
-    font-weight: bold;
-    padding: 1px 5px;
-    border-radius: 3px;
-    background: #e2e8f0;
-    color: #334155;
-    border: 1px solid #cbd5e1;
-  }
-  .card-body p {
-    color: #475569;
-    font-size: 11.5px;
-    margin-bottom: 8px;
-    line-height: 1.35;
-  }
-  .card-action {
-    display: flex;
-    justify-content: flex-end;
-    gap: 6px;
-  }
-  .dl-strip {
-    background: #ffffff;
-    border: 1px solid #94a3b8;
-    border-left: 5px solid #d97706;
-    border-radius: 6px;
-    padding: 10px 14px;
-    margin-top: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.08);
-  }
-  .dl-strip h3 { color: #b45309; font-size: 13.5px; margin-bottom: 2px; }
-  .dl-strip p { color: #64748b; font-size: 11.5px; }
-  .btn-amber {
-    background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%);
-    border: 1px solid #b45309;
-    color: #ffffff;
-    padding: 7px 14px;
-    border-radius: 4px;
-    text-decoration: none;
-    font-weight: bold;
-    font-size: 12px;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.15);
-    white-space: nowrap;
-  }
-  .btn-amber:hover {
-    background: linear-gradient(180deg, #fbbf24 0%, #b45309 100%);
-  }
-  #click-status {
-    margin-top: 4px;
-    color: #15803d;
-    font-weight: bold;
-    font-size: 11.5px;
-  }
+  body { font-family: 'DejaVu Sans', Arial, sans-serif; background: #e6eaf0; color: #1e293b; padding: 20px; }
+  .box { max-width: 760px; margin: 24px auto; background: #fff; border: 1px solid #94a3b8; border-radius: 8px; padding: 20px; }
+  h1 { font-size: 20px; margin-bottom: 12px; color: #1e3a8a; }
+  form { display: flex; gap: 8px; margin-bottom: 16px; }
+  input { flex: 1; padding: 8px 10px; border: 1px solid #94a3b8; border-radius: 4px; font-size: 14px; }
+  button { padding: 8px 16px; border: 1px solid #475569; border-radius: 4px; background: #e2e8f0; font-weight: bold; cursor: pointer; }
+  .links { display: flex; flex-wrap: wrap; gap: 8px; }
+  .links a { padding: 6px 12px; border: 1px solid #94a3b8; border-radius: 4px; text-decoration: none; color: #1e3a8a; background: #f8fafc; font-weight: bold; font-size: 13px; }
   @media (prefers-color-scheme: dark) {
-    body {
-      background: linear-gradient(180deg, #18181b 0%, #09090b 100%);
-      color: #f4f4f5;
-    }
-    .header {
-      background: linear-gradient(180deg, #27272a 0%, #18181b 100%);
-      border-color: #3f3f46;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.5);
-    }
-    .title-box p { color: #a1a1aa; }
-    .search-wrap {
-      background: #27272a;
-      border-color: #3f3f46;
-      box-shadow: inset 0 1px 3px rgba(0,0,0,0.4);
-    }
-    .engine-pill {
-      background: #18181b;
-      border-color: #3f3f46;
-      color: #d4d4d8;
-    }
-    .engine-pill:hover { background: #3f3f46; }
-    .engine-pill.active {
-      background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
-      border-color: #60a5fa;
-      color: #ffffff;
-    }
-    .search-bar input {
-      background: #18181b;
-      color: #fafafa;
-      border-color: #3f3f46;
-    }
-    .search-bar input:focus { border-color: #3b82f6; }
-    .btn-search, .btn-action {
-      background: linear-gradient(180deg, #3f3f46 0%, #27272a 100%);
-      border-color: #52525b;
-      color: #f4f4f5;
-    }
-    .btn-search:hover, .btn-action:hover {
-      background: linear-gradient(180deg, #52525b 0%, #3f3f46 100%);
-    }
-    .section-head {
-      background: #27272a;
-      border-left-color: #3b82f6;
-    }
-    .section-head h2 { color: #f4f4f5; }
-    .section-head .lang-tag {
-      background: #18181b;
-      color: #d4d4d8;
-      border-color: #3f3f46;
-    }
-    .card {
-      background: #27272a;
-      border-color: #3f3f46;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.4);
-    }
-    .card-body h3 { color: #60a5fa; }
-    .badge-lang {
-      background: #18181b;
-      color: #d4d4d8;
-      border-color: #3f3f46;
-    }
-    .card-body p { color: #a1a1aa; }
-    .dl-strip {
-      background: #27272a;
-      border-color: #3f3f46;
-      border-left: 5px solid #d97706;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.4);
-    }
-    .dl-strip p { color: #a1a1aa; }
+    body { background: #18181b; color: #f4f4f5; }
+    .box { background: #27272a; border-color: #3f3f46; }
+    h1 { color: #60a5fa; }
+    input { background: #18181b; color: #fafafa; border-color: #3f3f46; }
+    button, .links a { background: #3f3f46; color: #f4f4f5; border-color: #52525b; }
   }
 </style>
 <script>
-function setEngine(btn) {
-  document.querySelectorAll('.engine-pill').forEach(function(el) { el.classList.remove('active'); });
-  btn.classList.add('active');
-  document.getElementById('se').value = btn.getAttribute('data-url');
-  var q = document.getElementById('q');
-  q.placeholder = 'Suchbegriff f\u00fcr ' + btn.textContent + ' oder URL eingeben...';
-  q.focus();
-}
 function doSearch() {
   var q = document.getElementById('q').value.trim();
   if (!q) return false;
-  if (q.startsWith('http://') || q.startsWith('https://')) {
-    window.location.href = q;
-    return false;
-  }
-  var eng = document.getElementById('se').value;
-  window.location.href = eng.replace('%s', encodeURIComponent(q));
+  window.location.href = (q.startsWith('http://') || q.startsWith('https://'))
+    ? q : 'https://duckduckgo.com/?q=' + encodeURIComponent(q);
   return false;
 }
 </script>
 </head>
 <body>
-  <div class="header">
-    <div class="title-box">
-      <h1>VortexBrowser 1.0 &bull; AmigaOS 4 Portal &amp; Schnellwahl</h1>
-      <p>AmigaOS 4 News &amp; Downloads nach Sprache sortiert &bull; LZ4-Streaming &bull; AHI Stereo-Audio &bull; ASL Download</p>
-    </div>
-    <div class="badge">AmigaOS 4.1 PPC</div>
-  </div>
-
-  <div class="search-wrap">
-    <div class="engine-pills">
-      <button type="button" class="engine-pill active" data-url="https://duckduckgo.com/?q=%s" onclick="setEngine(this)">DuckDuckGo</button>
-      <button type="button" class="engine-pill" data-url="https://www.google.de/search?q=%s" onclick="setEngine(this)">Google</button>
-      <button type="button" class="engine-pill" data-url="https://www.bing.com/search?q=%s" onclick="setEngine(this)">Bing</button>
-      <button type="button" class="engine-pill" data-url="https://www.startpage.com/sp/search?query=%s" onclick="setEngine(this)">Startpage</button>
-      <button type="button" class="engine-pill" data-url="https://www.ecosia.org/search?q=%s" onclick="setEngine(this)">Ecosia</button>
-      <button type="button" class="engine-pill" data-url="https://os4depot.net/?function=search&ias=1&s=%s" onclick="setEngine(this)">OS4Depot</button>
-      <button type="button" class="engine-pill" data-url="https://aminet.net/search?query=%s" onclick="setEngine(this)">Aminet</button>
-      <button type="button" class="engine-pill" data-url="https://de.wikipedia.org/w/index.php?search=%s" onclick="setEngine(this)">Wikipedia (DE)</button>
-      <button type="button" class="engine-pill" data-url="https://www.youtube.com/results?search_query=%s" onclick="setEngine(this)">YouTube</button>
-    </div>
-    <form class="search-bar" onsubmit="return doSearch();">
-      <input type="hidden" id="se" value="https://duckduckgo.com/?q=%s" />
-      <input id="q" type="text" autofocus placeholder="Suchbegriff f&uuml;r DuckDuckGo oder URL eingeben..." />
-      <button type="submit" class="btn-search">Suche</button>
+  <div class="box">
+    <h1>VortexBrowser &bull; Startseite</h1>
+    <form onsubmit="return doSearch();">
+      <input id="q" type="text" autofocus placeholder="Suchbegriff oder URL eingeben..." />
+      <button type="submit">Suche</button>
     </form>
-  </div>
-
-  <div class="section-head">
-    <h2>Downloads, Software-Archive &amp; Offizielle AmigaOS 4 Portale</h2>
-    <span class="lang-tag">GLOBAL / EN</span>
-  </div>
-  <div class="grid">
-    <div class="card">
-      <div class="card-top card-top-blue"></div>
-      <div class="card-body">
-        <div>
-          <h3>OS4Depot.net <span class="badge-lang">EN</span></h3>
-          <p>Das zentrale Software-Archiv speziell f&uuml;r native AmigaOS 4 Programme, Libraries, Treiber und Spiele.</p>
-        </div>
-        <div class="card-action"><a class="btn-action" href="https://os4depot.net">&Ouml;ffnen</a></div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-top card-top-green"></div>
-      <div class="card-body">
-        <div>
-          <h3>Aminet.net <span class="badge-lang">EN</span></h3>
-          <p>Das weltgr&ouml;&szlig;te Amiga-Softwarearchiv f&uuml;r Classic 68k, PowerPC und AmigaOS 4.</p>
-        </div>
-        <div class="card-action"><a class="btn-action" href="https://aminet.net">&Ouml;ffnen</a></div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-top card-top-red"></div>
-      <div class="card-body">
-        <div>
-          <h3>AmigaOS.net <span class="badge-lang">EN</span></h3>
-          <p>Die offizielle AmigaOS 4 Homepage mit Systeminfos, Features und Ank&uuml;ndigungen.</p>
-        </div>
-        <div class="card-action"><a class="btn-action" href="https://www.amigaos.net">&Ouml;ffnen</a></div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-top card-top-teal"></div>
-      <div class="card-body">
-        <div>
-          <h3>AmigaOS Wiki <span class="badge-lang">EN</span></h3>
-          <p>Offizielle Dokumentation, Benutzerhandbuch, SDK-Referenz und Entwickler-Guides f&uuml;r AmigaOS 4.</p>
-        </div>
-        <div class="card-action"><a class="btn-action" href="https://wiki.amigaos.net">&Ouml;ffnen</a></div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-top card-top-slate"></div>
-      <div class="card-body">
-        <div>
-          <h3>Hyperion Entertainment <span class="badge-lang">EN</span></h3>
-          <p>Offizielle AmigaOS 4.1 Final Edition Updates, Registrierung und Download-Bereich.</p>
-        </div>
-        <div class="card-action"><a class="btn-action" href="https://www.hyperion-entertainment.com">&Ouml;ffnen</a></div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-top card-top-purple"></div>
-      <div class="card-body">
-        <div>
-          <h3>VortexBrowser GitHub <span class="badge-lang">EN / DE</span></h3>
-          <p>Quellcode, Release-Pakete, Raspberry-Pi-Images und Companion-Server f&uuml;r VortexBrowser.</p>
-        </div>
-        <div class="card-action"><a class="btn-action" href="https://github.com/TearsOfMe/VortexBrowser">&Ouml;ffnen</a></div>
-      </div>
-    </div>
-  </div>
-
-  <div class="section-head">
-    <h2>Deutschsprachige AmigaOS 4 News &amp; Foren</h2>
-    <span class="lang-tag">DEUTSCH</span>
-  </div>
-  <div class="grid">
-    <div class="card">
-      <div class="card-top card-top-orange"></div>
-      <div class="card-body">
-        <div>
-          <h3>Amiga-News.de <span class="badge-lang">DE</span></h3>
-          <p>Der t&auml;gliche Amiga-Newsticker mit allen Meldungen zu AmigaOS 4, Hardware und Software-Releases.</p>
-        </div>
-        <div class="card-action"><a class="btn-action" href="https://www.amiga-news.de">&Ouml;ffnen</a></div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-top card-top-blue"></div>
-      <div class="card-body">
-        <div>
-          <h3>A1k.org <span class="badge-lang">DE</span></h3>
-          <p>Das gro&szlig;e deutschsprachige Forum rund um AmigaOS 4, NextGen-Hardware und klassische Amigas.</p>
-        </div>
-        <div class="card-action"><a class="btn-action" href="https://www.a1k.org">&Ouml;ffnen</a></div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-top card-top-red"></div>
-      <div class="card-body">
-        <div>
-          <h3>Amiga Future <span class="badge-lang">DE / EN</span></h3>
-          <p>Online-Portal des gedruckten Amiga-Magazins mit News, Testberichten, Forum und Downloads.</p>
-        </div>
-        <div class="card-action"><a class="btn-action" href="https://www.amigafuture.de">&Ouml;ffnen</a></div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-top card-top-teal"></div>
-      <div class="card-body">
-        <div>
-          <h3>OS4Welt.de <span class="badge-lang">DE</span></h3>
-          <p>Deutschsprachiges AmigaOS-4-Forum und Community-Portal f&uuml;r News, Treiber, Hardware und Hilfe.</p>
-        </div>
-        <div class="card-action"><a class="btn-action" href="https://os4welt.de">&Ouml;ffnen</a></div>
-      </div>
-    </div>
-  </div>
-
-  <div class="section-head">
-    <h2>Englischsprachige &amp; Internationale AmigaOS 4 News &amp; Foren</h2>
-    <span class="lang-tag">ENGLISH</span>
-  </div>
-  <div class="grid">
-    <div class="card">
-      <div class="card-top card-top-teal"></div>
-      <div class="card-body">
-        <div>
-          <h3>Amigans.net <span class="badge-lang">EN</span></h3>
-          <p>Zentrales internationales AmigaOS 4 Forum f&uuml;r Anwender, Entwickler und Bug-Reports.</p>
-        </div>
-        <div class="card-action"><a class="btn-action" href="https://www.amigans.net">&Ouml;ffnen</a></div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-top card-top-blue"></div>
-      <div class="card-body">
-        <div>
-          <h3>AmigaWorld.net <span class="badge-lang">EN</span></h3>
-          <p>Eines der gr&ouml;&szlig;ten englischsprachigen Newsportale und Foren mit starkem AmigaOS-4-Fokus.</p>
-        </div>
-        <div class="card-action"><a class="btn-action" href="https://amigaworld.net">&Ouml;ffnen</a></div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-top card-top-orange"></div>
-      <div class="card-body">
-        <div>
-          <h3>Amiga-News.de (English) <span class="badge-lang">EN</span></h3>
-          <p>Englische Ausgabe des t&auml;glichen Amiga-Newstickers f&uuml;r OS4, MorphOS, AROS und Classic.</p>
-        </div>
-        <div class="card-action"><a class="btn-action" href="https://www.amiga-news.de/en/">&Ouml;ffnen</a></div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-top card-top-slate"></div>
-      <div class="card-body">
-        <div>
-          <h3>Amiga.org <span class="badge-lang">EN</span></h3>
-          <p>Internationales Traditionsforum mit News, technischen Diskussionen und OS4-Threads.</p>
-        </div>
-        <div class="card-action"><a class="btn-action" href="https://www.amiga.org">&Ouml;ffnen</a></div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-top card-top-green"></div>
-      <div class="card-body">
-        <div>
-          <h3>AmigaNG.com <span class="badge-lang">EN</span></h3>
-          <p>Spezialisiertes Newsportal f&uuml;r Next-Generation-Amiga-Systeme, PowerPC-Hardware und OS4.</p>
-        </div>
-        <div class="card-action"><a class="btn-action" href="https://www.amigang.com">&Ouml;ffnen</a></div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-top card-top-amber"></div>
-      <div class="card-body">
-        <div>
-          <h3>IntuitionBase <span class="badge-lang">EN</span></h3>
-          <p>Wissensdatenbank, Hardware-Kompatibilit&auml;t und Praxis-Guides rund um AmigaOS 4 &amp; AmigaOne.</p>
-        </div>
-        <div class="card-action"><a class="btn-action" href="https://intuitionbase.com">&Ouml;ffnen</a></div>
-      </div>
-    </div>
-  </div>
-
-  <div class="section-head">
-    <h2>Franz&ouml;sische AmigaOS &amp; Amiga Newsportale</h2>
-    <span class="lang-tag">FRAN&Ccedil;AIS</span>
-  </div>
-  <div class="grid">
-    <div class="card">
-      <div class="card-top card-top-blue"></div>
-      <div class="card-body">
-        <div>
-          <h3>AmigaImpact <span class="badge-lang">FR</span></h3>
-          <p>Gro&szlig;es franz&ouml;sisches Amiga-Newsportal mit aktivem Forum f&uuml;r AmigaOS 4, MorphOS und Classic.</p>
-        </div>
-        <div class="card-action"><a class="btn-action" href="https://www.amigaimpact.org">&Ouml;ffnen</a></div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-top card-top-teal"></div>
-      <div class="card-body">
-        <div>
-          <h3>Obligement <span class="badge-lang">FR</span></h3>
-          <p>Franz&ouml;sisches Online-Magazin mit ausf&uuml;hrlichen Testberichten, Interviews und Tutorials.</p>
-        </div>
-        <div class="card-action"><a class="btn-action" href="http://obligement.free.fr">&Ouml;ffnen</a></div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-top card-top-red"></div>
-      <div class="card-body">
-        <div>
-          <h3>Amiga France <span class="badge-lang">FR</span></h3>
-          <p>Franz&ouml;sische Community f&uuml;r aktuelle Amiga-News, Projekte und Software-Vorstellungen.</p>
-        </div>
-        <div class="card-action"><a class="btn-action" href="https://www.amigafrance.com">&Ouml;ffnen</a></div>
-      </div>
-    </div>
-  </div>
-
-  <div class="section-head">
-    <h2>Italienische, Polnische &amp; Tschechische Amiga-Portale</h2>
-    <span class="lang-tag">IT / PL / CS</span>
-  </div>
-  <div class="grid">
-    <div class="card">
-      <div class="card-top card-top-green"></div>
-      <div class="card-body">
-        <div>
-          <h3>Amigapage.it <span class="badge-lang">IT</span></h3>
-          <p>Italienisches Amiga-Newsportal und Forum f&uuml;r moderne AmigaOS-Systeme, Hardware und Software.</p>
-        </div>
-        <div class="card-action"><a class="btn-action" href="https://www.amigapage.it">&Ouml;ffnen</a></div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-top card-top-red"></div>
-      <div class="card-body">
-        <div>
-          <h3>PPA.pl <span class="badge-lang">PL</span></h3>
-          <p>Polski Portal Amigowy &ndash; t&auml;gliche News, Szene-Berichte, Reviews und Forum der polnischen Community.</p>
-        </div>
-        <div class="card-action"><a class="btn-action" href="https://www.ppa.pl">&Ouml;ffnen</a></div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-top card-top-blue"></div>
-      <div class="card-body">
-        <div>
-          <h3>Amigaportal.cz <span class="badge-lang">CS</span></h3>
-          <p>Tschechisches/Slowakisches Amiga-Portal mit Hardware-Berichten, OS4-Themen und Community-Forum.</p>
-        </div>
-        <div class="card-action"><a class="btn-action" href="https://www.amigaportal.cz">&Ouml;ffnen</a></div>
-      </div>
-    </div>
-  </div>
-
-  <div class="section-head">
-    <h2>Media &amp; Streaming</h2>
-    <span class="lang-tag">VIDEO / AUDIO</span>
-  </div>
-  <div class="grid">
-    <div class="card">
-      <div class="card-top card-top-red"></div>
-      <div class="card-body">
-        <div>
-          <h3>YouTube</h3>
-          <p>Videos &amp; Musik mit direkter 44100Hz AHI-Stereo-Ton&uuml;bertragung (CD-Qualit&auml;t) auf die Workbench.</p>
-        </div>
-        <div class="card-action">
-          <a class="btn-action" href="https://www.youtube.com">&Ouml;ffnen</a>
-          <a class="btn-action" href="https://m.youtube.com" style="background: linear-gradient(180deg, #d32f2f, #9a0007); color: #fff;">Lite / Mobil</a>
-        </div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-top card-top-purple"></div>
-      <div class="card-body">
-        <div>
-          <h3>Twitch</h3>
-          <p>Live-Streaming mit Turbo-H.264 &amp; 30 FPS Optimierung. Ton direkt via AHI Stereo.</p>
-        </div>
-        <div class="card-action">
-          <a class="btn-action" href="https://www.twitch.tv">&Ouml;ffnen</a>
-          <a class="btn-action" href="https://m.twitch.tv" style="background: linear-gradient(180deg, #9146ff, #5c16c5); color: #fff;">Lite / Mobil</a>
-        </div>
-      </div>
+    <div class="links">
+      <a href="https://os4depot.net">OS4Depot</a>
+      <a href="https://aminet.net">Aminet</a>
+      <a href="https://www.amiga-news.de">Amiga-News.de</a>
+      <a href="https://os4welt.de">OS4Welt.de</a>
+      <a href="https://www.amigans.net">Amigans.net</a>
+      <a href="https://amigaworld.net">AmigaWorld.net</a>
     </div>
   </div>
 </body>
@@ -1820,17 +1220,41 @@ function doSearch() {
 """
 
 
-def _unwrap_ddg_url(raw_href: str) -> str:
-    href = html.unescape(raw_href.strip())
-    if "uddg=" in href:
+def resolve_startpage_url() -> str:
+    """Returns a file:// URI pointing to the static startpage.html (no local HTTP server)."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    bundled = os.path.join(script_dir, "startpage.html")
+    if os.path.isfile(bundled):
+        uri = Path(bundled).resolve().as_uri()
+        logger.info("Using static start page: %s", uri)
+        return uri
+    cfg_path = os.path.join(get_vortex_config_dir(), "startpage.html")
+    if not os.path.isfile(cfg_path):
         try:
-            qpart = href.split("uddg=", 1)[1].split("&", 1)[0]
-            return unquote(qpart)
-        except Exception:
-            pass
-    if href.startswith("//"):
-        return "https:" + href
-    return href
+            with open(cfg_path, "w", encoding="utf-8") as f:
+                f.write(DEFAULT_STARTPAGE_HTML)
+        except Exception as exc:
+            logger.warning("Could not write fallback startpage.html: %s", exc)
+            return "about:blank"
+    uri = Path(cfg_path).resolve().as_uri()
+    logger.info("Using fallback static start page: %s", uri)
+    return uri
+
+
+def is_startpage_url(url: str, portal_url: str = "") -> bool:
+    """Returns True if url refers to the local static start page or legacy local portal."""
+    if not url:
+        return True
+    low = url.strip().lower()
+    if not low or low.startswith("about:") or low == "@home":
+        return True
+    if portal_url and low == portal_url.strip().lower():
+        return True
+    if low.startswith("file://") and low.endswith("/startpage.html"):
+        return True
+    if low.startswith("http://127.0.0.1:") or low.startswith("http://localhost:"):
+        return True
+    return False
 
 
 _BARE_LOCALE_MAP: Dict[str, str] = {
@@ -1975,265 +1399,6 @@ def build_navigator_languages(bcp47: str) -> List[str]:
 
 
 _SERVER_LOCALE, _LOCALE_EXPLICIT = detect_system_locale()
-
-
-def _fetch_search_results_sync(query: str) -> str:
-    q_esc = html.escape(query)
-    items_html = []
-    try:
-        url = "https://html.duckduckgo.com/html/?" + urlencode({"q": query})
-        req = urllib.request.Request(
-            url,
-            headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0",
-                "Accept": "text/html,application/xhtml+xml",
-                "Accept-Language": build_accept_language(_SERVER_LOCALE),
-            },
-        )
-        with urllib.request.urlopen(req, timeout=8) as resp:
-            page_html = resp.read().decode("utf-8", errors="replace")
-
-        blocks = page_html.split('class="result__body"')
-        for blk in blocks[1:16]:
-            m_link = re.search(r'<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>(.*?)</a>', blk, re.S)
-            if not m_link:
-                continue
-            real_url = _unwrap_ddg_url(m_link.group(1))
-            if not real_url.startswith("http"):
-                continue
-            title_clean = re.sub(r"<[^>]+>", "", m_link.group(2)).strip()
-            m_snip = re.search(r'<a[^>]+class="result__snippet"[^>]*>(.*?)</a>', blk, re.S)
-            snippet_clean = re.sub(r"<[^>]+>", "", m_snip.group(1)).strip() if m_snip else ""
-            u_esc = html.escape(real_url)
-            items_html.append(
-                f'<div class="res-card">'
-                f'<a class="res-title" href="{u_esc}">{title_clean}</a>'
-                f'<div class="res-url">{u_esc}</div>'
-                f'<div class="res-snip">{snippet_clean}</div>'
-                f'</div>'
-            )
-    except Exception as exc:
-        logger.warning("Search fetch error for '%s': %s", query, exc)
-
-    if not items_html:
-        items_html.append(
-            f'<div class="res-card">'
-            f'<div class="res-snip">Keine direkten Treffer gefunden. Direkt weiter zu: '
-            f'<a class="res-title" href="https://www.google.de/search?q={quote_plus(query)}">Google-Suche nach &bdquo;{q_esc}&ldquo;</a></div>'
-            f'</div>'
-        )
-
-    results_joined = "\n".join(items_html)
-    return f"""<!DOCTYPE html>
-<html lang="de">
-<head>
-<meta charset="utf-8">
-<title>VortexBrowser Suche: {q_esc}</title>
-<style>
-  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-  body {{
-    font-family: 'DejaVu Sans', 'Liberation Sans', Arial, Helvetica, sans-serif;
-    background: linear-gradient(180deg, #e6eaf0 0%, #d3dae4 100%);
-    color: #1e293b;
-    padding: 16px 22px;
-  }}
-  .top-bar {{
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    margin-bottom: 14px;
-    background: linear-gradient(180deg, #375375 0%, #20354f 100%);
-    border: 1px solid #1a2c42;
-    border-radius: 6px;
-    padding: 10px 14px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.18);
-  }}
-  .home-btn {{
-    background: linear-gradient(180deg, #f1f5f9 0%, #cbd5e1 100%);
-    border: 1px solid #64748b;
-    color: #0f172a;
-    padding: 7px 14px;
-    border-radius: 4px;
-    text-decoration: none;
-    font-weight: bold;
-    font-size: 13px;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.12);
-  }}
-  .home-btn:hover {{
-    background: linear-gradient(180deg, #ffffff 0%, #e2e8f0 100%);
-  }}
-  .search-form {{
-    display: flex;
-    flex: 1;
-    gap: 8px;
-  }}
-  .search-form input {{
-    flex: 1;
-    padding: 8px 12px;
-    border-radius: 4px;
-    border: 1px solid #cbd5e1;
-    background: #ffffff;
-    color: #0f172a;
-    font-size: 14px;
-  }}
-  .search-form button {{
-    padding: 8px 16px;
-    border-radius: 4px;
-    border: 1px solid #64748b;
-    background: linear-gradient(180deg, #f1f5f9 0%, #cbd5e1 100%);
-    color: #0f172a;
-    font-weight: bold;
-    font-size: 13px;
-    cursor: pointer;
-  }}
-  .search-form button:hover {{
-    background: linear-gradient(180deg, #ffffff 0%, #e2e8f0 100%);
-  }}
-  .res-card {{
-    background: #ffffff;
-    border: 1px solid #94a3b8;
-    border-radius: 6px;
-    padding: 12px 16px;
-    margin-bottom: 10px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.06);
-  }}
-  .res-title {{
-    color: #1e40af;
-    font-size: 16px;
-    font-weight: bold;
-    text-decoration: none;
-    display: block;
-    margin-bottom: 3px;
-  }}
-  .res-title:hover {{ text-decoration: underline; }}
-  .res-url {{
-    color: #15803d;
-    font-size: 12px;
-    margin-bottom: 5px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }}
-  .res-snip {{
-    color: #334155;
-    font-size: 13px;
-    line-height: 1.4;
-  }}
-</style>
-</head>
-<body>
-  <div class="top-bar">
-    <a class="home-btn" href="/">Schnellwahl</a>
-    <form class="search-form" onsubmit="event.preventDefault(); const q=document.getElementById('q').value.trim(); if(!q) return; if(q.startsWith('http://')||q.startsWith('https://')) window.location.href=q; else if(q.includes('.') && !q.includes(' ')) window.location.href='https://'+q; else window.location.href='/search?q='+encodeURIComponent(q);">
-      <input id="q" type="text" value="{q_esc}" placeholder="Suchbegriff oder URL eingeben..." />
-      <button type="submit">Suchen</button>
-    </form>
-  </div>
-  {results_joined}
-</body>
-</html>"""
-
-
-class LocalPortalHTTPServer:
-    """Lightweight asyncio HTTP server providing the start portal, CAPTCHA-free web search, and a test download file."""
-
-    def __init__(self, host: str = "127.0.0.1", port: int = 8089):
-        self.host = host
-        self.port = port
-        self.server: Optional[asyncio.AbstractServer] = None
-
-    async def start(self) -> str:
-        candidates = [self.port] if self.port else []
-        candidates.extend([8090, 8091, 8092, 8093, 8094, 0])
-        last_err = None
-        for p in candidates:
-            try:
-                self.server = await asyncio.start_server(self._handle_http, self.host, p)
-                sockets = self.server.sockets
-                if sockets:
-                    self.port = sockets[0].getsockname()[1]
-                url = f"http://{self.host}:{self.port}/"
-                logger.info("Local portal HTTP server listening on %s", url)
-                return url
-            except OSError as exc:
-                last_err = exc
-                logger.info("Port %s busy for local portal (%s), trying alternative...", p, exc)
-                continue
-        if last_err:
-            raise last_err
-        raise OSError("Could not bind local portal HTTP server on any port")
-
-
-    async def stop(self) -> None:
-        if self.server:
-            self.server.close()
-            await self.server.wait_closed()
-
-    async def _handle_http(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-        try:
-            req_line = await asyncio.wait_for(reader.readline(), timeout=5.0)
-            if not req_line:
-                writer.close()
-                return
-            parts = req_line.decode("utf-8", errors="replace").strip().split(" ")
-            path = parts[1] if len(parts) > 1 else "/"
-
-            while True:
-                line = await asyncio.wait_for(reader.readline(), timeout=5.0)
-                if not line or line in (b"\r\n", b"\n"):
-                    break
-
-            if path.startswith("/download/"):
-                filename = os.path.basename(path) or "VortexBrowse_Test.bin"
-                header_txt = (
-                    f"VortexBrowse AmigaOS 4 Download Proxy Test File ({filename})\n"
-                    "Streamed in 64KB chunks over MSG_DOWNLOAD_CHUNK.\n"
-                ).encode("utf-8")
-                pattern = b"AMIGAOS4-VORTEXBROWSE-LZ4-STREAM-OK\n" * 4500
-                body = (header_txt + pattern)[:163840]
-
-                headers = (
-                    "HTTP/1.1 200 OK\r\n"
-                    "Content-Type: application/octet-stream\r\n"
-                    f'Content-Disposition: attachment; filename="{filename}"\r\n'
-                    f"Content-Length: {len(body)}\r\n"
-                    "Connection: close\r\n\r\n"
-                ).encode("utf-8")
-                writer.write(headers + body)
-                await writer.drain()
-            elif path.startswith("/search"):
-                parsed_p = urlparse(path)
-                qs = parse_qs(parsed_p.query)
-                query = (qs.get("q") or [""])[0].strip()
-                loop = asyncio.get_running_loop()
-                html_str = await loop.run_in_executor(None, _fetch_search_results_sync, query)
-                body = html_str.encode("utf-8")
-                headers = (
-                    "HTTP/1.1 200 OK\r\n"
-                    "Content-Type: text/html; charset=utf-8\r\n"
-                    f"Content-Length: {len(body)}\r\n"
-                    "Connection: close\r\n\r\n"
-                ).encode("utf-8")
-                writer.write(headers + body)
-                await writer.drain()
-            else:
-                body = PORTAL_HTML.encode("utf-8")
-                headers = (
-                    "HTTP/1.1 200 OK\r\n"
-                    "Content-Type: text/html; charset=utf-8\r\n"
-                    f"Content-Length: {len(body)}\r\n"
-                    "Connection: close\r\n\r\n"
-                ).encode("utf-8")
-                writer.write(headers + body)
-                await writer.drain()
-        except Exception as exc:
-            logger.debug("Portal HTTP handler error: %s", exc)
-        finally:
-            try:
-                writer.close()
-                await writer.wait_closed()
-            except Exception:
-                pass
 
 
 # ============================================================================
@@ -2519,10 +1684,22 @@ def image_to_big_endian_pixels(
 # Memory Reclamation & Safe CDP Helpers
 # ============================================================================
 def _reclaim_python_memory() -> None:
+    if _FAST_PIXCONV is not None and hasattr(_FAST_PIXCONV, "fast_pixconv_release_tls"):
+        try:
+            _FAST_PIXCONV.fast_pixconv_release_tls()
+        except Exception:
+            pass
+    gc.collect()
     gc.collect()
     if platform.system() == "Linux":
         try:
             ctypes.CDLL("libc.so.6").malloc_trim(0)
+        except Exception:
+            pass
+    elif _IS_WINDOWS:
+        try:
+            k32 = ctypes.windll.kernel32
+            k32.SetProcessWorkingSetSize(ctypes.c_void_p(-1), ctypes.c_size_t(-1), ctypes.c_size_t(-1))
         except Exception:
             pass
 
@@ -3089,19 +2266,58 @@ class H264LiveStreamEncoder:
         return None
 
     def stop(self) -> None:
-        if self.proc:
+        proc = self.proc
+        self.proc = None
+        self._fd = None
+        if proc:
             try:
-                if self.proc.stdin:
-                    self.proc.stdin.close()
-                self.proc.terminate()
-                self.proc.wait(timeout=0.2)
+                if proc.stdin:
+                    try:
+                        proc.stdin.close()
+                    except Exception:
+                        pass
+                if proc.poll() is None:
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=0.5)
+                    except Exception:
+                        try:
+                            proc.kill()
+                        except Exception:
+                            pass
+                        try:
+                            proc.wait(timeout=1.0)
+                        except Exception:
+                            pass
+                else:
+                    try:
+                        proc.wait(timeout=0.1)
+                    except Exception:
+                        pass
             except Exception:
                 try:
-                    self.proc.kill()
+                    proc.kill()
+                    proc.wait(timeout=1.0)
                 except Exception:
                     pass
-            self.proc = None
-            self._fd = None
+            if proc.stdout:
+                try:
+                    proc.stdout.close()
+                except Exception:
+                    pass
+        rt = self._reader_thread
+        self._reader_thread = None
+        if rt is not None and rt.is_alive():
+            try:
+                rt.join(timeout=0.3)
+            except Exception:
+                pass
+        if self._out_queue is not None:
+            while True:
+                try:
+                    self._out_queue.get_nowait()
+                except queue.Empty:
+                    break
 
 
 # ============================================================================
@@ -3707,11 +2923,14 @@ class AmigaClientSession:
         use_rustwright: bool = False,
         audio_device: str = "",
         tab_audio_bridge: Optional[SilentTabAudioBridge] = None,
+        close_browser_on_exit: bool = True,
     ):
         self.reader = reader
         self.writer = writer
         self.browser = browser
         self.is_persistent_context: bool = isinstance(browser, _PERSISTENT_CONTEXT_TYPES)
+        self.close_browser_on_exit: bool = bool(close_browser_on_exit)
+        self._storage_saved_on_exit: bool = False
         self.engine: str = engine.lower()
         self.storage_state_file: str = storage_state_file or get_vortex_storage_state_path(self.engine)
         self._context_state: Dict[str, Any] = context_state if context_state is not None else {}
@@ -3790,6 +3009,8 @@ class AmigaClientSession:
         self._switching_tab: bool = False
         self._tab_generation: int = 0
         self._nav_task: Optional[asyncio.Task] = None
+        self._tab_nav_tasks: Dict[Tuple[str, Any], asyncio.Task] = {}
+        self._client_nav_received = asyncio.Event()
         self._err_aborted_counts: Dict[Tuple[str, Any], int] = {}
         self._wedged_pages: Set[Tuple[str, Any]] = set()
         self._last_download_time: float = 0.0
@@ -3812,6 +3033,13 @@ class AmigaClientSession:
             if sock is not None:
                 sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
                 sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1024 * 1024)
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+                if hasattr(socket, "TCP_KEEPIDLE"):
+                    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 15)
+                if hasattr(socket, "TCP_KEEPINTVL"):
+                    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 5)
+                if hasattr(socket, "TCP_KEEPCNT"):
+                    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
         except Exception:
             pass
 
@@ -4229,7 +3457,15 @@ class AmigaClientSession:
         except Exception:
             return True
 
-    def _cancel_nav_task(self) -> None:
+    def _cancel_nav_task(self, page: Any = None) -> None:
+        if page is not None:
+            pkey = self._page_identity(page)
+            pt = self._tab_nav_tasks.pop(pkey, None)
+            if pt is not None and not pt.done():
+                pt.cancel()
+            if self._nav_task is pt:
+                self._nav_task = None
+            return
         t = self._nav_task
         self._nav_task = None
         if t is not None and not t.done():
@@ -4278,7 +3514,7 @@ class AmigaClientSession:
             # so clicking Back doesn't get stuck in a redirect loop!
             elapsed = now - h_times[h_idx]
             prev_url = h_list[h_idx]
-            if not force_push and elapsed < 1.2 and prev_url != self.portal_url:
+            if not force_push and elapsed < 1.2 and not is_startpage_url(prev_url, self.portal_url):
                 h_list[h_idx] = url
                 h_times[h_idx] = now
                 logger.info("Tab[%d] history updated redirect in-place [%d]: %s", tidx, h_idx, url)
@@ -4302,6 +3538,7 @@ class AmigaClientSession:
         if page is None:
             return
         pkey = self._page_identity(page)
+        self._cancel_nav_task(page)
         self._err_aborted_counts.pop(pkey, None)
         self._wedged_pages.discard(pkey)
         self._tab_histories.pop(pkey, None)
@@ -4679,6 +3916,14 @@ class AmigaClientSession:
         if not self.running:
             return
         sender = args[0] if args else self.page
+        if sender is not None and (
+            self.web_zoom_pct != 100
+            or self.web_font_size != 16
+            or self.web_font_family != "sans-serif"
+        ):
+            t_sty = asyncio.create_task(self._apply_web_styling(sender))
+            self.background_tasks.add(t_sty)
+            t_sty.add_done_callback(self.background_tasks.discard)
         if self.page and self._page_identity(sender) != self._page_identity(self.page):
             tidx = self._find_tab_index(sender)
             if tidx >= 0 and getattr(sender, "url", None):
@@ -4694,6 +3939,14 @@ class AmigaClientSession:
         if not self.running:
             return
         sender = args[0] if args else self.page
+        if sender is not None and (
+            self.web_zoom_pct != 100
+            or self.web_font_size != 16
+            or self.web_font_family != "sans-serif"
+        ):
+            t_sty = asyncio.create_task(self._apply_web_styling(sender))
+            self.background_tasks.add(t_sty)
+            t_sty.add_done_callback(self.background_tasks.discard)
         if self.page and self._page_identity(sender) != self._page_identity(self.page):
             tidx = self._find_tab_index(sender)
             if tidx >= 0 and getattr(sender, "url", None):
@@ -5497,18 +4750,31 @@ class AmigaClientSession:
                 tasks.append(asyncio.create_task(self._audio_stream_loop()))
 
             curr_url = self.page.url if self.page else ""
-            has_existing_page = bool(curr_url and not curr_url.startswith("about:") and curr_url != self.portal_url)
+            has_existing_page = bool(curr_url and not is_startpage_url(curr_url, self.portal_url))
 
             initial_url = self.start_url if self.start_url else self.portal_url
-            logger.info("Navigating initial viewport (%dx%d) to %s (has_existing_page=%s)", self.width, self.height, initial_url, has_existing_page)
+            logger.info("Initial viewport ready (%dx%d, has_existing_page=%s) — waiting briefly for client tab sync", self.width, self.height, has_existing_page)
             async def _init_nav():
+                # Give the Amiga client a short window to send its saved tabs / start URL
+                # so the static start page never overwrites restored tabs on startup.
+                if not self.start_url:
+                    try:
+                        await asyncio.wait_for(self._client_nav_received.wait(), timeout=2.0)
+                        logger.info("Client sent initial tab/URL sync; skipping default start page load")
+                        return
+                    except asyncio.TimeoutError:
+                        pass
+                    except asyncio.CancelledError:
+                        return
+                if not self.running or self._client_nav_received.is_set():
+                    return
                 if not has_existing_page and self.page is not None:
                     try:
                         await self._safe_page_goto(self.page, initial_url, wait_until="domcontentloaded", timeout=12000)
                     except asyncio.CancelledError:
                         return
                     except Exception as nav_exc:
-                        logger.warning("Initial navigation warning (%s), falling back to portal", nav_exc)
+                        logger.warning("Initial navigation warning (%s), falling back to start page", nav_exc)
                         if initial_url != self.portal_url and self.page is not None:
                             try:
                                 await self._safe_page_goto(self.page, self.portal_url, wait_until="domcontentloaded", timeout=8000)
@@ -5533,17 +4799,40 @@ class AmigaClientSession:
             self.running = False
             for t in pending:
                 t.cancel()
+            if pending:
+                try:
+                    await asyncio.wait_for(
+                        asyncio.gather(*pending, return_exceptions=True),
+                        timeout=2.0,
+                    )
+                except Exception:
+                    pass
         except Exception as exc:
             logger.error("Session error: %s", exc)
         finally:
             try:
                 self.running = False
+                # Close client TCP transport immediately so socket never lingers in CLOSE-WAIT
+                try:
+                    self.writer.close()
+                    await asyncio.wait_for(self.writer.wait_closed(), timeout=1.0)
+                except Exception:
+                    pass
                 if self._h264_encoder is not None:
                     self._h264_encoder.stop()
                     self._h264_encoder = None
-                await self._stop_screencast()
-                await self._detach_cdp()
-                await self._stop_browser_download_monitor()
+                try:
+                    await asyncio.wait_for(self._stop_screencast(), timeout=1.5)
+                except Exception:
+                    pass
+                try:
+                    await asyncio.wait_for(self._detach_cdp(), timeout=1.5)
+                except Exception:
+                    pass
+                try:
+                    await asyncio.wait_for(self._stop_browser_download_monitor(), timeout=1.5)
+                except Exception:
+                    pass
                 if self.context:
                     try:
                         self.context.remove_listener("page", self._on_popup_page)
@@ -5563,80 +4852,112 @@ class AmigaClientSession:
                         entry[1].cancel()
                 self.pending_uploads.clear()
                 self._cancel_nav_task()
+                for pt in list(self._tab_nav_tasks.values()):
+                    if not pt.done():
+                        pt.cancel()
+                self._tab_nav_tasks.clear()
                 if self._pending_storage_save_task and not self._pending_storage_save_task.done():
                     self._pending_storage_save_task.cancel()
-                for t in list(self.background_tasks):
-                    t.cancel()
+                self._pending_storage_save_task = None
+                bg_list = list(self.background_tasks)
+                for t in bg_list:
+                    if not t.done():
+                        t.cancel()
+                if bg_list:
+                    try:
+                        await asyncio.wait_for(
+                            asyncio.gather(*bg_list, return_exceptions=True),
+                            timeout=1.0,
+                        )
+                    except Exception:
+                        pass
                 self.background_tasks.clear()
                 if self._context_state.get("active_session") is self:
                     self._context_state["active_session"] = None
                 if self.is_persistent_context:
                     try:
-                        await self.save_storage_state(force=True)
+                        await asyncio.wait_for(self.save_storage_state(force=True), timeout=3.0)
+                        self._storage_saved_on_exit = True
                     except Exception:
                         pass
-                    for tab in list(self.tabs[1:]):
-                        await self._force_close_page(tab)
-                    if self.context:
-                        try:
-                            tab0_id = self._page_identity(self.tabs[0]) if self.tabs else None
-                            for stray in list(getattr(self.context, "pages", []) or []):
-                                if tab0_id is None or self._page_identity(stray) != tab0_id:
-                                    await self._force_close_page(stray)
-                        except Exception:
-                            pass
-                    if self.tabs:
-                        tab0 = self.tabs[0]
-                        tab0_clean = False
-                        t0_key = self._page_identity(tab0)
-                        if not self._is_page_closed(tab0) and t0_key not in self._wedged_pages:
+                    if not self.close_browser_on_exit:
+                        for tab in list(self.tabs[1:]):
+                            await self._force_close_page(tab)
+                        if self.context:
                             try:
-                                await self._stop_page_loading(tab0)
-                                await asyncio.wait_for(
-                                    tab0.goto("about:blank", wait_until="commit", timeout=3000),
-                                    timeout=3.5,
-                                )
-                                tab0_clean = True
-                            except Exception:
-                                tab0_clean = False
-                        if not tab0_clean and self.context:
-                            try:
-                                logger.info("Teardown: replacing wedged/unresettable tab[0] with fresh blank Page")
-                                fresh0 = await asyncio.wait_for(self.context.new_page(), timeout=3.0)
-                                await self._force_close_page(tab0)
-                                self.tabs[0] = fresh0
+                                tab0_id = self._page_identity(self.tabs[0]) if self.tabs else None
+                                for stray in list(getattr(self.context, "pages", []) or []):
+                                    if tab0_id is None or self._page_identity(stray) != tab0_id:
+                                        await self._force_close_page(stray)
                             except Exception:
                                 pass
+                        if self.tabs:
+                            tab0 = self.tabs[0]
+                            tab0_clean = False
+                            t0_key = self._page_identity(tab0)
+                            if not self._is_page_closed(tab0) and t0_key not in self._wedged_pages:
+                                try:
+                                    await self._stop_page_loading(tab0)
+                                    await asyncio.wait_for(
+                                        tab0.goto("about:blank", wait_until="commit", timeout=3000),
+                                        timeout=3.5,
+                                    )
+                                    tab0_clean = True
+                                except Exception:
+                                    tab0_clean = False
+                            if not tab0_clean and self.context:
+                                try:
+                                    logger.info("Teardown: replacing wedged/unresettable tab[0] with fresh blank Page")
+                                    fresh0 = await asyncio.wait_for(self.context.new_page(), timeout=3.0)
+                                    await self._force_close_page(tab0)
+                                    self.tabs[0] = fresh0
+                                except Exception:
+                                    pass
                 elif self.context:
                     try:
-                        await self.context.close()
+                        await asyncio.wait_for(self.context.close(), timeout=3.0)
                     except Exception:
                         pass
                 self.tabs.clear()
                 self.page = None
+                self.context = None
+                self.browser = None
+                self.cdp = None
                 self._tab_histories.clear()
+                self._err_aborted_counts.clear()
+                self._wedged_pages.clear()
+                self._cdp_downloads.clear()
+                self._cdp_handled_guids.clear()
+                self._cdp_handled_keys.clear()
+                self._adopting_popups.clear()
+                self._server_clipboard = ""
                 self.prev_raw_buf = None
+                self.last_frame_hash = None
                 self._argb_buf = None
                 self._rgb565_buf = None
                 self._yuv_buf = None
                 self._rect_buf = None
                 self._pkt_buf = None
-                try:
-                    self.writer.close()
-                    await self.writer.wait_closed()
-                except Exception:
-                    pass
+                self.screencast_queue = None
+                self._screencast_handler = None
                 if getattr(self, "_encode_executor", None) is not None:
+                    enc_exec = self._encode_executor
+                    self._encode_executor = None
                     if _FAST_PIXCONV is not None and hasattr(_FAST_PIXCONV, "fast_pixconv_release_tls"):
                         try:
-                            self._encode_executor.submit(_FAST_PIXCONV.fast_pixconv_release_tls)
+                            fut = enc_exec.submit(_FAST_PIXCONV.fast_pixconv_release_tls)
+                            await asyncio.wait_for(asyncio.wrap_future(fut), timeout=0.5)
                         except Exception:
                             pass
                     try:
-                        self._encode_executor.shutdown(wait=False)
+                        enc_exec.shutdown(wait=False, cancel_futures=True)
+                    except TypeError:
+                        try:
+                            enc_exec.shutdown(wait=False)
+                        except Exception:
+                            pass
                     except Exception:
                         pass
-                    self._encode_executor = None
                 _reclaim_python_memory()
                 logger.info("AmigaOS 4 client session closed (%s)", peer)
             finally:
@@ -6242,11 +5563,14 @@ class AmigaClientSession:
         finally:
             if proc is not None:
                 try:
-                    proc.terminate()
-                    await asyncio.wait_for(proc.wait(), timeout=1.0)
+                    if proc.returncode is None:
+                        proc.terminate()
+                        await asyncio.wait_for(proc.wait(), timeout=1.0)
                 except Exception:
                     try:
-                        proc.kill()
+                        if proc.returncode is None:
+                            proc.kill()
+                        await asyncio.wait_for(proc.wait(), timeout=1.0)
                     except Exception:
                         pass
 
@@ -8059,7 +7383,7 @@ class AmigaClientSession:
     async def _activate_tab(self, tidx: int, old_page=None) -> None:
         if tidx < 0 or tidx >= len(self.tabs):
             return
-        self._cancel_nav_task()
+        # Do NOT cancel in-flight background navigations on other tabs (e.g. during startup tab restore)
         target_page = self.tabs[tidx]
         if self._is_page_closed(target_page):
             fresh = await self._replace_tab_page(tidx, reason="closed on switch")
@@ -8135,14 +7459,19 @@ class AmigaClientSession:
             p = cur_page
             if not p or self.page is not p or not self.running:
                 return
+            need_refresh = False
             if getattr(p, "_vb_applied_dark_mode", None) != self.dark_mode:
                 await self._apply_dark_mode(p)
                 try:
                     setattr(p, "_vb_applied_dark_mode", self.dark_mode)
                 except Exception:
                     pass
-                if self.page is p:
-                    self._trigger_full_refresh(True)
+                need_refresh = True
+            elif getattr(p, "_vb_applied_zoom", 100) != self.web_zoom_pct:
+                await self._apply_web_styling(p)
+                need_refresh = True
+            if need_refresh and self.page is p:
+                self._trigger_full_refresh(True)
 
         t = asyncio.create_task(_post_switch_tasks())
         self.background_tasks.add(t)
@@ -8381,9 +7710,6 @@ class AmigaClientSession:
             css_font = self.web_font_family if self.web_font_family in ("serif", "monospace") else "sans-serif"
             fsize = max(10, min(36, int(getattr(self, "web_font_size", 16) or 16)))
             base_zoom = max(50, min(300, int(self.web_zoom_pct or 100)))
-            # Compute target font size in pixels without using CSS style.zoom on <html>
-            # (CSS style.zoom breaks hardware-composited <video> / YouTube preview video coordinates)
-            effective_px = max(10, min(36, int(round(fsize * (base_zoom / 100.0)))))
 
             if self.cdp is not None and self.engine == "chromium":
                 try:
@@ -8391,8 +7717,8 @@ class AmigaClientSession:
                         "Page.setFontSizes",
                         {
                             "fontSizes": {
-                                "standard": effective_px,
-                                "fixed": max(10, effective_px - 2),
+                                "standard": fsize,
+                                "fixed": max(10, fsize - 2),
                             }
                         },
                     )
@@ -8413,11 +7739,13 @@ class AmigaClientSession:
                 elif self.dark_mode == 0:
                     dark_css = ":root, html { color-scheme: light !important; }"
 
+            zoom_css_val = "" if base_zoom == 100 else f"{base_zoom}%"
             js = f"""
             (() => {{
                 try {{
                     if (document.documentElement) {{
-                        document.documentElement.style.zoom = '';
+                        document.documentElement.style.zoom = '{zoom_css_val}';
+                        void document.documentElement.offsetHeight;
                     }}
                     let style = document.getElementById('__vb_font_override');
                     if (!style && document.head) {{
@@ -8432,6 +7760,10 @@ class AmigaClientSession:
             }})();
             """
             await target_page.evaluate(js)
+            try:
+                setattr(target_page, "_vb_applied_zoom", base_zoom)
+            except Exception:
+                pass
         except Exception:
             pass
 
@@ -8583,7 +7915,10 @@ class AmigaClientSession:
                 self.web_zoom_pct = max(50, min(300, zoom_val))
                 logger.info("Setting web zoom to %d%%", self.web_zoom_pct)
                 await self._apply_web_styling()
+                self.last_frame_hash = None
+                self.force_full_frame = True
                 self._trigger_full_refresh(True)
+                self._schedule_delayed_frames()
             except Exception as exc:
                 logger.warning("Zoom error: %s", exc)
             return
@@ -8709,14 +8044,15 @@ class AmigaClientSession:
             return
 
         if cmd.upper().startswith("@NEWTAB"):
+            self._client_nav_received.set()
             parts = cmd.split(":", 1)
             target = parts[1].strip() if len(parts) > 1 else ""
-            if not target or target.startswith("about:") or "127.0.0.1" in target or "localhost" in target or target.upper() == "@HOME":
+            if is_startpage_url(target, self.portal_url):
                 target = self.portal_url
             elif not (target.startswith("http://") or target.startswith("https://") or target.startswith("file://")):
                 target = "https://" + target
             if self.context:
-                self._cancel_nav_task()
+                # Do NOT cancel other tabs' background navigations (e.g. Tab 0 restoring on startup)
                 try:
                     self._creating_tab = True
                     self._tab_generation += 1
@@ -8774,6 +8110,7 @@ class AmigaClientSession:
             return
 
         if cmd.upper().startswith("@SWITCHTAB:"):
+            self._client_nav_received.set()
             try:
                 tidx = int(cmd.split(":", 1)[1].strip())
                 if 0 <= tidx < len(self.tabs):
@@ -8805,8 +8142,8 @@ class AmigaClientSession:
             try:
                 tidx = int(cmd.split(":", 1)[1].strip())
                 if 0 <= tidx < len(self.tabs) and len(self.tabs) > 1:
-                    self._cancel_nav_task()
                     p_to_close = self.tabs.pop(tidx)
+                    self._cancel_nav_task(p_to_close)
                     was_active = (
                         self.page is not None
                         and self._page_identity(p_to_close) == self._page_identity(self.page)
@@ -8882,6 +8219,7 @@ class AmigaClientSession:
                 logger.warning("Ignoring unhandled internal '@' command: %s", cmd.split(":", 1)[0])
                 return
 
+        self._client_nav_received.set()
         cur_hist = self._get_tab_history(self.page) if self.page else {"history": [], "idx": -1}
         logger.info(
             "INPUT_GOTO_URL: %s (tab[%d] history idx=%d/%d)",
@@ -8890,11 +8228,12 @@ class AmigaClientSession:
             cur_hist["idx"],
             len(cur_hist["history"]),
         )
-        self._cancel_nav_task()
+        self._cancel_nav_task(self.page)
         self._trigger_full_refresh()
         self._schedule_delayed_frames()
 
         nav_page_init = self.page
+        nav_page_key = self._page_identity(nav_page_init) if nav_page_init is not None else None
         nav_tab_gen = self._tab_generation
 
         async def _nav_bg():
@@ -8922,7 +8261,7 @@ class AmigaClientSession:
                             nav_page = await self._safe_page_goto(nav_page, target_url, wait_until="commit", timeout=12000)
                         finally:
                             hist["jumping"] = False
-                    elif (nav_page.url or "") != self.portal_url:
+                    elif not is_startpage_url(nav_page.url or "", self.portal_url):
                         resolved_target = self.portal_url
                         logger.info(
                             "Navigating tab[%d] @BACK fallback to portal: %s",
@@ -8976,11 +8315,8 @@ class AmigaClientSession:
                     nav_page = await self._safe_page_goto(nav_page, self.portal_url, wait_until="commit", timeout=10000)
                 else:
                     target = cmd
-                    if (
-                        target.startswith("http://127.0.0.1:")
-                        or target.startswith("http://localhost:")
-                    ):
-                        logger.info("Redirecting local portal request '%s' to '%s'", target, self.portal_url)
+                    if is_startpage_url(target, self.portal_url):
+                        logger.info("Redirecting startpage request '%s' to '%s'", target, self.portal_url)
                         target = self.portal_url
                     elif not (
                         target.startswith("http://")
@@ -9005,6 +8341,8 @@ class AmigaClientSession:
             finally:
                 if self._nav_task is asyncio.current_task():
                     self._nav_task = None
+                if nav_page_key is not None and self._tab_nav_tasks.get(nav_page_key) is asyncio.current_task():
+                    self._tab_nav_tasks.pop(nav_page_key, None)
                 cur_u = ""
                 try:
                     cur_u = (nav_page.url or "").strip() if (nav_page is not None and not self._is_page_closed(nav_page)) else ""
@@ -9033,6 +8371,8 @@ class AmigaClientSession:
 
         t = asyncio.create_task(_nav_bg())
         self._nav_task = t
+        if nav_page_key is not None:
+            self._tab_nav_tasks[nav_page_key] = t
         self.background_tasks.add(t)
         t.add_done_callback(self.background_tasks.discard)
 
@@ -9523,8 +8863,8 @@ class AmigaClientSession:
         download_id = self.next_download_id
         self.next_download_id += 1
 
-        if url.startswith("/"):
-            url = f"http://127.0.0.1:8089{url}"
+        if url.startswith("/") and self.page and self.page.url:
+            url = urljoin(self.page.url, url)
 
         parsed = urlparse(url)
         raw_name = unquote(os.path.basename(parsed.path)).strip()
@@ -10344,6 +9684,169 @@ def _extract_cli_port(argv: List[str], default_port: int = 7788) -> int:
     return default_port
 
 
+def _reap_child_zombies() -> None:
+    """Reaps any terminated direct child processes on POSIX so zero <defunct> zombies remain."""
+    if _IS_WINDOWS or not hasattr(os, "waitpid"):
+        return
+    for _ in range(64):
+        try:
+            pid, _ = os.waitpid(-1, os.WNOHANG)
+            if pid <= 0:
+                break
+        except ChildProcessError:
+            break
+        except Exception:
+            break
+
+
+def _get_direct_child_pids(parent_pid: int) -> List[int]:
+    """Returns live direct child PIDs of parent_pid on Linux via /proc."""
+    if _IS_WINDOWS or not os.path.isdir("/proc"):
+        return []
+    children: List[int] = []
+    try:
+        entries = os.listdir("/proc")
+    except Exception:
+        return children
+    ppid_prefix = f"PPid:\t{parent_pid}\n"
+    for entry in entries:
+        if not entry.isdigit():
+            continue
+        pid = int(entry)
+        if pid == parent_pid:
+            continue
+        try:
+            with open(f"/proc/{pid}/status", "r", encoding="utf-8", errors="ignore") as f:
+                st = f.read(1024)
+            if ppid_prefix in st:
+                children.append(pid)
+        except Exception:
+            continue
+    return children
+
+
+def _cleanup_browser_processes_and_locks(profile_dir: str, engine: str = "chromium") -> None:
+    """Terminates any lingering browser, crashpad, Playwright driver, ffmpeg, or parec processes and clears lock files."""
+    _reap_child_zombies()
+    sig_kill = getattr(signal, "SIGKILL", signal.SIGTERM)
+
+    if not _IS_WINDOWS and os.path.isdir("/proc"):
+        real_profile = os.path.realpath(profile_dir)
+        user_data_flags = {f"--user-data-dir={profile_dir}", f"--user-data-dir={real_profile}"}
+        crashpad_pids: Set[int] = set()
+
+        def _matches_profile_proc(pid: int, argv: List[str], main_only: bool) -> bool:
+            matched = False
+            if any(a in user_data_flags for a in argv):
+                matched = True
+            elif engine == "firefox" and (profile_dir in argv or real_profile in argv):
+                matched = True
+            if not matched:
+                return False
+            for a in argv:
+                if a.startswith("--crashpad-handler-pid="):
+                    val = a.split("=", 1)[1].strip()
+                    if val.isdigit():
+                        crashpad_pids.add(int(val))
+            if main_only and any(a.startswith("--type=") for a in argv):
+                return False
+            return True
+
+        # 1. Gracefully stop main browser processes bound to our profile first
+        main_pids = _find_proc_pids_matching(lambda pid, argv: _matches_profile_proc(pid, argv, True))
+        if main_pids:
+            logger.info("Stopping lingering browser main process(es) %s for %s...", main_pids, profile_dir)
+            for pid in main_pids:
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                except Exception:
+                    pass
+            _wait_pids_exit(main_pids, timeout=2.0)
+
+        # 2. Collect all remaining profile processes, referenced crashpad handlers, and direct leaked helper children
+        stray_pids: List[int] = _find_proc_pids_matching(lambda pid, argv: _matches_profile_proc(pid, argv, False))
+        for cpid in list(crashpad_pids):
+            if _is_pid_alive(cpid) and cpid not in stray_pids:
+                stray_pids.append(cpid)
+            for gchild in _get_direct_child_pids(cpid):
+                if gchild not in stray_pids:
+                    stray_pids.append(gchild)
+
+        helper_names = ("chromium", "chrome", "firefox", "ffmpeg", "parec", "node", "chrome_crashpad_handler")
+        for cpid in _get_direct_child_pids(os.getpid()):
+            if cpid in stray_pids:
+                continue
+            try:
+                with open(f"/proc/{cpid}/cmdline", "rb") as f:
+                    raw = f.read()
+                if not raw:
+                    continue
+                argv0 = raw.split(b"\x00", 1)[0].decode("utf-8", errors="ignore")
+                base = os.path.basename(argv0).lower()
+                if any(h in base for h in helper_names):
+                    stray_pids.append(cpid)
+            except Exception:
+                continue
+
+        if stray_pids:
+            logger.info("Cleaning up remaining browser/helper process(es): %s", stray_pids)
+            for pid in stray_pids:
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                except Exception:
+                    pass
+            remaining = _wait_pids_exit(stray_pids, timeout=1.5)
+            for pid in remaining:
+                try:
+                    os.kill(pid, sig_kill)
+                except Exception:
+                    pass
+            if remaining:
+                _wait_pids_exit(remaining, timeout=0.5)
+
+        # 3. If no Chromium process remains for this UID at all, clean any orphaned chrome_crashpad_handler daemons
+        my_uid = os.getuid() if hasattr(os, "getuid") else -1
+        if my_uid >= 0:
+            def _same_uid(pid: int) -> bool:
+                try:
+                    return os.stat(f"/proc/{pid}").st_uid == my_uid
+                except Exception:
+                    return False
+
+            any_user_chrome = _find_proc_pids_matching(
+                lambda pid, argv: _same_uid(pid)
+                and os.path.basename(argv[0]).lower() in ("chromium", "chrome", "ungoogled-chromium", "chromium-browser")
+            )
+            if not any_user_chrome:
+                orphan_cp = _find_proc_pids_matching(
+                    lambda pid, argv: _same_uid(pid)
+                    and "chrome_crashpad_handler" in os.path.basename(argv[0]).lower()
+                )
+                for pid in orphan_cp:
+                    try:
+                        os.kill(pid, signal.SIGTERM)
+                    except Exception:
+                        pass
+                if orphan_cp:
+                    rem_cp = _wait_pids_exit(orphan_cp, timeout=0.8)
+                    for pid in rem_cp:
+                        try:
+                            os.kill(pid, sig_kill)
+                        except Exception:
+                            pass
+
+        _reap_child_zombies()
+
+    # Clean stale Chromium/Firefox lock files
+    for lock_name in ("SingletonLock", "SingletonCookie", "SingletonSocket", "lockfile", "parent.lock", ".parentlock"):
+        lp = os.path.join(profile_dir, lock_name)
+        if os.path.lexists(lp):
+            try:
+                os.remove(lp)
+            except Exception:
+                pass
+
+
 def _cleanup_existing_server_and_locks(port: int, profile_dir: str, config_dir: str) -> None:
     """Gracefully stops older matching server.py or orphaned browser locks without corrupting SQLite."""
     pid_file = os.path.join(config_dir, "server.pid")
@@ -10399,51 +9902,7 @@ def _cleanup_existing_server_and_locks(port: int, profile_dir: str, config_dir: 
         if remaining:
             _wait_pids_exit(remaining, timeout=1.0)
 
-    # Clean up any orphaned Chromium processes still holding --user-data-dir={profile_dir}
-    real_profile = os.path.realpath(profile_dir)
-    user_data_flags = {f"--user-data-dir={profile_dir}", f"--user-data-dir={real_profile}"}
-
-    def _is_orphaned_chrome(pid: int, argv: List[str], main_only: bool) -> bool:
-        if not any(a in user_data_flags for a in argv):
-            return False
-        if main_only and any(a.startswith("--type=") for a in argv):
-            return False
-        return True
-
-    main_chrome_pids = _find_proc_pids_matching(lambda pid, argv: _is_orphaned_chrome(pid, argv, True))
-    if main_chrome_pids:
-        logger.info("Gracefully stopping orphaned browser process(es) %s for %s...", main_chrome_pids, profile_dir)
-        for pid in main_chrome_pids:
-            try:
-                os.kill(pid, signal.SIGTERM)
-            except Exception:
-                pass
-        _wait_pids_exit(main_chrome_pids, timeout=3.0)
-
-    stray_pids = _find_proc_pids_matching(lambda pid, argv: _is_orphaned_chrome(pid, argv, False))
-    if stray_pids:
-        for pid in stray_pids:
-            try:
-                os.kill(pid, signal.SIGTERM)
-            except Exception:
-                pass
-        remaining_chrome = _wait_pids_exit(stray_pids, timeout=2.0)
-        for pid in remaining_chrome:
-            try:
-                os.kill(pid, sig_kill)
-            except Exception:
-                pass
-        if remaining_chrome:
-            _wait_pids_exit(remaining_chrome, timeout=0.5)
-
-    # Clean stale Chromium SingletonLock / Windows lockfile
-    for lock_name in ("SingletonLock", "SingletonCookie", "SingletonSocket", "lockfile"):
-        lp = os.path.join(profile_dir, lock_name)
-        if os.path.lexists(lp):
-            try:
-                os.remove(lp)
-            except Exception:
-                pass
+    _cleanup_browser_processes_and_locks(profile_dir)
 
 
 def _write_server_pid(pid_file: str) -> None:
@@ -10470,14 +9929,14 @@ def _remove_server_pid(pid_file: str) -> None:
         pass
 
 
-async def _close_browser_gracefully(browser: BrowserContext, use_rustwright: bool) -> None:
+async def _close_browser_gracefully(browser: BrowserContext, use_rustwright: bool, cdp_port: int = 9222) -> None:
     """Sends CDP Browser.close when needed and waits cleanly so SQLite/LevelDB flush to disk."""
     if not browser:
         return
     if use_rustwright and _HAS_WEBSOCKETS and websockets is not None:
         try:
             def _fetch_ws_url() -> Optional[str]:
-                with urllib.request.urlopen("http://127.0.0.1:9222/json/version", timeout=1.5) as resp:
+                with urllib.request.urlopen(f"http://127.0.0.1:{cdp_port}/json/version", timeout=1.5) as resp:
                     info = json.loads(resp.read().decode("utf-8", errors="ignore"))
                     return info.get("webSocketDebuggerUrl")
 
@@ -10489,7 +9948,7 @@ async def _close_browser_gracefully(browser: BrowserContext, use_rustwright: boo
         except Exception as exc:
             logger.debug("Rustwright CDP Browser.close notice: %s", exc)
     try:
-        await asyncio.wait_for(browser.close(), timeout=8.0)
+        await asyncio.wait_for(browser.close(), timeout=6.0)
     except Exception as exc:
         logger.debug("browser.close notice: %s", exc)
 
@@ -10588,8 +10047,7 @@ async def run_server(args: argparse.Namespace) -> None:
             if await bridge.start():
                 tab_audio_bridge = bridge
         audio_ready = ensure_audio_sink(audio_device, tabcapture_active=(tab_audio_bridge is not None))
-    portal = LocalPortalHTTPServer(host="127.0.0.1", port=args.portal_port)
-    portal_url = await portal.start()
+    portal_url = resolve_startpage_url()
 
     if args.format.lower() in ("yuv", "yuv420", "yuv420p", "12", "12bit"):
         pixel_fmt = FMT_YUV420P
@@ -10608,6 +10066,7 @@ async def run_server(args: argparse.Namespace) -> None:
     if audio_ready and tab_audio_bridge is None and platform.system() == "Linux":
         browser_env["PULSE_SINK"] = AUDIO_SINK_NAME
 
+    cdp_port = 9222 if args.port == 7788 else (9222 + (args.port % 1000))
     if engine == "chromium":
         custom_bin = getattr(args, "browser_bin", None)
         full_chrome = find_full_chromium_executable(custom_bin)
@@ -10705,10 +10164,12 @@ async def run_server(args: argparse.Namespace) -> None:
             ozone_flags = []
         launch_args = _merge_chromium_feature_flags(ozone_flags + [
             f"--lang={server_locale}",
-            "--remote-debugging-port=9222",
+            f"--remote-debugging-port={cdp_port}",
             "--remote-allow-origins=*",
             "--no-sandbox",
             "--disable-dev-shm-usage",
+            "--disable-crash-reporter",
+            "--disable-breakpad",
             "--font-render-hinting=medium",
             "--enable-font-antialiasing",
             "--enable-smooth-scrolling",
@@ -10751,14 +10212,27 @@ async def run_server(args: argparse.Namespace) -> None:
     else:
         logger.info("Browser Automation Core: Playwright (%s)", engine)
 
-    try:
-        async with pw_factory() as pw:
+    full_chrome = full_chrome if engine == "chromium" else None
+    all_exts = all_exts if engine == "chromium" else []
+    launch_args = launch_args if engine == "chromium" else []
+    gpu_flags = gpu_flags if engine == "chromium" else []
+    raster_threads = raster_threads if engine == "chromium" else 2
+    js_heap_mb = js_heap_mb if engine == "chromium" else 1024
+    renderer_limit = renderer_limit if engine == "chromium" else 4
+
+    async def _launch_browser_runtime() -> Tuple[Any, BrowserContext, Dict[str, Any]]:
+        """Launches a fresh browser instance on-demand when an Amiga client connects."""
+        await loop.run_in_executor(None, _cleanup_browser_processes_and_locks, profile_dir, engine)
+        local_needs_recovery = check_profile_needs_recovery(profile_dir, state_file, engine, is_fallback_profile)
+        pw_cm = pw_factory()
+        pw = await pw_cm.__aenter__()
+        try:
             if engine == "firefox":
                 logger.info("Launching Playwright Firefox persistent context at %s...", profile_dir)
                 firefox_user_agent = (
                     "Mozilla/5.0 (X11; Linux x86_64; rv:134.0) Gecko/20100101 Firefox/134.0"
                 )
-                browser = await pw.firefox.launch_persistent_context(
+                br = await pw.firefox.launch_persistent_context(
                     user_data_dir=profile_dir,
                     headless=True,
                     ignore_default_args=["--mute-audio"],
@@ -10800,15 +10274,17 @@ async def run_server(args: argparse.Namespace) -> None:
                 detected_ua = _detect_chromium_ua(full_chrome)
                 if detected_ua:
                     launch_kwargs["user_agent"] = detected_ua
-                browser = await pw.chromium.launch_persistent_context(**launch_kwargs)
+                br = await pw.chromium.launch_persistent_context(**launch_kwargs)
             else:
                 logger.info("Launching Headless Chromium fallback persistent context at %s...", profile_dir)
                 fallback_args = _merge_chromium_feature_flags([
                     f"--lang={server_locale}",
-                    "--remote-debugging-port=9222",
+                    f"--remote-debugging-port={cdp_port}",
                     "--remote-allow-origins=*",
                     "--no-sandbox",
                     "--disable-dev-shm-usage",
+                    "--disable-crash-reporter",
+                    "--disable-breakpad",
                     "--font-render-hinting=medium",
                     "--enable-font-antialiasing",
                     "--enable-smooth-scrolling",
@@ -10846,152 +10322,241 @@ async def run_server(args: argparse.Namespace) -> None:
                 detected_ua = _detect_chromium_ua(getattr(pw.chromium, "executable_path", None))
                 if detected_ua:
                     fallback_kwargs["user_agent"] = detected_ua
-                browser = await pw.chromium.launch_persistent_context(**fallback_kwargs)
+                br = await pw.chromium.launch_persistent_context(**fallback_kwargs)
 
-            if needs_recovery:
-                await recover_profile_storage_state(browser, state_file)
-            await deduplicate_context_cookies(browser)
+            if local_needs_recovery:
+                await recover_profile_storage_state(br, state_file)
+            await deduplicate_context_cookies(br)
 
-            context_state: Dict[str, Any] = {
+            ctx_state: Dict[str, Any] = {
                 "scripts_initialized": False,
                 "active_session": None,
             }
+            return pw_cm, br, ctx_state
+        except Exception:
+            try:
+                await asyncio.wait_for(pw_cm.__aexit__(None, None, None), timeout=3.0)
+            except Exception:
+                pass
+            await loop.run_in_executor(None, _cleanup_browser_processes_and_locks, profile_dir, engine)
+            raise
 
-            global cpu_gov_global
-            cpu_gov = CPUGovernorManager(enabled=not getattr(args, "no_cpu_governor", False))
-            cpu_gov_global = cpu_gov
+    async def _teardown_browser_runtime(
+        pw_cm: Any,
+        br: Optional[BrowserContext],
+        skip_storage_export: bool = False,
+    ) -> None:
+        """Completely closes the browser, driver, and any lingering processes and returns RAM to OS."""
+        logger.info("Client disconnected: shutting down browser instance and reclaiming memory...")
+        if br is not None and not skip_storage_export:
+            try:
+                await asyncio.wait_for(export_merged_storage_state(br, state_file), timeout=4.0)
+            except Exception:
+                pass
+        if br is not None:
+            try:
+                await _close_browser_gracefully(br, use_rustwright, cdp_port=cdp_port)
+            except Exception as exc:
+                logger.debug("Browser close notice: %s", exc)
+        if pw_cm is not None:
+            try:
+                await asyncio.wait_for(pw_cm.__aexit__(None, None, None), timeout=4.0)
+            except Exception as exc:
+                logger.debug("Playwright/Rustwright exit notice: %s", exc)
+        br = None
+        pw_cm = None
+        await loop.run_in_executor(None, _cleanup_browser_processes_and_locks, profile_dir, engine)
+        _reclaim_python_memory()
+        logger.info("Browser instance fully stopped; server is now idle with zero browser processes.")
 
-            active_session: Optional[AmigaClientSession] = None
-            active_session_lock = asyncio.Lock()
+    try:
+        global cpu_gov_global
+        cpu_gov = CPUGovernorManager(enabled=not getattr(args, "no_cpu_governor", False))
+        cpu_gov_global = cpu_gov
 
-            async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-                nonlocal active_session
-                await cpu_gov.client_connected()
-                session = None
+        active_session: Optional[AmigaClientSession] = None
+        browser_lock = asyncio.Lock()
+
+        async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+            nonlocal active_session
+            # Immediately ask any previous active session to stop before waiting on browser_lock
+            prev_sess = active_session
+            if prev_sess is not None:
+                logger.info("New client connected: closing previous session before launching fresh browser")
+                prev_sess.running = False
                 try:
-                    async with active_session_lock:
-                        prev_sess = active_session
-                        if prev_sess is not None:
-                            logger.info("New client connected: waiting for previous session to close cleanly")
-                            prev_sess.running = False
-                            try:
-                                prev_sess.writer.close()
-                            except Exception:
-                                pass
-                            try:
-                                await asyncio.wait_for(prev_sess._closed_event.wait(), timeout=3.0)
-                            except Exception:
-                                pass
+                    prev_sess.writer.close()
+                except Exception:
+                    pass
 
-                        session = AmigaClientSession(
-                            reader=reader,
-                            writer=writer,
-                            browser=browser,
-                            width=args.width,
-                            height=args.height,
-                            pixel_format=pixel_fmt,
-                            target_fps=args.fps,
-                            start_url=args.url,
-                            portal_url=portal_url,
-                            audio_enabled=audio_ready,
-                            jpeg_quality=getattr(args, "jpeg_quality", 100),
-                            codec_mode=getattr(args, "codec", "auto"),
-                            engine=engine,
-                            stream_mode=getattr(args, "stream_mode", "auto"),
-                            video_bitrate=getattr(args, "video_bitrate", 8000),
-                            storage_state_file=state_file,
-                            context_state=context_state,
-                            browser_locale=server_locale,
-                            locale_explicit=locale_explicit,
-                            use_rustwright=use_rustwright,
-                            audio_device=audio_device,
-                            tab_audio_bridge=tab_audio_bridge,
-                        )
-                        active_session = session
+            await cpu_gov.client_connected()
+            pw_cm = None
+            browser: Optional[BrowserContext] = None
+            session: Optional[AmigaClientSession] = None
+            try:
+                async with browser_lock:
+                    if not getattr(reader, "_buffer", None):
+                        await asyncio.sleep(0.05)
+                    if reader.at_eof() or stop_event.is_set():
+                        try:
+                            writer.close()
+                            await asyncio.wait_for(writer.wait_closed(), timeout=0.5)
+                        except Exception:
+                            pass
+                        return
 
+                    # Send immediate status hint to Amiga while browser starts on-demand
+                    try:
+                        msg_b = "Starte Browser...".encode("latin-1", errors="replace")[:63].ljust(64, b"\x00")
+                        writer.write(STRUCT_MSG_PROGRESS.pack(MSG_PAGE_PROGRESS, 10, msg_b))
+                        await asyncio.wait_for(writer.drain(), timeout=1.0)
+                    except Exception:
+                        pass
+
+                    try:
+                        pw_cm, browser, context_state = await _launch_browser_runtime()
+                    except Exception as launch_exc:
+                        logger.error("Failed to launch browser on client connect: %s", launch_exc)
+                        try:
+                            writer.close()
+                            await asyncio.wait_for(writer.wait_closed(), timeout=0.5)
+                        except Exception:
+                            pass
+                        return
+
+                    if reader.at_eof() or stop_event.is_set():
+                        await _teardown_browser_runtime(pw_cm, browser, skip_storage_export=True)
+                        pw_cm = None
+                        browser = None
+                        try:
+                            writer.close()
+                            await asyncio.wait_for(writer.wait_closed(), timeout=0.5)
+                        except Exception:
+                            pass
+                        return
+
+                    session = AmigaClientSession(
+                        reader=reader,
+                        writer=writer,
+                        browser=browser,
+                        width=args.width,
+                        height=args.height,
+                        pixel_format=pixel_fmt,
+                        target_fps=args.fps,
+                        start_url=args.url,
+                        portal_url=portal_url,
+                        audio_enabled=audio_ready,
+                        jpeg_quality=getattr(args, "jpeg_quality", 100),
+                        codec_mode=getattr(args, "codec", "auto"),
+                        engine=engine,
+                        stream_mode=getattr(args, "stream_mode", "auto"),
+                        video_bitrate=getattr(args, "video_bitrate", 8000),
+                        storage_state_file=state_file,
+                        context_state=context_state,
+                        browser_locale=server_locale,
+                        locale_explicit=locale_explicit,
+                        use_rustwright=use_rustwright,
+                        audio_device=audio_device,
+                        tab_audio_bridge=tab_audio_bridge,
+                        close_browser_on_exit=True,
+                    )
+                    session.cdp_port = cdp_port
+                    active_session = session
+
+                    storage_already_saved = False
                     try:
                         await session.run()
                     finally:
-                        async with active_session_lock:
-                            if active_session is session:
-                                active_session = None
-                finally:
-                    await cpu_gov.client_disconnected()
-
-            server = await asyncio.start_server(handle_client, args.host, args.port)
-            extra_servers = []
-            if args.port != 9757:
-                try:
-                    srv_lan = await asyncio.start_server(handle_client, args.host, 9757)
-                    extra_servers.append(srv_lan)
-                except OSError as exc:
-                    logger.warning("Could not bind secondary LAN port 9757: %s", exc)
-
-            all_socks = list(server.sockets or [])
-            for s in extra_servers:
-                all_socks.extend(s.sockets or [])
-            addrs = ", ".join(str(sock.getsockname()) for sock in all_socks)
-            if audio_ready:
-                if tab_audio_bridge is not None:
-                    audio_desc = "ON (Silent Browser TabCapture -> AHI; Host Speakers Muted)"
-                elif _IS_WINDOWS:
-                    audio_desc = "ON (Windows WASAPI/DirectShow -> AHI)"
-                elif platform.system() == "Darwin":
-                    audio_desc = "ON (macOS AVFoundation -> AHI)"
-                else:
-                    audio_desc = "ON (Full Browser -> PipeWire -> AHI)"
-            else:
-                audio_desc = "OFF"
-            logger.info(
-                "VortexBrowse Server ready on %s | Engine: %s | Viewport: %dx%d (1:1 Auto-Sync) | Format: %s | Codec: LZ4+DirtySlice | Audio: %s",
-                addrs,
-                engine.upper(),
-                args.width,
-                args.height,
-                "YUV420P" if pixel_fmt == FMT_YUV420P else ("RGB565" if pixel_fmt == FMT_RGB565 else "ARGB32"),
-                audio_desc,
-            )
-
-            try:
-                async with server:
-                    if not stop_event.is_set():
-                        serve_task = asyncio.create_task(server.serve_forever())
-                        stop_wait_task = asyncio.create_task(stop_event.wait())
-                        try:
-                            await asyncio.wait(
-                                {serve_task, stop_wait_task},
-                                return_when=asyncio.FIRST_COMPLETED,
-                            )
-                        finally:
-                            for t in (serve_task, stop_wait_task):
-                                if not t.done():
-                                    t.cancel()
-                                    try:
-                                        await t
-                                    except asyncio.CancelledError:
-                                        pass
+                        storage_already_saved = bool(getattr(session, "_storage_saved_on_exit", False))
+                        if active_session is session:
+                            active_session = None
+                        session = None
+                        context_state = None
+                        await _teardown_browser_runtime(
+                            pw_cm,
+                            browser,
+                            skip_storage_export=storage_already_saved,
+                        )
+                        pw_cm = None
+                        browser = None
+                        _reclaim_python_memory()
             finally:
-                logger.info("Shutting down VortexBrowse Server cleanly...")
-                sess = active_session
-                if sess is not None and sess.running:
-                    sess.running = False
+                await cpu_gov.client_disconnected()
+
+        server = await asyncio.start_server(handle_client, args.host, args.port)
+        extra_servers = []
+        if args.port != 9757:
+            try:
+                srv_lan = await asyncio.start_server(handle_client, args.host, 9757)
+                extra_servers.append(srv_lan)
+            except OSError as exc:
+                logger.warning("Could not bind secondary LAN port 9757: %s", exc)
+
+        all_socks = list(server.sockets or [])
+        for s in extra_servers:
+            all_socks.extend(s.sockets or [])
+        addrs = ", ".join(str(sock.getsockname()) for sock in all_socks)
+        if audio_ready:
+            if tab_audio_bridge is not None:
+                audio_desc = "ON (Silent Browser TabCapture -> AHI; Host Speakers Muted)"
+            elif _IS_WINDOWS:
+                audio_desc = "ON (Windows WASAPI/DirectShow -> AHI)"
+            elif platform.system() == "Darwin":
+                audio_desc = "ON (macOS AVFoundation -> AHI)"
+            else:
+                audio_desc = "ON (Full Browser -> PipeWire -> AHI)"
+        else:
+            audio_desc = "OFF"
+        logger.info(
+            "VortexBrowse Server ready on %s (On-Demand Browser) | Engine: %s | Viewport: %dx%d (1:1 Auto-Sync) | Format: %s | Codec: LZ4+DirtySlice | Audio: %s",
+            addrs,
+            engine.upper(),
+            args.width,
+            args.height,
+            "YUV420P" if pixel_fmt == FMT_YUV420P else ("RGB565" if pixel_fmt == FMT_RGB565 else "ARGB32"),
+            audio_desc,
+        )
+        _reclaim_python_memory()
+
+        try:
+            async with server:
+                if not stop_event.is_set():
+                    serve_task = asyncio.create_task(server.serve_forever())
+                    stop_wait_task = asyncio.create_task(stop_event.wait())
                     try:
-                        sess.writer.close()
-                    except Exception:
-                        pass
-                    try:
-                        await asyncio.wait_for(sess.save_storage_state(force=True), timeout=3.0)
-                    except Exception:
-                        pass
-                cpu_gov.restore()
-                for s in extra_servers:
-                    s.close()
-                    await s.wait_closed()
+                        await asyncio.wait(
+                            {serve_task, stop_wait_task},
+                            return_when=asyncio.FIRST_COMPLETED,
+                        )
+                    finally:
+                        for t in (serve_task, stop_wait_task):
+                            if not t.done():
+                                t.cancel()
+                                try:
+                                    await t
+                                except asyncio.CancelledError:
+                                    pass
+        finally:
+            logger.info("Shutting down VortexBrowse Server cleanly...")
+            sess = active_session
+            if sess is not None:
+                sess.running = False
                 try:
-                    await asyncio.wait_for(export_merged_storage_state(browser, state_file), timeout=5.0)
+                    sess.writer.close()
                 except Exception:
                     pass
-                await _close_browser_gracefully(browser, use_rustwright)
+            # Wait briefly for any active handle_client() to finish browser teardown cleanly
+            try:
+                await asyncio.wait_for(browser_lock.acquire(), timeout=8.0)
+                browser_lock.release()
+            except Exception:
+                pass
+            cpu_gov.restore()
+            for s in extra_servers:
+                s.close()
+                await s.wait_closed()
+            await loop.run_in_executor(None, _cleanup_browser_processes_and_locks, profile_dir, engine)
+            _reclaim_python_memory()
     finally:
         for sig in registered_signals:
             try:
@@ -11005,7 +10570,6 @@ async def run_server(args: argparse.Namespace) -> None:
                 pass
         if tab_audio_bridge is not None:
             await tab_audio_bridge.stop()
-        await portal.stop()
         _remove_server_pid(pid_file)
 
 
@@ -11013,7 +10577,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="VortexBrowse Universal Companion Server (Linux / Raspberry Pi / macOS / Windows)")
     parser.add_argument("--host", default="0.0.0.0", help="Bind address (default: 0.0.0.0)")
     parser.add_argument("--port", type=int, default=7788, help="TCP port (default: 7788, plus 9757 for LAN)")
-    parser.add_argument("--portal-port", type=int, default=8089, help="Local start portal HTTP port")
+    parser.add_argument("--portal-port", type=int, default=0, help=argparse.SUPPRESS)
     parser.add_argument("--width", type=int, default=1920, help="Initial browser width (default: 1920 Full HD)")
     parser.add_argument("--height", type=int, default=1080, help="Initial browser height (default: 1080 Full HD)")
     parser.add_argument("--format", choices=["argb32", "rgb565", "yuv420p", "yuv"], default="yuv420p", help="Wire pixel format (default: yuv420p — GPU-native YUV, lowest bandwidth)")

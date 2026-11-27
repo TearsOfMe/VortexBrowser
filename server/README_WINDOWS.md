@@ -20,7 +20,7 @@ Native Windows 10/11 server for **VortexBrowser (AmigaOS 4.1)** — no VM, no WS
 
 ## Schnellstart / Quick Start (Windows 10 / 11)
 
-1. Entpacke `VortexBrowser-1.0-Server-Windows.zip` in einen Ordner (z. B. `C:\VortexBrowser-Server\`).
+1. Entpacke `VortexBrowser-1.1-Server-Windows.zip` in einen Ordner (z. B. `C:\VortexBrowser-Server\`).
 2. Öffne **PowerShell** im Server-Ordner (für automatische Firewall-Regel idealerweise **als Administrator**):
    ```powershell
    powershell -ExecutionPolicy Bypass -File .\install_windows.ps1

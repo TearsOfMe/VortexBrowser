@@ -11,9 +11,9 @@ import zipfile
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DIST_DIR = os.path.join(SCRIPT_DIR, "dist")
 
-VER_STR = "1.0"
+VER_STR = "1.1"
 APP_NAME = "VortexBrowser"
-RELEASE_DATE = "22.11.2026"
+RELEASE_DATE = "27.11.2026"
 
 STAGING_DIR = os.path.join(DIST_DIR, "staging")
 AMIGA_DRAWER = os.path.join(STAGING_DIR, "VortexBrowser")
@@ -35,15 +35,15 @@ os.makedirs(SERVER_WINDOWS_DRAWER, exist_ok=True)
 GUIDE_CONTENT = """@database "VortexBrowser.guide"
 @author "TearsOfMe"
 @(c) "2026 VortexBrowser Project"
-@$VER: VortexBrowser.guide 1.0 (22.11.2026)
+@$VER: VortexBrowser.guide 1.1 (27.11.2026)
 
-@node "Main" "VortexBrowser 1.0 - Benutzerhandbuch"
+@node "Main" "VortexBrowser 1.1 - Benutzerhandbuch"
 @{b}========================================================================@{ub}
-           @{b}VORTEXBROWSER 1.0 FUER AMIGAOS 4.1@{ub}
+           @{b}VORTEXBROWSER 1.1 FUER AMIGAOS 4.1@{ub}
       Moderner Web-Browser mit Remote-Rendering & Streaming
 @{b}========================================================================@{ub}
 
-Willkommen zu @{b}VortexBrowser 1.0@{ub}!
+Willkommen zu @{b}VortexBrowser 1.1@{ub}!
 
 VortexBrowser ermoeglicht modernes Surfen im World Wide Web auf Ihrem AmigaOS 4.1
 System mit voller Unterstuetzung fuer moderne Web-Standards (HTML5, CSS3,
@@ -136,7 +136,7 @@ authentischen Look & Feel von AmigaOS 4!
 @{b}Installation & Schnellstart@{ub}
 
 @{b}Schritt 1: Server starten (Linux PC oder Raspberry Pi)@{ub}
-1. Entpacken Sie das Server-Archiv @{b}VortexBrowser-1.0-Server-Linux.zip@{ub}
+1. Entpacken Sie das Server-Archiv @{b}VortexBrowser-1.1-Server-Linux.zip@{ub}
    (bzw. kopieren Sie den Ordner @{b}Server-Linux/@{ub}) auf Ihren Server.
 2. Oeffnen Sie ein Terminal im Server-Verzeichnis.
 3. Starten Sie das universelle Installationsskript:
@@ -150,7 +150,7 @@ authentischen Look & Feel von AmigaOS 4!
    @{b}./run_server.sh@{ub}
 
 @{b}Schritt 2: VortexBrowser auf dem AmigaOS 4 starten@{ub}
-1. Entpacken Sie das Archiv @{b}VortexBrowser-1.0-AmigaOS4.lha@{ub} an Ihren
+1. Entpacken Sie das Archiv @{b}VortexBrowser-1.1-AmigaOS4.lha@{ub} an Ihren
    gewuenschten Ort (z. B. @{b}Work:Internet/VortexBrowser@{ub}).
 2. Starten Sie @{b}VortexBrowser@{ub} per Doppelklick auf das Programm-Icon.
 3. Beim ersten Start fragt VortexBrowser Sie direkt nach der IP-Adresse Ihres Servers
@@ -466,7 +466,7 @@ automatisch erkennt und konfiguriert:
   und kompiliert die SIMD-Routinen passgenau fuer Ihre Prozessor-Architektur.
 
 @{b}Automatische Installation mit install_server.sh:@{ub}
-1. Entpacken Sie das Server-Archiv @{b}VortexBrowser-1.0-Server-Linux.zip@{ub}.
+1. Entpacken Sie das Server-Archiv @{b}VortexBrowser-1.1-Server-Linux.zip@{ub}.
 2. Oeffnen Sie ein Terminal im Verzeichnis @{b}Server-Linux/@{ub}.
 3. Fuehren Sie das universelle Installationsskript aus:
    @{b}./install_server.sh@{ub}
@@ -522,7 +522,7 @@ Deaktivieren Sie Rustwright beim Server-Start (Fallback auf Standard-Playwright)
 @node "EnglishDoc" "English Documentation Summary"
 @{b}English Documentation Summary@{ub}
 
-@{b}VortexBrowser 1.0@{ub} is a remote web rendering browser client for AmigaOS 4.1.
+@{b}VortexBrowser 1.1@{ub} is a remote web rendering browser client for AmigaOS 4.1.
 It renders modern web pages (HTML5, CSS3, ES2024 JavaScript, WebGL, YouTube, etc.)
 on a companion Linux PC, AMD Ryzen, Intel Core/Atom or Raspberry Pi 4/5 server, streaming ultra-smooth visuals
 and 16-bit 48kHz audio directly to AmigaOS with native Reaction GUI controls.
@@ -539,14 +539,14 @@ and 16-bit 48kHz audio directly to AmigaOS with native Reaction GUI controls.
 
 @{b}Quick Start:@{ub}
 1. On your Linux PC or Raspberry Pi:
-   Extract @{b}VortexBrowser-1.0-Server-Linux.zip@{ub}, enter the @{b}Server-Linux/@{ub} directory and run:
+   Extract @{b}VortexBrowser-1.1-Server-Linux.zip@{ub}, enter the @{b}Server-Linux/@{ub} directory and run:
    @{b}./install_server.sh@{ub}
    (Automatically detects your CPU/GPU hardware, drivers and SIMD instruction set).
    Then start the server with:
    @{b}./run_server.sh@{ub}
    Note the IP address displayed.
 2. On your Amiga:
-   Extract @{b}VortexBrowser-1.0-AmigaOS4.lha@{ub} and double-click @{b}VortexBrowser@{ub}.
+   Extract @{b}VortexBrowser-1.1-AmigaOS4.lha@{ub} and double-click @{b}VortexBrowser@{ub}.
    Enter your server IP address (Port: 7788) and connect!
 
 @{b}Key Features:@{ub}
@@ -567,17 +567,17 @@ with open(os.path.join(AMIGA_DRAWER, f"{APP_NAME}.guide"), "w", encoding="iso-88
 GUIDE_EN_CONTENT = """@database "VortexBrowser_EN.guide"
 @author "TearsOfMe"
 @(c) "(C) 2026 TearsOfMe"
-@$VER: VortexBrowser_EN.guide 1.0 (22.11.2026)
+@$VER: VortexBrowser_EN.guide 1.1 (27.11.2026)
 
-@node MAIN "VortexBrowser 1.0 - Official AmigaOS 4.1 User Manual"
+@node MAIN "VortexBrowser 1.1 - Official AmigaOS 4.1 User Manual"
 @next INTRO
 
 @{b}==============================================================================
-                      VORTEXBROWSER 1.0 FOR AMIGAOS 4.1
+                      VORTEXBROWSER 1.1 FOR AMIGAOS 4.1
                  High-Performance Remote Web Browser (PPC)
 ==============================================================================@{ub}
 
-Welcome to @{b}VortexBrowser 1.0@{ub}!
+Welcome to @{b}VortexBrowser 1.1@{ub}!
 VortexBrowser brings the modern web (HTML5, CSS3, ES2024 JavaScript, YouTube,
 Twitch, WebGL) smoothly to AmigaOS 4.1 by offloading browser rendering to a
 Linux, macOS, Docker, or Raspberry Pi companion server and streaming pixels
@@ -598,7 +598,7 @@ using planar YUV420p + 2D Dirty-Rect + LZ4 (or H.264 via va.library) plus
 @next REQS
 
 @{b}1. AmigaOS 4 (Client)@{ub}
-- Extract vortexbrowser.lha or VortexBrowser-1.0-AmigaOS4.lha using UnArc
+- Extract vortexbrowser.lha or VortexBrowser-1.1-AmigaOS4.lha using UnArc
   into any drawer (e.g. Work:Internet/VortexBrowser/).
 - No external .so libraries needed (libavcodec, liblz4, libjpeg are compiled
   statically into the binary).
@@ -714,7 +714,7 @@ if os.path.exists(en_guide_info):
 # German Quickstart Readme: LIESMICH.txt
 # -------------------------------------------------------------
 LIESMICH_CONTENT = f"""==============================================================================
-                    {APP_NAME.upper()} 1.0 FUER AMIGAOS 4.1
+                    {APP_NAME.upper()} 1.1 FUER AMIGAOS 4.1
                  Schnellstartanleitung & Kurzanleitung
 ==============================================================================
 
@@ -739,7 +739,7 @@ WebGL, etc.) fluessig und ressourcenschonend auf den Amiga bringt.
 ------------------------------------------------------------------------------
 
 SCHRITT 1: Server starten (auf Linux-PC oder Raspberry Pi 4/5)
-1. Entpacken Sie das Server-Archiv (VortexBrowser-1.0-Server-Linux.zip) auf Ihrem Rechner.
+1. Entpacken Sie das Server-Archiv (VortexBrowser-1.1-Server-Linux.zip) auf Ihrem Rechner.
 2. Oeffnen Sie ein Terminal im Server-Ordner ("Server-Linux/") und starten Sie die Installation:
       ./install_server.sh
    (Erkennt automatisch Intel-, AMD- und Raspberry Pi-Hardware sowie Grafiktreiber und SIMD)
@@ -816,7 +816,7 @@ with open(os.path.join(AMIGA_DRAWER, "LIESMICH.txt"), "w", encoding="iso-8859-1"
 # English Quickstart Readme: README.txt
 # -------------------------------------------------------------
 README_CONTENT = f"""==============================================================================
-                    {APP_NAME.upper()} 1.0 FOR AMIGAOS 4.1
+                    {APP_NAME.upper()} 1.1 FOR AMIGAOS 4.1
                  Quick Start Guide & Feature Overview
 ==============================================================================
 
@@ -841,7 +841,7 @@ YouTube, and Twitch with low Amiga CPU usage and native Reaction GUI.
 ------------------------------------------------------------------------------
 
 STEP 1: Start Server (Linux PC, AMD, Intel or Raspberry Pi 4/5)
-1. Extract "VortexBrowser-1.0-Server-Linux.zip" on your companion Linux machine.
+1. Extract "VortexBrowser-1.1-Server-Linux.zip" on your companion Linux machine.
 2. Open a terminal in "Server-Linux/" and run:
       ./install_server.sh
    (Automatically detects your CPU/GPU hardware, drivers and SIMD)
@@ -1091,6 +1091,8 @@ WantedBy=default.target
 # Populate Universal Server-Linux Drawer from single server/ codebase
 # -------------------------------------------------------------
 shutil.copy2("server/server.py", os.path.join(SERVER_LINUX_DRAWER, "server.py"))
+if os.path.exists("server/startpage.html"):
+    shutil.copy2("server/startpage.html", os.path.join(SERVER_LINUX_DRAWER, "startpage.html"))
 shutil.copy2("server/fast_pixconv.c", os.path.join(SERVER_LINUX_DRAWER, "fast_pixconv.c"))
 if os.path.exists("server/fast_pixconv.so"):
     shutil.copy2("server/fast_pixconv.so", os.path.join(SERVER_LINUX_DRAWER, "fast_pixconv.so"))
@@ -1215,6 +1217,8 @@ if os.path.exists("server/README.md"):
 # Populate Native Server-Windows Drawer from single server/ codebase
 # -------------------------------------------------------------
 shutil.copy2("server/server.py", os.path.join(SERVER_WINDOWS_DRAWER, "server.py"))
+if os.path.exists("server/startpage.html"):
+    shutil.copy2("server/startpage.html", os.path.join(SERVER_WINDOWS_DRAWER, "startpage.html"))
 shutil.copy2("server/fast_pixconv.c", os.path.join(SERVER_WINDOWS_DRAWER, "fast_pixconv.c"))
 for _dll in ("fast_pixconv.dll", "fast_pixconv_avx2.dll"):
     if os.path.exists(os.path.join("server", _dll)):
@@ -1250,10 +1254,10 @@ assert_tree_clean(SERVER_WINDOWS_DRAWER, "Server-Windows drawer")
 # Overall German and English Readmes for Complete Archive
 # -------------------------------------------------------------
 OVERALL_DE_TXT = f"""==============================================================================
-            {APP_NAME.upper()} 1.0 - GESAMTPAKET FUER AMIGAOS 4 & SERVER
+            {APP_NAME.upper()} 1.1 - GESAMTPAKET FUER AMIGAOS 4 & SERVER
 ==============================================================================
 
-Dieses Komplettpaket enthaelt alles fuer den Betrieb von {APP_NAME} 1.0
+Dieses Komplettpaket enthaelt alles fuer den Betrieb von {APP_NAME} 1.1
 auf AmigaOS 4.1 sowie dem Rendering-Server auf Linux oder Raspberry Pi 4/5.
 
 VERZEICHNISSTRUKTUR:

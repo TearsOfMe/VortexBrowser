@@ -1,4 +1,4 @@
-## version $VER: VortexBrowser.catalog 3.0 (22.11.2026)
+## version $VER: VortexBrowser.catalog 3.0 (27.11.2026)
 ## language espanol
 ## codeset 4
 ;
@@ -561,7 +561,7 @@ MSG_ABOUT_ALTIVEC_NO
 Base escalar (Seguro para X5000/A1222+/Sam460/G3)
 ;
 MSG_ABOUT_SEC_SERVER
-VortexBrowser para AmigaOS 4\nVersión 1.0\n\n=== INFORMACIÓN DEL SERVIDOR ===\nDirección del servidor: %s:%u\nEstado de conexión: %s\nMotor del servidor: %s\n\n
+VortexBrowser para AmigaOS 4\nVersión 1.1\n\n=== INFORMACIÓN DEL SERVIDOR ===\nDirección del servidor: %s:%u\nEstado de conexión: %s\nMotor del servidor: %s\n\n
 ;
 MSG_ABOUT_SEC_GRAPHICS
 === RESOLUCIÓN Y GRÁFICOS ===\nPantalla: %ux%u (%u bits, %s)\nVentana: %ux%u (Pos: %d,%d)\nÁrea web: %ux%u px (Auto-Sync 1:1)\nFlujo del servidor: %ux%u (%s)\nFotogramas decodificados: %u\nIdioma activo: %s\n\n

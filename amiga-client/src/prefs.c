@@ -311,7 +311,7 @@ static BOOL load_from_file(VortexApp *app, const char *path)
             app->prefs.font.web_charset = (uint8_t)atoi(val);
         } else if (strcmp(key, "web_zoom_pct") == 0) {
             int z = atoi(val);
-            if (z >= 50 && z <= 250) app->prefs.font.web_zoom_pct = (uint16_t)z;
+            if (z >= 50 && z <= 300) app->prefs.font.web_zoom_pct = (uint16_t)z;
         } else if (strcmp(key, "web_font_size") == 0) {
             int fs = atoi(val);
             if (fs >= 10 && fs <= 36) app->prefs.font.web_font_size = (uint16_t)fs;
@@ -570,36 +570,49 @@ void prefs_capture_dl_window_box(VortexApp *app)
     }
 }
 
+BOOL prefs_is_startpage_url(const char *url)
+{
+    if (!url || url[0] == '\0' || url[0] == '@') {
+        return TRUE;
+    }
+    if (strncmp(url, "about:", 6) == 0 ||
+        strncmp(url, "http://127.0.0.1:", 17) == 0 ||
+        strncmp(url, "http://localhost:", 17) == 0) {
+        return TRUE;
+    }
+    if (strncmp(url, "file://", 7) == 0 && strstr(url, "startpage.html") != NULL) {
+        return TRUE;
+    }
+    return FALSE;
+}
+
 void prefs_capture_tabs(VortexApp *app)
 {
     if (!app) return;
     if (app->num_tabs > 0) {
         int real_tabs = 0;
         for (int i = 0; i < app->num_tabs && i < VB_MAX_TABS; i++) {
-            const char *u = app->tabs[i].url;
-            if (u && u[0] != '\0' && u[0] != '@' &&
-                strncmp(u, "about:", 6) != 0 &&
-                strncmp(u, "http://127.0.0.1:", 17) != 0 &&
-                strncmp(u, "http://localhost:", 17) != 0) {
+            if (!prefs_is_startpage_url(app->tabs[i].url)) {
                 real_tabs++;
             }
         }
 
         uint16_t count = 0;
+        int mapped_active = -1;
+        const char *home_str = GetVString(MSG_MENU_HOME);
         for (int i = 0; i < app->num_tabs && count < VB_MAX_TABS; i++) {
             const char *u = app->tabs[i].url;
             const char *t = app->tabs[i].title;
-            const char *home_str = GetVString(MSG_MENU_HOME);
-            BOOL is_startpage = (!u || u[0] == '\0' || u[0] == '@' ||
-                                 strncmp(u, "about:", 6) == 0 ||
-                                 strncmp(u, "http://127.0.0.1:", 17) == 0 ||
-                                 strncmp(u, "http://localhost:", 17) == 0 ||
+            BOOL is_startpage = (prefs_is_startpage_url(u) ||
                                  (t && (strcmp(t, "Startseite") == 0 || (home_str && strcmp(t, home_str) == 0)) && (!u || u[0] == '\0')));
-            /* If there is at least one old web tab, don't persist redundant startpage tabs */
+            /* If there is at least one real web tab, don't persist redundant startpage tabs */
             if (real_tabs > 0 && is_startpage) {
                 continue;
             }
-            strncpy(app->prefs.saved_tab_urls[count], u ? u : "", sizeof(app->prefs.saved_tab_urls[0]) - 1);
+            if (i == (int)app->active_tab_idx) {
+                mapped_active = (int)count;
+            }
+            strncpy(app->prefs.saved_tab_urls[count], (!is_startpage && u) ? u : "", sizeof(app->prefs.saved_tab_urls[0]) - 1);
             app->prefs.saved_tab_urls[count][sizeof(app->prefs.saved_tab_urls[0]) - 1] = '\0';
 
             strncpy(app->prefs.saved_tab_titles[count], (t && t[0]) ? t : "Web", sizeof(app->prefs.saved_tab_titles[0]) - 1);
@@ -608,10 +621,10 @@ void prefs_capture_tabs(VortexApp *app)
             count++;
         }
         app->prefs.saved_num_tabs = count;
-        if (app->active_tab_idx < count) {
-            app->prefs.saved_active_tab = app->active_tab_idx;
+        if (mapped_active >= 0 && mapped_active < (int)count) {
+            app->prefs.saved_active_tab = (uint16_t)mapped_active;
         } else {
-            app->prefs.saved_active_tab = (count > 0) ? (count - 1) : 0;
+            app->prefs.saved_active_tab = (count > 0) ? (uint16_t)(count - 1) : 0;
         }
     }
 }

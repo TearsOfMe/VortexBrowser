@@ -21,9 +21,9 @@
 #endif
 
 #define VB_APP_NAME      "VortexBrowser"
-#define VB_APP_VERSION   "1.0"
-#define VB_APP_DATE      "(22.11.2026)"
-#define VB_APP_TITLE     "VortexBrowser 1.0"
+#define VB_APP_VERSION   "1.1"
+#define VB_APP_DATE      "(27.11.2026)"
+#define VB_APP_TITLE     "VortexBrowser 1.1"
 #define VB_MAX_FAVORITES 64
 #ifndef VB_MAX_URL_LEN
 #define VB_MAX_URL_LEN   512
@@ -89,6 +89,8 @@ typedef struct DownloadState {
 
 struct MsgPort;
 struct AHIRequest;
+struct DiskObject;
+struct AppIcon;
 
 typedef struct AudioState {
     struct MsgPort    *ahi_mp;
@@ -186,6 +188,18 @@ typedef struct VortexApp {
     /* Reaction GUI objects */
     Object        *win_obj;
     struct Window *win;
+    struct MsgPort *app_port;
+    BOOL           is_iconified;
+    struct AppIcon     *wb_app_icon;
+    struct DiskObject  *wb_icon_dobj;
+    BOOL                iconify_needed;
+    BOOL                uniconify_needed;
+    BOOL                to_front_needed;
+    BOOL                open_prefs_needed;
+    uint32              applib_id;
+    struct MsgPort     *applib_port;
+    APTR                cx_broker;       /* CxObj * */
+    struct MsgPort     *cx_port;
     Object        *gad_url;
     Object        *gad_search_chooser;
     Object        *gad_search;
@@ -274,6 +288,7 @@ typedef struct VortexApp {
     BrowserTab     tabs[VB_MAX_TABS];
     uint16_t       num_tabs;
     uint16_t       active_tab_idx;
+    uint32_t       restore_tab_mask; /* Bitmask of tabs currently restoring saved URLs */
     Object        *gad_clicktab;
     struct List    tab_list;
     Object        *gad_tab_new;

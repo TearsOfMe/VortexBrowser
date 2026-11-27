@@ -133,6 +133,10 @@ void gui_tab_close_remote(VortexApp *app, uint16 idx, uint16 new_active_idx);
 void gui_tab_set_title(VortexApp *app, uint16 idx, const char *title);
 void gui_tabs_rebuild(VortexApp *app);
 void gui_set_rmb_trap(VortexApp *app, BOOL trap);
+void gui_iconify(VortexApp *app);
+void gui_uniconify(VortexApp *app);
+void gui_to_front(VortexApp *app);
+void gui_try_close_pending_screen(VortexApp *app);
 
 #endif /* VORTEXBROWSE_GUI_H */
 

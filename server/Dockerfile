@@ -49,7 +49,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r /app/requirements.txt
 
 # 3. Copy server files
-COPY server.py darkreader.js fast_pixconv.c sync_twitch_login.py sync_twitch_login.sh /app/
+COPY server.py startpage.html darkreader.js fast_pixconv.c sync_twitch_login.py sync_twitch_login.sh /app/
 COPY extensions /app/extensions
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh /app/sync_twitch_login.sh

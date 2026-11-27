@@ -14,6 +14,9 @@
 #include <proto/bsdsocket.h>
 #include <proto/popupmenu.h>
 #include <proto/keymap.h>
+#include <proto/icon.h>
+#include <proto/wb.h>
+#include <workbench/workbench.h>
 
 #include <classes/window.h>
 #include <classes/popupmenu.h>
@@ -39,6 +42,9 @@
 #include <images/bitmap.h>
 #include <images/label.h>
 #include <libraries/gadtools.h>
+#include <graphics/gfx.h>
+#include <graphics/rpattr.h>
+#include <graphics/blitattr.h>
 #include <graphics/modeid.h>
 #include <graphics/displayinfo.h>
 #include <graphics/layers.h>
@@ -56,6 +62,7 @@
 #include "locale_strings.h"
 
 extern struct SocketIFace *ISocket;
+extern void app_sync_hidden_state(VortexApp *app, BOOL hidden);
 
 static void send_amiga_clipboard_paste(VortexApp *app)
 {
@@ -147,6 +154,90 @@ static BOOL dispatch_edit_shortcut(VortexApp *app, char ch, int source)
         default:  return FALSE;
     }
     return TRUE;
+}
+
+static BOOL dispatch_zoom_shortcut(VortexApp *app, int dir, int source)
+{
+    static int     s_last_dir = 99;
+    static int     s_last_src = 0;
+    static int64_t s_last_us  = 0;
+
+    if (!app) return FALSE;
+
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    int64_t now_us = (int64_t)tv.tv_sec * 1000000LL + (int64_t)tv.tv_usec;
+    if (dir == s_last_dir && source != s_last_src && (now_us - s_last_us) < 80000LL) {
+        /* Same keystroke delivered by both RAWKEY and MENUPICK */
+        return TRUE;
+    }
+    s_last_dir = dir;
+    s_last_src = source;
+    s_last_us  = now_us;
+
+    static const uint16_t k_zoom_steps[] = {
+        50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200, 250, 300
+    };
+    const int n_steps = (int)(sizeof(k_zoom_steps) / sizeof(k_zoom_steps[0]));
+    uint16_t cur = app->prefs.font.web_zoom_pct ? app->prefs.font.web_zoom_pct : 100;
+    uint16_t next_zoom = cur;
+
+    if (dir == 0) {
+        next_zoom = 100;
+        app->prefs.font.web_font_size = 16;
+    } else if (dir > 0) {
+        next_zoom = k_zoom_steps[n_steps - 1];
+        for (int i = 0; i < n_steps; i++) {
+            if (k_zoom_steps[i] > cur) {
+                next_zoom = k_zoom_steps[i];
+                break;
+            }
+        }
+    } else {
+        next_zoom = k_zoom_steps[0];
+        for (int i = n_steps - 1; i >= 0; i--) {
+            if (k_zoom_steps[i] < cur) {
+                next_zoom = k_zoom_steps[i];
+                break;
+            }
+        }
+    }
+
+    app->prefs.font.web_zoom_pct = next_zoom;
+    prefs_save(app, TRUE);
+    if (app->connected) {
+        char cmd[32];
+        snprintf(cmd, sizeof(cmd), "@ZOOM:%u", (unsigned)next_zoom);
+        net_send_url(app, cmd);
+        if (dir == 0) {
+            net_send_url(app, "@FONTSIZE:16");
+        }
+    }
+    if (dir == 0) {
+        app_set_status(GetVString(MSG_STATUS_FONT_RESET));
+    } else {
+        app_set_status("Zoom: %u%%", (unsigned)next_zoom);
+    }
+    return TRUE;
+}
+
+static struct DiskObject *load_app_icon(void)
+{
+    if (!IIcon) return NULL;
+
+    struct DiskObject *dobj = NULL;
+#if defined(__ALTIVEC__)
+    dobj = IIcon->GetDiskObject("PROGDIR:VortexBrowser-AltiVec");
+    if (!dobj) dobj = IIcon->GetDiskObject("PROGDIR:VortexBrowser");
+#else
+    dobj = IIcon->GetDiskObject("PROGDIR:VortexBrowser");
+    if (!dobj) dobj = IIcon->GetDiskObject("PROGDIR:VortexBrowser-AltiVec");
+#endif
+    if (dobj) {
+        dobj->do_CurrentX = NO_ICON_POSITION;
+        dobj->do_CurrentY = NO_ICON_POSITION;
+    }
+    return dobj;
 }
 
 static void handle_menu_command(VortexApp *app, uint32 item_id);
@@ -422,6 +513,159 @@ static struct Image *load_aiss_image(const char *const candidates[], int num_can
     return NULL;
 }
 
+static Object        *s_tab_close_image = NULL;
+static struct BitMap *s_tab_close_bm[3] = { NULL, NULL, NULL }; /* 0=normal, 1=selected, 2=disabled */
+
+static void gui_free_tab_close_image(void)
+{
+    if (s_tab_close_image) {
+        IIntuition->DisposeObject(s_tab_close_image);
+        s_tab_close_image = NULL;
+    }
+    for (int i = 0; i < 3; i++) {
+        if (s_tab_close_bm[i]) {
+            IGraphics->FreeBitMap(s_tab_close_bm[i]);
+            s_tab_close_bm[i] = NULL;
+        }
+    }
+}
+
+static struct BitMap *make_tab_close_bitmap(struct Screen *scr, int state)
+{
+    const int w = 13;
+    const int h = 13;
+
+    struct BitMap *bm = IGraphics->AllocBitMapTags(
+        w, h, 32,
+        BMATags_PixelFormat, PIXF_A8R8G8B8,
+        BMATags_Displayable, TRUE,
+        scr ? BMATags_Friend : TAG_IGNORE, (Tag)(scr ? scr->RastPort.BitMap : NULL),
+        TAG_DONE);
+    if (!bm && scr) {
+        bm = IGraphics->AllocBitMapTags(
+            w, h, 32,
+            BMATags_PixelFormat, PIXF_A8R8G8B8,
+            BMATags_Displayable, TRUE,
+            TAG_DONE);
+    }
+    if (!bm) {
+        return NULL;
+    }
+
+    uint32_t pixels[13 * 13];
+    uint8_t top_r, top_g, top_b, bot_r, bot_g, bot_b;
+    uint32_t border_argb, x_argb;
+    uint8_t x_r, x_g, x_b;
+
+    if (state == 1) {
+        /* Pressed / selected */
+        top_r = 0x9E; top_g = 0x1C; top_b = 0x16;
+        bot_r = 0x74; bot_g = 0x10; bot_b = 0x0C;
+        border_argb = 0xFF4E0806U;
+        x_r = 0xF0; x_g = 0xE8; x_b = 0xE8;
+    } else if (state == 2) {
+        /* Inactive tab / disabled look */
+        top_r = 0x8E; top_g = 0x92; top_b = 0x9A;
+        bot_r = 0x6C; bot_g = 0x70; bot_b = 0x78;
+        border_argb = 0xFF50545CU;
+        x_r = 0xE0; x_g = 0xE4; x_b = 0xEA;
+    } else {
+        /* Normal OWB-style red close gadget */
+        top_r = 0xDF; top_g = 0x40; top_b = 0x38;
+        bot_r = 0xA8; bot_g = 0x1E; bot_b = 0x18;
+        border_argb = 0xFF78120EU;
+        x_r = 0xFF; x_g = 0xFF; x_b = 0xFF;
+    }
+    x_argb = (0xFFU << 24) | ((uint32_t)x_r << 16) | ((uint32_t)x_g << 8) | (uint32_t)x_b;
+
+    for (int y = 0; y < h; y++) {
+        int dy = y - 1;
+        if (dy < 0) dy = 0;
+        if (dy > 10) dy = 10;
+        uint8_t bg_r = (uint8_t)(top_r + ((int)(bot_r - top_r) * dy) / 10);
+        uint8_t bg_g = (uint8_t)(top_g + ((int)(bot_g - top_g) * dy) / 10);
+        uint8_t bg_b = (uint8_t)(top_b + ((int)(bot_b - top_b) * dy) / 10);
+
+        for (int x = 0; x < w; x++) {
+            uint32_t px;
+            if ((x == 0 || x == 12) && (y == 0 || y == 12)) {
+                px = 0x00000000U;
+            } else if (x == 0 || x == 12 || y == 0 || y == 12 ||
+                       ((x == 1 || x == 11) && (y == 1 || y == 11))) {
+                px = border_argb;
+            } else {
+                px = (0xFFU << 24) | ((uint32_t)bg_r << 16) | ((uint32_t)bg_g << 8) | (uint32_t)bg_b;
+                if (x >= 3 && x <= 9 && y >= 3 && y <= 9) {
+                    int d1 = abs(x - y);
+                    int d2 = abs((x + y) - 12);
+                    if (d1 == 0 || d2 == 0) {
+                        px = x_argb;
+                    } else if (d1 == 1 || d2 == 1) {
+                        uint8_t mr = (uint8_t)((bg_r * 3 + x_r * 2) / 5);
+                        uint8_t mg = (uint8_t)((bg_g * 3 + x_g * 2) / 5);
+                        uint8_t mb = (uint8_t)((bg_b * 3 + x_b * 2) / 5);
+                        px = (0xFFU << 24) | ((uint32_t)mr << 16) | ((uint32_t)mg << 8) | (uint32_t)mb;
+                    }
+                }
+            }
+            pixels[y * w + x] = px;
+        }
+    }
+
+    APTR base_addr = NULL;
+    uint32 dst_bpr = 0;
+    APTR lock = IGraphics->LockBitMapTags(
+        bm,
+        LBM_BaseAddress, &base_addr,
+        LBM_BytesPerRow, &dst_bpr,
+        TAG_DONE);
+
+    if (!lock || !base_addr || dst_bpr < (uint32)(w * 4)) {
+        if (lock) {
+            IGraphics->UnlockBitMap(lock);
+        }
+        IGraphics->FreeBitMap(bm);
+        return NULL;
+    }
+
+    uint8_t *dst = (uint8_t *)base_addr;
+    for (int y = 0; y < h; y++) {
+        memcpy(dst + (size_t)y * dst_bpr, &pixels[y * w], (size_t)w * 4U);
+    }
+    IGraphics->UnlockBitMap(lock);
+    return bm;
+}
+
+static Object *gui_create_tab_close_image(struct Screen *scr)
+{
+    gui_free_tab_close_image();
+
+    s_tab_close_bm[0] = make_tab_close_bitmap(scr, 0);
+    s_tab_close_bm[1] = make_tab_close_bitmap(scr, 1);
+    s_tab_close_bm[2] = make_tab_close_bitmap(scr, 2);
+
+    if (!s_tab_close_bm[0]) {
+        gui_free_tab_close_image();
+        return NULL;
+    }
+
+    s_tab_close_image = IIntuition->NewObject(NULL, "bitmap.image",
+        BITMAP_BitMap,                                             (Tag)s_tab_close_bm[0],
+        s_tab_close_bm[1] ? BITMAP_SelectBitMap : TAG_IGNORE,      (Tag)s_tab_close_bm[1],
+        s_tab_close_bm[2] ? BITMAP_DisabledBitMap : TAG_IGNORE,    (Tag)s_tab_close_bm[2],
+        BITMAP_Width,                                              13,
+        BITMAP_Height,                                             13,
+        BITMAP_Screen,                                             (Tag)scr,
+        BITMAP_Masking,                                            TRUE,
+        BITMAP_HasAlpha,                                           TRUE,
+        TAG_DONE);
+
+    if (!s_tab_close_image) {
+        gui_free_tab_close_image();
+    }
+    return s_tab_close_image;
+}
+
 /* ------------------------------------------------------------------------
  * AmigaOS 4 Dark Theme Pens & Dynamic BackFill Hook
  * ------------------------------------------------------------------------ */
@@ -615,57 +859,58 @@ void gui_draw_dark_titlebar(VortexApp *app)
     IGraphics->Move(rp, btn_x + btn_w - 1 - pad, btn_y + pad);
     IGraphics->Draw(rp, btn_x + pad, btn_y + btn_h - 1 - pad);
 
-    /* 4. Right side gadgets: Depth, Zoom, Iconify */
-    int rx = win_w - 5 - btn_w;
+    /* 4. Right side gadgets: Depth, Iconify (aligned to real Intuition titlebar gadgets when present) */
+    int depth_x = win_w - 5 - btn_w;
+    int depth_w = btn_w;
+    int iconify_x = depth_x - (btn_w + 4);
+    int iconify_w = btn_w;
     int ry = btn_y;
+    for (struct Gadget *g = win->FirstGadget; g != NULL; g = g->NextGadget) {
+        int gx = g->LeftEdge;
+        if (g->Flags & GFLG_RELRIGHT) {
+            gx += win_w;
+        }
+        int gw = g->Width;
+        if (gw >= 8 && gw <= 48 && gx > win_w / 2 && gx + gw <= win_w) {
+            if ((g->GadgetType & GTYP_SYSTYPEMASK) == GTYP_WDEPTH) {
+                depth_x = gx;
+                depth_w = gw;
+            } else if (g->GadgetID == 0xFFFE) {
+                iconify_x = gx;
+                iconify_w = gw;
+            }
+        }
+    }
 
     /* Depth gadget */
     IGraphics->SetAPen(rp, dark_pen);
-    IGraphics->RectFill(rp, rx, ry, rx + btn_w - 1, ry + btn_h - 1);
+    IGraphics->RectFill(rp, depth_x, ry, depth_x + depth_w - 1, ry + btn_h - 1);
     IGraphics->SetAPen(rp, edge_pen);
-    IGraphics->Move(rp, rx, ry);
-    IGraphics->Draw(rp, rx + btn_w - 1, ry);
-    IGraphics->Draw(rp, rx + btn_w - 1, ry + btn_h - 1);
-    IGraphics->Draw(rp, rx, ry + btn_h - 1);
-    IGraphics->Draw(rp, rx, ry);
+    IGraphics->Move(rp, depth_x, ry);
+    IGraphics->Draw(rp, depth_x + depth_w - 1, ry);
+    IGraphics->Draw(rp, depth_x + depth_w - 1, ry + btn_h - 1);
+    IGraphics->Draw(rp, depth_x, ry + btn_h - 1);
+    IGraphics->Draw(rp, depth_x, ry);
     IGraphics->SetAPen(rp, text_pen);
-    IGraphics->Move(rp, rx + 3, ry + 3);
-    IGraphics->Draw(rp, rx + btn_w - 4, ry + 3);
-    IGraphics->Draw(rp, rx + btn_w - 4, ry + btn_h - 4);
-    IGraphics->Draw(rp, rx + 3, ry + btn_h - 4);
-    IGraphics->Draw(rp, rx + 3, ry + 3);
-
-    /* Zoom gadget [+] */
-    rx -= (btn_w + 4);
-    IGraphics->SetAPen(rp, dark_pen);
-    IGraphics->RectFill(rp, rx, ry, rx + btn_w - 1, ry + btn_h - 1);
-    IGraphics->SetAPen(rp, edge_pen);
-    IGraphics->Move(rp, rx, ry);
-    IGraphics->Draw(rp, rx + btn_w - 1, ry);
-    IGraphics->Draw(rp, rx + btn_w - 1, ry + btn_h - 1);
-    IGraphics->Draw(rp, rx, ry + btn_h - 1);
-    IGraphics->Draw(rp, rx, ry);
-    IGraphics->SetAPen(rp, text_pen);
-    int mid_x = rx + btn_w / 2;
-    int mid_y = ry + btn_h / 2;
-    IGraphics->Move(rp, mid_x, ry + 3);
-    IGraphics->Draw(rp, mid_x, ry + btn_h - 4);
-    IGraphics->Move(rp, rx + 3, mid_y);
-    IGraphics->Draw(rp, rx + btn_w - 4, mid_y);
+    IGraphics->Move(rp, depth_x + 3, ry + 3);
+    IGraphics->Draw(rp, depth_x + depth_w - 4, ry + 3);
+    IGraphics->Draw(rp, depth_x + depth_w - 4, ry + btn_h - 4);
+    IGraphics->Draw(rp, depth_x + 3, ry + btn_h - 4);
+    IGraphics->Draw(rp, depth_x + 3, ry + 3);
 
     /* Iconify gadget [_] */
-    rx -= (btn_w + 4);
+    int rx = iconify_x;
     IGraphics->SetAPen(rp, dark_pen);
-    IGraphics->RectFill(rp, rx, ry, rx + btn_w - 1, ry + btn_h - 1);
+    IGraphics->RectFill(rp, rx, ry, rx + iconify_w - 1, ry + btn_h - 1);
     IGraphics->SetAPen(rp, edge_pen);
     IGraphics->Move(rp, rx, ry);
-    IGraphics->Draw(rp, rx + btn_w - 1, ry);
-    IGraphics->Draw(rp, rx + btn_w - 1, ry + btn_h - 1);
+    IGraphics->Draw(rp, rx + iconify_w - 1, ry);
+    IGraphics->Draw(rp, rx + iconify_w - 1, ry + btn_h - 1);
     IGraphics->Draw(rp, rx, ry + btn_h - 1);
     IGraphics->Draw(rp, rx, ry);
     IGraphics->SetAPen(rp, text_pen);
     IGraphics->Move(rp, rx + 3, ry + btn_h - 4);
-    IGraphics->Draw(rp, rx + btn_w - 4, ry + btn_h - 4);
+    IGraphics->Draw(rp, rx + iconify_w - 4, ry + btn_h - 4);
 
     /* 5. Window Title Text */
     int title_x = btn_x + btn_w + 8;
@@ -1481,7 +1726,12 @@ void prompt_server_address(VortexApp *app)
     while (!done) {
         uint32 sigmask = 0;
         IIntuition->GetAttr(WINDOW_SigMask, req_win_obj, &sigmask);
-        IExec->Wait(sigmask | SIGBREAKF_CTRL_C);
+        uint32 got_sigs = IExec->Wait(sigmask | SIGBREAKF_CTRL_C);
+        if (got_sigs & SIGBREAKF_CTRL_C) {
+            done = TRUE;
+            app->running = FALSE;
+            break;
+        }
         uint32 res;
         int16 code = 0;
         while ((res = IIntuition->IDoMethod(req_win_obj, WM_HANDLEINPUT, &code)) != WMHI_LASTMSG) {
@@ -1528,8 +1778,6 @@ void prompt_server_address(VortexApp *app)
             app->prefs.server_port = app->server_port;
             prefs_save(app, TRUE);
             if (net_connect(app, app->server_host, app->server_port)) {
-                renderer_sync_viewport_size(app);
-                net_send_url(app, "@REFRESH");
                 net_sync_tabs(app);
             }
         }
@@ -1545,6 +1793,9 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
     switch (item_id) {
         case MID_PROJ_NEW:
         case MID_NAV_HOME:
+            if (app->active_tab_idx < VB_MAX_TABS) {
+                app->restore_tab_mask &= ~(1UL << app->active_tab_idx);
+            }
             gui_update_url_bar(app, "");
             net_send_url(app, "@HOME");
             break;
@@ -1564,8 +1815,6 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
                 prompt_server_address(app);
             } else {
                 if (net_connect(app, app->server_host, app->server_port)) {
-                    renderer_sync_viewport_size(app);
-                    net_send_url(app, "@REFRESH");
                     net_sync_tabs(app);
                 }
             }
@@ -1860,45 +2109,17 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
             app_set_status(GetVString(MSG_STATUS_LOADING_STOPPED));
             break;
 
-        case MID_FONT_LARGER: {
-            uint16_t fs = app->prefs.font.web_font_size ? app->prefs.font.web_font_size : 16;
-            if (fs < 32) fs += 2;
-            app->prefs.font.web_font_size = fs;
-            prefs_save(app, TRUE);
-            if (app->connected) {
-                char cmd[32];
-                snprintf(cmd, sizeof(cmd), "@FONTSIZE:%u", (unsigned)fs);
-                net_send_url(app, cmd);
-            }
-            app_set_status(GetVString(MSG_STATUS_FONT_SIZE), (unsigned)fs);
+        case MID_FONT_LARGER:
+            dispatch_zoom_shortcut(app, +1, SHORTCUT_SRC_MENU);
             break;
-        }
 
-        case MID_FONT_SMALLER: {
-            uint16_t fs = app->prefs.font.web_font_size ? app->prefs.font.web_font_size : 16;
-            if (fs > 10) fs -= 2;
-            app->prefs.font.web_font_size = fs;
-            prefs_save(app, TRUE);
-            if (app->connected) {
-                char cmd[32];
-                snprintf(cmd, sizeof(cmd), "@FONTSIZE:%u", (unsigned)fs);
-                net_send_url(app, cmd);
-            }
-            app_set_status(GetVString(MSG_STATUS_FONT_SIZE), (unsigned)fs);
+        case MID_FONT_SMALLER:
+            dispatch_zoom_shortcut(app, -1, SHORTCUT_SRC_MENU);
             break;
-        }
 
-        case MID_FONT_RESET: {
-            app->prefs.font.web_font_size = 16;
-            app->prefs.font.web_zoom_pct  = 100;
-            prefs_save(app, TRUE);
-            if (app->connected) {
-                net_send_url(app, "@ZOOM:100");
-                net_send_url(app, "@FONTSIZE:16");
-            }
-            app_set_status(GetVString(MSG_STATUS_FONT_RESET));
+        case MID_FONT_RESET:
+            dispatch_zoom_shortcut(app, 0, SHORTCUT_SRC_MENU);
             break;
-        }
 
         case MID_FAV_ADD: {
             char url_buf[VB_MAX_URL_LEN];
@@ -2289,7 +2510,7 @@ static void tabs_build_list(VortexApp *app, struct List *out)
         struct Node *n = IClickTab->AllocClickTabNode(
             TNA_Text,        (Tag)app->tabs[i].title,
             TNA_Number,      (uint16)i,
-            TNA_CloseGadget, (app->num_tabs > 1),
+            TNA_CloseGadget, TRUE,
             use_dark_pen ? TNA_TextPen : TAG_IGNORE, (uint32)(int16)s_dark_pens.txt_pen,
             TAG_DONE);
         if (n && n == s_handled_close_node) {
@@ -2298,7 +2519,7 @@ static void tabs_build_list(VortexApp *app, struct List *out)
             n = IClickTab->AllocClickTabNode(
                 TNA_Text,        (Tag)app->tabs[i].title,
                 TNA_Number,      (uint16)i,
-                TNA_CloseGadget, (app->num_tabs > 1),
+                TNA_CloseGadget, TRUE,
                 use_dark_pen ? TNA_TextPen : TAG_IGNORE, (uint32)(int16)s_dark_pens.txt_pen,
                 TAG_DONE);
             IClickTab->FreeClickTabNode(quarantine);
@@ -2331,33 +2552,32 @@ void gui_tabs_init(VortexApp *app)
             /* Count tabs that contain a real web URL (not empty, not startpage/portal) */
             int real_tabs = 0;
             for (int i = 0; i < app->prefs.saved_num_tabs && i < VB_MAX_TABS; i++) {
-                const char *u = app->prefs.saved_tab_urls[i];
-                if (u && u[0] != '\0' && u[0] != '@' &&
-                    strncmp(u, "about:", 6) != 0 &&
-                    strncmp(u, "http://127.0.0.1:", 17) != 0 &&
-                    strncmp(u, "http://localhost:", 17) != 0) {
+                if (!prefs_is_startpage_url(app->prefs.saved_tab_urls[i])) {
                     real_tabs++;
                 }
             }
 
             int count = 0;
+            int mapped_active = -1;
             const char *home_str = GetVString(MSG_MENU_HOME);
             for (int i = 0; i < app->prefs.saved_num_tabs && i < VB_MAX_TABS; i++) {
                 const char *u = app->prefs.saved_tab_urls[i];
                 const char *t = app->prefs.saved_tab_titles[i];
-                BOOL is_startpage = (!u || u[0] == '\0' || u[0] == '@' ||
-                                     strncmp(u, "about:", 6) == 0 ||
-                                     strncmp(u, "http://127.0.0.1:", 17) == 0 ||
-                                     strncmp(u, "http://localhost:", 17) == 0 ||
+                BOOL is_startpage = (prefs_is_startpage_url(u) ||
                                      (t && (strcmp(t, "Startseite") == 0 || (home_str && strcmp(t, home_str) == 0)) && (!u || u[0] == '\0')));
-                /* If there is at least one old web tab, remove/skip redundant startpage tab */
+                /* If there is at least one saved web tab, never restore redundant startpage tabs */
                 if (real_tabs > 0 && is_startpage) {
                     continue;
                 }
+                if (i == (int)app->prefs.saved_active_tab) {
+                    mapped_active = count;
+                }
                 app->tabs[count].id = (uint32_t)count;
-                strncpy(app->tabs[count].url, u ? u : "", sizeof(app->tabs[0].url) - 1);
+                strncpy(app->tabs[count].url, (!is_startpage && u) ? u : "", sizeof(app->tabs[0].url) - 1);
                 app->tabs[count].url[sizeof(app->tabs[0].url) - 1] = '\0';
-                if (t && t[0]) {
+                if (is_startpage) {
+                    snprintf(app->tabs[count].title, sizeof(app->tabs[0].title), "%s", home_str ? home_str : "Startseite");
+                } else if (t && t[0]) {
                     vb_utf8_to_local(t, app->tabs[count].title, sizeof(app->tabs[0].title));
                     app->tabs[count].title[sizeof(app->tabs[0].title) - 1] = '\0';
                 } else {
@@ -2369,25 +2589,41 @@ void gui_tabs_init(VortexApp *app)
             if (count == 0) {
                 app->active_tab_idx = 0;
                 app->tabs[0].id     = 0;
-                snprintf(app->tabs[0].title, sizeof(app->tabs[0].title), "%s", GetVString(MSG_MENU_HOME));
-                strncpy(app->tabs[0].url, app->current_url, sizeof(app->tabs[0].url) - 1);
-                app->tabs[0].url[sizeof(app->tabs[0].url) - 1] = '\0';
+                snprintf(app->tabs[0].title, sizeof(app->tabs[0].title), "%s", home_str ? home_str : "Startseite");
+                if (!prefs_is_startpage_url(app->current_url)) {
+                    strncpy(app->tabs[0].url, app->current_url, sizeof(app->tabs[0].url) - 1);
+                    app->tabs[0].url[sizeof(app->tabs[0].url) - 1] = '\0';
+                } else {
+                    app->tabs[0].url[0] = '\0';
+                    app->current_url[0] = '\0';
+                }
                 app->num_tabs = 1;
             } else {
-                app->num_tabs = count;
-                app->active_tab_idx = (app->prefs.saved_active_tab < count) ? app->prefs.saved_active_tab : 0;
+                app->num_tabs = (uint16_t)count;
+                if (mapped_active >= 0 && mapped_active < count) {
+                    app->active_tab_idx = (uint16_t)mapped_active;
+                } else {
+                    app->active_tab_idx = (uint16_t)(count - 1);
+                }
                 const char *act_url = app->tabs[app->active_tab_idx].url;
-                if (act_url && act_url[0] && act_url[0] != '@') {
+                if (!prefs_is_startpage_url(act_url)) {
                     strncpy(app->current_url, act_url, sizeof(app->current_url) - 1);
                     app->current_url[sizeof(app->current_url) - 1] = '\0';
+                } else {
+                    app->current_url[0] = '\0';
                 }
             }
         } else {
             app->active_tab_idx = 0;
             app->tabs[0].id = 0;
             snprintf(app->tabs[0].title, sizeof(app->tabs[0].title), "%s", GetVString(MSG_MENU_HOME));
-            strncpy(app->tabs[0].url, app->current_url, sizeof(app->tabs[0].url) - 1);
-            app->tabs[0].url[sizeof(app->tabs[0].url) - 1] = '\0';
+            if (!prefs_is_startpage_url(app->current_url)) {
+                strncpy(app->tabs[0].url, app->current_url, sizeof(app->tabs[0].url) - 1);
+                app->tabs[0].url[sizeof(app->tabs[0].url) - 1] = '\0';
+            } else {
+                app->tabs[0].url[0] = '\0';
+                app->current_url[0] = '\0';
+            }
             app->num_tabs = 1;
         }
     }
@@ -2615,12 +2851,18 @@ void gui_tab_set_title(VortexApp *app, uint16 idx, const char *title)
 BOOL gui_init(VortexApp *app)
 {
     app->main_task = IExec->FindTask(NULL);
-    app->mouse_sig_bit = IExec->AllocSignal(-1);
-    if (app->mouse_sig_bit != -1) {
-        app->mouse_sig_mask = (1UL << app->mouse_sig_bit);
-    } else {
-        app->mouse_sig_mask = 0;
+    if (app->mouse_sig_mask == 0) {
+        app->mouse_sig_bit = IExec->AllocSignal(-1);
+        if (app->mouse_sig_bit != -1) {
+            app->mouse_sig_mask = (1UL << app->mouse_sig_bit);
+        } else {
+            app->mouse_sig_mask = 0;
+        }
     }
+    if (!app->app_port) {
+        app->app_port = (struct MsgPort *)IExec->AllocSysObjectTags(ASOT_PORT, TAG_DONE);
+    }
+    app->is_iconified = FALSE;
 
     memset(&s_render_hook, 0, sizeof(struct Hook));
     s_render_hook.h_Entry = (HOOKFUNC)space_render_func;
@@ -2638,7 +2880,7 @@ BOOL gui_init(VortexApp *app)
     if (app->prefs.resolution.use_custom_screen) {
         if (!app->custom_screen) {
             const char *pubname = "VORTEXBROWSER";
-            const char *title   = "VortexBrowser 1.0 (AmigaOS 4.1)";
+            const char *title   = "VortexBrowser 1.1 (AmigaOS 4.1)";
             uint16 scr_w = app->prefs.resolution.width;
             uint16 scr_h = app->prefs.resolution.height;
             uint16 scr_d = app->prefs.resolution.depth;
@@ -3050,7 +3292,11 @@ BOOL gui_init(VortexApp *app)
     Object *btn_stop = create_toolbar_button(GID_STOP, c_stop, 2, GetVString(MSG_BTN_STOP), GetVString(MSG_HINT_STOP), pub_scr);
     Object *btn_home = create_toolbar_button(GID_HOME, c_home, 2, GetVString(MSG_BTN_HOME), GetVString(MSG_HINT_HOME), pub_scr);
 
-    struct Image *fav_img = load_favicon_image(app->current_url, pub_scr);
+    /* Restore saved tabs BEFORE creating URL bar so active tab URL & favicon match immediately */
+    gui_tabs_init(app);
+
+    const char *init_url_disp = !prefs_is_startpage_url(app->current_url) ? app->current_url : "";
+    struct Image *fav_img = load_favicon_image(init_url_disp, pub_scr);
     app->gad_url_favicon = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,             GID_URL_FAVICON,
         GA_RelVerify,      TRUE,
@@ -3066,7 +3312,7 @@ BOOL gui_init(VortexApp *app)
         GA_TabCycle,      FALSE,
         GA_HintInfo,      GetVString(MSG_HINT_URL),
         STRINGA_MaxChars, VB_MAX_URL_LEN - 1,
-        STRINGA_TextVal,  app->current_url[0] ? app->current_url : "",
+        STRINGA_TextVal,  init_url_disp,
         s_dark_pens.allocated ? STRINGA_Pens : TAG_IGNORE,
             (uint32)((s_dark_pens.inp_bg_pen << 16) | (s_dark_pens.txt_pen & 0xFFFF)),
         s_dark_pens.allocated ? STRINGA_ActivePens : TAG_IGNORE,
@@ -3381,9 +3627,9 @@ BOOL gui_init(VortexApp *app)
     }
 
     /* ------------------------------------------------------------------------
-     * Tabs (clicktab.gadget)
+     * Tabs (clicktab.gadget) — tab_list already built by gui_tabs_init() above
      * ------------------------------------------------------------------------ */
-    gui_tabs_init(app);
+    Object *tab_close_img = gui_create_tab_close_image(pub_scr);
 
     app->gad_clicktab = IIntuition->NewObject(NULL, "clicktab.gadget",
         GA_ID,                  GID_CLICKTAB,
@@ -3393,15 +3639,15 @@ BOOL gui_init(VortexApp *app)
         CLICKTAB_AutoFit,       TRUE,
         CLICKTAB_LabelTruncate, TRUE,
         CLICKTAB_PageGroupBorder, FALSE,
+        tab_close_img ? CLICKTAB_CloseImage : TAG_IGNORE,     (Tag)tab_close_img,
+        tab_close_img ? CLICKTAB_ClosePlacement : TAG_IGNORE, PLACECLOSE_LEFT,
         s_dark_pens.allocated ? CLICKTAB_PageGroupBackFill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
         s_dark_pens.allocated ? GA_BackFill : TAG_IGNORE, (Tag)&s_dark_backfill_hook,
         TAG_DONE);
 
     const char *c_add_tab[] = { "add", "plus", "new" };
     app->gad_tab_new = create_toolbar_button(GID_TAB_NEW, c_add_tab, 3, "+", GetVString(MSG_HINT_NEW_TAB), pub_scr);
-
-    const char *c_rem_tab[] = { "remove", "minus", "delete", "close", NULL };
-    app->gad_tab_close = create_toolbar_button(GID_TAB_CLOSE, c_rem_tab, 4, "-", GetVString(MSG_HINT_CLOSE_TAB), pub_scr);
+    app->gad_tab_close = NULL;
 
     Object *tab_row = IIntuition->NewObject(NULL, "layout.gadget",
         LAYOUT_Orientation,  LAYOUT_ORIENT_HORIZ,
@@ -3412,8 +3658,6 @@ BOOL gui_init(VortexApp *app)
         CHILD_WeightedWidth, 100,
         CHILD_MinWidth,      60,
         LAYOUT_AddChild,     app->gad_tab_new,
-        CHILD_WeightedWidth, 0,
-        LAYOUT_AddChild,     app->gad_tab_close,
         CHILD_WeightedWidth, 0,
         TAG_DONE);
 
@@ -3487,10 +3731,13 @@ BOOL gui_init(VortexApp *app)
     gui_localize_menu();
     snprintf(app->win_title, sizeof(app->win_title), "%s", GetVString(MSG_WIN_TITLE));
 
+    /* Pass a fresh DiskObject owned by window.class (no WINDOW_IconNoDispose), matching OS4 SDK examples */
+    struct DiskObject *win_icon = (app->app_port != NULL) ? load_app_icon() : NULL;
+
     app->win_obj = IIntuition->NewObject(NULL, "window.class",
         WA_Title,             app->win_title,
         (app->custom_screen != NULL) ? WA_ScreenTitle : TAG_IGNORE,
-        (app->custom_screen != NULL) ? (Tag)"VortexBrowser 1.0 (AmigaOS 4.1)" : 0,
+        (app->custom_screen != NULL) ? (Tag)"VortexBrowser 1.1 (AmigaOS 4.1)" : 0,
         s_dark_pens.allocated ? WA_BackFill : TAG_IGNORE,  (Tag)&s_dark_backfill_hook,
         s_dark_pens.allocated ? WA_DetailPen : TAG_IGNORE, (uint32)s_dark_pens.txt_pen,
         s_dark_pens.allocated ? WA_BlockPen : TAG_IGNORE,  (uint32)s_dark_pens.btn_bg_pen,
@@ -3520,6 +3767,11 @@ BOOL gui_init(VortexApp *app)
         (app->custom_screen != NULL) ? (Tag)app->custom_screen : (Tag)"Workbench",
         WINDOW_ParentGroup,     root_layout,
         WINDOW_NewMenu,         s_main_menu,
+        (app->app_port != NULL) ? WINDOW_AppPort       : TAG_IGNORE, (Tag)app->app_port,
+        (app->app_port != NULL) ? WINDOW_Iconifiable   : TAG_IGNORE, TRUE,
+        (app->app_port != NULL) ? WINDOW_IconifyGadget : TAG_IGNORE, TRUE,
+        (app->app_port != NULL) ? WINDOW_IconTitle     : TAG_IGNORE, (Tag)"VortexBrowser",
+        (app->app_port != NULL && win_icon != NULL) ? WINDOW_Icon : TAG_IGNORE, (Tag)win_icon,
         WINDOW_IDCMPHook,       &s_idcmp_hook,
         WINDOW_IDCMPHookBits,   IDCMP_MOUSEBUTTONS | IDCMP_EXTENDEDMOUSE | IDCMP_MOUSEMOVE |
                                 IDCMP_CHANGEWINDOW | IDCMP_ACTIVEWINDOW | IDCMP_INACTIVEWINDOW,
@@ -3528,6 +3780,9 @@ BOOL gui_init(VortexApp *app)
 
     if (!app->win_obj) {
         DBG_LOG("[GUI] Failed to create Reaction window.class object!\n");
+        if (win_icon && IIcon) {
+            IIcon->FreeDiskObject(win_icon);
+        }
         IIntuition->DisposeObject(root_layout);
         if (app->custom_screen) {
             IIntuition->PubScreenStatus(app->custom_screen, PSNF_PRIVATE);
@@ -3639,9 +3894,11 @@ void gui_cleanup_window(VortexApp *app)
 
     if (app->win_obj) {
         IIntuition->DisposeObject(app->win_obj);
-        app->win_obj = NULL;
-        app->win     = NULL;
+        app->win_obj      = NULL;
+        app->win          = NULL;
+        app->is_iconified = FALSE;
     }
+    gui_free_tab_close_image();
     if (IClickTab) {
         IClickTab->FreeClickTabList(&app->tab_list);
     }
@@ -3675,12 +3932,28 @@ void gui_cleanup_window(VortexApp *app)
     gui_free_dark_pens();
 }
 
-void gui_cleanup(VortexApp *app)
+static void gui_remove_wb_app_icon(VortexApp *app)
 {
     if (!app) return;
 
-    gui_cleanup_window(app);
+    if (app->wb_app_icon && IWorkbench) {
+        IWorkbench->RemoveAppIcon(app->wb_app_icon);
+        app->wb_app_icon = NULL;
+    }
+    if (app->wb_icon_dobj && IIcon) {
+        IIcon->FreeDiskObject(app->wb_icon_dobj);
+        app->wb_icon_dobj = NULL;
+    }
+    if (app->app_port) {
+        struct Message *msg;
+        while ((msg = IExec->GetMsg(app->app_port)) != NULL) {
+            IExec->ReplyMsg(msg);
+        }
+    }
+}
 
+static void gui_restore_custom_screen_attrs(void)
+{
     /* Restore original screen GUI attributes if modified */
     if (s_orig_gui_attrs_saved && s_orig_gui_screen) {
         struct DrawInfo *dri = IIntuition->GetScreenDrawInfo(s_orig_gui_screen);
@@ -3704,15 +3977,53 @@ void gui_cleanup(VortexApp *app)
         s_orig_gui_attrs_saved = FALSE;
         s_orig_gui_screen = NULL;
     }
+}
 
-    /* Close custom public screen if one was opened */
-    if (app->custom_screen) {
-        IIntuition->PubScreenStatus(app->custom_screen, PSNF_PRIVATE);
-        IIntuition->CloseScreen(app->custom_screen);
-        app->custom_screen = NULL;
+static BOOL gui_close_custom_screen(VortexApp *app, int max_attempts)
+{
+    if (!app) return TRUE;
+
+    gui_restore_custom_screen_attrs();
+
+    if (!app->custom_screen) {
+        return TRUE;
     }
 
-    if (app->mouse_sig_bit != -1) {
+    /* Take public screen private and switch display to Workbench BEFORE calling CloseScreen()
+     * so ScreenNotify/AmiDock/follow-front-screen helpers release any visitor windows first. */
+    IIntuition->PubScreenStatus(app->custom_screen, PSNF_PRIVATE);
+    IIntuition->ScreenToBack(app->custom_screen);
+    IIntuition->WBenchToFront();
+
+    if (max_attempts < 1) max_attempts = 1;
+    for (int attempt = 0; attempt < max_attempts; attempt++) {
+        IIntuition->PubScreenStatus(app->custom_screen, PSNF_PRIVATE);
+        if (IIntuition->CloseScreen(app->custom_screen)) {
+            app->custom_screen = NULL;
+            return TRUE;
+        }
+        if (attempt + 1 < max_attempts && IDOS) {
+            IDOS->Delay(2);
+        }
+    }
+
+    /* Keep PSNF_PRIVATE set so no new visitor windows can open while closing/iconified */
+    return FALSE;
+}
+
+void gui_cleanup(VortexApp *app)
+{
+    if (!app) return;
+
+    gui_remove_wb_app_icon(app);
+    gui_cleanup_window(app);
+    gui_close_custom_screen(app, 10);
+
+    if (app->app_port) {
+        IExec->FreeSysObject(ASOT_PORT, app->app_port);
+        app->app_port = NULL;
+    }
+    if (app->mouse_sig_mask != 0 && app->mouse_sig_bit != -1) {
         IExec->FreeSignal(app->mouse_sig_bit);
         app->mouse_sig_bit = -1;
         app->mouse_sig_mask = 0;
@@ -3808,6 +4119,15 @@ uint32 gui_get_signal_mask(VortexApp *app)
         uint32 win_sig = 0;
         IIntuition->GetAttr(WINDOW_SigMask, app->win_obj, &win_sig);
         sigmask |= win_sig;
+    }
+    if (app->app_port) {
+        sigmask |= (1UL << app->app_port->mp_SigBit);
+    }
+    if (app->applib_port) {
+        sigmask |= (1UL << app->applib_port->mp_SigBit);
+    }
+    if (app->cx_port) {
+        sigmask |= (1UL << app->cx_port->mp_SigBit);
     }
     if (app->pw_win_obj) {
         uint32 pw_sig = 0;
@@ -3920,8 +4240,229 @@ static void remove_current_quicklink(VortexApp *app)
     gui_rebuild_window(app);
 }
 
+void gui_try_close_pending_screen(VortexApp *app)
+{
+    if (app && app->is_iconified && app->custom_screen && !app->win_obj) {
+        if (gui_close_custom_screen(app, 1)) {
+            DBG_LOG("[GUI] Deferred custom screen close succeeded\n");
+        }
+    }
+}
+
+void gui_to_front(VortexApp *app)
+{
+    if (!app) return;
+
+    if (app->is_iconified) {
+        gui_uniconify(app);
+        return;
+    }
+    if (app->custom_screen) {
+        IIntuition->ScreenToFront(app->custom_screen);
+    }
+    if (app->win) {
+        IIntuition->WindowToFront(app->win);
+        IIntuition->ActivateWindow(app->win);
+    }
+}
+
+void gui_iconify(VortexApp *app)
+{
+    if (!app || app->is_iconified || !app->win_obj) {
+        return;
+    }
+
+    prefs_capture_window_box(app);
+    gui_set_rmb_trap(app, FALSE);
+
+    if (app->pw_win_obj) {
+        gui_close_password_manager(app);
+    }
+    if (app->dl_win_obj) {
+        gui_close_download_manager(app);
+    }
+
+    /* When running on our own custom public screen, ReAction WM_ICONIFY only
+     * closes the window and leaves the screen open. Tear down the window and
+     * custom screen cleanly, and place an AppIcon on Workbench instead. */
+    if (app->custom_screen != NULL) {
+        renderer_cleanup(app);
+        gui_cleanup_window(app);
+
+        if (!gui_close_custom_screen(app, 25)) {
+            DBG_LOG("[GUI] WARNING: CloseScreen returned FALSE on iconify (visitor window open)\n");
+        }
+
+        if (!app->app_port) {
+            app->app_port = (struct MsgPort *)IExec->AllocSysObjectTags(ASOT_PORT, TAG_DONE);
+        }
+        if (IWorkbench && app->app_port) {
+            struct Message *msg;
+            while ((msg = IExec->GetMsg(app->app_port)) != NULL) {
+                IExec->ReplyMsg(msg);
+            }
+
+            struct DiskObject *dobj = load_app_icon();
+            struct AppIcon *aicon = NULL;
+            if (dobj) {
+                aicon = IWorkbench->AddAppIconA(1, 0, (CONST_STRPTR)"VortexBrowser",
+                                                app->app_port, ZERO, dobj, NULL);
+            }
+            if (!aicon) {
+                if (dobj && IIcon) {
+                    IIcon->FreeDiskObject(dobj);
+                }
+                dobj = IIcon ? IIcon->GetDefDiskObject(WBTOOL) : NULL;
+                if (dobj) {
+                    dobj->do_CurrentX = NO_ICON_POSITION;
+                    dobj->do_CurrentY = NO_ICON_POSITION;
+                    aicon = IWorkbench->AddAppIconA(1, 0, (CONST_STRPTR)"VortexBrowser",
+                                                    app->app_port, ZERO, dobj, NULL);
+                }
+            }
+            if (aicon) {
+                app->wb_app_icon  = aicon;
+                app->wb_icon_dobj = dobj;
+            } else if (dobj && IIcon) {
+                IIcon->FreeDiskObject(dobj);
+            }
+        }
+
+        app->win          = NULL;
+        app->is_iconified = TRUE;
+        app_sync_hidden_state(app, TRUE);
+        DBG_LOG("[GUI] Custom-screen iconify complete (custom_screen=%p, app_icon=%p)\n",
+                (void *)app->custom_screen, (void *)app->wb_app_icon);
+        return;
+    }
+
+    /* Standard ReAction WM_ICONIFY path (when running directly on Workbench) */
+    uint32 res = IIntuition->IDoMethod(app->win_obj, WM_ICONIFY, NULL);
+    if (!res) {
+        /* Fallback: let window.class use the system default icon if custom icon failed */
+        IIntuition->SetAttrs(app->win_obj, WINDOW_Icon, (Tag)NULL, TAG_DONE);
+        res = IIntuition->IDoMethod(app->win_obj, WM_ICONIFY, NULL);
+    }
+
+    /* Verify that Intuition actually closed the window; force WM_CLOSE if still open */
+    struct Window *cur_win = NULL;
+    IIntuition->GetAttr(WINDOW_Window, app->win_obj, (uint32 *)&cur_win);
+    if (res && cur_win != NULL) {
+        IIntuition->IDoMethod(app->win_obj, WM_CLOSE, NULL);
+        cur_win = NULL;
+        IIntuition->GetAttr(WINDOW_Window, app->win_obj, (uint32 *)&cur_win);
+    }
+
+    if (res || cur_win == NULL) {
+        app->win          = NULL;
+        app->is_iconified = TRUE;
+        app_sync_hidden_state(app, TRUE);
+    } else {
+        app_set_status("Iconify fehlgeschlagen!");
+        DBG_LOG("[GUI] WM_ICONIFY failed (res=%lu, cur_win=%p)\n", (unsigned long)res, (void *)cur_win);
+    }
+}
+
+void gui_uniconify(VortexApp *app)
+{
+    if (!app) return;
+
+    if (!app->is_iconified) {
+        gui_to_front(app);
+        return;
+    }
+
+    /* Branch A: Custom-screen iconify (window & screen were torn down) */
+    if (!app->win_obj) {
+        DBG_LOG("[GUI] Restoring custom screen and window...\n");
+        gui_remove_wb_app_icon(app);
+
+        if (app->custom_screen != NULL) {
+            IIntuition->PubScreenStatus(app->custom_screen, 0);
+            IIntuition->ScreenToFront(app->custom_screen);
+        }
+
+        app->is_iconified = FALSE;
+
+        if (!gui_init(app)) {
+            DBG_LOG("[GUI] Failed to restore custom screen! Falling back to Workbench...\n");
+            app->prefs.resolution.use_custom_screen = FALSE;
+            app->prefs.resolution.screen_mode = VB_SCREEN_WORKBENCH;
+            if (!gui_init(app)) {
+                DBG_LOG("[GUI] Fatal: Could not restore GUI window!\n");
+                app->running = FALSE;
+                return;
+            }
+        }
+
+        renderer_init(app);
+        favorites_rebuild_chooser_list(app);
+        prefs_apply(app);
+        if (app->num_tabs > 0 && app->active_tab_idx < app->num_tabs) {
+            gui_update_url_bar(app, app->tabs[app->active_tab_idx].url);
+        }
+        renderer_sync_viewport_size(app);
+
+        if (app->connected) {
+            net_send_url(app, "@REFRESH");
+        }
+        app_sync_hidden_state(app, FALSE);
+        return;
+    }
+
+    /* Branch B: Standard Workbench-mode ReAction WM_ICONIFY restore */
+    if (app->custom_screen) {
+        IIntuition->ScreenToFront(app->custom_screen);
+    }
+    app->win = (struct Window *)IIntuition->IDoMethod(app->win_obj, WM_OPEN, NULL);
+    if (app->win) {
+        app->is_iconified = FALSE;
+        IIntuition->WindowLimits(app->win, 200, 150, 0, 0);
+        if (app->prefs.dark_theme == 1) {
+            gui_draw_dark_titlebar(app);
+        }
+        IIntuition->RefreshWindowFrame(app->win);
+        if (app->prefs.dark_theme == 1) {
+            gui_draw_dark_titlebar(app);
+        }
+        IIntuition->SetMouseQueue(app->win, 1);
+        s_current_rmb_trap = FALSE;
+        if (app->gad_space) {
+            struct IBox *uarea = NULL;
+            IIntuition->GetAttr(SPACE_AreaBox, app->gad_space, (uint32 *)&uarea);
+            if (uarea && uarea->Width > 2 && uarea->Height > 2) {
+                app->cached_space_box = *uarea;
+            }
+        }
+        if (app->renderer.has_frame) {
+            app->renderer.dirty    = TRUE;
+            app->renderer.dirty_x1 = 0;
+            app->renderer.dirty_y1 = 0;
+            app->renderer.dirty_x2 = 32767;
+            app->renderer.dirty_y2 = 32767;
+            renderer_flush_dirty(app);
+        }
+        if (app->connected) {
+            net_send_url(app, "@REFRESH");
+        }
+        app_sync_hidden_state(app, FALSE);
+    }
+}
+
 void gui_handle_events(VortexApp *app)
 {
+    if (app->is_iconified && app->wb_app_icon && app->app_port) {
+        struct Message *msg;
+        while ((msg = IExec->GetMsg(app->app_port)) != NULL) {
+            struct AppMessage *amsg = (struct AppMessage *)msg;
+            if (amsg->am_Type == AMTYPE_APPICON) {
+                app->uniconify_needed = TRUE;
+            }
+            IExec->ReplyMsg(msg);
+        }
+        return;
+    }
+
     if (app->pw_win_obj) {
         gui_handle_password_manager_events(app);
     }
@@ -3941,6 +4482,14 @@ void gui_handle_events(VortexApp *app)
             case WMHI_CLOSEWINDOW:
                 prefs_capture_window_box(app);
                 app->running = FALSE;
+                break;
+
+            case WMHI_ICONIFY:
+                app->iconify_needed = TRUE;
+                break;
+
+            case WMHI_UNICONIFY:
+                app->uniconify_needed = TRUE;
                 break;
 
             case WMHI_MENUPICK: {
@@ -4106,6 +4655,19 @@ void gui_handle_events(VortexApp *app)
                     if (base_ch && dispatch_edit_shortcut(app, base_ch, SHORTCUT_SRC_RAWKEY)) {
                         break;
                     }
+                    /* Zoom hotkeys work with BOTH Ctrl and RAmiga, including US '=' key and Numpad */
+                    if (has_ctrl || has_ramiga) {
+                        if (base_ch == '+' || base_ch == '=' || rawkey == 0x5E) {
+                            dispatch_zoom_shortcut(app, +1, SHORTCUT_SRC_RAWKEY);
+                            break;
+                        } else if (base_ch == '-' || base_ch == '_' || rawkey == 0x4A) {
+                            dispatch_zoom_shortcut(app, -1, SHORTCUT_SRC_RAWKEY);
+                            break;
+                        } else if (base_ch == '0' || rawkey == 0x0F) {
+                            dispatch_zoom_shortcut(app, 0, SHORTCUT_SRC_RAWKEY);
+                            break;
+                        }
+                    }
                     /* When WFLG_RMBTRAP suppresses Intuition's menu bar, still honor core RAmiga menu keys */
                     if (has_ramiga && base_ch) {
                         switch (base_ch) {
@@ -4121,9 +4683,6 @@ void gui_handle_events(VortexApp *app)
                             case 's': handle_menu_command(app, MID_NAV_STOP);          break;
                             case 'h': handle_menu_command(app, MID_NAV_HOME);          break;
                             case 'q': handle_menu_command(app, MID_PROJ_QUIT);         break;
-                            case '+': handle_menu_command(app, MID_FONT_LARGER);       break;
-                            case '-': handle_menu_command(app, MID_FONT_SMALLER);      break;
-                            case '0': handle_menu_command(app, MID_FONT_RESET);        break;
                             default:  break;
                         }
                     }
@@ -4232,6 +4791,10 @@ void gui_handle_events(VortexApp *app)
 
             case WMHI_GADGETUP: {
                 uint32 gid = (result & WMHI_GADGETMASK);
+                if (gid == 0xFFFE) {
+                    app->iconify_needed = TRUE;
+                    break;
+                }
                 switch (gid) {
                     case GID_BACK:
                         net_send_url(app, "@BACK");
@@ -4251,6 +4814,9 @@ void gui_handle_events(VortexApp *app)
                         break;
 
                     case GID_HOME:
+                        if (app->active_tab_idx < VB_MAX_TABS) {
+                            app->restore_tab_mask &= ~(1UL << app->active_tab_idx);
+                        }
                         gui_update_url_bar(app, "");
                         net_send_url(app, "@HOME");
                         break;
@@ -4271,8 +4837,6 @@ void gui_handle_events(VortexApp *app)
                             prompt_server_address(app);
                         } else {
                             if (net_connect(app, app->server_host, app->server_port)) {
-                                renderer_sync_viewport_size(app);
-                                net_send_url(app, "@REFRESH");
                                 net_sync_tabs(app);
                             }
                         }
@@ -4474,7 +5038,9 @@ void gui_handle_events(VortexApp *app)
                 break;
         }
 
-        if (app->reopen_screen_needed || app->reopen_gui_needed || !app->running) {
+        if (app->reopen_screen_needed || app->reopen_gui_needed ||
+            app->iconify_needed || app->uniconify_needed ||
+            !app->running || app->is_iconified) {
             break;
         }
     }
@@ -4781,6 +5347,9 @@ void gui_handle_events(VortexApp *app)
                     break;
 
                 case CTX_HOME:
+                    if (app->active_tab_idx < VB_MAX_TABS) {
+                        app->restore_tab_mask &= ~(1UL << app->active_tab_idx);
+                    }
                     gui_update_url_bar(app, "");
                     net_send_url(app, "@HOME");
                     break;
@@ -4824,7 +5393,7 @@ void gui_update_url_bar(VortexApp *app, const char *url)
         return;
     }
     const char *disp = url ? url : "";
-    if (strncmp(disp, "http://127.0.0.1:", 17) == 0) {
+    if (prefs_is_startpage_url(disp)) {
         disp = "";
     }
     if (url && app->num_tabs > 0 && app->active_tab_idx < app->num_tabs) {
@@ -4875,7 +5444,7 @@ void gui_update_url_bar(VortexApp *app, const char *url)
         }
     }
     if (app->win) {
-        STRPTR scr_title = (app->custom_screen != NULL) ? (STRPTR)"VortexBrowser 1.0 (AmigaOS 4.1)" : (STRPTR)~0;
+        STRPTR scr_title = (app->custom_screen != NULL) ? (STRPTR)"VortexBrowser 1.1 (AmigaOS 4.1)" : (STRPTR)~0;
         IIntuition->SetWindowTitles(app->win, app->win_title, scr_title);
         if (app->prefs.dark_theme == 1) {
             gui_draw_dark_titlebar(app);

@@ -50,7 +50,7 @@ def run_ssh(cmd, password):
             raise SystemExit(f'Command failed with exit code {os.WEXITSTATUS(status)}: {cmd}')
         return output.decode('utf-8', errors='ignore')
 
-for f in ['fast_pixconv.c', 'server.py', 'run_server.sh', 'install_server.sh', 'README.md']:
+for f in ['fast_pixconv.c', 'server.py', 'startpage.html', 'run_server.sh', 'install_server.sh', 'README.md']:
     print(f'Uploading {f}...')
     run_ssh(['scp', '-o', 'StrictHostKeyChecking=no', f'{src_dir}/{f}', f'{user}@{host}:/tmp/{f}'], pw)
 
@@ -59,6 +59,7 @@ cmds = f'''
 set -e
 cp /tmp/fast_pixconv.c {target_dir}/fast_pixconv.c
 cp /tmp/server.py {target_dir}/server.py
+cp /tmp/startpage.html {target_dir}/startpage.html
 cp /tmp/run_server.sh {target_dir}/run_server.sh
 cp /tmp/install_server.sh {target_dir}/install_server.sh
 cp /tmp/README.md {target_dir}/README.md

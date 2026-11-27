@@ -136,6 +136,7 @@ BOOL prefs_save(struct VortexApp *app, BOOL permanent);
 BOOL prefs_save_keep_window_box(struct VortexApp *app, BOOL permanent);
 void prefs_capture_window_box(struct VortexApp *app);
 void prefs_capture_dl_window_box(struct VortexApp *app);
+BOOL prefs_is_startpage_url(const char *url);
 void prefs_capture_tabs(struct VortexApp *app);
 void prefs_apply(struct VortexApp *app);
 void prefs_resize_window_to_resolution(struct VortexApp *app, uint16_t req_w, uint16_t req_h);
