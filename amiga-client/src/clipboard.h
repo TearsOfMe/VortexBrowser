@@ -1,5 +1,5 @@
-#ifndef VORTEXBROWSE_CLIPBOARD_H
-#define VORTEXBROWSE_CLIPBOARD_H
+#ifndef VORTEXREMOTEBROWSER_CLIPBOARD_H
+#define VORTEXREMOTEBROWSER_CLIPBOARD_H
 
 #include <exec/types.h>
 
@@ -17,5 +17,5 @@ char *clipboard_read_text(void);
 }
 #endif
 
-#endif /* VORTEXBROWSE_CLIPBOARD_H */
+#endif /* VORTEXREMOTEBROWSER_CLIPBOARD_H */
 

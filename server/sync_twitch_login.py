@@ -55,8 +55,8 @@ def get_target_user_and_home():
     except Exception:
         pass
 
-    # 3. Check existing /home/* directories containing .config/vortexbrowse
-    for vb_dir in glob.glob("/home/*/.config/vortexbrowse"):
+    # 3. Check existing /home/* directories containing .config/vortexremotebrowser
+    for vb_dir in glob.glob("/home/*/.config/vortexremotebrowser"):
         try:
             import pwd
             st = os.stat(vb_dir)
@@ -180,8 +180,8 @@ def load_cached_cookies(search_paths=None):
     if search_paths is None:
         _, _, user_home = get_target_user_and_home()
         search_paths = [
-            os.path.join(user_home, ".config", "vortexbrowse", "twitch_cookies.json"),
-            os.path.expanduser("~/.config/vortexbrowse/twitch_cookies.json"),
+            os.path.join(user_home, ".config", "vortexremotebrowser", "twitch_cookies.json"),
+            os.path.expanduser("~/.config/vortexremotebrowser/twitch_cookies.json"),
         ]
         # De-duplicate while preserving order
         seen = set()
@@ -204,8 +204,8 @@ def load_token_text():
     """Loads plain auth-token string from the user profile directory."""
     _, _, user_home = get_target_user_and_home()
     search_paths = [
-        os.path.join(user_home, ".config", "vortexbrowse", "twitch_token.txt"),
-        os.path.expanduser("~/.config/vortexbrowse/twitch_token.txt"),
+        os.path.join(user_home, ".config", "vortexremotebrowser", "twitch_token.txt"),
+        os.path.expanduser("~/.config/vortexremotebrowser/twitch_token.txt"),
     ]
     seen = set()
     search_paths = [p for p in search_paths if not (p in seen or seen.add(p))]
@@ -350,8 +350,8 @@ async def sync_twitch(cookies_to_inject, token_val=None, login_user=None, cdp_ur
             target_uid, target_gid, user_home = get_target_user_and_home()
 
             target_dirs = []
-            c1 = os.path.join(user_home, ".config", "vortexbrowse")
-            c3 = os.path.expanduser("~/.config/vortexbrowse")
+            c1 = os.path.join(user_home, ".config", "vortexremotebrowser")
+            c3 = os.path.expanduser("~/.config/vortexremotebrowser")
             for d in [c1, c3]:
                 if d and d not in target_dirs:
                     target_dirs.append(d)

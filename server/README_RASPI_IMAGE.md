@@ -26,7 +26,7 @@ With these prebuilt Raspberry Pi images, **no manual setup is required**: flash 
 * **Default Browser:** **Ungoogled-Chromium `156.0.8078.79`** (`/usr/bin/ungoogled-chromium`) with **Broadcom V3D ANGLE GLES/EGL** GPU acceleration (`libegl1`, `libegl-mesa0`, `libgles2`, `mesa-vulkan-drivers`)
 * **Alternative Browser Engine:** **Playwright Firefox** + **`firefox-esr 153.7.0esr`** pre-installed
 * **Automation Core:** **Rustwright** (`VORTEX_USE_RUSTWRIGHT=1`) for fast zero-overhead DirectCDP streaming
-* **VortexRemoteBrowser Server (`/home/pi/vortexbrowse/server`):**
+* **VortexRemoteBrowser Server (`/home/pi/vortexremotebrowser/server`):**
   * Python `.venv` with all dependencies (`rustwright`, `playwright`, `websockets`, `lz4`, `Pillow`, `PyTurboJPEG`)
   * Target-optimized native ARM64 `fast_pixconv.so` (TurboJPEG + LZ4 + OpenMP)
   * `pulseaudio` / `pulseaudio-utils` for AHI audio streaming to AmigaOS 4
@@ -174,7 +174,7 @@ Mit den fertigen Raspberry-Pi-Images benötigt dein Raspberry Pi **keine manuell
 * **Standard-Browser:** **Ungoogled-Chromium `156.0.8078.79`** (`/usr/bin/ungoogled-chromium`) mit **Broadcom V3D ANGLE GLES/EGL** GPU-Beschleunigung (`libegl1`, `libegl-mesa0`, `libgles2`, `mesa-vulkan-drivers`)
 * **Alternative Browser-Engine:** **Playwright Firefox** + **`firefox-esr 153.7.0esr`** komplett vorinstalliert
 * **Automation-Core:** **Rustwright** (`VORTEX_USE_RUSTWRIGHT=1`) für schnelles DirectCDP-Streaming
-* **VortexRemoteBrowser Server (`/home/pi/vortexbrowse/server`):**
+* **VortexRemoteBrowser Server (`/home/pi/vortexremotebrowser/server`):**
   * Python-`.venv` mit allen Abhängigkeiten (`rustwright`, `playwright`, `websockets`, `lz4`, `Pillow`, `PyTurboJPEG`)
   * Nativ für das jeweilige Pi-Modell kompiliertes `fast_pixconv.so` (TurboJPEG + LZ4 + OpenMP)
   * `pulseaudio` / `pulseaudio-utils` für AHI-Audiostreaming an den Amiga

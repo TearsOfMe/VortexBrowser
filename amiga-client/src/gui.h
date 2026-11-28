@@ -1,13 +1,13 @@
-#ifndef VORTEXBROWSE_GUI_H
-#define VORTEXBROWSE_GUI_H
+#ifndef VORTEXREMOTEBROWSER_GUI_H
+#define VORTEXREMOTEBROWSER_GUI_H
 
 #include "app.h"
 
-#ifndef VORTEXBROWSE_RPI_HOST
-#define VORTEXBROWSE_RPI_HOST       "127.0.0.1"
-#define VORTEXBROWSE_RPI_PORT       7788
-#define VORTEXBROWSE_HOSTPC_HOST    "127.0.0.1"
-#define VORTEXBROWSE_HOSTPC_PORT    9757
+#ifndef VORTEXREMOTEBROWSER_RPI_HOST
+#define VORTEXREMOTEBROWSER_RPI_HOST       "127.0.0.1"
+#define VORTEXREMOTEBROWSER_RPI_PORT       7788
+#define VORTEXREMOTEBROWSER_HOSTPC_HOST    "127.0.0.1"
+#define VORTEXREMOTEBROWSER_HOSTPC_PORT    9757
 #endif
 
 /* Reaction Gadget IDs */
@@ -138,5 +138,5 @@ void gui_uniconify(VortexApp *app);
 void gui_to_front(VortexApp *app);
 void gui_try_close_pending_screen(VortexApp *app);
 
-#endif /* VORTEXBROWSE_GUI_H */
+#endif /* VORTEXREMOTEBROWSER_GUI_H */
 

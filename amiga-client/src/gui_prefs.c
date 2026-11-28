@@ -420,14 +420,14 @@ void gui_prefs_open(VortexApp *app)
      * Tab 0: Server & Streaming
      * ------------------------------------------------------------------------ */
     const char *cur_host = app->server_host[0] ? app->server_host :
-                          (app->prefs.server_host[0] ? app->prefs.server_host : VORTEXBROWSE_HOSTPC_HOST);
+                          (app->prefs.server_host[0] ? app->prefs.server_host : VORTEXREMOTEBROWSER_HOSTPC_HOST);
     uint16 cur_port = app->server_port ? app->server_port :
-                     (app->prefs.server_port ? app->prefs.server_port : VORTEXBROWSE_HOSTPC_PORT);
+                     (app->prefs.server_port ? app->prefs.server_port : VORTEXREMOTEBROWSER_HOSTPC_PORT);
 
     uint16 init_srv_preset = 2; /* Custom */
-    if (strcmp(cur_host, VORTEXBROWSE_HOSTPC_HOST) == 0 && cur_port == VORTEXBROWSE_HOSTPC_PORT) {
+    if (strcmp(cur_host, VORTEXREMOTEBROWSER_HOSTPC_HOST) == 0 && cur_port == VORTEXREMOTEBROWSER_HOSTPC_PORT) {
         init_srv_preset = 0;
-    } else if (strcmp(cur_host, VORTEXBROWSE_RPI_HOST) == 0 && cur_port == VORTEXBROWSE_RPI_PORT) {
+    } else if (strcmp(cur_host, VORTEXREMOTEBROWSER_RPI_HOST) == 0 && cur_port == VORTEXREMOTEBROWSER_RPI_PORT) {
         init_srv_preset = 1;
     }
 
@@ -1584,13 +1584,13 @@ void gui_prefs_open(VortexApp *app)
                         IIntuition->GetAttr(CHOOSER_Selected, gad_srv_preset, &p_sel);
                         if (p_sel == 0) { /* Host-PC */
                             char p_str[16];
-                            snprintf(p_str, sizeof(p_str), "%u", (unsigned)VORTEXBROWSE_HOSTPC_PORT);
-                            set_string_text(gad_srv_host, win, VORTEXBROWSE_HOSTPC_HOST);
+                            snprintf(p_str, sizeof(p_str), "%u", (unsigned)VORTEXREMOTEBROWSER_HOSTPC_PORT);
+                            set_string_text(gad_srv_host, win, VORTEXREMOTEBROWSER_HOSTPC_HOST);
                             set_string_text(gad_srv_port, win, p_str);
                         } else if (p_sel == 1) { /* Raspberry Pi 4 */
                             char p_str[16];
-                            snprintf(p_str, sizeof(p_str), "%u", (unsigned)VORTEXBROWSE_RPI_PORT);
-                            set_string_text(gad_srv_host, win, VORTEXBROWSE_RPI_HOST);
+                            snprintf(p_str, sizeof(p_str), "%u", (unsigned)VORTEXREMOTEBROWSER_RPI_PORT);
+                            set_string_text(gad_srv_host, win, VORTEXREMOTEBROWSER_RPI_HOST);
                             set_string_text(gad_srv_port, win, p_str);
                         }
                     } else if (gid == GID_P_SERVER_HOST || gid == GID_P_SERVER_PORT) {
@@ -1598,9 +1598,9 @@ void gui_prefs_open(VortexApp *app)
                         get_string_text(gad_srv_host, h_buf, sizeof(h_buf));
                         get_string_text(gad_srv_port, p_buf, sizeof(p_buf));
                         uint32 p_sel = 2; /* Custom */
-                        if (strcmp(h_buf, VORTEXBROWSE_HOSTPC_HOST) == 0 && atoi(p_buf) == VORTEXBROWSE_HOSTPC_PORT) {
+                        if (strcmp(h_buf, VORTEXREMOTEBROWSER_HOSTPC_HOST) == 0 && atoi(p_buf) == VORTEXREMOTEBROWSER_HOSTPC_PORT) {
                             p_sel = 0;
-                        } else if (strcmp(h_buf, VORTEXBROWSE_RPI_HOST) == 0 && atoi(p_buf) == VORTEXBROWSE_RPI_PORT) {
+                        } else if (strcmp(h_buf, VORTEXREMOTEBROWSER_RPI_HOST) == 0 && atoi(p_buf) == VORTEXREMOTEBROWSER_RPI_PORT) {
                             p_sel = 1;
                         }
                         IIntuition->SetGadgetAttrs((struct Gadget *)gad_srv_preset, win, NULL,
@@ -1789,7 +1789,7 @@ void gui_prefs_open(VortexApp *app)
         get_string_text(gad_srv_host, new_host, sizeof(new_host));
         get_string_text(gad_srv_port, new_port_str, sizeof(new_port_str));
         int new_port = atoi(new_port_str);
-        if (new_port <= 0 || new_port > 65535) new_port = VORTEXBROWSE_HOSTPC_PORT;
+        if (new_port <= 0 || new_port > 65535) new_port = VORTEXREMOTEBROWSER_HOSTPC_PORT;
 
         uint32 stream_sel = 0;
         IIntuition->GetAttr(CHOOSER_Selected, gad_stream_res_chooser, &stream_sel);
@@ -1845,9 +1845,9 @@ void gui_prefs_open(VortexApp *app)
 
         if (app->gad_server_chooser && app->win) {
             uint32 s_sel = 2; /* Custom */
-            if (strcmp(app->server_host, VORTEXBROWSE_RPI_HOST) == 0 && app->server_port == VORTEXBROWSE_RPI_PORT) {
+            if (strcmp(app->server_host, VORTEXREMOTEBROWSER_RPI_HOST) == 0 && app->server_port == VORTEXREMOTEBROWSER_RPI_PORT) {
                 s_sel = 0;
-            } else if (strcmp(app->server_host, VORTEXBROWSE_HOSTPC_HOST) == 0 && app->server_port == VORTEXBROWSE_HOSTPC_PORT) {
+            } else if (strcmp(app->server_host, VORTEXREMOTEBROWSER_HOSTPC_HOST) == 0 && app->server_port == VORTEXREMOTEBROWSER_HOSTPC_PORT) {
                 s_sel = 1;
             }
             IIntuition->SetGadgetAttrs((struct Gadget *)app->gad_server_chooser, app->win, NULL,

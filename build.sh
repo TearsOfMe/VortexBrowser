@@ -32,8 +32,6 @@ docker run --rm \
         cp -rf catalogs/. /out_amiga/catalogs/
         chown -R ${HOST_UID}:${HOST_GID} /out_amiga/VortexRemoteBrowser /out_amiga/VortexRemoteBrowser.stripped /out_amiga/VortexRemoteBrowser-AltiVec /out_amiga/VortexRemoteBrowser-AltiVec.stripped /out_amiga/catalogs
     "
-cp -f "${SCRIPT_DIR}/amiga-client/VortexRemoteBrowser" "${SCRIPT_DIR}/amiga-client/VortexBrowse"
-cp -f "${SCRIPT_DIR}/amiga-client/VortexRemoteBrowser.stripped" "${SCRIPT_DIR}/amiga-client/VortexBrowse.stripped"
 
 if [ -f "${SCRIPT_DIR}/amiga-client/VortexRemoteBrowser.info" ]; then
     [ -f "${SCRIPT_DIR}/amiga-client/VortexRemoteBrowser-AltiVec.info" ] || cp -f "${SCRIPT_DIR}/amiga-client/VortexRemoteBrowser.info" "${SCRIPT_DIR}/amiga-client/VortexRemoteBrowser-AltiVec.info"
@@ -73,9 +71,9 @@ if [ -z "$AMIGA_FTP_AUTH" ]; then
     if [ -f "${SCRIPT_DIR}/.ftp_auth" ]; then
         # shellcheck disable=SC1091
         source "${SCRIPT_DIR}/.ftp_auth"
-    elif [ -f "${HOME}/.config/vortexbrowse/ftp_auth.env" ]; then
+    elif [ -f "${HOME}/.config/vortexremotebrowser/ftp_auth.env" ]; then
         # shellcheck disable=SC1090
-        source "${HOME}/.config/vortexbrowse/ftp_auth.env"
+        source "${HOME}/.config/vortexremotebrowser/ftp_auth.env"
     fi
 fi
 

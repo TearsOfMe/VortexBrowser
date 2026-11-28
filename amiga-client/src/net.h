@@ -1,5 +1,5 @@
-#ifndef VORTEXBROWSE_NET_H
-#define VORTEXBROWSE_NET_H
+#ifndef VORTEXREMOTEBROWSER_NET_H
+#define VORTEXREMOTEBROWSER_NET_H
 
 #include "app.h"
 
@@ -31,4 +31,4 @@ BOOL net_send_key(VortexApp *app, uint8_t event_type, uint16_t key_code, const c
 BOOL net_send_clipboard(VortexApp *app, const char *text);
 BOOL net_send_download_response(VortexApp *app, uint32_t download_id, uint8_t accepted);
 
-#endif /* VORTEXBROWSE_NET_H */
+#endif /* VORTEXREMOTEBROWSER_NET_H */

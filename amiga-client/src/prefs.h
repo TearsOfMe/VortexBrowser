@@ -1,5 +1,5 @@
-#ifndef VORTEXBROWSE_PREFS_H
-#define VORTEXBROWSE_PREFS_H
+#ifndef VORTEXREMOTEBROWSER_PREFS_H
+#define VORTEXREMOTEBROWSER_PREFS_H
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -145,4 +145,4 @@ BOOL prefs_quicklink_add(struct VortexApp *app, const char *label, const char *u
 BOOL prefs_quicklink_remove(struct VortexApp *app, int index);
 void prefs_set_resolution(struct VortexApp *app, uint16_t preset_idx, uint16_t custom_w, uint16_t custom_h);
 
-#endif /* VORTEXBROWSE_PREFS_H */
+#endif /* VORTEXREMOTEBROWSER_PREFS_H */

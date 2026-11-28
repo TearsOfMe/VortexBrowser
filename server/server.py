@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-VortexBrowse - CachyOS HP EliteDesk 805 G6 (AMD Ryzen PRO / Radeon Vega) Edition
+VortexRemoteBrowser - CachyOS HP EliteDesk 805 G6 (AMD Ryzen PRO / Radeon Vega) Edition
 - Specially tuned for Full HD (1920x1080) @ 25 FPS streaming to AmigaOS 4.1 PowerPC
 - Uses C-native AVX2 + OpenMP + libturbojpeg + liblz4 pipeline (encode_jpeg_to_frame_packet)
 - Streams 12-bpp Planar YUV420P with 2D Dirty-Rect (CODEC_LZ4_RECT) & full-frame LZ4
@@ -156,7 +156,7 @@ DOWNLOAD_CHUNK_SIZE = 64 * 1024
 AUDIO_SAMPLE_RATE   = 44100
 AUDIO_CHANNELS      = 2
 AUDIO_CHUNK_BYTES   = 8192  # ~46ms of 44100Hz 16-bit stereo PCM (CD quality)
-AUDIO_SINK_NAME     = "vortexbrowse_sink"
+AUDIO_SINK_NAME     = "vortexremotebrowser_sink"
 
 _LOG_LEVEL_STR = os.environ.get("VORTEX_LOG_LEVEL", "CRITICAL").upper()
 _LOG_LEVEL = getattr(logging, _LOG_LEVEL_STR, logging.CRITICAL)
@@ -938,7 +938,7 @@ def ensure_audio_sink(audio_device: str = "", tabcapture_active: bool = False) -
                     "load-module",
                     "module-null-sink",
                     f"sink_name={AUDIO_SINK_NAME}",
-                    "sink_properties=device.description=VortexBrowse_Amiga_Audio",
+                    "sink_properties=device.description=VortexRemoteBrowser_Amiga_Audio",
                 ],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -2324,7 +2324,7 @@ class H264LiveStreamEncoder:
 # Persistent Profile, Session Storage & Security Helpers
 # ============================================================================
 def get_vortex_config_dir() -> str:
-    """Returns the user config/profile directory (~/.config/vortexbrowse, %APPDATA%\\VortexRemoteBrowser, or $VORTEX_PROFILE_DIR)."""
+    """Returns the user config/profile directory (~/.config/vortexremotebrowser, %APPDATA%\\VortexRemoteBrowser, or $VORTEX_PROFILE_DIR)."""
     env_dir = os.environ.get("VORTEX_PROFILE_DIR", "").strip()
     if env_dir:
         cfg_dir = os.path.expanduser(env_dir)
@@ -2332,7 +2332,7 @@ def get_vortex_config_dir() -> str:
         base = os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
         cfg_dir = os.path.join(base, "VortexRemoteBrowser")
     else:
-        cfg_dir = os.path.expanduser("~/.config/vortexbrowse")
+        cfg_dir = os.path.expanduser("~/.config/vortexremotebrowser")
     os.makedirs(cfg_dir, mode=0o700, exist_ok=True)
     return cfg_dir
 
@@ -4139,7 +4139,7 @@ class AmigaClientSession:
                 cfg_dir = get_vortex_config_dir()
                 cookie_candidates = list(dict.fromkeys([
                     os.path.join(cfg_dir, "twitch_cookies.json"),
-                    os.path.expanduser("~/.config/vortexbrowse/twitch_cookies.json"),
+                    os.path.expanduser("~/.config/vortexremotebrowser/twitch_cookies.json"),
                 ]))
                 loaded_twitch = False
                 for j_path in cookie_candidates:
@@ -4171,7 +4171,7 @@ class AmigaClientSession:
                 if not loaded_twitch:
                     token_candidates = list(dict.fromkeys([
                         os.path.join(cfg_dir, "twitch_token.txt"),
-                        os.path.expanduser("~/.config/vortexbrowse/twitch_token.txt"),
+                        os.path.expanduser("~/.config/vortexremotebrowser/twitch_token.txt"),
                     ]))
                     for t_path in token_candidates:
                         if os.path.exists(t_path):
@@ -9984,7 +9984,7 @@ async def run_server(args: argparse.Namespace) -> None:
         os.unlink(test_file)
     except Exception as e:
         user_tag = str(os.getuid()) if hasattr(os, "getuid") else re.sub(r"[^a-zA-Z0-9_-]", "_", getpass.getuser() or "user")
-        fallback_dir = os.path.join(tempfile.gettempdir(), f"vortexbrowse_{engine}_profile_{user_tag}")
+        fallback_dir = os.path.join(tempfile.gettempdir(), f"vortexremotebrowser_{engine}_profile_{user_tag}")
         logger.warning("Profile directory '%s' is not writable (%s). Falling back to temporary directory '%s'", profile_dir, e, fallback_dir)
         profile_dir = fallback_dir
         is_fallback_profile = True
@@ -10508,7 +10508,7 @@ async def run_server(args: argparse.Namespace) -> None:
         else:
             audio_desc = "OFF"
         logger.info(
-            "VortexBrowse Server ready on %s (On-Demand Browser) | Engine: %s | Viewport: %dx%d (1:1 Auto-Sync) | Format: %s | Codec: LZ4+DirtySlice | Audio: %s",
+            "VortexRemoteBrowser Server ready on %s (On-Demand Browser) | Engine: %s | Viewport: %dx%d (1:1 Auto-Sync) | Format: %s | Codec: LZ4+DirtySlice | Audio: %s",
             addrs,
             engine.upper(),
             args.width,
@@ -10537,7 +10537,7 @@ async def run_server(args: argparse.Namespace) -> None:
                                 except asyncio.CancelledError:
                                     pass
         finally:
-            logger.info("Shutting down VortexBrowse Server cleanly...")
+            logger.info("Shutting down VortexRemoteBrowser Server cleanly...")
             sess = active_session
             if sess is not None:
                 sess.running = False
@@ -10574,7 +10574,7 @@ async def run_server(args: argparse.Namespace) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="VortexBrowse Universal Companion Server (Linux / Raspberry Pi / macOS / Windows)")
+    parser = argparse.ArgumentParser(description="VortexRemoteBrowser Universal Companion Server (Linux / Raspberry Pi / macOS / Windows)")
     parser.add_argument("--host", default="0.0.0.0", help="Bind address (default: 0.0.0.0)")
     parser.add_argument("--port", type=int, default=7788, help="TCP port (default: 7788, plus 9757 for LAN)")
     parser.add_argument("--portal-port", type=int, default=0, help=argparse.SUPPRESS)
@@ -10635,4 +10635,4 @@ if __name__ == "__main__":
     try:
         asyncio.run(run_server(parse_args()))
     except KeyboardInterrupt:
-        logger.info("VortexBrowse Server stopped.")
+        logger.info("VortexRemoteBrowser Server stopped.")

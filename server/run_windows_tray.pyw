@@ -44,7 +44,7 @@ def _get_config_dir() -> str:
         appdata = os.environ.get("APPDATA") or os.path.expanduser("~\\AppData\\Roaming")
         d = os.path.join(appdata, "VortexRemoteBrowser")
     else:
-        d = os.path.expanduser("~/.config/vortexbrowse")
+        d = os.path.expanduser("~/.config/vortexremotebrowser")
     os.makedirs(d, exist_ok=True)
     return d
 

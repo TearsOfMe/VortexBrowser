@@ -4,7 +4,7 @@ Generate native AmigaOS 4.1 (64x64 standard size) circular .info icons for Vorte
 Creates:
   1. Primary icon set in amiga-client/ (Cyber-Globe Vortex, circular 32-bit ARGB):
      - VortexRemoteBrowser.info          (Standard ReAction)
-     - VortexBrowse.info           (Backward-compatibility alias)
+     - VortexRemoteBrowser.info           (Backward-compatibility alias)
      - VortexRemoteBrowser-AltiVec.info  (with 'AltiVec' badge)
      - VortexRemoteBrowser-MUI.info      (with 'MUI' badge)
      - VortexRemoteBrowser_drawer.info   (Workbench drawer icon with DrawerData)
@@ -339,7 +339,7 @@ def build_icon_set(base_png, out_dir, include_compat=False):
     im_norm, im_sel = render_circular_icon_pair(base_png, badge=None)
     write_amiga_info(im_norm, im_sel, WBTOOL, os.path.join(out_dir, "VortexRemoteBrowser.info"), tooltypes=default_tt)
     if include_compat:
-        write_amiga_info(im_norm, im_sel, WBTOOL, os.path.join(out_dir, "VortexBrowse.info"), tooltypes=default_tt)
+        write_amiga_info(im_norm, im_sel, WBTOOL, os.path.join(out_dir, "VortexRemoteBrowser.info"), tooltypes=default_tt)
     write_amiga_info(im_norm, im_sel, WBDRAWER, os.path.join(out_dir, "VortexRemoteBrowser_drawer.info"))
 
     # 2. AltiVec Edition (with AltiVec badge)

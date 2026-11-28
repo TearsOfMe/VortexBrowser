@@ -1,5 +1,5 @@
-#ifndef VORTEXBROWSE_AUDIO_H
-#define VORTEXBROWSE_AUDIO_H
+#ifndef VORTEXREMOTEBROWSER_AUDIO_H
+#define VORTEXREMOTEBROWSER_AUDIO_H
 
 #include "app.h"
 
@@ -15,4 +15,4 @@ void audio_handle_packet(
     uint32_t        payload_len
 );
 
-#endif /* VORTEXBROWSE_AUDIO_H */
+#endif /* VORTEXREMOTEBROWSER_AUDIO_H */

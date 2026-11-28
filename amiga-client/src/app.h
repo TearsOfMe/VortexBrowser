@@ -1,5 +1,5 @@
-#ifndef VORTEXBROWSE_APP_H
-#define VORTEXBROWSE_APP_H
+#ifndef VORTEXREMOTEBROWSER_APP_H
+#define VORTEXREMOTEBROWSER_APP_H
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -324,5 +324,5 @@ extern VortexApp g_app;
 void app_set_status(const char *fmt, ...);
 void app_set_gauge(int percent);
 
-#endif /* VORTEXBROWSE_APP_H */
+#endif /* VORTEXREMOTEBROWSER_APP_H */
 

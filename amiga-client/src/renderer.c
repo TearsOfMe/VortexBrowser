@@ -32,8 +32,8 @@ void renderer_init(VortexApp *app)
     av_log_set_level(AV_LOG_QUIET);
 
     memset(&app->renderer, 0, sizeof(RendererState));
-    app->renderer.src_width   = VORTEXBROWSE_DEFAULT_WIDTH;
-    app->renderer.src_height  = VORTEXBROWSE_DEFAULT_HEIGHT;
+    app->renderer.src_width   = VORTEXREMOTEBROWSER_DEFAULT_WIDTH;
+    app->renderer.src_height  = VORTEXREMOTEBROWSER_DEFAULT_HEIGHT;
     app->renderer.src_format  = FMT_RGB565;
 
     uint32 vec_unit = VECTORTYPE_NONE;
@@ -1990,8 +1990,8 @@ BOOL renderer_map_window_to_remote(
     int32_t rel_x = (int32_t)(win_mouse_x - area.Left);
     int32_t rel_y = (int32_t)(win_mouse_y - area.Top);
 
-    uint16_t sw = app->renderer.src_width  ? app->renderer.src_width  : VORTEXBROWSE_DEFAULT_WIDTH;
-    uint16_t sh = app->renderer.src_height ? app->renderer.src_height : VORTEXBROWSE_DEFAULT_HEIGHT;
+    uint16_t sw = app->renderer.src_width  ? app->renderer.src_width  : VORTEXREMOTEBROWSER_DEFAULT_WIDTH;
+    uint16_t sh = app->renderer.src_height ? app->renderer.src_height : VORTEXREMOTEBROWSER_DEFAULT_HEIGHT;
 
     int32_t rx = (rel_x * (int32_t)sw) / (int32_t)area.Width;
     int32_t ry = (rel_y * (int32_t)sh) / (int32_t)area.Height;

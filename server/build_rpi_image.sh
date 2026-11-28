@@ -102,8 +102,8 @@ tar -xf /work/ungoogled.tar.xz -C /mnt/rpi/opt/ungoogled-chromium --strip-compon
 ln -sf /opt/ungoogled-chromium/chrome /mnt/rpi/usr/bin/ungoogled-chromium
 ln -sf /opt/ungoogled-chromium/chrome /mnt/rpi/usr/local/bin/ungoogled-chromium
 
-rm -rf /mnt/rpi/home/pi/vortexbrowse
-mkdir -p /mnt/rpi/home/pi/vortexbrowse/server
+rm -rf /mnt/rpi/home/pi/vortexremotebrowser
+mkdir -p /mnt/rpi/home/pi/vortexremotebrowser/server
 tar -C /src_server \
     --exclude=".venv" \
     --exclude="__pycache__" \
@@ -114,8 +114,8 @@ tar -C /src_server \
     --exclude="*chromium_profile*" \
     --exclude="*firefox_profile*" \
     --exclude="browser_bin.txt" \
-    -cf - . | tar -C /mnt/rpi/home/pi/vortexbrowse/server -xf -
-echo "/usr/bin/ungoogled-chromium" > /mnt/rpi/home/pi/vortexbrowse/server/browser_bin.txt
+    -cf - . | tar -C /mnt/rpi/home/pi/vortexremotebrowser/server -xf -
+echo "/usr/bin/ungoogled-chromium" > /mnt/rpi/home/pi/vortexremotebrowser/server/browser_bin.txt
 
 chroot /mnt/rpi /bin/bash -e << "CHROOT_EOF"
 export DEBIAN_FRONTEND=noninteractive
@@ -150,21 +150,21 @@ apt-get install -y --no-install-recommends \
     libgl1-mesa-dri libegl1 libegl-mesa0 libgles2 mesa-vulkan-drivers \
     fonts-liberation fonts-dejavu-core fonts-noto-color-emoji ca-certificates
 
-chown -R pi:pi /home/pi/vortexbrowse
+chown -R pi:pi /home/pi/vortexremotebrowser
 su -s /bin/bash pi -c "
 set -e
-cd /home/pi/vortexbrowse/server
+cd /home/pi/vortexremotebrowser/server
 python3 -m venv .venv
 .venv/bin/pip install --no-cache-dir --upgrade pip
 .venv/bin/pip install --no-cache-dir -r requirements.txt
 "
-/home/pi/vortexbrowse/server/.venv/bin/playwright install-deps chromium firefox || true
+/home/pi/vortexremotebrowser/server/.venv/bin/playwright install-deps chromium firefox || true
 su -s /bin/bash pi -c "
 set -e
-cd /home/pi/vortexbrowse/server
+cd /home/pi/vortexremotebrowser/server
 .venv/bin/playwright install firefox
 "
-chmod +x /home/pi/vortexbrowse/server/run_server.sh /home/pi/vortexbrowse/server/install_server.sh
+chmod +x /home/pi/vortexremotebrowser/server/run_server.sh /home/pi/vortexremotebrowser/server/install_server.sh
 mkdir -p /var/lib/systemd/linger
 touch /var/lib/systemd/linger/pi
 
@@ -192,12 +192,12 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=pi
-WorkingDirectory=/home/pi/vortexbrowse/server
+WorkingDirectory=/home/pi/vortexremotebrowser/server
 Environment=PYTHONUNBUFFERED=1
 Environment=OMP_NUM_THREADS=4
 Environment=XDG_RUNTIME_DIR=/run/user/1000
 EnvironmentFile=-/etc/default/vortexremotebrowser
-ExecStart=/home/pi/vortexbrowse/server/run_server.sh
+ExecStart=/home/pi/vortexremotebrowser/server/run_server.sh
 KillMode=mixed
 TimeoutStopSec=15
 Restart=always
@@ -281,11 +281,11 @@ mount --bind /dev/pts /mnt/rpi/dev/pts
 # Sync latest server sources into cached rootfs (preserving browser_bin.txt and .venv)
 for fname in server.py startpage.html fast_pixconv.c run_server.sh install_server.sh README.md darkreader.js requirements.txt; do
     if [ -f "/src_server/${fname}" ]; then
-        cp -f "/src_server/${fname}" "/mnt/rpi/home/pi/vortexbrowse/server/${fname}"
+        cp -f "/src_server/${fname}" "/mnt/rpi/home/pi/vortexremotebrowser/server/${fname}"
     fi
 done
-chown -R 1000:1000 /mnt/rpi/home/pi/vortexbrowse/server
-chmod +x /mnt/rpi/home/pi/vortexbrowse/server/server.py /mnt/rpi/home/pi/vortexbrowse/server/run_server.sh /mnt/rpi/home/pi/vortexbrowse/server/install_server.sh
+chown -R 1000:1000 /mnt/rpi/home/pi/vortexremotebrowser/server
+chmod +x /mnt/rpi/home/pi/vortexremotebrowser/server/server.py /mnt/rpi/home/pi/vortexremotebrowser/server/run_server.sh /mnt/rpi/home/pi/vortexremotebrowser/server/install_server.sh
 
 chroot /mnt/rpi /bin/bash -e << CHROOT_EOF
 RPI_HOST="vortexremotebrowser"
@@ -295,7 +295,7 @@ sed -i "s/^127\.0\.1\.1.*/127.0.1.1\t\${RPI_HOST}/" /etc/hosts
 
 su -s /bin/bash pi -c "
 set -e
-cd /home/pi/vortexbrowse/server
+cd /home/pi/vortexremotebrowser/server
 gcc -O3 ${CPU_FLAG} -fopenmp -DHAVE_TURBOJPEG_LZ4 -shared -fPIC fast_pixconv.c -lturbojpeg -llz4 -o fast_pixconv.so
 .venv/bin/python -c \"import ctypes, playwright, rustwright, websockets, lz4, PIL, turbojpeg; ctypes.CDLL('./fast_pixconv.so'); print('${TARGET}_PYTHON_RUSTWRIGHT_PIXCONV_OK')\"
 "

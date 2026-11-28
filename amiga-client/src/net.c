@@ -322,7 +322,7 @@ BOOL net_handle_incoming(VortexApp *app)
                 net_disconnect(app);
                 return FALSE;
             }
-            static uint8_t s_chunk_buf[VORTEXBROWSE_DOWNLOAD_CHUNK_SIZE];
+            static uint8_t s_chunk_buf[VORTEXREMOTEBROWSER_DOWNLOAD_CHUNK_SIZE];
             uint8_t *buf = (clen <= sizeof(s_chunk_buf)) ? s_chunk_buf : (uint8_t *)malloc(clen);
             if (!buf) {
                 net_disconnect(app);

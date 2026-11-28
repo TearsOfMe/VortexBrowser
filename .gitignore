@@ -1,8 +1,8 @@
 # Compiled binaries & objects
 *.o
 *.stripped
-amiga-client/VortexBrowse
-amiga-client/VortexBrowse.stripped
+amiga-client/VortexRemoteBrowser
+amiga-client/VortexRemoteBrowser.stripped
 amiga-client/VortexRemoteBrowser
 amiga-client/VortexRemoteBrowser.stripped
 *.so
@@ -28,7 +28,7 @@ Thumbs.db
 
 # Release staging & clib4 binary
 dist/
-amiga-client/VortexBrowse.clib4
+amiga-client/VortexRemoteBrowser.clib4
 *.lha
 
 # Secrets, browser profiles & local credentials

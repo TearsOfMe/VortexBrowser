@@ -1,5 +1,5 @@
-#ifndef VORTEXBROWSE_RENDERER_H
-#define VORTEXBROWSE_RENDERER_H
+#ifndef VORTEXREMOTEBROWSER_RENDERER_H
+#define VORTEXREMOTEBROWSER_RENDERER_H
 
 #include "app.h"
 
@@ -33,4 +33,4 @@ BOOL renderer_map_window_to_remote(
     int16_t   *out_remote_y
 );
 
-#endif /* VORTEXBROWSE_RENDERER_H */
+#endif /* VORTEXREMOTEBROWSER_RENDERER_H */

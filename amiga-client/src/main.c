@@ -461,10 +461,10 @@ static void run_autotest_step(VortexApp *app)
                (unsigned)app->renderer.last_comp_err);
 
         /* Test Favorites in ENVARC: */
-        favorites_add(app, "VortexBrowse AutoTest Bookmark", "https://www.amigans.net");
+        favorites_add(app, "VortexRemoteBrowser AutoTest Bookmark", "https://www.amigans.net");
         BOOL fav_ok = favorites_save(app);
         favorites_rebuild_chooser_list(app);
-        printf("[AutoTest] PASS 2/4: Favorites saved to ENVARC:VortexBrowse/favorites.prefs (ok=%d, count=%d)\n",
+        printf("[AutoTest] PASS 2/4: Favorites saved to ENVARC:VortexRemoteBrowser/favorites.prefs (ok=%d, count=%d)\n",
                (int)fav_ok, app->num_favorites);
 
         /* Trigger click on interactive button on portal */
@@ -475,7 +475,7 @@ static void run_autotest_step(VortexApp *app)
     /* Stage 1: Trigger download of test package from Pi server */
     else if (app->autotest_stage == 1 && app->autotest_ticks >= 4) {
         char dl_url[256];
-        snprintf(dl_url, sizeof(dl_url), "http://127.0.0.1:8089/download/VortexBrowse_TestPackage.lha");
+        snprintf(dl_url, sizeof(dl_url), "http://127.0.0.1:8089/download/VortexRemoteBrowser_TestPackage.lha");
         printf("[AutoTest] Triggering download proxy test: %s\n", dl_url);
         net_send_url(app, dl_url);
         app->autotest_stage = 2;
@@ -487,7 +487,7 @@ static void run_autotest_step(VortexApp *app)
             printf("[AutoTest] PASS 3/4: Download Proxy streamed %llu bytes to '%s'\n",
                    (unsigned long long)app->download.received_size,
                    app->download.dest_path);
-            printf("[AutoTest] PASS 4/4: All VortexBrowse AmigaOS 4 subsystems verified!\n");
+            printf("[AutoTest] PASS 4/4: All VortexRemoteBrowser AmigaOS 4 subsystems verified!\n");
             app->autotest_stage = 3;
             app->running = FALSE;
         } else if (app->autotest_ticks > 150) {
@@ -793,6 +793,6 @@ int main(int argc, char **argv)
     locale_close_catalog();
     close_libs_and_classes();
 
-    DBG_LOG("[Main] VortexBrowse exited cleanly.\n");
+    DBG_LOG("[Main] VortexRemoteBrowser exited cleanly.\n");
     return 0;
 }

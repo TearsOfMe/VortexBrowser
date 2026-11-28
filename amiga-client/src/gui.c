@@ -2852,7 +2852,7 @@ void gui_tab_close(VortexApp *app, uint16 idx)
     if (app->num_tabs <= 1) {
         /* Last tab: don't close, go back to the start page.
          * Must be "@HOME" - a literal 127.0.0.1:7788 URL would make Chromium
-         * load the VortexBrowse binary protocol port as a web page. */
+         * load the VortexRemoteBrowser binary protocol port as a web page. */
         snprintf(app->tabs[0].title, sizeof(app->tabs[0].title), "%s", GetVString(MSG_MENU_HOME));
         app->tabs[0].url[0] = '\0';
         gui_update_url_bar(app, "");

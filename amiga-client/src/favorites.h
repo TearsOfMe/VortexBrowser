@@ -1,5 +1,5 @@
-#ifndef VORTEXBROWSE_FAVORITES_H
-#define VORTEXBROWSE_FAVORITES_H
+#ifndef VORTEXREMOTEBROWSER_FAVORITES_H
+#define VORTEXREMOTEBROWSER_FAVORITES_H
 
 #include "app.h"
 
@@ -15,4 +15,4 @@ BOOL favorites_add(VortexApp *app, const char *title, const char *url);
 void favorites_free_chooser_list(VortexApp *app);
 void favorites_rebuild_chooser_list(VortexApp *app);
 
-#endif /* VORTEXBROWSE_FAVORITES_H */
+#endif /* VORTEXREMOTEBROWSER_FAVORITES_H */

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate crisp 20x20 RGBA webpage icons for VortexBrowse AmigaOS 4 client."""
+"""Generate crisp 20x20 RGBA webpage icons for VortexRemoteBrowser AmigaOS 4 client."""
 
 import os
 from PIL import Image, ImageDraw, ImageFont

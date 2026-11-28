@@ -73,10 +73,10 @@ if [ "$RESTORE_PC" -eq 1 ]; then
     echo "[*] Abrufen des aktiven Twitch-Tokens..."
     FETCHED_TOKEN="$TOKEN"
     if [ -z "$FETCHED_TOKEN" ]; then
-        if ssh "root@${SERVER_IP}" "test -f ~/.config/vortexbrowse/twitch_token.txt" 2>/dev/null; then
-            FETCHED_TOKEN=$(ssh "root@${SERVER_IP}" "cat ~/.config/vortexbrowse/twitch_token.txt" 2>/dev/null || true)
-        elif [ -f "${HOME}/.config/vortexbrowse/twitch_token.txt" ]; then
-            FETCHED_TOKEN=$(cat "${HOME}/.config/vortexbrowse/twitch_token.txt")
+        if ssh "root@${SERVER_IP}" "test -f ~/.config/vortexremotebrowser/twitch_token.txt" 2>/dev/null; then
+            FETCHED_TOKEN=$(ssh "root@${SERVER_IP}" "cat ~/.config/vortexremotebrowser/twitch_token.txt" 2>/dev/null || true)
+        elif [ -f "${HOME}/.config/vortexremotebrowser/twitch_token.txt" ]; then
+            FETCHED_TOKEN=$(cat "${HOME}/.config/vortexremotebrowser/twitch_token.txt")
         fi
     fi
 
@@ -247,7 +247,7 @@ REMOTE_INFO=$(ssh -o ConnectTimeout=5 "root@${SERVER_IP}" '
     elif [ -d "$(systemctl show vortexremotebrowser -p WorkingDirectory --value 2>/dev/null || true)" ]; then
         DIR="$(systemctl show vortexremotebrowser -p WorkingDirectory --value 2>/dev/null)"
     else
-        for d in /home/*/Server-* /home/*/vortexbrowse* /opt/vortexbrowse* /root/Server-*; do
+        for d in /home/*/Server-* /home/*/vortexremotebrowser* /opt/vortexremotebrowser* /root/Server-*; do
             if [ -f "$d/server.py" ]; then
                 DIR="$d"
                 break
@@ -275,7 +275,7 @@ fi
 echo "[+] Remote server directory : ${REMOTE_DIR}"
 echo "[+] Remote Python binary    : ${REMOTE_PY}"
 
-# Upload fresh cookies strictly into the user config dir (~/.config/vortexbrowse, 0600)
+# Upload fresh cookies strictly into the user config dir (~/.config/vortexremotebrowser, 0600)
 REMOTE_COOKIES_ARG=""
 if [ -s "$TMP_COOKIES" ]; then
     echo "[*] Uploading fresh Twitch cookies to secure user config on ${SERVER_IP}..."
@@ -283,7 +283,7 @@ if [ -s "$TMP_COOKIES" ]; then
         SVC_USER=\$(stat -c '%U' '${REMOTE_DIR}/server.py' 2>/dev/null || echo 'root')
         SVC_HOME=\$(getent passwd \"\$SVC_USER\" | cut -d: -f6)
         [ -n \"\$SVC_HOME\" ] || SVC_HOME='/root'
-        CFG=\"\${SVC_HOME}/.config/vortexbrowse\"
+        CFG=\"\${SVC_HOME}/.config/vortexremotebrowser\"
         mkdir -p \"\$CFG\"
         chown \"\$SVC_USER:\$SVC_USER\" \"\${SVC_HOME}/.config\" \"\$CFG\" 2>/dev/null || true
         chmod 700 \"\$CFG\"

@@ -1,5 +1,5 @@
-#ifndef VORTEXBROWSE_PROTOCOL_H
-#define VORTEXBROWSE_PROTOCOL_H
+#ifndef VORTEXREMOTEBROWSER_PROTOCOL_H
+#define VORTEXREMOTEBROWSER_PROTOCOL_H
 
 #include <stdint.h>
 
@@ -8,7 +8,7 @@ extern "C" {
 #endif
 
 /* ============================================================================
- * VortexBrowse Binary Streaming Protocol (Raspberry Pi 4 <-> AmigaOS 4 PPC)
+ * VortexRemoteBrowser Binary Streaming Protocol (Raspberry Pi 4 <-> AmigaOS 4 PPC)
  *
  * - All multi-byte fields are transmitted in Big-Endian (Network Byte Order)
  *   for zero-overhead native processing on AmigaOS 4 (PowerPC).
@@ -18,14 +18,14 @@ extern "C" {
  *   optional variable-length payload (for MSG_FRAME and MSG_DOWNLOAD_CHUNK).
  * ============================================================================ */
 
-#define VORTEXBROWSE_DEFAULT_PORT   7788
-#define VORTEXBROWSE_RPI_HOST       "127.0.0.1"
-#define VORTEXBROWSE_RPI_PORT       7788
-#define VORTEXBROWSE_HOSTPC_HOST    "127.0.0.1"
-#define VORTEXBROWSE_HOSTPC_PORT    9757
-#define VORTEXBROWSE_DEFAULT_WIDTH  1024
-#define VORTEXBROWSE_DEFAULT_HEIGHT 768
-#define VORTEXBROWSE_DOWNLOAD_CHUNK_SIZE (64 * 1024)
+#define VORTEXREMOTEBROWSER_DEFAULT_PORT   7788
+#define VORTEXREMOTEBROWSER_RPI_HOST       "127.0.0.1"
+#define VORTEXREMOTEBROWSER_RPI_PORT       7788
+#define VORTEXREMOTEBROWSER_HOSTPC_HOST    "127.0.0.1"
+#define VORTEXREMOTEBROWSER_HOSTPC_PORT    9757
+#define VORTEXREMOTEBROWSER_DEFAULT_WIDTH  1024
+#define VORTEXREMOTEBROWSER_DEFAULT_HEIGHT 768
+#define VORTEXREMOTEBROWSER_DOWNLOAD_CHUNK_SIZE (64 * 1024)
 
 /* Message Types (1 byte on wire preceding each message struct) */
 #define MSG_FRAME             0x01  /* Pi -> Amiga: Frame update with LZ4 payload */
@@ -302,4 +302,4 @@ typedef char vb_assert_msg_tab_sync_size[(sizeof(MsgTabSync) == 648) ? 1 : -1];
 }
 #endif
 
-#endif /* VORTEXBROWSE_PROTOCOL_H */
+#endif /* VORTEXREMOTEBROWSER_PROTOCOL_H */

@@ -17,7 +17,7 @@ services:
       # Comment out if running on a headless VM without /dev/dri.
       - /dev/dri:/dev/dri
     volumes:
-      - vortex_profile_data:/root/.config/vortexbrowse
+      - vortex_profile_data:/root/.config/vortexremotebrowser
     environment:
       - VORTEX_WIDTH=1920
       - VORTEX_HEIGHT=1080
@@ -44,7 +44,7 @@ services:
     devices:
       - /dev/dri:/dev/dri
     volumes:
-      - vortex_profile_data:/root/.config/vortexbrowse
+      - vortex_profile_data:/root/.config/vortexremotebrowser
     environment:
       - VORTEX_WIDTH=1280
       - VORTEX_HEIGHT=720
@@ -71,7 +71,7 @@ services:
       - "7788:7788"
       - "9757:9757"
     volumes:
-      - vortex_profile_data:/root/.config/vortexbrowse
+      - vortex_profile_data:/root/.config/vortexremotebrowser
     environment:
       - VORTEX_PLATFORM=macos
       - VORTEX_WIDTH=1920

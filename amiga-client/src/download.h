@@ -1,5 +1,5 @@
-#ifndef VORTEXBROWSE_DOWNLOAD_H
-#define VORTEXBROWSE_DOWNLOAD_H
+#ifndef VORTEXREMOTEBROWSER_DOWNLOAD_H
+#define VORTEXREMOTEBROWSER_DOWNLOAD_H
 
 #include "app.h"
 
@@ -15,4 +15,4 @@ void download_remove_entry(VortexApp *app, int index);
 void download_clear_completed(VortexApp *app);
 DownloadEntry *download_find_by_id(VortexApp *app, uint32_t id);
 
-#endif /* VORTEXBROWSE_DOWNLOAD_H */
+#endif /* VORTEXREMOTEBROWSER_DOWNLOAD_H */

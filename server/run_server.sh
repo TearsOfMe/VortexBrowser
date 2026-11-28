@@ -10,7 +10,7 @@ cd "$SCRIPT_DIR"
 
 # If running interactively and a systemd service is active, stop it first to prevent port conflicts
 if [ -z "${INVOCATION_ID:-}" ]; then
-    for svc in vortexremotebrowser.service vortexbrowse-cachyos.service vortexbrowse.service; do
+    for svc in vortexremotebrowser.service vortexremotebrowser-cachyos.service vortexremotebrowser.service; do
         if systemctl --user is-active --quiet "$svc" 2>/dev/null; then
             echo "[VortexServer] Stopping background user service $svc..."
             systemctl --user stop "$svc" 2>/dev/null || true

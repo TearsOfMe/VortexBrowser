@@ -1,5 +1,5 @@
-#ifndef VORTEXBROWSE_GUI_PASSWORDS_H
-#define VORTEXBROWSE_GUI_PASSWORDS_H
+#ifndef VORTEXREMOTEBROWSER_GUI_PASSWORDS_H
+#define VORTEXREMOTEBROWSER_GUI_PASSWORDS_H
 
 #include <exec/types.h>
 
@@ -11,4 +11,4 @@ void   gui_handle_password_manager_events(struct VortexApp *app);
 uint32 gui_get_password_manager_sigmask(struct VortexApp *app);
 BOOL   gui_password_manager_is_open(struct VortexApp *app);
 
-#endif /* VORTEXBROWSE_GUI_PASSWORDS_H */
+#endif /* VORTEXREMOTEBROWSER_GUI_PASSWORDS_H */
