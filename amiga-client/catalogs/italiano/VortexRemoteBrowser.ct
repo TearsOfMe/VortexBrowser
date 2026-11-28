@@ -1334,3 +1334,15 @@ Riproduci video nel lettore esterno (V-MPlayer)
 MSG_STATUS_EXT_PLAYER
 Avvio del lettore video esterno: %s
 ;
+MSG_PREFS_DL_LBL_AUTO_YT
+Clic YouTube:
+;
+MSG_PREFS_DL_CHK_AUTO_YT
+Riproduci automaticamente i video YouTube cliccati nel lettore esterno
+;
+MSG_CTX_AUTO_YT_ON
+Clic YouTube -> Lettore esterno: ON
+;
+MSG_CTX_AUTO_YT_OFF
+Clic YouTube -> Lettore esterno: OFF
+;

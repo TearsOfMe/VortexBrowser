@@ -5200,7 +5200,8 @@ void gui_handle_events(VortexApp *app)
                 CTX_EDIT_CUT,
                 CTX_EDIT_COPY,
                 CTX_EDIT_PASTE,
-                CTX_PLAY_EXTERNAL
+                CTX_PLAY_EXTERNAL,
+                CTX_TOGGLE_AUTO_EXT_YT
             };
 
             BOOL has_link  = (app->ctx_menu.link_url[0] != '\0');
@@ -5235,6 +5236,7 @@ void gui_handle_events(VortexApp *app)
                         PMITEM(GetVString(MSG_CTX_COPY_LINK)), PMIA_ID, CTX_COPY_LINK_URL, PMEND,
                         PMITEM(GetVString(MSG_CTX_FAV_LINK)), PMIA_ID, CTX_FAV_LINK, PMEND,
                         PMITEM(GetVString(MSG_CTX_PLAY_EXTERNAL)), PMIA_ID, CTX_PLAY_EXTERNAL, PMEND,
+                        PMITEM(app->prefs.auto_ext_youtube ? GetVString(MSG_CTX_AUTO_YT_ON) : GetVString(MSG_CTX_AUTO_YT_OFF)), PMIA_ID, CTX_TOGGLE_AUTO_EXT_YT, PMEND,
                         PMBAR(), PMEND,
                         PMITEM(GetVString(MSG_MENU_CUT)), PMIA_ID, CTX_EDIT_CUT, PMEND,
                         PMITEM(GetVString(MSG_MENU_COPY)), PMIA_ID, CTX_EDIT_COPY, PMEND,
@@ -5256,6 +5258,7 @@ void gui_handle_events(VortexApp *app)
                         PMITEM(GetVString(MSG_CTX_OPEN_MEDIA)), PMIA_ID, CTX_OPEN_MEDIA, PMEND,
                         PMITEM(GetVString(MSG_CTX_DOWNLOAD_IMAGE)), PMIA_ID, CTX_DOWNLOAD_MEDIA, PMEND,
                         PMITEM(GetVString(MSG_CTX_PLAY_EXTERNAL)), PMIA_ID, CTX_PLAY_EXTERNAL, PMEND,
+                        PMITEM(app->prefs.auto_ext_youtube ? GetVString(MSG_CTX_AUTO_YT_ON) : GetVString(MSG_CTX_AUTO_YT_OFF)), PMIA_ID, CTX_TOGGLE_AUTO_EXT_YT, PMEND,
                         PMBAR(), PMEND,
                         PMITEM(GetVString(MSG_MENU_CUT)), PMIA_ID, CTX_EDIT_CUT, PMEND,
                         PMITEM(GetVString(MSG_MENU_COPY)), PMIA_ID, CTX_EDIT_COPY, PMEND,
@@ -5276,6 +5279,7 @@ void gui_handle_events(VortexApp *app)
                     menu_obj = PMMENU(hdr_buf),
                         PMA_MenuHandler, &pm_hook,
                         PMITEM(GetVString(MSG_CTX_PLAY_EXTERNAL)), PMIA_ID, CTX_PLAY_EXTERNAL, PMEND,
+                        PMITEM(app->prefs.auto_ext_youtube ? GetVString(MSG_CTX_AUTO_YT_ON) : GetVString(MSG_CTX_AUTO_YT_OFF)), PMIA_ID, CTX_TOGGLE_AUTO_EXT_YT, PMEND,
                         PMBAR(), PMEND,
                         PMITEM(GetVString(MSG_MENU_CUT)), PMIA_ID, CTX_EDIT_CUT, PMEND,
                         PMITEM(GetVString(MSG_MENU_COPY)), PMIA_ID, CTX_EDIT_COPY, PMEND,
@@ -5423,7 +5427,11 @@ void gui_handle_events(VortexApp *app)
                     if (has_link && app->ctx_menu.link_url[0]) {
                         vurl = app->ctx_menu.link_url;
                     } else if (has_media && app->ctx_menu.media_url[0] &&
-                               strncmp(app->ctx_menu.media_url, "blob:", 5) != 0) {
+                               strncmp(app->ctx_menu.media_url, "blob:", 5) != 0 &&
+                               !strstr(app->ctx_menu.media_url, ".jpg") &&
+                               !strstr(app->ctx_menu.media_url, ".jpeg") &&
+                               !strstr(app->ctx_menu.media_url, ".png") &&
+                               !strstr(app->ctx_menu.media_url, ".webp")) {
                         vurl = app->ctx_menu.media_url;
                     } else if (app->current_url[0]) {
                         vurl = app->current_url;
@@ -5438,6 +5446,18 @@ void gui_handle_events(VortexApp *app)
                             gui_launch_external_player(app, vurl);
                         }
                     }
+                    break;
+                }
+
+                case CTX_TOGGLE_AUTO_EXT_YT: {
+                    app->prefs.auto_ext_youtube = !app->prefs.auto_ext_youtube;
+                    prefs_save_keep_window_box(app, TRUE);
+                    if (app->connected) {
+                        char epcmd[32];
+                        snprintf(epcmd, sizeof(epcmd), "@EXTPLAY_AUTO:%d", app->prefs.auto_ext_youtube ? 1 : 0);
+                        net_send_url(app, epcmd);
+                    }
+                    app_set_status("%s", app->prefs.auto_ext_youtube ? GetVString(MSG_CTX_AUTO_YT_ON) : GetVString(MSG_CTX_AUTO_YT_OFF));
                     break;
                 }
 

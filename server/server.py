@@ -2894,6 +2894,201 @@ def _merge_chromium_feature_flags(args_list: List[str]) -> List[str]:
 
 
 # ============================================================================
+# External Video Player HTTP Stream Relay (Plain-HTTP IPv4 Proxy for Amiga V-MPlayer)
+# ============================================================================
+_EXT_STREAM_REGISTRY: Dict[str, Dict[str, Any]] = {}
+_EXT_STREAM_COUNTER: int = 0
+
+
+def register_ext_video_stream(upstream_url: str, source_url: str = "") -> str:
+    global _EXT_STREAM_COUNTER
+    _EXT_STREAM_COUNTER += 1
+    sid = str(_EXT_STREAM_COUNTER)
+    # Keep registry bounded to latest 32 streams
+    if len(_EXT_STREAM_REGISTRY) > 32:
+        oldest_key = next(iter(_EXT_STREAM_REGISTRY))
+        _EXT_STREAM_REGISTRY.pop(oldest_key, None)
+    _EXT_STREAM_REGISTRY[sid] = {
+        "upstream_url": upstream_url,
+        "source_url": source_url or upstream_url,
+        "created_at": time.monotonic(),
+    }
+    return sid
+
+
+async def _handle_ext_video_stream_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+    """Streams resolved YouTube / media video over plain HTTP IPv4 to AmigaOS 4 V-MPlayer / MPlayer / Emotion."""
+    proc = None
+    try:
+        req_line_bytes = await asyncio.wait_for(reader.readline(), timeout=10.0)
+        if not req_line_bytes:
+            return
+        req_line = req_line_bytes.decode("latin-1", errors="replace").strip()
+        parts = req_line.split()
+        if len(parts) < 2:
+            return
+        method = parts[0].upper()
+        path = parts[1]
+
+        headers: Dict[str, str] = {}
+        while True:
+            hline = await asyncio.wait_for(reader.readline(), timeout=5.0)
+            if not hline or hline in (b"\r\n", b"\n"):
+                break
+            hstr = hline.decode("latin-1", errors="replace").strip()
+            if ":" in hstr:
+                hk, hv = hstr.split(":", 1)
+                headers[hk.strip().lower()] = hv.strip()
+
+        # Extract stream ID from /video/<id>.mp4
+        m = re.search(r"/video/(\d+)", path)
+        sid = m.group(1) if m else ""
+        entry = _EXT_STREAM_REGISTRY.get(sid)
+        if not entry and _EXT_STREAM_REGISTRY:
+            # Fallback to most recently registered stream
+            sid = list(_EXT_STREAM_REGISTRY.keys())[-1]
+            entry = _EXT_STREAM_REGISTRY.get(sid)
+
+        if not entry:
+            writer.write(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            await writer.drain()
+            return
+
+        upstream_url = entry["upstream_url"]
+        range_hdr = headers.get("range", "")
+        logger.info("External Player HTTP Relay %s %s (Range=%s) -> %s", method, path, range_hdr or "none", upstream_url[:100])
+
+        is_hls = ".m3u8" in upstream_url.lower() or "manifest.googlevideo.com" in upstream_url.lower()
+        if not is_hls:
+            # Direct progressive MP4 relay with full HTTP Range support
+            q = asyncio.Queue(maxsize=16)
+            loop = asyncio.get_running_loop()
+            stop_flag = threading.Event()
+
+            def _upstream_worker():
+                req_headers = {
+                    "User-Agent": "com.google.android.youtube/19.29.37 (Linux; U; Android 11) gzip",
+                    "Accept": "*/*",
+                    "Connection": "keep-alive",
+                }
+                if range_hdr:
+                    req_headers["Range"] = range_hdr
+                req = urllib.request.Request(upstream_url, headers=req_headers, method="GET" if method != "HEAD" else "HEAD")
+                try:
+                    with urllib.request.urlopen(req, timeout=15.0) as resp:
+                        status_code = getattr(resp, "status", 200) or 200
+                        ctype = resp.headers.get("Content-Type") or "video/mp4"
+                        clen = resp.headers.get("Content-Length")
+                        crange = resp.headers.get("Content-Range")
+                        meta = (status_code, ctype, clen, crange)
+                        asyncio.run_coroutine_threadsafe(q.put(("meta", meta)), loop).result(timeout=5.0)
+                        if method == "HEAD":
+                            return
+                        while not stop_flag.is_set():
+                            chunk = resp.read(65536)
+                            if not chunk:
+                                break
+                            asyncio.run_coroutine_threadsafe(q.put(("data", chunk)), loop).result(timeout=15.0)
+                except Exception as exc:
+                    try:
+                        asyncio.run_coroutine_threadsafe(q.put(("err", str(exc))), loop).result(timeout=2.0)
+                    except Exception:
+                        pass
+                finally:
+                    try:
+                        asyncio.run_coroutine_threadsafe(q.put(("eof", None)), loop).result(timeout=2.0)
+                    except Exception:
+                        pass
+
+            worker_fut = loop.run_in_executor(None, _upstream_worker)
+            try:
+                first_kind, first_payload = await asyncio.wait_for(q.get(), timeout=15.0)
+                if first_kind == "meta":
+                    status_code, ctype, clen, crange = first_payload
+                    reason = "Partial Content" if status_code == 206 else "OK"
+                    resp_hdrs = [
+                        f"HTTP/1.1 {status_code} {reason}",
+                        f"Content-Type: {ctype}",
+                        "Accept-Ranges: bytes",
+                        "Connection: close",
+                    ]
+                    if clen:
+                        resp_hdrs.append(f"Content-Length: {clen}")
+                    if crange:
+                        resp_hdrs.append(f"Content-Range: {crange}")
+                    writer.write(("\r\n".join(resp_hdrs) + "\r\n\r\n").encode("latin-1"))
+                    await writer.drain()
+
+                    while True:
+                        kind, payload = await q.get()
+                        if kind == "data" and payload:
+                            writer.write(payload)
+                            await writer.drain()
+                        else:
+                            break
+                    return
+                else:
+                    logger.warning("Direct upstream relay failed (%s), falling back to ffmpeg transcode", first_payload)
+            finally:
+                stop_flag.set()
+
+        # Fallback / HLS: stream via ffmpeg as H.264/AAC MPEG-TS compatible with all AmigaOS 4 MPlayer builds
+        ffmpeg_bin = shutil.which("ffmpeg")
+        if not ffmpeg_bin:
+            writer.write(b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            await writer.drain()
+            return
+
+        writer.write(
+            b"HTTP/1.1 200 OK\r\n"
+            b"Content-Type: video/mp2t\r\n"
+            b"Connection: close\r\n\r\n"
+        )
+        await writer.drain()
+        if method == "HEAD":
+            return
+
+        proc = await asyncio.create_subprocess_exec(
+            ffmpeg_bin,
+            "-hide_banner",
+            "-loglevel", "error",
+            "-reconnect", "1",
+            "-reconnect_streamed", "1",
+            "-reconnect_delay_max", "4",
+            "-i", upstream_url,
+            "-c:v", "copy",
+            "-c:a", "aac",
+            "-b:a", "128k",
+            "-f", "mpegts",
+            "pipe:1",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        assert proc.stdout is not None
+        while True:
+            chunk = await proc.stdout.read(65536)
+            if not chunk:
+                break
+            writer.write(chunk)
+            await writer.drain()
+    except (ConnectionResetError, BrokenPipeError, asyncio.CancelledError):
+        pass
+    except Exception as exc:
+        logger.debug("External video stream relay closed: %s", exc)
+    finally:
+        if proc is not None:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+        try:
+            writer.close()
+            await writer.wait_closed()
+        except Exception:
+            pass
+
+
+# ============================================================================
 # Client Session Handler
 # ============================================================================
 class AmigaClientSession:
@@ -2981,6 +3176,8 @@ class AmigaClientSession:
 
         self.soft_scroll: bool = True
         self.pause_bg_media: bool = False
+        self.ext_play_auto_youtube: bool = True
+        self._last_ext_play_time: float = 0.0
         self.last_hover_url: Optional[str] = None
         self.last_hover_time: float = 0.0
         self.hover_task: Optional[asyncio.Task] = None
@@ -3238,6 +3435,90 @@ class AmigaClientSession:
                 except Exception:
                     pass
                 return False
+
+    async def _launch_external_player(self, raw_target: str) -> None:
+        """Resolves a video URL (YouTube, Twitch, Mediathek, or direct <video>) into a plain-HTTP
+        IPv4 LAN stream URL served by our built-in HTTP proxy (port 7779) and launches V-MPlayer on Amiga."""
+        resolved_url = (raw_target or "").strip()
+        try:
+            if self.page:
+                try:
+                    dom_media = await self.page.evaluate("""() => {
+                        let foundSrc = '';
+                        document.querySelectorAll('video').forEach(v => {
+                            try { v.pause(); } catch(e) {}
+                            const s = v.currentSrc || v.src || '';
+                            if (!foundSrc && s && (s.startsWith('http://') || s.startsWith('https://'))) {
+                                foundSrc = s;
+                            }
+                        });
+                        return foundSrc;
+                    }""")
+                    if dom_media and (not resolved_url or resolved_url == getattr(self, "_cached_page_url", "")):
+                        resolved_url = dom_media
+                except Exception:
+                    pass
+
+            # Prefer the virtualenv yt-dlp (kept up to date) over older system yt-dlp
+            venv_ytdlp = os.path.join(os.path.dirname(sys.executable), "yt-dlp")
+            ytdlp_bin = venv_ytdlp if os.path.isfile(venv_ytdlp) else shutil.which("yt-dlp")
+
+            upstream_urls: List[str] = []
+            if ytdlp_bin and resolved_url.startswith(("http://", "https://")):
+                proc = await asyncio.create_subprocess_exec(
+                    ytdlp_bin,
+                    "--no-playlist",
+                    "--no-warnings",
+                    "--extractor-args", "youtube:player_client=android,ios,tv,web",
+                    "-f", "best[ext=mp4][vcodec^=avc1][acodec!=none]/18/best[ext=mp4]/best",
+                    "-g",
+                    resolved_url,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                try:
+                    stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=8.0)
+                    if proc.returncode == 0 and stdout:
+                        upstream_urls = [
+                            ln.strip()
+                            for ln in stdout.decode("utf-8", errors="replace").splitlines()
+                            if ln.strip().startswith(("http://", "https://"))
+                        ]
+                        if upstream_urls:
+                            logger.info("Resolved external player stream via yt-dlp: %s", upstream_urls[0][:120])
+                except asyncio.TimeoutError:
+                    try:
+                        proc.kill()
+                    except Exception:
+                        pass
+
+            target_stream = upstream_urls[0] if upstream_urls else resolved_url
+            if not target_stream:
+                return
+
+            # Register in the built-in plain-HTTP IPv4 stream relay (port 7779) so Amiga V-MPlayer
+            # gets a short, clean http://<server-ip>:7779/video/<id>.mp4 URL without IPv6/TLS1.3/403 issues.
+            server_ip = "127.0.0.1"
+            try:
+                sockname = self.writer.get_extra_info("sockname")
+                if sockname and isinstance(sockname, (tuple, list)) and sockname[0]:
+                    raw_ip = str(sockname[0])
+                    if raw_ip.startswith("::ffff:"):
+                        raw_ip = raw_ip[7:]
+                    if raw_ip not in ("0.0.0.0", "::", ""):
+                        server_ip = raw_ip
+            except Exception:
+                pass
+
+            stream_port = int(os.environ.get("VORTEX_STREAM_PORT", "7779"))
+            stream_id = register_ext_video_stream(target_stream, source_url=resolved_url)
+            play_url = f"http://{server_ip}:{stream_port}/video/{stream_id}.mp4"
+            logger.info("Sending @EXTPLAY_LAUNCH to Amiga: %s -> %s", resolved_url, play_url)
+            self._send_nav_update(f"@EXTPLAY_LAUNCH:{play_url}", title="External Video")
+        except Exception as e:
+            logger.warning("Error in _launch_external_player('%s'): %s", raw_target, e)
+            if resolved_url:
+                self._send_nav_update(f"@EXTPLAY_LAUNCH:{resolved_url}", title="External Video")
 
     def _send_nav_update(self, url: str, tab_idx: int = -1, title: str = "") -> None:
         if not self.running or not url:
@@ -6457,6 +6738,13 @@ class AmigaClientSession:
                                         else h = a.getAttribute('href') || a.getAttribute('xlink:href') || '';
                                         if (h && !h.startsWith('javascript:')) foundA = a;
                                     }
+                                    if (!foundA && el.closest) {
+                                        const ytCard = el.closest('ytd-thumbnail, yt-thumbnail-view-model, ytd-rich-item-renderer, ytd-video-renderer, ytd-compact-video-renderer, ytd-grid-video-renderer, ytd-reel-item-renderer, yt-lockup-view-model, ytm-video-with-context-renderer, ytm-media-item');
+                                        if (ytCard && ytCard.querySelector) {
+                                            const ya = ytCard.querySelector('a#thumbnail[href*="/watch"], a#thumbnail[href*="/shorts/"], a#video-title-link[href], a[href*="/watch?v="], a[href*="/shorts/"]');
+                                            if (ya) foundA = ya;
+                                        }
+                                    }
                                 }
                                 if (!foundImg) {
                                     const img = (el.tagName === 'IMG') ? el : (el.closest ? el.closest('img[src]') : null);
@@ -6857,6 +7145,115 @@ class AmigaClientSession:
                     # If user dragged, release with click_count=1 to finalize the freeform selection
                     if dist > 4 or dragged:
                         self._click_count = 1
+
+                    # Automatic YouTube video click -> External Player (V-MPlayer) interception
+                    yt_intercept_url = ""
+                    if (
+                        btn == "left"
+                        and dist <= 10
+                        and not dragged
+                        and self.ext_play_auto_youtube
+                        and (time.monotonic() - self._last_ext_play_time) >= 1.2
+                    ):
+                        yt_hit = await self._safe_eval(
+                            """([x, y]) => {
+                                let el = document.elementFromPoint(x, y);
+                                if (!el) return '';
+                                while (el && el.shadowRoot && el.shadowRoot.elementFromPoint) {
+                                    const inner = el.shadowRoot.elementFromPoint(x, y);
+                                    if (!inner || inner === el) break;
+                                    el = inner;
+                                }
+                                const elem = el.nodeType === 1 ? el : el.parentElement;
+                                if (!elem || !elem.closest) return '';
+
+                                // Never intercept search inputs, header/masthead, menus, dialogs, or player control bar
+                                if (elem.closest('input, textarea, select, [contenteditable="true"], ytd-masthead, #masthead-container, ytd-searchbox, #search-form, tp-yt-app-drawer, #guide, ytd-menu-popup-renderer, tp-yt-paper-dialog, .ytp-chrome-bottom, .ytp-settings-menu, ytd-comments, #comments')) {
+                                    return '';
+                                }
+                                // Ignore subscribe/like/share/action buttons that are not play buttons or thumbnails
+                                const btnEl = elem.closest('button, [role="button"]');
+                                if (btnEl && !btnEl.classList.contains('ytp-large-play-button') && !btnEl.closest('ytd-thumbnail, yt-thumbnail-view-model')) {
+                                    return '';
+                                }
+
+                                const isYtVideoUrl = (u) => {
+                                    if (!u) return false;
+                                    try {
+                                        const parsed = new URL(u, document.baseURI);
+                                        const h = parsed.hostname.toLowerCase();
+                                        const p = parsed.pathname;
+                                        if (h === 'youtu.be' && p.length > 1) return true;
+                                        if (h === 'youtube.com' || h.endsWith('.youtube.com') || h === 'youtube-nocookie.com' || h.endsWith('.youtube-nocookie.com')) {
+                                            if (p === '/watch' && parsed.searchParams.has('v')) return true;
+                                            if (p.startsWith('/shorts/') || p.startsWith('/embed/') || p.startsWith('/live/')) return true;
+                                        }
+                                    } catch (e) {}
+                                    return false;
+                                };
+
+                                let targetHref = '';
+                                const a = elem.closest('a[href]');
+                                if (a) {
+                                    const raw = (typeof a.href === 'string' && a.href) ? a.href : (a.getAttribute('href') || '');
+                                    try {
+                                        const abs = new URL(raw, document.baseURI).href;
+                                        if (isYtVideoUrl(abs)) targetHref = abs;
+                                    } catch (e) {}
+                                }
+
+                                if (!targetHref) {
+                                    const thumbCard = elem.closest('ytd-thumbnail, yt-thumbnail-view-model, ytd-reel-item-renderer, ytm-media-item, .yt-lockup-view-model__content-image');
+                                    if (thumbCard) {
+                                        const card = thumbCard.closest('ytd-rich-item-renderer, ytd-video-renderer, ytd-compact-video-renderer, ytd-grid-video-renderer, ytd-reel-item-renderer, yt-lockup-view-model, ytm-video-with-context-renderer') || thumbCard;
+                                        const ya = card.querySelector ? card.querySelector('a#thumbnail[href], a[href*="/watch?v="], a[href*="/shorts/"], a#video-title-link[href]') : null;
+                                        if (ya) {
+                                            try {
+                                                const abs = new URL(ya.getAttribute('href') || ya.href, document.baseURI).href;
+                                                if (isYtVideoUrl(abs)) targetHref = abs;
+                                            } catch (e) {}
+                                        }
+                                    }
+                                }
+
+                                // Also detect clicking the main video surface / big play button on an already open YouTube watch/shorts page
+                                if (!targetHref && isYtVideoUrl(location.href)) {
+                                    if (elem.closest('.html5-video-player, video.html5-main-video, .ytp-cued-thumbnail-overlay, .ytp-large-play-button, #player-container')) {
+                                        targetHref = location.href;
+                                    }
+                                }
+
+                                if (targetHref) {
+                                    const swallow = (ev) => {
+                                        try {
+                                            ev.preventDefault();
+                                            ev.stopPropagation();
+                                            ev.stopImmediatePropagation();
+                                        } catch (e) {}
+                                    };
+                                    window.addEventListener('click', swallow, { capture: true, once: true });
+                                    window.addEventListener('mouseup', swallow, { capture: true, once: true });
+                                    window.addEventListener('pointerup', swallow, { capture: true, once: true });
+                                    setTimeout(() => {
+                                        window.removeEventListener('click', swallow, { capture: true });
+                                        window.removeEventListener('mouseup', swallow, { capture: true });
+                                        window.removeEventListener('pointerup', swallow, { capture: true });
+                                    }, 400);
+                                    try {
+                                        document.querySelectorAll('video').forEach(v => { try { v.pause(); } catch (e) {} });
+                                    } catch (e) {}
+                                    return targetHref;
+                                }
+                                return '';
+                            }""",
+                            [cx, cy],
+                            timeout=0.45,
+                            default="",
+                        )
+                        if isinstance(yt_hit, str) and yt_hit.startswith(("http://", "https://")):
+                            yt_intercept_url = yt_hit
+                            self._last_ext_play_time = time.monotonic()
+
                     if cx != down_x or cy != down_y:
                         if not await self._cdp_mouse("mouseMoved", cx, cy, btn, 0):
                             await asyncio.wait_for(self.page.mouse.move(cx, cy), timeout=1.0)
@@ -6864,6 +7261,12 @@ class AmigaClientSession:
                         await asyncio.wait_for(self.page.mouse.up(button=btn, click_count=self._click_count), timeout=1.0)
 
                     self._mouse_down_btn = ""
+
+                    if yt_intercept_url:
+                        logger.info("YouTube video click detected at (%d, %d) -> External Player: %s", cx, cy, yt_intercept_url)
+                        asyncio.create_task(self._launch_external_player(yt_intercept_url))
+                        self._trigger_full_refresh(True)
+                        return
 
                     # Universal check: only if stationary click AND not dragged AND no upload is pending/recent
                     now_up = time.monotonic()
@@ -7949,63 +8352,15 @@ class AmigaClientSession:
                 pass
             return
 
+        if cmd.upper().startswith("@EXTPLAY_AUTO:"):
+            val = cmd.split(":", 1)[1].strip().lower()
+            self.ext_play_auto_youtube = val not in ("0", "false", "off", "no")
+            logger.info("Client set automatic external player for YouTube clicks: %s", self.ext_play_auto_youtube)
+            return
+
         if cmd.startswith("@EXTPLAY:"):
             raw_target = cmd.split(":", 1)[1].strip()
-            resolved_url = raw_target
-            try:
-                if self.page:
-                    # Pause any playing video in the remote browser so audio/CPU don't double-play
-                    try:
-                        dom_media = await self.page.evaluate("""() => {
-                            let foundSrc = '';
-                            document.querySelectorAll('video').forEach(v => {
-                                try { v.pause(); } catch(e) {}
-                                const s = v.currentSrc || v.src || '';
-                                if (!foundSrc && s && (s.startsWith('http://') || s.startsWith('https://'))) {
-                                    foundSrc = s;
-                                }
-                            });
-                            return foundSrc;
-                        }""")
-                        if dom_media and (not resolved_url or resolved_url == self.current_url):
-                            resolved_url = dom_media
-                    except Exception:
-                        pass
-
-                # Try resolving direct MP4 stream via yt-dlp if available (e.g. YouTube, Twitch, Mediathek)
-                ytdlp_bin = shutil.which("yt-dlp")
-                if not ytdlp_bin:
-                    venv_ytdlp = os.path.join(os.path.dirname(sys.executable), "yt-dlp")
-                    if os.path.isfile(venv_ytdlp):
-                        ytdlp_bin = venv_ytdlp
-                if ytdlp_bin and resolved_url.startswith(("http://", "https://")):
-                    proc = await asyncio.create_subprocess_exec(
-                        ytdlp_bin,
-                        "--no-playlist",
-                        "--no-warnings",
-                        "-f", "best[ext=mp4][vcodec^=avc1]/best[ext=mp4]/best",
-                        "-g",
-                        resolved_url,
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE,
-                    )
-                    try:
-                        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=6.0)
-                        if proc.returncode == 0 and stdout:
-                            lines = [ln.strip() for ln in stdout.decode("utf-8", errors="replace").splitlines() if ln.strip().startswith(("http://", "https://"))]
-                            if lines:
-                                resolved_url = lines[0]
-                                logger.info("Resolved external player stream via yt-dlp: %s", resolved_url[:120])
-                    except asyncio.TimeoutError:
-                        try:
-                            proc.kill()
-                        except Exception:
-                            pass
-            except Exception as e:
-                logger.warning("Error resolving @EXTPLAY URL '%s': %s", raw_target, e)
-
-            if resolved_url:
-                self._send_nav_update(f"@EXTPLAY_LAUNCH:{resolved_url}", title="External Video")
+            asyncio.create_task(self._launch_external_player(raw_target))
             return
 
         if cmd.upper() in ("@REFRESH", "@REDRAW"):
@@ -10621,6 +10976,14 @@ async def run_server(args: argparse.Namespace) -> None:
                 extra_servers.append(srv_lan)
             except OSError as exc:
                 logger.warning("Could not bind secondary LAN port 9757: %s", exc)
+
+        stream_port = int(os.environ.get("VORTEX_STREAM_PORT", "7779"))
+        try:
+            srv_stream = await asyncio.start_server(_handle_ext_video_stream_client, args.host, stream_port)
+            extra_servers.append(srv_stream)
+            logger.info("External Video Player HTTP Relay listening on %s:%d", args.host, stream_port)
+        except OSError as exc:
+            logger.warning("Could not bind external video player HTTP relay port %d: %s", stream_port, exc)
 
         all_socks = list(server.sockets or [])
         for s in extra_servers:

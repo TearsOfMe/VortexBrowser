@@ -96,6 +96,7 @@ enum {
     GID_P_DL_ALWAYS_ASK,
     GID_P_DL_AUTO_CLOSE,
     GID_P_EXT_PLAYER,
+    GID_P_EXT_AUTO_YT,
     GID_P_DL_OPEN_MGR
 };
 
@@ -1386,6 +1387,13 @@ void gui_prefs_open(VortexApp *app)
         STRINGA_TextVal,  (Tag)init_ext_player,
         TAG_DONE);
 
+    Object *gad_ext_auto_yt = IIntuition->NewObject(NULL, "checkbox.gadget",
+        GA_ID,            GID_P_EXT_AUTO_YT,
+        GA_RelVerify,     TRUE,
+        GA_Text,          (Tag)GetVString(MSG_PREFS_DL_CHK_AUTO_YT),
+        CHECKBOX_Checked, app->prefs.auto_ext_youtube,
+        TAG_DONE);
+
     Object *btn_dl_open_mgr = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_P_DL_OPEN_MGR,
         GA_RelVerify, TRUE,
@@ -1446,6 +1454,18 @@ void gui_prefs_open(VortexApp *app)
                                                             TAG_DONE),
                                   CHILD_WeightedWidth,  25,
                                   LAYOUT_AddChild,      gad_ext_player,
+                                  CHILD_WeightedWidth,  75,
+                                  TAG_DONE),
+        CHILD_WeightedHeight, 0,
+        LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
+                                  LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
+                                  LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_DL_LBL_AUTO_YT),
+                                                            GA_ReadOnly,          TRUE,
+                                                            BUTTON_Justification, BCJ_RIGHT,
+                                                            TAG_DONE),
+                                  CHILD_WeightedWidth,  25,
+                                  LAYOUT_AddChild,      gad_ext_auto_yt,
                                   CHILD_WeightedWidth,  75,
                                   TAG_DONE),
         CHILD_WeightedHeight, 0,
@@ -2054,6 +2074,15 @@ void gui_prefs_open(VortexApp *app)
         if (ext_pl_buf[0] != '\0') {
             strncpy(app->prefs.external_player_cmd, ext_pl_buf, sizeof(app->prefs.external_player_cmd) - 1);
             app->prefs.external_player_cmd[sizeof(app->prefs.external_player_cmd) - 1] = '\0';
+        }
+
+        uint32 ext_yt_val = 0;
+        IIntuition->GetAttr(CHECKBOX_Checked, gad_ext_auto_yt, &ext_yt_val);
+        app->prefs.auto_ext_youtube = (ext_yt_val != 0);
+        if (app->connected) {
+            char epcmd[32];
+            snprintf(epcmd, sizeof(epcmd), "@EXTPLAY_AUTO:%d", app->prefs.auto_ext_youtube ? 1 : 0);
+            net_send_url(app, epcmd);
         }
 
         /* If user explicitly picked a fixed window resolution preset, resize window now */

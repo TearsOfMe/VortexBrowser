@@ -109,6 +109,7 @@ void prefs_init(VortexApp *app)
     app->prefs.auto_close_download          = FALSE;
     strncpy(app->prefs.external_player_cmd, "APPDIR:V-MPlayer \"%s\"", sizeof(app->prefs.external_player_cmd) - 1);
     app->prefs.external_player_cmd[sizeof(app->prefs.external_player_cmd) - 1] = '\0';
+    app->prefs.auto_ext_youtube             = TRUE;
     app->prefs.has_dl_win_pos               = FALSE;
     app->prefs.dl_win_x                     = 0;
     app->prefs.dl_win_y                     = 0;
@@ -299,6 +300,8 @@ static BOOL load_from_file(VortexApp *app, const char *path)
                 strncpy(app->prefs.external_player_cmd, val, sizeof(app->prefs.external_player_cmd) - 1);
                 app->prefs.external_player_cmd[sizeof(app->prefs.external_player_cmd) - 1] = '\0';
             }
+        } else if (strcmp(key, "auto_ext_youtube") == 0) {
+            app->prefs.auto_ext_youtube = (atoi(val) != 0);
         } else if (strcmp(key, "has_dl_win_pos") == 0) {
             app->prefs.has_dl_win_pos = (atoi(val) != 0);
         } else if (strcmp(key, "dl_win_x") == 0) {
@@ -693,6 +696,7 @@ static BOOL save_to_file(const VortexApp *app, const char *path)
     fprintf(fp, "always_ask_download=%d\n", app->prefs.always_ask_download ? 1 : 0);
     fprintf(fp, "auto_close_download=%d\n", app->prefs.auto_close_download ? 1 : 0);
     fprintf(fp, "external_player_cmd=%s\n", app->prefs.external_player_cmd[0] ? app->prefs.external_player_cmd : "APPDIR:V-MPlayer \"%s\"");
+    fprintf(fp, "auto_ext_youtube=%d\n", app->prefs.auto_ext_youtube ? 1 : 0);
     fprintf(fp, "has_dl_win_pos=%d\n", app->prefs.has_dl_win_pos ? 1 : 0);
     fprintf(fp, "dl_win_x=%d\n",       (int)app->prefs.dl_win_x);
     fprintf(fp, "dl_win_y=%d\n",       (int)app->prefs.dl_win_y);
@@ -944,6 +948,11 @@ void prefs_apply(VortexApp *app)
         char brcmd[32];
         snprintf(brcmd, sizeof(brcmd), "@VIDEO_BITRATE:%u", (unsigned)br);
         net_send_url(app, brcmd);
+
+        /* Automatic external player on YouTube video clicks */
+        char epcmd[32];
+        snprintf(epcmd, sizeof(epcmd), "@EXTPLAY_AUTO:%d", app->prefs.auto_ext_youtube ? 1 : 0);
+        net_send_url(app, epcmd);
     }
 }
 

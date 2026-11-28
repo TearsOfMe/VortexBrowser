@@ -1334,3 +1334,15 @@ Video im externen Player abspielen (V-MPlayer)
 MSG_STATUS_EXT_PLAYER
 Starte externen Video-Player: %s
 ;
+MSG_PREFS_DL_LBL_AUTO_YT
+YouTube-Klick:
+;
+MSG_PREFS_DL_CHK_AUTO_YT
+Angeklickte YouTube-Videos direkt im externen Player abspielen
+;
+MSG_CTX_AUTO_YT_ON
+YouTube-Klick -> Externer Player: EIN
+;
+MSG_CTX_AUTO_YT_OFF
+YouTube-Klick -> Externer Player: AUS
+;

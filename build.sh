@@ -85,10 +85,10 @@ if [ -n "$AMIGA_FTP_AUTH" ] && [ -n "$AMIGA_FTP_HOST" ]; then
     FTP_BASE_DIR="${AMIGA_FTP_DIR:-/Work2/VortexRemoteBrowser}"
     FTP_URL="ftp://${FTP_HOST}${FTP_BASE_DIR}"
 
-    if curl -s --connect-timeout 2 --max-time 5 --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd "ftp://${FTP_HOST}/Work2/" >/dev/null 2>&1; then
+    if curl -s --connect-timeout 10 --max-time 20 --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd "ftp://${FTP_HOST}/Work2/" >/dev/null 2>&1; then
         echo "=== Auto-Uploading to Amiga FTP (${FTP_URL}) ==="
-        curl -s --max-time 15 --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexRemoteBrowser.stripped" "${FTP_URL}/VortexRemoteBrowser" >/dev/null 2>&1 || true
-        curl -s --max-time 15 --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexRemoteBrowser-AltiVec.stripped" "${FTP_URL}/VortexRemoteBrowser-AltiVec" >/dev/null 2>&1 || true
+        curl -s --connect-timeout 10 --max-time 60 --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexRemoteBrowser.stripped" "${FTP_URL}/VortexRemoteBrowser" >/dev/null 2>&1 || true
+        curl -s --connect-timeout 10 --max-time 60 --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexRemoteBrowser-AltiVec.stripped" "${FTP_URL}/VortexRemoteBrowser-AltiVec" >/dev/null 2>&1 || true
         [ -f "${SCRIPT_DIR}/amiga-client/VortexRemoteBrowser.info" ] && curl -s --max-time 10 --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexRemoteBrowser.info" "${FTP_URL}/VortexRemoteBrowser.info" >/dev/null 2>&1 || true
         [ -f "${SCRIPT_DIR}/amiga-client/VortexRemoteBrowser-AltiVec.info" ] && curl -s --max-time 10 --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexRemoteBrowser-AltiVec.info" "${FTP_URL}/VortexRemoteBrowser-AltiVec.info" >/dev/null 2>&1 || true
         [ -f "${SCRIPT_DIR}/amiga-client/VortexRemoteBrowser_drawer.info" ] && curl -s --max-time 10 --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd -T "${SCRIPT_DIR}/amiga-client/VortexRemoteBrowser_drawer.info" "${FTP_URL}.info" >/dev/null 2>&1 || true
@@ -102,7 +102,7 @@ if [ -n "$AMIGA_FTP_AUTH" ] && [ -n "$AMIGA_FTP_HOST" ]; then
             for cfile in "${SCRIPT_DIR}/amiga-client/catalogs"/*/*.catalog; do
                 if [ -f "$cfile" ]; then
                     rel_path=$(echo "$cfile" | sed "s|${SCRIPT_DIR}/amiga-client/||")
-                    curl -s --max-time 15 --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd --ftp-create-dirs -T "$cfile" "${FTP_URL}/${rel_path}" >/dev/null 2>&1 || true
+                    curl -s --connect-timeout 10 --max-time 60 --insecure -u "${AMIGA_FTP_AUTH}" --ssl-reqd --ftp-create-dirs -T "$cfile" "${FTP_URL}/${rel_path}" >/dev/null 2>&1 || true
                 fi
             done
         fi

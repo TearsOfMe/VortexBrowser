@@ -547,6 +547,10 @@ static const StringEntry s_builtins[] = {
     { MSG_PREFS_DL_HINT_PLAYER,     "External video player command (e.g. APPDIR:V-MPlayer \"%s\")" },
     { MSG_CTX_PLAY_EXTERNAL,        "Play Video in External Player (V-MPlayer)" },
     { MSG_STATUS_EXT_PLAYER,        "Launching external video player: %s" },
+    { MSG_PREFS_DL_LBL_AUTO_YT,     "YouTube Click:" },
+    { MSG_PREFS_DL_CHK_AUTO_YT,     "Play clicked YouTube videos automatically in external player" },
+    { MSG_CTX_AUTO_YT_ON,           "YouTube Click -> External Player: ON" },
+    { MSG_CTX_AUTO_YT_OFF,          "YouTube Click -> External Player: OFF" },
 };
 
 #define NUM_BUILTINS (sizeof(s_builtins) / sizeof(s_builtins[0]))

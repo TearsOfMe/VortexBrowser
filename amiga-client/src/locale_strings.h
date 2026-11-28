@@ -482,6 +482,10 @@ extern "C" {
 #define MSG_PREFS_DL_HINT_PLAYER     958
 #define MSG_CTX_PLAY_EXTERNAL        959
 #define MSG_STATUS_EXT_PLAYER        960
+#define MSG_PREFS_DL_LBL_AUTO_YT     961
+#define MSG_PREFS_DL_CHK_AUTO_YT     962
+#define MSG_CTX_AUTO_YT_ON           963
+#define MSG_CTX_AUTO_YT_OFF          964
 
 /* Get localized string or built-in default */
 CONST_STRPTR GetVString(ULONG id);
