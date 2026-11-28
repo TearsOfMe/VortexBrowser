@@ -1,4 +1,4 @@
-# VortexBrowser 1.1 – High-Performance Headless Web Browser Streaming System
+# VortexRemoteBrowser 1.1 – High-Performance Headless Web Browser Streaming System
 **(Universeller Linux / Windows / macOS Server [AMD/Intel/NVIDIA/Apple Silicon/Raspberry Pi/Docker] $\rightarrow$ AmigaOS 4.1 PowerPC Client)**
 
 [English version below / Zur englischen Version wechseln](#english-version)
@@ -7,7 +7,7 @@
 
 ## Deutsch
 
-VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwright / Rustwright + DirectCDP WebSocket) auf einem **universellen Linux-, Windows- oder macOS-Server sowie im Docker-Container** (automatische Hardware-Erkennung für AMD Ryzen Vulkan/AMF, Intel QuickSync VA-API/QSV, NVIDIA NVENC, **Apple VideoToolbox**, Windows D3D11 und Raspberry Pi 3/4/5 V3D) und streamt die Bilddaten hocheffizient komprimiert per **Planar YUV420P + 2D Dirty-Rect + LZ4** bzw. **H.264** an einen nativen **AmigaOS 4.1 PowerPC ReAction-Client**.
+VortexRemoteBrowser rendert moderne Webseiten über einen Headless Chromium (Playwright / Rustwright + DirectCDP WebSocket) auf einem **universellen Linux-, Windows- oder macOS-Server sowie im Docker-Container** (automatische Hardware-Erkennung für AMD Ryzen Vulkan/AMF, Intel QuickSync VA-API/QSV, NVIDIA NVENC, **Apple VideoToolbox**, Windows D3D11 und Raspberry Pi 3/4/5 V3D) und streamt die Bilddaten hocheffizient komprimiert per **Planar YUV420P + 2D Dirty-Rect + LZ4** bzw. **H.264** an einen nativen **AmigaOS 4.1 PowerPC ReAction-Client**.
 
 ---
 
@@ -27,8 +27,8 @@ VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwrigh
 #### AmigaOS 4.1 Client
 * **Betriebssystem:** **AmigaOS 4.1 Final Edition** (Update 1 oder Update 2 empfohlen)
 * **Prozessor & Binary-Variante:**
-  * **`VortexBrowser` (Universal PowerPC):** Läuft auf **jedem** AmigaOS-4-System (AmigaOne X5000, A1222/A1222+ Tabor, Sam440ep/Flex, Sam460ex/cr, Pegasos II, AmigaOne XE/SE/µA1, Classic PPC sowie QEMU `pegasos2`/`sam460ex`), inklusive dynamischer AltiVec-Erkennung im Pixel-Renderer.
-  * **`VortexBrowser-AltiVec`:** Optimierte Recompile-Version für **PowerPC-CPUs mit AltiVec** (AmigaOne X1000, PowerMac G4/G5, AmigaOne XE G4).
+  * **`VortexRemoteBrowser` (Universal PowerPC):** Läuft auf **jedem** AmigaOS-4-System (AmigaOne X5000, A1222/A1222+ Tabor, Sam440ep/Flex, Sam460ex/cr, Pegasos II, AmigaOne XE/SE/µA1, Classic PPC sowie QEMU `pegasos2`/`sam460ex`), inklusive dynamischer AltiVec-Erkennung im Pixel-Renderer.
+  * **`VortexRemoteBrowser-AltiVec`:** Optimierte Recompile-Version für **PowerPC-CPUs mit AltiVec** (AmigaOne X1000, PowerMac G4/G5, AmigaOne XE G4).
 * **Arbeitsspeicher:** Mindestens **256 MB RAM** (**512 MB+ RAM** für HD-Streams empfohlen).
 * **Grafik:** RTG-Grafikkarte (`Picasso96`) mit **24/32-Bit TrueColor** (`Radeon HD` oder `Radeon RX` empfohlen für GPU-Scaling via `CompositeTags()`).
 * **Hardware-Videodekodierung (optional):** **`va.library`** (aus *Enhancer Software*) für Hardware-H.264-Dekodierung auf Radeon HD/RX (`UVD`/`VCN`). Ohne `va.library` schaltet der Client automatisch auf den schnellen YUV420p/LZ4-Pfad um.
@@ -58,8 +58,8 @@ VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwrigh
    - **DirectCDP WebSocket Core:** Direkte WebSocket-Screencast-Anbindung ohne Treiber-Overhead.
 
 2. **Native AmigaOS 4 ReAction Benutzeroberfläche:**
-   - **Klassisches AmigaOS 4 Look-and-Feel (`VortexBrowser` & `VortexBrowser-AltiVec`):** Nahtlose Integration mit Tabs (`clicktab.gadget`), Font-Zoom, Screen-Cloning und GPU-Composite-Skalierung.
-   - **Mehrsprachige Benutzeroberfläche (Locale):** Vollständige Lokalisierung über `locale.library` (entsprechend der AmigaOS-4-Systemeinstellung in `Prefs/Locale` inklusive automatischem Land-Fallback bei leerer Sprachenliste) mit nativen AmigaOS-Katalogen für Deutsch (`german`/`deutsch`), Englisch (`english`), Französisch (`french`/`francais`), Italienisch (`italian`/`italiano`) und Spanisch (`spanish`/`espanol`) in `catalogs/` (mit optionalem Fallback über `ENV:VortexBrowser/language`).
+   - **Klassisches AmigaOS 4 Look-and-Feel (`VortexRemoteBrowser` & `VortexRemoteBrowser-AltiVec`):** Nahtlose Integration mit Tabs (`clicktab.gadget`), Font-Zoom, Screen-Cloning und GPU-Composite-Skalierung.
+   - **Mehrsprachige Benutzeroberfläche (Locale):** Vollständige Lokalisierung über `locale.library` (entsprechend der AmigaOS-4-Systemeinstellung in `Prefs/Locale` inklusive automatischem Land-Fallback bei leerer Sprachenliste) mit nativen AmigaOS-Katalogen für Deutsch (`german`/`deutsch`), Englisch (`english`), Französisch (`french`/`francais`), Italienisch (`italian`/`italiano`) und Spanisch (`spanish`/`espanol`) in `catalogs/` (mit optionalem Fallback über `ENV:VortexRemoteBrowser/language`).
    - **Dynamische Breitenanpassung der Schnellwahl-Buttons:** Die Schnellwahl-Leiste nutzt automatisch die gesamte verfügbare Fensterbreite.
    - **Favoriten:** In den Einstellungen (`Amiga+E`) können Lesezeichen und Schnellwahl-Seiten gepflegt werden.
 
@@ -76,7 +76,7 @@ VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwrigh
 5. **Passwort-Manager:**
    - Integrierter Passwort-Tresor (`Amiga+K`) mit starker Blowfish-CBC- und SHA-256-Verschlüsselung.
    - Benutzername und Passwort per Knopfdruck ins Amiga-Clipboard kopieren.
-   - Speicherort in `ENVARC:VortexBrowser/passwords.enc`.
+   - Speicherort in `ENVARC:VortexRemoteBrowser/passwords.enc`.
    - **Twitch-Unterstützung:** Session-Token-Login (`twitch_token.txt`), um Bot-Schranken auf dem Amiga zu umgehen.
 
 6. **Audio-Streaming:**
@@ -86,7 +86,7 @@ VortexBrowser rendert moderne Webseiten über einen Headless Chromium (Playwrigh
 
 ### Workbench Icon-ToolTypes & Konfiguration
 
-VortexBrowser unterstützt die vollständige Konfiguration über standardmäßige AmigaOS 4 **ToolTypes** in den `.info`-Dateien (`VortexBrowser.info`, `VortexBrowser-AltiVec.info`).
+VortexRemoteBrowser unterstützt die vollständige Konfiguration über standardmäßige AmigaOS 4 **ToolTypes** in den `.info`-Dateien (`VortexRemoteBrowser.info`, `VortexRemoteBrowser-AltiVec.info`).
 
 Um die ToolTypes zu bearbeiten:
 1. Klicken Sie das Programm-Icon auf der Workbench an.
@@ -161,8 +161,8 @@ docker compose -f docker-compose.macos.yml up -d
 ```
 
 #### 5. Client auf AmigaOS 4.1 starten
-1. Archiv `VortexBrowser-1.1-AmigaOS4.lha` (oder das Komplettpaket `VortexBrowser-1.1-Complete.zip`) auf dem Amiga entpacken (z. B. nach `Work:Internet/VortexBrowser`).
-2. Doppelklick auf `VortexBrowser` (Universal für alle AmigaOS-4-Systeme) bzw. `VortexBrowser-AltiVec` (für G4 / G5 / AmigaOne X1000).
+1. Archiv `VortexRemoteBrowser-1.1-AmigaOS4.lha` (oder das Komplettpaket `VortexRemoteBrowser-1.1-Complete.zip`) auf dem Amiga entpacken (z. B. nach `Work:Internet/VortexRemoteBrowser`).
+2. Doppelklick auf `VortexRemoteBrowser` (Universal für alle AmigaOS-4-Systeme) bzw. `VortexRemoteBrowser-AltiVec` (für G4 / G5 / AmigaOne X1000).
 3. Server-IP eintragen (oder `Amiga+1` drücken) und auf **Verbinden** klicken.
 
 ---
@@ -171,7 +171,7 @@ docker compose -f docker-compose.macos.yml up -d
 <a name="english-version"></a>
 ## English Version
 
-VortexBrowser 1.1 renders modern websites via headless Chromium (Playwright / Rustwright + DirectCDP WebSocket) on a **universal Linux, Windows, or macOS server or Docker container** (with automatic hardware acceleration for AMD Ryzen Vulkan/AMF, Intel QuickSync VA-API/QSV, NVIDIA NVENC, **Apple VideoToolbox**, Windows D3D11, and Raspberry Pi 3/4/5 V3D) and streams compressed video data using **Planar YUV420P + 2D Dirty-Rect + LZ4** or **H.264** to a native **AmigaOS 4.1 PowerPC ReAction client**.
+VortexRemoteBrowser 1.1 renders modern websites via headless Chromium (Playwright / Rustwright + DirectCDP WebSocket) on a **universal Linux, Windows, or macOS server or Docker container** (with automatic hardware acceleration for AMD Ryzen Vulkan/AMF, Intel QuickSync VA-API/QSV, NVIDIA NVENC, **Apple VideoToolbox**, Windows D3D11, and Raspberry Pi 3/4/5 V3D) and streams compressed video data using **Planar YUV420P + 2D Dirty-Rect + LZ4** or **H.264** to a native **AmigaOS 4.1 PowerPC ReAction client**.
 
 ---
 
@@ -191,8 +191,8 @@ VortexBrowser 1.1 renders modern websites via headless Chromium (Playwright / Ru
 #### AmigaOS 4.1 Client
 * **Operating System:** **AmigaOS 4.1 Final Edition** (Update 1 or Update 2 recommended)
 * **CPU & Executable Selection:**
-  * **`VortexBrowser` (Universal PowerPC):** Runs on **every** AmigaOS 4 system (AmigaOne X5000, A1222/A1222+ Tabor, Sam440ep/Flex, Sam460ex/cr, Pegasos II, AmigaOne XE/SE/µA1, Classic PPC, and QEMU `pegasos2`/`sam460ex`), with runtime AltiVec detection for the pixel renderer.
-  * **`VortexBrowser-AltiVec`:** Dedicated AltiVec build for **G4 / G5 / AmigaOne X1000** systems.
+  * **`VortexRemoteBrowser` (Universal PowerPC):** Runs on **every** AmigaOS 4 system (AmigaOne X5000, A1222/A1222+ Tabor, Sam440ep/Flex, Sam460ex/cr, Pegasos II, AmigaOne XE/SE/µA1, Classic PPC, and QEMU `pegasos2`/`sam460ex`), with runtime AltiVec detection for the pixel renderer.
+  * **`VortexRemoteBrowser-AltiVec`:** Dedicated AltiVec build for **G4 / G5 / AmigaOne X1000** systems.
 * **Memory:** Minimum **256 MB RAM** (**512 MB+ RAM** recommended for HD streams).
 * **Graphics:** RTG graphics card (`Picasso96`) with **24/32-bit TrueColor** (**Radeon HD** or **Radeon RX** recommended for hardware scaling via `CompositeTags()`).
 * **Hardware Video Decoding (optional):** **`va.library`** (*Enhancer Software*) for hardware H.264 decoding on Radeon HD/RX (`UVD`/`VCN`). Without `va.library`, the client automatically uses the fast YUV420p/LZ4 path.
@@ -222,8 +222,8 @@ VortexBrowser 1.1 renders modern websites via headless Chromium (Playwright / Ru
    - **DirectCDP WebSocket Core:** Low-overhead direct screencast connection.
 
 2. **Native AmigaOS 4 ReAction GUI:**
-   - **Classic AmigaOS 4 Look-and-Feel (`VortexBrowser` & `VortexBrowser-AltiVec`):** ReAction tabs (`clicktab.gadget`), font zooming, screen cloning, and GPU composite scaling.
-   - **Multilingual Support (Locale):** Complete localization via `locale.library` (following the AmigaOS 4 `Prefs/Locale` system setting, including automatic country fallback when the preferred languages list is empty) with native AmigaOS catalogs for English (`english`), German (`german`/`deutsch`), French (`french`/`francais`), Italian (`italian`/`italiano`), and Spanish (`spanish`/`espanol`) in `catalogs/` (with optional fallback via `ENV:VortexBrowser/language`).
+   - **Classic AmigaOS 4 Look-and-Feel (`VortexRemoteBrowser` & `VortexRemoteBrowser-AltiVec`):** ReAction tabs (`clicktab.gadget`), font zooming, screen cloning, and GPU composite scaling.
+   - **Multilingual Support (Locale):** Complete localization via `locale.library` (following the AmigaOS 4 `Prefs/Locale` system setting, including automatic country fallback when the preferred languages list is empty) with native AmigaOS catalogs for English (`english`), German (`german`/`deutsch`), French (`french`/`francais`), Italian (`italian`/`italiano`), and Spanish (`spanish`/`espanol`) in `catalogs/` (with optional fallback via `ENV:VortexRemoteBrowser/language`).
    - **Dynamic Quick Link Layout:** Toolbar buttons scale to use available window width.
    - **Bookmarks & Quick Links:** Managed in preferences (`Amiga+E`).
 
@@ -240,7 +240,7 @@ VortexBrowser 1.1 renders modern websites via headless Chromium (Playwright / Ru
 5. **Password Manager:**
    - Secure credential vault (`Amiga+K`) with Blowfish-CBC and SHA-256 encryption.
    - Copy username and password to Amiga clipboard.
-   - Saved securely in `ENVARC:VortexBrowser/passwords.enc`.
+   - Saved securely in `ENVARC:VortexRemoteBrowser/passwords.enc`.
    - **Twitch Support:** Login token import (`twitch_token.txt`) to bypass bot verification challenges.
 
 6. **Audio Streaming:**
@@ -250,7 +250,7 @@ VortexBrowser 1.1 renders modern websites via headless Chromium (Playwright / Ru
 
 ### Workbench Icon ToolTypes & Configuration
 
-VortexBrowser supports configuration via standard AmigaOS 4 **ToolTypes** in `.info` files (`VortexBrowser.info`, `VortexBrowser-AltiVec.info`):
+VortexRemoteBrowser supports configuration via standard AmigaOS 4 **ToolTypes** in `.info` files (`VortexRemoteBrowser.info`, `VortexRemoteBrowser-AltiVec.info`):
 
 1. Click the application icon on Workbench.
 2. Select **Icons $\rightarrow$ Information...** from Workbench menu (or press **`Right Amiga + I`**).
@@ -324,6 +324,6 @@ docker compose -f docker-compose.macos.yml up -d
 ```
 
 #### 5. Starting the Client on AmigaOS 4.1
-1. Unpack `VortexBrowser-1.1-AmigaOS4.lha` (or the full package `VortexBrowser-1.1-Complete.zip`) on your Amiga (e.g. into `Work:Internet/VortexBrowser`).
-2. Double-click `VortexBrowser` (universal for all AmigaOS 4 machines) or `VortexBrowser-AltiVec` (for G4 / G5 / AmigaOne X1000).
+1. Unpack `VortexRemoteBrowser-1.1-AmigaOS4.lha` (or the full package `VortexRemoteBrowser-1.1-Complete.zip`) on your Amiga (e.g. into `Work:Internet/VortexRemoteBrowser`).
+2. Double-click `VortexRemoteBrowser` (universal for all AmigaOS 4 machines) or `VortexRemoteBrowser-AltiVec` (for G4 / G5 / AmigaOne X1000).
 3. Enter your Linux/Docker server IP (or press `Amiga+1`) and click **Connect**.

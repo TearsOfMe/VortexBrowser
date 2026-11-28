@@ -408,12 +408,12 @@ BOOL prefs_load(VortexApp *app)
     /* Check DOS environment variables if set */
     if (IDOS) {
         char env_host[128];
-        if (IDOS->GetVar("VortexBrowser/server_host", env_host, sizeof(env_host), GVF_GLOBAL_ONLY) > 0 && env_host[0] != '\0') {
+        if (IDOS->GetVar("VortexRemoteBrowser/server_host", env_host, sizeof(env_host), GVF_GLOBAL_ONLY) > 0 && env_host[0] != '\0') {
             strncpy(app->prefs.server_host, env_host, sizeof(app->prefs.server_host) - 1);
             app->prefs.server_host[sizeof(app->prefs.server_host) - 1] = '\0';
         }
         char env_port[16];
-        if (IDOS->GetVar("VortexBrowser/server_port", env_port, sizeof(env_port), GVF_GLOBAL_ONLY) > 0 && env_port[0] != '\0') {
+        if (IDOS->GetVar("VortexRemoteBrowser/server_port", env_port, sizeof(env_port), GVF_GLOBAL_ONLY) > 0 && env_port[0] != '\0') {
             int ep = atoi(env_port);
             if (ep > 0 && ep <= 65535) app->prefs.server_port = (uint16_t)ep;
         }
@@ -454,13 +454,13 @@ void prefs_load_tooltypes(VortexApp *app, int argc, char **argv)
         /* Started from Shell: find icon for argv[0] or PROGDIR: */
         dobj = IIcon->GetDiskObject(argv[0]);
         if (!dobj) {
-            dobj = IIcon->GetDiskObject("PROGDIR:VortexBrowser");
+            dobj = IIcon->GetDiskObject("PROGDIR:VortexRemoteBrowser");
         }
         if (!dobj) {
-            dobj = IIcon->GetDiskObject("PROGDIR:VortexBrowser-MUI");
+            dobj = IIcon->GetDiskObject("PROGDIR:VortexRemoteBrowser-MUI");
         }
         if (!dobj) {
-            dobj = IIcon->GetDiskObject("PROGDIR:VortexBrowser-AltiVec");
+            dobj = IIcon->GetDiskObject("PROGDIR:VortexRemoteBrowser-AltiVec");
         }
     }
 
@@ -634,7 +634,7 @@ static BOOL save_to_file(const VortexApp *app, const char *path)
     FILE *fp = fopen(path, "w");
     if (!fp) return FALSE;
 
-    fprintf(fp, "# VortexBrowser Configuration\n");
+    fprintf(fp, "# VortexRemoteBrowser Configuration\n");
     fprintf(fp, "version=3\n\n");
 
     /* Unified Resolution & Saved Window Geometry */
@@ -751,8 +751,8 @@ static BOOL prefs_save_impl(VortexApp *app, BOOL permanent, BOOL capture_win)
     if (app->prefs.server_host[0] != '\0' && IDOS) {
         char port_str[16];
         snprintf(port_str, sizeof(port_str), "%u", (unsigned)app->prefs.server_port);
-        IDOS->SetVar("VortexBrowser/server_host", (STRPTR)app->prefs.server_host, -1, GVF_GLOBAL_ONLY | (permanent ? GVF_SAVE_VAR : 0));
-        IDOS->SetVar("VortexBrowser/server_port", port_str, -1, GVF_GLOBAL_ONLY | (permanent ? GVF_SAVE_VAR : 0));
+        IDOS->SetVar("VortexRemoteBrowser/server_host", (STRPTR)app->prefs.server_host, -1, GVF_GLOBAL_ONLY | (permanent ? GVF_SAVE_VAR : 0));
+        IDOS->SetVar("VortexRemoteBrowser/server_port", port_str, -1, GVF_GLOBAL_ONLY | (permanent ? GVF_SAVE_VAR : 0));
     }
 
     return ok_env && ok_arc;

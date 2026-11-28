@@ -2,7 +2,7 @@
 setlocal EnableExtensions
 
 REM ============================================================================
-REM VortexBrowser Native Windows Background Server Stopper
+REM VortexRemoteBrowser Native Windows Background Server Stopper
 REM Cleanly shuts down the invisible / tray server (saving cookies & closing Chromium)
 REM ============================================================================
 

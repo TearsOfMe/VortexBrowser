@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """
-Generate native AmigaOS 4.1 (64x64 standard size) circular .info icons for VortexBrowser.
+Generate native AmigaOS 4.1 (64x64 standard size) circular .info icons for VortexRemoteBrowser.
 Creates:
   1. Primary icon set in amiga-client/ (Cyber-Globe Vortex, circular 32-bit ARGB):
-     - VortexBrowser.info          (Standard ReAction)
+     - VortexRemoteBrowser.info          (Standard ReAction)
      - VortexBrowse.info           (Backward-compatibility alias)
-     - VortexBrowser-AltiVec.info  (with 'AltiVec' badge)
-     - VortexBrowser-MUI.info      (with 'MUI' badge)
-     - VortexBrowser_drawer.info   (Workbench drawer icon with DrawerData)
+     - VortexRemoteBrowser-AltiVec.info  (with 'AltiVec' badge)
+     - VortexRemoteBrowser-MUI.info      (with 'MUI' badge)
+     - VortexRemoteBrowser_drawer.info   (Workbench drawer icon with DrawerData)
   2. Alternative icon set in amiga-client/alt-icons/ (3D Titanium Glossy Orb):
-     - VortexBrowser.info
-     - VortexBrowser-AltiVec.info  (with 'AltiVec' badge)
-     - VortexBrowser-MUI.info      (with 'MUI' badge)
-     - VortexBrowser_drawer.info   (Workbench drawer icon with DrawerData)
+     - VortexRemoteBrowser.info
+     - VortexRemoteBrowser-AltiVec.info  (with 'AltiVec' badge)
+     - VortexRemoteBrowser-MUI.info      (with 'MUI' badge)
+     - VortexRemoteBrowser_drawer.info   (Workbench drawer icon with DrawerData)
 
 Self-contained pure Python + Pillow writer (no external amigainfo dependency):
   - DiskObject + OS2/OS4 DrawerData (for WBDRAWER) + ToolTypes (for WBTOOL)
@@ -337,14 +337,14 @@ def build_icon_set(base_png, out_dir, include_compat=False):
 
     # 1. Standard ReAction & Drawer
     im_norm, im_sel = render_circular_icon_pair(base_png, badge=None)
-    write_amiga_info(im_norm, im_sel, WBTOOL, os.path.join(out_dir, "VortexBrowser.info"), tooltypes=default_tt)
+    write_amiga_info(im_norm, im_sel, WBTOOL, os.path.join(out_dir, "VortexRemoteBrowser.info"), tooltypes=default_tt)
     if include_compat:
         write_amiga_info(im_norm, im_sel, WBTOOL, os.path.join(out_dir, "VortexBrowse.info"), tooltypes=default_tt)
-    write_amiga_info(im_norm, im_sel, WBDRAWER, os.path.join(out_dir, "VortexBrowser_drawer.info"))
+    write_amiga_info(im_norm, im_sel, WBDRAWER, os.path.join(out_dir, "VortexRemoteBrowser_drawer.info"))
 
     # 2. AltiVec Edition (with AltiVec badge)
     av_norm, av_sel = render_circular_icon_pair(base_png, badge="AltiVec")
-    write_amiga_info(av_norm, av_sel, WBTOOL, os.path.join(out_dir, "VortexBrowser-AltiVec.info"), tooltypes=default_tt)
+    write_amiga_info(av_norm, av_sel, WBTOOL, os.path.join(out_dir, "VortexRemoteBrowser-AltiVec.info"), tooltypes=default_tt)
 
 
 if __name__ == "__main__":

@@ -81,17 +81,17 @@ typedef struct {
 } StringEntry;
 
 static const StringEntry s_builtins[] = {
-    { MSG_WIN_TITLE,           "VortexBrowser" },
-    { MSG_DL_WIN_TITLE,        "Downloads - VortexBrowser" },
-    { MSG_PW_WIN_TITLE,        "Password Manager - VortexBrowser" },
-    { MSG_PREFS_WIN_TITLE,     "Settings - VortexBrowser" },
+    { MSG_WIN_TITLE,           "VortexRemoteBrowser" },
+    { MSG_DL_WIN_TITLE,        "Downloads - VortexRemoteBrowser" },
+    { MSG_PW_WIN_TITLE,        "Password Manager - VortexRemoteBrowser" },
+    { MSG_PREFS_WIN_TITLE,     "Settings - VortexRemoteBrowser" },
 
     { MSG_MENU_PROJECT,        "Project" },
     { MSG_MENU_OPEN_URL,       "Open URL..." },
     { MSG_MENU_OPEN_FILE,      "Open Local File..." },
     { MSG_MENU_SAVE_SOURCE,    "Save HTML Source..." },
     { MSG_MENU_PRINT,          "Print Page..." },
-    { MSG_MENU_ABOUT,          "About VortexBrowser..." },
+    { MSG_MENU_ABOUT,          "About VortexRemoteBrowser..." },
     { MSG_MENU_QUIT,           "Quit" },
 
     { MSG_MENU_NAVIGATION,     "Navigation" },
@@ -234,9 +234,9 @@ static const StringEntry s_builtins[] = {
     { MSG_MENU_TOGGLE_DARK,       "Toggle Dark Mode" },
     { MSG_MENU_TOGGLE_SCREEN,     "Toggle Fullscreen / Screen (F11)" },
     { MSG_MENU_TOGGLE_STATUSBAR,  "Toggle Status Bar" },
-    { MSG_POPUP_MAIN_TITLE,       "VortexBrowser Menu" },
+    { MSG_POPUP_MAIN_TITLE,       "VortexRemoteBrowser Menu" },
     { MSG_POPUP_SAVE_SETTINGS,    "Save Settings" },
-    { MSG_POPUP_OPT_TITLE,        "VortexBrowser Options" },
+    { MSG_POPUP_OPT_TITLE,        "VortexRemoteBrowser Options" },
     { MSG_POPUP_OPT_PROMPT,       "Choose action:" },
     { MSG_POPUP_OPT_BUTTONS,      "Configure Server|Connect|Disconnect|Home|Add Bookmark|About|Cancel" },
     { MSG_BTN_SEARCH,             "Search" },
@@ -266,14 +266,14 @@ static const StringEntry s_builtins[] = {
     { MSG_CTX_LIGHT_ON,           "Light Theme" },
     { MSG_CTX_DARK_MODE_FULL,     "Dark Theme (Dark Mode)" },
     { MSG_CTX_LIGHT_MODE_FULL,    "Light Theme (Light Mode)" },
-    { MSG_CTX_REQ_TITLE,          "VortexBrowser Context Menu" },
+    { MSG_CTX_REQ_TITLE,          "VortexRemoteBrowser Context Menu" },
     { MSG_CTX_REQ_LINK_TEXT,      "Link: %s" },
     { MSG_CTX_REQ_LINK_BTNS,      "Open Link|New Tab|Close Tab|Download (ASL)|Copy URL|Main Menu|Back|Cancel" },
     { MSG_CTX_REQ_PAGE_TEXT,      "Choose page action:" },
     { MSG_CTX_REQ_PAGE_BTNS,      "Back|Forward|Reload|Home|New Tab|Close Tab|Main Menu|Cancel" },
     { MSG_SRV_DLG_TITLE,          "Configure Server" },
-    { MSG_SRV_DLG_SCRTITLE,       "VortexBrowser Settings" },
-    { MSG_SRV_DLG_PROMPT,         "Enter VortexBrowser server address (IP:Port):" },
+    { MSG_SRV_DLG_SCRTITLE,       "VortexRemoteBrowser Settings" },
+    { MSG_SRV_DLG_PROMPT,         "Enter VortexRemoteBrowser server address (IP:Port):" },
     { MSG_SRV_DLG_HINT,           "Server IP and port (e.g. 127.0.0.1:7788)" },
     { MSG_SRV_DLG_CONNECT,        "Connect" },
 
@@ -285,12 +285,12 @@ static const StringEntry s_builtins[] = {
     { MSG_ABOUT_SCR_WB,           "Workbench Screen" },
     { MSG_ABOUT_ALTIVEC_YES,      "AltiVec 128-Bit SIMD (Enabled - X1000/G4)" },
     { MSG_ABOUT_ALTIVEC_NO,       "Scalar Baseline (Safe for X5000/A1222+/Sam460/G3)" },
-    { MSG_ABOUT_SEC_SERVER,       "VortexBrowser for AmigaOS 4\nVersion 1.1\n\n=== SERVER INFORMATION ===\nServer Address: %s:%u\nConnection Status: %s\nServer Engine: %s\n\n" },
+    { MSG_ABOUT_SEC_SERVER,       "VortexRemoteBrowser for AmigaOS 4\nVersion 1.1\n\n=== SERVER INFORMATION ===\nServer Address: %s:%u\nConnection Status: %s\nServer Engine: %s\n\n" },
     { MSG_ABOUT_SEC_GRAPHICS,     "=== RESOLUTION & GRAPHICS ===\nScreen: %ux%u (%u-bit, %s)\nWindow Size: %ux%u (Pos: %d,%d)\nBrowser Viewport: %ux%u px (1:1 Auto-Sync)\nServer Stream: %ux%u (%s)\nDecoded Frames: %u\nActive Language: %s\n\n" },
     { MSG_ABOUT_SEC_AUDIO,        "=== AUDIO & OPTIMIZATION ===\nAudio Engine: AHI 16-Bit Stereo (44100 Hz CD Quality PCM Low-Latency)\nCPU Target: PowerPC Universal (Dynamic CPU Detection)\nVector SIMD: %s\nCompression: LZ4 Realtime Stream Decompressor" },
-    { MSG_ABOUT_TITLE,            "About VortexBrowser" },
-    { MSG_CPU_INCOMPAT_TITLE,     "VortexBrowser - Incompatible CPU" },
-    { MSG_CPU_INCOMPAT_BODY,      "This build ('VortexBrowser-AltiVec') requires a CPU with an AltiVec/VMX SIMD unit (e.g. AmigaOne X1000 or G4).\n\nOn systems such as AmigaOne X5000, A1222+, Sam460 or G3, please launch the standard 'VortexBrowser' build!" },
+    { MSG_ABOUT_TITLE,            "About VortexRemoteBrowser" },
+    { MSG_CPU_INCOMPAT_TITLE,     "VortexRemoteBrowser - Incompatible CPU" },
+    { MSG_CPU_INCOMPAT_BODY,      "This build ('VortexRemoteBrowser-AltiVec') requires a CPU with an AltiVec/VMX SIMD unit (e.g. AmigaOne X1000 or G4).\n\nOn systems such as AmigaOne X5000, A1222+, Sam460 or G3, please launch the standard 'VortexRemoteBrowser' build!" },
 
     { MSG_STATUS_READY_STREAM,       "Ready - Stream System: %s | %u kbps" },
     { MSG_STATUS_CONNECTED_STREAM,   "Connected to %s:%u - Stream: %s | %u kbps" },
@@ -348,7 +348,7 @@ static const StringEntry s_builtins[] = {
     { MSG_STATUS_START_DL,           "Starting download: %s" },
     { MSG_STATUS_READY_SHORT,        "Ready" },
 
-    { MSG_NET_UPLOAD_TITLE,      "VortexBrowser: Select file to upload..." },
+    { MSG_NET_UPLOAD_TITLE,      "VortexRemoteBrowser: Select file to upload..." },
     { MSG_NET_UPLOAD_POS,        "Select" },
     { MSG_NET_UPLOAD_CANCELLED,  "File upload cancelled." },
     { MSG_NET_UPLOAD_OPEN_ERR,   "Error opening file: %s" },
@@ -358,14 +358,14 @@ static const StringEntry s_builtins[] = {
     { MSG_NET_SAVE_PW_BODY,      "Do you want to save the password for\n'%s' (User: %s)\nin the secure Password Manager?" },
     { MSG_NET_SAVE_PW_BTNS,      "Save|Not now" },
     { MSG_NET_PW_SAVED,          "Password saved for '%s'." },
-    { MSG_DL_SAVE_TITLE,         "VortexBrowser: Save download as..." },
+    { MSG_DL_SAVE_TITLE,         "VortexRemoteBrowser: Save download as..." },
     { MSG_DL_SAVE_POS,           "Save" },
     { MSG_DL_STATUS_RUNNING,     "Running" },
     { MSG_DL_STATUS_DONE,        "Done" },
     { MSG_DL_STATUS_CANCELLED,   "Cancelled" },
     { MSG_DL_STATUS_ERROR,       "Error" },
     { MSG_DL_ETA_CANCELLED,      "Canc." },
-    { MSG_FAV_DEFAULT_PORTAL,    "VortexBrowser Portal (Home)" },
+    { MSG_FAV_DEFAULT_PORTAL,    "VortexRemoteBrowser Portal (Home)" },
     { MSG_FAV_GOOGLE_SEARCH,     "Google Search" },
     { MSG_WEB_PAGE_FALLBACK,     "Website" },
 
@@ -793,9 +793,9 @@ static struct Catalog *try_open_catalog_sys(const char *lang_name)
     tags[n].ti_Tag  = TAG_DONE;
     tags[n].ti_Data = 0;
 
-    cat = ILocale->OpenCatalogA(NULL, "VortexBrowser.catalog", tags);
+    cat = ILocale->OpenCatalogA(NULL, "VortexRemoteBrowser.catalog", tags);
     if (!cat && s_locale) {
-        cat = ILocale->OpenCatalogA(s_locale, "VortexBrowser.catalog", tags);
+        cat = ILocale->OpenCatalogA(s_locale, "VortexRemoteBrowser.catalog", tags);
     }
     return cat;
 }
@@ -990,11 +990,11 @@ static BOOL parse_ctlg_blob(const uint8 *blob, size_t blob_len)
 static BOOL try_load_ctlg_direct(const char *lang_name, int32 *out_err)
 {
     const char *patterns[] = {
-        "PROGDIR:Catalogs/%s/VortexBrowser.catalog",
-        "PROGDIR:catalogs/%s/VortexBrowser.catalog",
-        "LOCALE:Catalogs/%s/VortexBrowser.catalog",
-        "LOCALE:catalogs/%s/VortexBrowser.catalog",
-        "Catalogs/%s/VortexBrowser.catalog"
+        "PROGDIR:Catalogs/%s/VortexRemoteBrowser.catalog",
+        "PROGDIR:catalogs/%s/VortexRemoteBrowser.catalog",
+        "LOCALE:Catalogs/%s/VortexRemoteBrowser.catalog",
+        "LOCALE:catalogs/%s/VortexRemoteBrowser.catalog",
+        "Catalogs/%s/VortexRemoteBrowser.catalog"
     };
     char path[256];
     size_t i;
@@ -1541,10 +1541,10 @@ void locale_init_catalog(void)
         }
     }
 
-    /* 6. Last-resort fallback: ENV:VortexBrowser/language only when system Locale resolved nothing */
+    /* 6. Last-resort fallback: ENV:VortexRemoteBrowser/language only when system Locale resolved nothing */
     if (!resolved && IDOS) {
         env_lang[0] = '\0';
-        env_len = IDOS->GetVar("VortexBrowser/language", env_lang, sizeof(env_lang), GVF_GLOBAL_ONLY);
+        env_len = IDOS->GetVar("VortexRemoteBrowser/language", env_lang, sizeof(env_lang), GVF_GLOBAL_ONLY);
         if (env_len > 0 && trim_trailing_ws(env_lang, env_len) > 0) {
             if (!diag_pref[0]) {
                 snprintf(diag_pref, sizeof(diag_pref), "%s", env_lang);

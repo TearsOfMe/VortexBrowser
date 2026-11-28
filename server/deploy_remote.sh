@@ -68,8 +68,8 @@ chmod +x {target_dir}/server.py {target_dir}/run_server.sh {target_dir}/install_
 cd {target_dir}
 gcc -O3 -march=native -mtune=native -fopenmp -DHAVE_TURBOJPEG_LZ4 -shared -fPIC fast_pixconv.c -lturbojpeg -llz4 -o fast_pixconv.so
 chown tears:tears fast_pixconv.so
-systemctl restart vortexbrowser.service
-systemctl status vortexbrowser.service --no-pager
+systemctl restart vortexremotebrowser.service
+systemctl status vortexremotebrowser.service --no-pager
 '''
 print(run_ssh(['ssh', '-o', 'StrictHostKeyChecking=no', f'{user}@{host}', cmds], pw))
 "

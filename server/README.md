@@ -1,6 +1,6 @@
-# VortexBrowser Universal Linux Companion Server
+# VortexRemoteBrowser Universal Linux Companion Server
 
-Der offizielle, universelle Hochleistungs-Server für den **VortexBrowser (AmigaOS 4.1)**.
+Der offizielle, universelle Hochleistungs-Server für den **VortexRemoteBrowser (AmigaOS 4.1)**.
 
 [English guide below / Zur englischen Anleitung](#english-guide)
 
@@ -31,7 +31,7 @@ Dieser Server läuft auf jedem modernen Linux-System (x86_64 und ARM64) oder im 
    ./run_server.sh
    ```
 
-4. Tragen Sie die IP-Adresse des Servers im VortexBrowser auf Ihrem Amiga ein (Standard-Port: **7788**) und klicken Sie auf **Verbinden**.
+4. Tragen Sie die IP-Adresse des Servers im VortexRemoteBrowser auf Ihrem Amiga ein (Standard-Port: **7788**) und klicken Sie auf **Verbinden**.
 
 ---
 
@@ -50,23 +50,23 @@ Im Verzeichnis `server/` stehen ein Multi-Arch `Dockerfile` (`linux/amd64` und `
 ```bash
 docker compose up -d vortex-server
 ```
-*(Oder direkt via: `docker run -d --name vortexbrowser-server --shm-size=2g -p 7788:7788 -p 9757:9757 --device /dev/dri:/dev/dri vortexbrowser-server:linux-amd64`)*
+*(Oder direkt via: `docker run -d --name vortexremotebrowser-server --shm-size=2g -p 7788:7788 -p 9757:9757 --device /dev/dri:/dev/dri vortexremotebrowser-server:linux-amd64`)*
 
 #### Starten auf Raspberry Pi 4 / 5 (ARM64):
 ```bash
 docker compose --profile rpi up -d vortex-rpi
 ```
-*(Oder direkt via: `docker run -d --name vortexbrowser-rpi --shm-size=1g -p 7788:7788 -p 9757:9757 vortexbrowser-server:rpi-arm64`)*
+*(Oder direkt via: `docker run -d --name vortexremotebrowser-rpi --shm-size=1g -p 7788:7788 -p 9757:9757 vortexremotebrowser-server:rpi-arm64`)*
 
 #### Starten auf macOS (Docker Desktop – Apple Silicon & Intel):
 ```bash
 docker compose -f docker-compose.macos.yml up -d
 ```
-*(Oder direkt via: `docker run -d --name vortexbrowser-macos --shm-size=2g -e VORTEX_PLATFORM=macos -p 7788:7788 -p 9757:9757 vortexbrowser-server:macos-arm64`)*
+*(Oder direkt via: `docker run -d --name vortexremotebrowser-macos --shm-size=2g -e VORTEX_PLATFORM=macos -p 7788:7788 -p 9757:9757 vortexremotebrowser-server:macos-arm64`)*
 
 ### 🪟 Schnellstart & Installation (Windows 10/11 Nativ mit NVENC / AMF / QSV & WASAPI)
 
-1. Entpacken Sie `VortexBrowser-1.1-Server-Windows.zip` (oder wechseln Sie in `server/`) und starten Sie den Installer in PowerShell:
+1. Entpacken Sie `VortexRemoteBrowser-1.1-Server-Windows.zip` (oder wechseln Sie in `server/`) und starten Sie den Installer in PowerShell:
    ```powershell
    powershell -ExecutionPolicy Bypass -File .\install_windows.ps1
    ```
@@ -117,7 +117,7 @@ Bei manuellem `docker run` für schwere Seiten (z. B. `cnn.com`) bitte immer `--
 <a name="english-guide"></a>
 ## English Guide
 
-The official universal companion server for **VortexBrowser (AmigaOS 4.1)**.
+The official universal companion server for **VortexRemoteBrowser (AmigaOS 4.1)**.
 
 Runs on any modern Linux distribution (x86_64 and ARM64) or inside **Docker containers**, streaming modern web pages with audio and hardware video acceleration to your AmigaOS 4 machine.
 
@@ -156,23 +156,23 @@ A multi-architecture `Dockerfile` (`linux/amd64` and `linux/arm64`), `docker-com
 ```bash
 docker compose up -d vortex-server
 ```
-*(Or via docker run: `docker run -d --name vortexbrowser-server --shm-size=2g -p 7788:7788 -p 9757:9757 --device /dev/dri:/dev/dri vortexbrowser-server:linux-amd64`)*
+*(Or via docker run: `docker run -d --name vortexremotebrowser-server --shm-size=2g -p 7788:7788 -p 9757:9757 --device /dev/dri:/dev/dri vortexremotebrowser-server:linux-amd64`)*
 
 #### Run on Raspberry Pi 4 / 5 (ARM64):
 ```bash
 docker compose --profile rpi up -d vortex-rpi
 ```
-*(Or via docker run: `docker run -d --name vortexbrowser-rpi --shm-size=1g -p 7788:7788 -p 9757:9757 vortexbrowser-server:rpi-arm64`)*
+*(Or via docker run: `docker run -d --name vortexremotebrowser-rpi --shm-size=1g -p 7788:7788 -p 9757:9757 vortexremotebrowser-server:rpi-arm64`)*
 
 #### Run on macOS (Docker Desktop – Apple Silicon & Intel):
 ```bash
 docker compose -f docker-compose.macos.yml up -d
 ```
-*(Or via docker run: `docker run -d --name vortexbrowser-macos --shm-size=2g -e VORTEX_PLATFORM=macos -p 7788:7788 -p 9757:9757 vortexbrowser-server:macos-arm64`)*
+*(Or via docker run: `docker run -d --name vortexremotebrowser-macos --shm-size=2g -e VORTEX_PLATFORM=macos -p 7788:7788 -p 9757:9757 vortexremotebrowser-server:macos-arm64`)*
 
 ### 🪟 Quickstart & Native Installation (Windows 10/11 with NVENC / AMF / QSV & WASAPI)
 
-1. Unpack `VortexBrowser-1.1-Server-Windows.zip` (or open PowerShell in `server/`) and run the Windows installer:
+1. Unpack `VortexRemoteBrowser-1.1-Server-Windows.zip` (or open PowerShell in `server/`) and run the Windows installer:
    ```powershell
    powershell -ExecutionPolicy Bypass -File .\install_windows.ps1
    ```

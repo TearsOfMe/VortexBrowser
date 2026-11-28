@@ -1,5 +1,5 @@
 # ==============================================================================
-# VortexBrowser Universal Companion Server - Multi-Arch Dockerfile
+# VortexRemoteBrowser Universal Companion Server - Multi-Arch Dockerfile
 # Supports:
 #   - linux/amd64 (Linux Desktop/Server: Intel QuickSync/VA-API, AMD Vulkan/VA-API)
 #   - linux/arm64 (Raspberry Pi 4 / Raspberry Pi 5 64-bit OS: Broadcom V3D + NEON)

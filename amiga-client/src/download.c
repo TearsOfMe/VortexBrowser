@@ -395,7 +395,7 @@ void download_handle_complete(VortexApp *app, const MsgDownloadComplete *msg)
 
     if (e->dest_path[0]) {
         char comment[160];
-        snprintf(comment, sizeof(comment), "Downloaded via VortexBrowser from %.100s", app->current_url);
+        snprintf(comment, sizeof(comment), "Downloaded via VortexRemoteBrowser from %.100s", app->current_url);
         IDOS->SetComment(e->dest_path, comment);
     }
 

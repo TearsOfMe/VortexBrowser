@@ -7,7 +7,7 @@ __pycache__/
 *.so
 *.o
 browser_bin.txt
-vortexbrowser.service
+vortexremotebrowser.service
 *.log
 *.sqlite*
 *.ldb

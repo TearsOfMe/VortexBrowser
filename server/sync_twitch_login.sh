@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# VortexBrowser - Twitch Automatic Login & Session Synchronizer
+# VortexRemoteBrowser - Twitch Automatic Login & Session Synchronizer
 # Usage:
 #   ./sync_twitch_login.sh [--server IP] [--token TOKEN] [--user USER]
 #   ./sync_twitch_login.sh --restore-pc
@@ -32,7 +32,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --help|-h)
-            echo "VortexBrowser Twitch Synchronizer"
+            echo "VortexRemoteBrowser Twitch Synchronizer"
             echo "Usage:"
             echo "  ./sync_twitch_login.sh [--server IP] [--token TOKEN] [--user USER]"
             echo "  ./sync_twitch_login.sh --restore-pc   (Restore login into PC LibreWolf/Firefox)"
@@ -45,7 +45,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 echo "=================================================================="
-echo " VortexBrowser - Twitch Automatic Login & Session Synchronizer"
+echo " VortexRemoteBrowser - Twitch Automatic Login & Session Synchronizer"
 echo " Target Server: ${SERVER_IP}"
 echo "=================================================================="
 
@@ -244,8 +244,8 @@ REMOTE_INFO=$(ssh -o ConnectTimeout=5 "root@${SERVER_IP}" '
     PID_DIR=$(pgrep -f "server.py" | head -n1 | xargs -I{} readlink -f /proc/{}/cwd 2>/dev/null || true)
     if [ -n "$PID_DIR" ] && [ -f "$PID_DIR/server.py" ]; then
         DIR="$PID_DIR"
-    elif [ -d "$(systemctl show vortexbrowser -p WorkingDirectory --value 2>/dev/null || true)" ]; then
-        DIR="$(systemctl show vortexbrowser -p WorkingDirectory --value 2>/dev/null)"
+    elif [ -d "$(systemctl show vortexremotebrowser -p WorkingDirectory --value 2>/dev/null || true)" ]; then
+        DIR="$(systemctl show vortexremotebrowser -p WorkingDirectory --value 2>/dev/null)"
     else
         for d in /home/*/Server-* /home/*/vortexbrowse* /opt/vortexbrowse* /root/Server-*; do
             if [ -f "$d/server.py" ]; then

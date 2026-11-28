@@ -1,18 +1,18 @@
-## version $VER: VortexBrowser.catalog 3.0 (27.11.2026)
-## language italiano
+## version $VER: VortexRemoteBrowser.catalog 3.0 (27.11.2026)
+## language italian
 ## codeset 4
 ;
 MSG_WIN_TITLE
-VortexBrowser
+VortexRemoteBrowser
 ;
 MSG_DL_WIN_TITLE
-Scaricamenti - VortexBrowser
+Scaricamenti - VortexRemoteBrowser
 ;
 MSG_PW_WIN_TITLE
-Gestore password - VortexBrowser
+Gestore password - VortexRemoteBrowser
 ;
 MSG_PREFS_WIN_TITLE
-Impostazioni - VortexBrowser
+Impostazioni - VortexRemoteBrowser
 ;
 MSG_MENU_PROJECT
 Progetto
@@ -30,7 +30,7 @@ MSG_MENU_PRINT
 Stampa pagina...
 ;
 MSG_MENU_ABOUT
-Informazioni su VortexBrowser...
+Informazioni su VortexRemoteBrowser...
 ;
 MSG_MENU_QUIT
 Esci
@@ -414,13 +414,13 @@ MSG_MENU_TOGGLE_STATUSBAR
 Mostra/nascondi barra di stato
 ;
 MSG_POPUP_MAIN_TITLE
-Menu VortexBrowser
+Menu VortexRemoteBrowser
 ;
 MSG_POPUP_SAVE_SETTINGS
 Salva impostazioni
 ;
 MSG_POPUP_OPT_TITLE
-Opzioni di VortexBrowser
+Opzioni di VortexRemoteBrowser
 ;
 MSG_POPUP_OPT_PROMPT
 Scegli azione:
@@ -507,7 +507,7 @@ MSG_CTX_LIGHT_MODE_FULL
 Tema chiaro (Light Mode)
 ;
 MSG_CTX_REQ_TITLE
-Menu contestuale VortexBrowser
+Menu contestuale VortexRemoteBrowser
 ;
 MSG_CTX_REQ_LINK_TEXT
 Collegamento: %s
@@ -525,10 +525,10 @@ MSG_SRV_DLG_TITLE
 Configura server
 ;
 MSG_SRV_DLG_SCRTITLE
-Impostazioni di VortexBrowser
+Impostazioni di VortexRemoteBrowser
 ;
 MSG_SRV_DLG_PROMPT
-Inserisci indirizzo del server VortexBrowser (IP:Porta):
+Inserisci indirizzo del server VortexRemoteBrowser (IP:Porta):
 ;
 MSG_SRV_DLG_HINT
 IP e porta del server (es. 127.0.0.1:7788)
@@ -561,7 +561,7 @@ MSG_ABOUT_ALTIVEC_NO
 Base scalare (Sicuro per X5000/A1222+/Sam460/G3)
 ;
 MSG_ABOUT_SEC_SERVER
-VortexBrowser per AmigaOS 4\nVersione 1.1\n\n=== INFORMAZIONI SERVER ===\nIndirizzo server: %s:%u\nStato connessione: %s\nMotore server: %s\n\n
+VortexRemoteBrowser per AmigaOS 4\nVersione 1.1\n\n=== INFORMAZIONI SERVER ===\nIndirizzo server: %s:%u\nStato connessione: %s\nMotore server: %s\n\n
 ;
 MSG_ABOUT_SEC_GRAPHICS
 === RISOLUZIONE E GRAFICA ===\nSchermo: %ux%u (%u bit, %s)\nFinestra: %ux%u (Pos: %d,%d)\nViewport browser: %ux%u px (Auto-Sync 1:1)\nFlusso server: %ux%u (%s)\nFotogrammi decodificati: %u\nLingua attiva: %s\n\n
@@ -570,13 +570,13 @@ MSG_ABOUT_SEC_AUDIO
 === AUDIO E OTTIMIZZAZIONE ===\nMotore audio: AHI 16 bit stereo (44100 Hz qualità CD PCM bassa latenza)\nTarget CPU: PowerPC Universal (rilevamento dinamico CPU)\nVettore SIMD: %s\nCompressione: Decompressione flusso LZ4 in tempo reale
 ;
 MSG_ABOUT_TITLE
-Informazioni su VortexBrowser
+Informazioni su VortexRemoteBrowser
 ;
 MSG_CPU_INCOMPAT_TITLE
-VortexBrowser - CPU non compatibile
+VortexRemoteBrowser - CPU non compatibile
 ;
 MSG_CPU_INCOMPAT_BODY
-Questa versione ('VortexBrowser-AltiVec') richiede una CPU con unità SIMD AltiVec/VMX (es. AmigaOne X1000 o G4).\n\nSu sistemi come AmigaOne X5000, A1222+, Sam460 o G3, avvia il programma standard 'VortexBrowser'!
+Questa versione ('VortexRemoteBrowser-AltiVec') richiede una CPU con unità SIMD AltiVec/VMX (es. AmigaOne X1000 o G4).\n\nSu sistemi come AmigaOne X5000, A1222+, Sam460 o G3, avvia il programma standard 'VortexRemoteBrowser'!
 ;
 MSG_STATUS_READY_STREAM
 Pronto - Sistema flusso: %s | %u kbps
@@ -744,7 +744,7 @@ MSG_STATUS_READY_SHORT
 Pronto
 ;
 MSG_NET_UPLOAD_TITLE
-VortexBrowser: Scegli file da caricare...
+VortexRemoteBrowser: Scegli file da caricare...
 ;
 MSG_NET_UPLOAD_POS
 Seleziona
@@ -774,7 +774,7 @@ MSG_NET_PW_SAVED
 Password salvata per '%s'.
 ;
 MSG_DL_SAVE_TITLE
-VortexBrowser: Salva scaricamento con nome...
+VortexRemoteBrowser: Salva scaricamento con nome...
 ;
 MSG_DL_SAVE_POS
 Salva
@@ -795,7 +795,7 @@ MSG_DL_ETA_CANCELLED
 Annull.
 ;
 MSG_FAV_DEFAULT_PORTAL
-Portale VortexBrowser (Home)
+Portale VortexRemoteBrowser (Home)
 ;
 MSG_FAV_GOOGLE_SEARCH
 Ricerca Google

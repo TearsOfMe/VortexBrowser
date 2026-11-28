@@ -12,11 +12,11 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DIST_DIR = os.path.join(SCRIPT_DIR, "dist")
 
 VER_STR = "1.1"
-APP_NAME = "VortexBrowser"
+APP_NAME = "VortexRemoteBrowser"
 RELEASE_DATE = "27.11.2026"
 
 STAGING_DIR = os.path.join(DIST_DIR, "staging")
-AMIGA_DRAWER = os.path.join(STAGING_DIR, "VortexBrowser")
+AMIGA_DRAWER = os.path.join(STAGING_DIR, "VortexRemoteBrowser")
 SERVER_LINUX_DRAWER = os.path.join(STAGING_DIR, "Server-Linux")
 SERVER_WINDOWS_DRAWER = os.path.join(STAGING_DIR, "Server-Windows")
 
@@ -32,20 +32,20 @@ os.makedirs(SERVER_WINDOWS_DRAWER, exist_ok=True)
 # -------------------------------------------------------------
 # AmigaGuide Documentation
 # -------------------------------------------------------------
-GUIDE_CONTENT = """@database "VortexBrowser.guide"
+GUIDE_CONTENT = """@database "VortexRemoteBrowser.guide"
 @author "TearsOfMe"
-@(c) "2026 VortexBrowser Project"
-@$VER: VortexBrowser.guide 1.1 (27.11.2026)
+@(c) "2026 VortexRemoteBrowser Project"
+@$VER: VortexRemoteBrowser.guide 1.1 (27.11.2026)
 
-@node "Main" "VortexBrowser 1.1 - Benutzerhandbuch"
+@node "Main" "VortexRemoteBrowser 1.1 - Benutzerhandbuch"
 @{b}========================================================================@{ub}
-           @{b}VORTEXBROWSER 1.1 FUER AMIGAOS 4.1@{ub}
+           @{b}VORTEXREMOTEBROWSER 1.1 FUER AMIGAOS 4.1@{ub}
       Moderner Web-Browser mit Remote-Rendering & Streaming
 @{b}========================================================================@{ub}
 
-Willkommen zu @{b}VortexBrowser 1.1@{ub}!
+Willkommen zu @{b}VortexRemoteBrowser 1.1@{ub}!
 
-VortexBrowser ermoeglicht modernes Surfen im World Wide Web auf Ihrem AmigaOS 4.1
+VortexRemoteBrowser ermoeglicht modernes Surfen im World Wide Web auf Ihrem AmigaOS 4.1
 System mit voller Unterstuetzung fuer moderne Web-Standards (HTML5, CSS3,
 JavaScript ES2024, WebGL, YouTube, Twitch, etc.) bei maximaler Geschwindigkeit
 und minimaler CPU-Auslastung.
@@ -80,7 +80,7 @@ Klassische und aeltere Webbrowser auf dem Amiga haben oft Schwierigkeiten mit
 hochkomplexen JavaScript-Websites, modernen Verschluesselungs-Standards (TLS 1.3),
 Videowiedergabe und WebGL.
 
-@{b}VortexBrowser loest dieses Problem mit einer modernen Client-Server-Architektur:@{ub}
+@{b}VortexRemoteBrowser loest dieses Problem mit einer modernen Client-Server-Architektur:@{ub}
 
 1. @{b}Der Rendering-Server@{ub} (laeuft auf einem beliebigen Linux-PC, Raspberry Pi 4/5,
    oder Heimserver im lokalen Netzwerk):
@@ -111,9 +111,9 @@ authentischen Look & Feel von AmigaOS 4!
 @{b}AmigaOS 4.1 Client:@{ub}
 - @{b}Betriebssystem:@{ub} AmigaOS 4.1 Final Edition (Update 1 oder Update 2 empfohlen)
 - @{b}Prozessor / Binary:@{ub}
-  * @{b}VortexBrowser@{ub} (Universal PowerPC): AmigaOne X5000, A1222/A1222+, Sam440, Sam460,
+  * @{b}VortexRemoteBrowser@{ub} (Universal PowerPC): AmigaOne X5000, A1222/A1222+, Sam440, Sam460,
     Pegasos II, AmigaOne XE/SE/uA1, Classic PPC oder QEMU (pegasos2/sam460ex)
-  * @{b}VortexBrowser-AltiVec@{ub}: PowerPC mit AltiVec (AmigaOne X1000, G4, G5)
+  * @{b}VortexRemoteBrowser-AltiVec@{ub}: PowerPC mit AltiVec (AmigaOne X1000, G4, G5)
 - @{b}Arbeitsspeicher:@{ub} Mindestens 256 MB RAM (512 MB+ RAM fuer HD-Streams empfohlen)
 - @{b}Grafikkarte:@{ub} RTG (Picasso96) mit 24/32-Bit TrueColor; Radeon HD oder Radeon RX
   fuer Hardware-Composite-Scaling empfohlen
@@ -136,7 +136,7 @@ authentischen Look & Feel von AmigaOS 4!
 @{b}Installation & Schnellstart@{ub}
 
 @{b}Schritt 1: Server starten (Linux PC oder Raspberry Pi)@{ub}
-1. Entpacken Sie das Server-Archiv @{b}VortexBrowser-1.1-Server-Linux.zip@{ub}
+1. Entpacken Sie das Server-Archiv @{b}VortexRemoteBrowser-1.1-Server-Linux.zip@{ub}
    (bzw. kopieren Sie den Ordner @{b}Server-Linux/@{ub}) auf Ihren Server.
 2. Oeffnen Sie ein Terminal im Server-Verzeichnis.
 3. Starten Sie das universelle Installationsskript:
@@ -149,21 +149,21 @@ authentischen Look & Feel von AmigaOS 4!
 5. Starten Sie den Server mit:
    @{b}./run_server.sh@{ub}
 
-@{b}Schritt 2: VortexBrowser auf dem AmigaOS 4 starten@{ub}
-1. Entpacken Sie das Archiv @{b}VortexBrowser-1.1-AmigaOS4.lha@{ub} an Ihren
-   gewuenschten Ort (z. B. @{b}Work:Internet/VortexBrowser@{ub}).
-2. Starten Sie @{b}VortexBrowser@{ub} per Doppelklick auf das Programm-Icon.
-3. Beim ersten Start fragt VortexBrowser Sie direkt nach der IP-Adresse Ihres Servers
+@{b}Schritt 2: VortexRemoteBrowser auf dem AmigaOS 4 starten@{ub}
+1. Entpacken Sie das Archiv @{b}VortexRemoteBrowser-1.1-AmigaOS4.lha@{ub} an Ihren
+   gewuenschten Ort (z. B. @{b}Work:Internet/VortexRemoteBrowser@{ub}).
+2. Starten Sie @{b}VortexRemoteBrowser@{ub} per Doppelklick auf das Programm-Icon.
+3. Beim ersten Start fragt VortexRemoteBrowser Sie direkt nach der IP-Adresse Ihres Servers
    (oder druecken Sie Amiga+1 / Amiga+E).
 4. Tragen Sie die IP-Adresse ein und klicken Sie auf @{b}Verbinden@{ub}.
-5. VortexBrowser verbindet sich sofort mit dem Server und laedt Ihre Startseite!
+5. VortexRemoteBrowser verbindet sich sofort mit dem Server und laedt Ihre Startseite!
 
 @endnode
 
 @node "Features" "Bedienung & Funktionen"
 @{b}Bedienung & Funktionen@{ub}
 
-VortexBrowser bietet eine intuitive, an modernen Amiga-Standards orientierte Reaction-Oberflaeche:
+VortexRemoteBrowser bietet eine intuitive, an modernen Amiga-Standards orientierte Reaction-Oberflaeche:
 
 - @{"Multi-Tab-Browsing" link "Tabs"}
 - @{"Schnellwahl & Lesezeichen" link "Bookmarks"}
@@ -178,7 +178,7 @@ VortexBrowser bietet eine intuitive, an modernen Amiga-Standards orientierte Rea
 @node "Tabs" "Multi-Tab-Browsing"
 @{b}Multi-Tab-Browsing@{ub}
 
-VortexBrowser unterstuetzt echtes Tabbed-Browsing mit mehreren gleichzeitigen Webseiten:
+VortexRemoteBrowser unterstuetzt echtes Tabbed-Browsing mit mehreren gleichzeitigen Webseiten:
 
 - @{b}Neuer Tab:@{ub} Klicken Sie auf die @{b}[+]@{ub}-Schaltflaeche in der Tab-Leiste
   oder druecken Sie @{b}Amiga+T@{ub}.
@@ -196,7 +196,7 @@ Sitzungen sauber getrennt bleiben.
 @node "Bookmarks" "Schnellwahl & Lesezeichen"
 @{b}Schnellwahl & Lesezeichen@{ub}
 
-VortexBrowser besitzt eine praktische Schnellwahl-Leiste direkt ueber der Adressleiste:
+VortexRemoteBrowser besitzt eine praktische Schnellwahl-Leiste direkt ueber der Adressleiste:
 
 - @{b}Standard-Schnellwahl-Buttons:@{ub}
   Enthaelt Schnellzugriffe mit massgeschneiderten Icons fuer beliebte Websites
@@ -219,11 +219,11 @@ VortexBrowser besitzt eine praktische Schnellwahl-Leiste direkt ueber der Adress
 @node "Downloads" "Download-Manager"
 @{b}Download-Manager@{ub}
 
-Der Download-Manager von VortexBrowser bietet eine uebersichtliche Verwaltung aller Downloads:
+Der Download-Manager von VortexRemoteBrowser bietet eine uebersichtliche Verwaltung aller Downloads:
 
 - @{b}Automatischer Start:@{ub}
   Sobald Sie auf einer Webseite einen Download anklicken (oder im Kontextmenue
-  @{b}"Link speichern unter..."@{ub} waehlen), uebernimmt der VortexBrowser Download-Manager
+  @{b}"Link speichern unter..."@{ub} waehlen), uebernimmt der VortexRemoteBrowser Download-Manager
   den Download transparent im Hintergrund.
 - @{b}Download-Fenster oeffnen:@{ub}
   Druecken Sie @{b}Amiga+D@{ub} oder waehlen Sie im Menue @{b}Projekt -> Download-Manager...@{ub}.
@@ -243,7 +243,7 @@ Der Download-Manager von VortexBrowser bietet eine uebersichtliche Verwaltung al
 @node "Passwords" "Passwort-Manager"
 @{b}Passwort-Manager@{ub}
 
-VortexBrowser enthaelt einen sicheren, integrierten Passwort-Manager:
+VortexRemoteBrowser enthaelt einen sicheren, integrierten Passwort-Manager:
 
 - @{b}Lokale, starke Verschluesselung:@{ub}
   Alle Anmeldedaten werden verschluesselt mit @{b}Blowfish-CBC@{ub} und einem ueber
@@ -260,7 +260,7 @@ VortexBrowser enthaelt einen sicheren, integrierten Passwort-Manager:
 @node "DarkMode" "Dark Mode (Dunkles Theme)"
 @{b}Dark Mode (Dunkles Theme)@{ub}
 
-VortexBrowser bietet einen vollstaendigen Dunkelmodus fuer augenschonendes Surfen:
+VortexRemoteBrowser bietet einen vollstaendigen Dunkelmodus fuer augenschonendes Surfen:
 
 - @{b}Umschalten:@{ub}
   Druecken Sie @{b}Amiga+U@{ub} oder waehlen Sie im Menue @{b}Ansicht -> Dunkles Theme an/aus@{ub}.
@@ -276,7 +276,7 @@ VortexBrowser bietet einen vollstaendigen Dunkelmodus fuer augenschonendes Surfe
 @node "Audio" "Audio-Streaming (16-Bit AHI)"
 @{b}Audio-Streaming (16-Bit AHI)@{ub}
 
-VortexBrowser streamt Audio von YouTube-Videos, Twitch-Livestreams oder Audio-Websites
+VortexRemoteBrowser streamt Audio von YouTube-Videos, Twitch-Livestreams oder Audio-Websites
 in Echtzeit synchron zum Amiga:
 
 - @{b}Audio-Qualitaet:@{ub}
@@ -340,8 +340,8 @@ Das Einstellungsfenster ist uebersichtlich in fuenf Reiter unterteilt:
 @node "ToolTypes" "Workbench ToolTypes (Icon-Infos)"
 @{b}Workbench ToolTypes (Icon-Infos)@{ub}
 
-VortexBrowser unterstuetzt die typische Amiga-Konfiguration ueber @{b}ToolTypes@{ub} in
-den Programm-Icons (@{i}VortexBrowser.info@{ui}, @{i}VortexBrowser-AltiVec.info@{ui}).
+VortexRemoteBrowser unterstuetzt die typische Amiga-Konfiguration ueber @{b}ToolTypes@{ub} in
+den Programm-Icons (@{i}VortexRemoteBrowser.info@{ui}, @{i}VortexRemoteBrowser-AltiVec.info@{ui}).
 
 @{b}So bearbeiten Sie die ToolTypes auf der Workbench:@{ub}
 1. Markieren Sie das Icon mit einem einfachen Mausklick.
@@ -425,7 +425,7 @@ dank bi-linearer Filterung gestochen scharf und fluessig bleibt!
   @{b}Amiga+D@{ub}       Download-Manager oeffnen
   @{b}Amiga+K@{ub}       Passwort-Manager oeffnen
   @{b}Amiga+E@{ub}       Einstellungen (Preferences) oeffnen
-  @{b}Amiga+Q@{ub}       VortexBrowser beenden
+  @{b}Amiga+Q@{ub}       VortexRemoteBrowser beenden
 
 @{b}Navigation:@{ub}
   @{b}Amiga+B@{ub}       Zurueck (Back)
@@ -451,12 +451,12 @@ dank bi-linearer Filterung gestochen scharf und fluessig bleibt!
 @node "ServerSetup" "Server-Einrichtung (Universeller Linux-Server)"
 @{b}Server-Einrichtung (Universeller Linux-Server)@{ub}
 
-Der universelle VortexBrowser-Server laeuft auf jedem gaengigen Linux-System
+Der universelle VortexRemoteBrowser-Server laeuft auf jedem gaengigen Linux-System
 (z. B. Raspberry Pi 4, Raspberry Pi 5, Intel Atom/Core PC, AMD Ryzen unter Debian,
 Ubuntu, CachyOS, Arch Linux, Fedora, Linux Mint, etc.).
 
 @{b}Intelligente Hardware-Erkennung (Universal Server):@{ub}
-Anstelle separater Builds buendelt VortexBrowser alle Faehigkeiten in einem
+Anstelle separater Builds buendelt VortexRemoteBrowser alle Faehigkeiten in einem
 einzigen, hochoptimierten Server, der bei Installation und Start die Hardware
 automatisch erkennt und konfiguriert:
 - @{b}Intel QuickSync & VA-API@{ub} (`iHD` / `i965`) fuer Intel Core, Celeron & Atom Mini-PCs
@@ -466,7 +466,7 @@ automatisch erkennt und konfiguriert:
   und kompiliert die SIMD-Routinen passgenau fuer Ihre Prozessor-Architektur.
 
 @{b}Automatische Installation mit install_server.sh:@{ub}
-1. Entpacken Sie das Server-Archiv @{b}VortexBrowser-1.1-Server-Linux.zip@{ub}.
+1. Entpacken Sie das Server-Archiv @{b}VortexRemoteBrowser-1.1-Server-Linux.zip@{ub}.
 2. Oeffnen Sie ein Terminal im Verzeichnis @{b}Server-Linux/@{ub}.
 3. Fuehren Sie das universelle Installationsskript aus:
    @{b}./install_server.sh@{ub}
@@ -494,7 +494,7 @@ automatisch erkennt und konfiguriert:
 @node "Troubleshooting" "Fehlerbehebung (FAQ)"
 @{b}Fehlerbehebung (FAQ)@{ub}
 
-@{b}Frage: VortexBrowser zeigt "Nicht verbunden" oder "Verbindung fehlgeschlagen".@{ub}
+@{b}Frage: VortexRemoteBrowser zeigt "Nicht verbunden" oder "Verbindung fehlgeschlagen".@{ub}
 @{b}Antwort:@{ub}
 1. Ueberpruefen Sie, ob der Server auf dem Linux-PC/Raspberry Pi laeuft (@{b}./run_server.sh@{ub}).
 2. Druecken Sie @{b}Amiga+1@{ub} und ueberpruefen Sie die IP-Adresse des Servers.
@@ -522,15 +522,15 @@ Deaktivieren Sie Rustwright beim Server-Start (Fallback auf Standard-Playwright)
 @node "EnglishDoc" "English Documentation Summary"
 @{b}English Documentation Summary@{ub}
 
-@{b}VortexBrowser 1.1@{ub} is a remote web rendering browser client for AmigaOS 4.1.
+@{b}VortexRemoteBrowser 1.1@{ub} is a remote web rendering browser client for AmigaOS 4.1.
 It renders modern web pages (HTML5, CSS3, ES2024 JavaScript, WebGL, YouTube, etc.)
 on a companion Linux PC, AMD Ryzen, Intel Core/Atom or Raspberry Pi 4/5 server, streaming ultra-smooth visuals
 and 16-bit 48kHz audio directly to AmigaOS with native Reaction GUI controls.
 
 @{b}AmigaOS 4.1 Client Requirements:@{ub}
 - AmigaOS 4.1 Final Edition (Update 1 or Update 2 recommended).
-- PowerPC CPU: @{b}VortexBrowser@{ub} works on all AmigaOS 4 PPC machines (X5000, A1222/+,
-  Sam440/460, Pegasos II, XE/SE/uA1, Classic PPC, QEMU); @{b}VortexBrowser-AltiVec@{ub} for
+- PowerPC CPU: @{b}VortexRemoteBrowser@{ub} works on all AmigaOS 4 PPC machines (X5000, A1222/+,
+  Sam440/460, Pegasos II, XE/SE/uA1, Classic PPC, QEMU); @{b}VortexRemoteBrowser-AltiVec@{ub} for
   G4, G5 and AmigaOne X1000.
 - 256 MB RAM minimum (512 MB+ RAM recommended); 24/32-bit RTG screen (Radeon HD/RX
   recommended; optional va.library for hardware H.264 decoding).
@@ -539,14 +539,14 @@ and 16-bit 48kHz audio directly to AmigaOS with native Reaction GUI controls.
 
 @{b}Quick Start:@{ub}
 1. On your Linux PC or Raspberry Pi:
-   Extract @{b}VortexBrowser-1.1-Server-Linux.zip@{ub}, enter the @{b}Server-Linux/@{ub} directory and run:
+   Extract @{b}VortexRemoteBrowser-1.1-Server-Linux.zip@{ub}, enter the @{b}Server-Linux/@{ub} directory and run:
    @{b}./install_server.sh@{ub}
    (Automatically detects your CPU/GPU hardware, drivers and SIMD instruction set).
    Then start the server with:
    @{b}./run_server.sh@{ub}
    Note the IP address displayed.
 2. On your Amiga:
-   Extract @{b}VortexBrowser-1.1-AmigaOS4.lha@{ub} and double-click @{b}VortexBrowser@{ub}.
+   Extract @{b}VortexRemoteBrowser-1.1-AmigaOS4.lha@{ub} and double-click @{b}VortexRemoteBrowser@{ub}.
    Enter your server IP address (Port: 7788) and connect!
 
 @{b}Key Features:@{ub}
@@ -564,21 +564,21 @@ and 16-bit 48kHz audio directly to AmigaOS with native Reaction GUI controls.
 with open(os.path.join(AMIGA_DRAWER, f"{APP_NAME}.guide"), "w", encoding="iso-8859-1") as f:
     f.write(GUIDE_CONTENT)
 
-GUIDE_EN_CONTENT = """@database "VortexBrowser_EN.guide"
+GUIDE_EN_CONTENT = """@database "VortexRemoteBrowser_EN.guide"
 @author "TearsOfMe"
 @(c) "(C) 2026 TearsOfMe"
-@$VER: VortexBrowser_EN.guide 1.1 (27.11.2026)
+@$VER: VortexRemoteBrowser_EN.guide 1.1 (27.11.2026)
 
-@node MAIN "VortexBrowser 1.1 - Official AmigaOS 4.1 User Manual"
+@node MAIN "VortexRemoteBrowser 1.1 - Official AmigaOS 4.1 User Manual"
 @next INTRO
 
 @{b}==============================================================================
-                      VORTEXBROWSER 1.1 FOR AMIGAOS 4.1
+                      VORTEXREMOTEBROWSER 1.1 FOR AMIGAOS 4.1
                  High-Performance Remote Web Browser (PPC)
 ==============================================================================@{ub}
 
-Welcome to @{b}VortexBrowser 1.1@{ub}!
-VortexBrowser brings the modern web (HTML5, CSS3, ES2024 JavaScript, YouTube,
+Welcome to @{b}VortexRemoteBrowser 1.1@{ub}!
+VortexRemoteBrowser brings the modern web (HTML5, CSS3, ES2024 JavaScript, YouTube,
 Twitch, WebGL) smoothly to AmigaOS 4.1 by offloading browser rendering to a
 Linux, macOS, Docker, or Raspberry Pi companion server and streaming pixels
 using planar YUV420p + 2D Dirty-Rect + LZ4 (or H.264 via va.library) plus
@@ -598,14 +598,14 @@ using planar YUV420p + 2D Dirty-Rect + LZ4 (or H.264 via va.library) plus
 @next REQS
 
 @{b}1. AmigaOS 4 (Client)@{ub}
-- Extract vortexbrowser.lha or VortexBrowser-1.1-AmigaOS4.lha using UnArc
-  into any drawer (e.g. Work:Internet/VortexBrowser/).
+- Extract vortexremotebrowser.lha or VortexRemoteBrowser-1.1-AmigaOS4.lha using UnArc
+  into any drawer (e.g. Work:Internet/VortexRemoteBrowser/).
 - No external .so libraries needed (libavcodec, liblz4, libjpeg are compiled
   statically into the binary).
 - Launch:
-  * @{b}VortexBrowser@{ub}         -> All AmigaOS 4 systems (X5000, A1222+, Sam440/460,
+  * @{b}VortexRemoteBrowser@{ub}         -> All AmigaOS 4 systems (X5000, A1222+, Sam440/460,
                              Pegasos II, QEMU, Classic PPC)
-  * @{b}VortexBrowser-AltiVec@{ub} -> AltiVec CPUs (X1000, G4, G5)
+  * @{b}VortexRemoteBrowser-AltiVec@{ub} -> AltiVec CPUs (X1000, G4, G5)
 - Configure Server Address in Icon ToolTypes (SERVER=<IP-or-host>, PORT=7788)
   or directly in Settings (Amiga+E).
 
@@ -613,7 +613,7 @@ using planar YUV420p + 2D Dirty-Rect + LZ4 (or H.264 via va.library) plus
 - @{b}Option A - Raspberry Pi 3 / 4 / 5 (Plug & Play):@{ub}
   Flash the matching .img.xz (rpi3/4/5) to a >= 16 GB microSD card, connect
   Ethernet, power on (~60-90s first boot), and connect from the Amiga to
-  vortexbrowser.local (Pi 4), vortexbrowser-rpi3.local, or vortexbrowser-rpi5.local.
+  vortexremotebrowser.local (Pi 4), vortexremotebrowser-rpi3.local, or vortexremotebrowser-rpi5.local.
 - @{b}Option B - Linux or macOS:@{ub}
   Copy Server-Linux/ to your host. Run ./install_server.sh (Linux) or
   ./install_macos.sh (macOS) once, then ./run_server.sh / ./run_macos.sh.
@@ -643,7 +643,7 @@ using planar YUV420p + 2D Dirty-Rect + LZ4 (or H.264 via va.library) plus
 @prev REQS
 @next KEYS
 
-Supported ToolTypes in VortexBrowser.info (remove parentheses to activate):
+Supported ToolTypes in VortexRemoteBrowser.info (remove parentheses to activate):
   SERVER=<IP-or-Hostname>  Companion server address (e.g. SERVER=192.168.178.2)
   PORT=<Number>            Control/video TCP port (default: 7788)
   FPS=<Number>             Target frame rate (15, 25, 30, 50, 60; default: 25)
@@ -654,7 +654,7 @@ Supported ToolTypes in VortexBrowser.info (remove parentheses to activate):
   DARK                     Start with Dark Mode enabled
   URL=<URL>                Initial page (default: @HOME built-in startpage)
 
-Configuration files are stored in ENVARC:VortexBrowser/vortexbrowser.prefs.
+Configuration files are stored in ENVARC:VortexRemoteBrowser/vortexremotebrowser.prefs.
 
 @endnode
 
@@ -679,13 +679,13 @@ Configuration files are stored in ENVARC:VortexBrowser/vortexbrowser.prefs.
 @prev KEYS
 @next TROUBLE
 
-- On a fresh install, VortexBrowser opens the built-in Startpage (@HOME)
+- On a fresh install, VortexRemoteBrowser opens the built-in Startpage (@HOME)
   featuring clickable search engines (DuckDuckGo, Google, Bing, Startpage,
   Ecosia, OS4Depot, Aminet, Wikipedia, YouTube) and AmigaOS 4 news & download
   portals sorted by language (EN, DE, FR, IT, PL, CS).
 - 8 default Quick Dial buttons: OS4Welt, Amiga-News, OS4Depot, Amigans,
   Aminet, YouTube, Twitch, Wikipedia.
-- Help -> About VortexBrowser displays the active server engine
+- Help -> About VortexRemoteBrowser displays the active server engine
   (Chromium Rustwright DirectCDP, Chromium Playwright, or Firefox Playwright).
 
 @endnode
@@ -739,7 +739,7 @@ WebGL, etc.) fluessig und ressourcenschonend auf den Amiga bringt.
 ------------------------------------------------------------------------------
 
 SCHRITT 1: Server starten (auf Linux-PC oder Raspberry Pi 4/5)
-1. Entpacken Sie das Server-Archiv (VortexBrowser-1.1-Server-Linux.zip) auf Ihrem Rechner.
+1. Entpacken Sie das Server-Archiv (VortexRemoteBrowser-1.1-Server-Linux.zip) auf Ihrem Rechner.
 2. Oeffnen Sie ein Terminal im Server-Ordner ("Server-Linux/") und starten Sie die Installation:
       ./install_server.sh
    (Erkennt automatisch Intel-, AMD- und Raspberry Pi-Hardware sowie Grafiktreiber und SIMD)
@@ -788,7 +788,7 @@ SCHRITT 2: {APP_NAME} auf dem Amiga starten
 ------------------------------------------------------------------------------
 4. WORKBENCH TOOLTYPES (ICON-EINSTELLUNGEN)
 ------------------------------------------------------------------------------
-Sie koennen VortexBrowser auch direkt ueber ToolTypes im Icon konfigurieren!
+Sie koennen VortexRemoteBrowser auch direkt ueber ToolTypes im Icon konfigurieren!
 Klicken Sie dazu das Icon an und waehlen Sie Workbench-Menue "Icons -> Information..."
 (oder Tastenkombination Rechte Amiga + I):
 
@@ -841,7 +841,7 @@ YouTube, and Twitch with low Amiga CPU usage and native Reaction GUI.
 ------------------------------------------------------------------------------
 
 STEP 1: Start Server (Linux PC, AMD, Intel or Raspberry Pi 4/5)
-1. Extract "VortexBrowser-1.1-Server-Linux.zip" on your companion Linux machine.
+1. Extract "VortexRemoteBrowser-1.1-Server-Linux.zip" on your companion Linux machine.
 2. Open a terminal in "Server-Linux/" and run:
       ./install_server.sh
    (Automatically detects your CPU/GPU hardware, drivers and SIMD)
@@ -899,15 +899,15 @@ with open(os.path.join(AMIGA_DRAWER, "README.txt"), "w", encoding="utf-8") as f:
 # Copy Client Binaries and Icons
 # -------------------------------------------------------------
 print("=== [2/6] Copying AmigaOS 4 Client Binaries and Icons ===")
-shutil.copy2("amiga-client/VortexBrowser.stripped", os.path.join(AMIGA_DRAWER, APP_NAME))
-shutil.copy2("amiga-client/VortexBrowser.info", os.path.join(AMIGA_DRAWER, f"{APP_NAME}.info"))
+shutil.copy2("amiga-client/VortexRemoteBrowser.stripped", os.path.join(AMIGA_DRAWER, APP_NAME))
+shutil.copy2("amiga-client/VortexRemoteBrowser.info", os.path.join(AMIGA_DRAWER, f"{APP_NAME}.info"))
 
-if os.path.exists("amiga-client/VortexBrowser-AltiVec.stripped"):
-    shutil.copy2("amiga-client/VortexBrowser-AltiVec.stripped", os.path.join(AMIGA_DRAWER, "VortexBrowser-AltiVec"))
-    if os.path.exists("amiga-client/VortexBrowser-AltiVec.info"):
-        shutil.copy2("amiga-client/VortexBrowser-AltiVec.info", os.path.join(AMIGA_DRAWER, "VortexBrowser-AltiVec.info"))
+if os.path.exists("amiga-client/VortexRemoteBrowser-AltiVec.stripped"):
+    shutil.copy2("amiga-client/VortexRemoteBrowser-AltiVec.stripped", os.path.join(AMIGA_DRAWER, "VortexRemoteBrowser-AltiVec"))
+    if os.path.exists("amiga-client/VortexRemoteBrowser-AltiVec.info"):
+        shutil.copy2("amiga-client/VortexRemoteBrowser-AltiVec.info", os.path.join(AMIGA_DRAWER, "VortexRemoteBrowser-AltiVec.info"))
     else:
-        shutil.copy2("amiga-client/VortexBrowser.info", os.path.join(AMIGA_DRAWER, "VortexBrowser-AltiVec.info"))
+        shutil.copy2("amiga-client/VortexRemoteBrowser.info", os.path.join(AMIGA_DRAWER, "VortexRemoteBrowser-AltiVec.info"))
 
 # Copy Icons to icons/
 for icon in os.listdir("amiga-client/icons"):
@@ -933,11 +933,11 @@ ALT_ICONS_SRC = "amiga-client/alt-icons"
 if os.path.isdir(ALT_ICONS_SRC):
     ALT_ICONS_DST = os.path.join(AMIGA_DRAWER, "Alternative-Icons")
     os.makedirs(ALT_ICONS_DST, exist_ok=True)
-    for fname in ("VortexBrowser.info", "VortexBrowser-AltiVec.info", "VortexBrowser_drawer.info"):
+    for fname in ("VortexRemoteBrowser.info", "VortexRemoteBrowser-AltiVec.info", "VortexRemoteBrowser_drawer.info"):
         src_info = os.path.join(ALT_ICONS_SRC, fname)
         if os.path.exists(src_info):
             shutil.copy2(src_info, os.path.join(ALT_ICONS_DST, fname))
-    alt_drawer_src = os.path.join(ALT_ICONS_SRC, "VortexBrowser_drawer.info")
+    alt_drawer_src = os.path.join(ALT_ICONS_SRC, "VortexRemoteBrowser_drawer.info")
     if os.path.exists(alt_drawer_src):
         shutil.copy2(alt_drawer_src, os.path.join(AMIGA_DRAWER, "Alternative-Icons.info"))
     elif os.path.exists(KYVOS_DOCS_INFO):
@@ -946,11 +946,11 @@ if os.path.isdir(ALT_ICONS_SRC):
         "Alternative kreisrunde Icons (Variante: 3D Titanium Glossy Orb, 64x64 ARGB)\n"
         "===========================================================================\n\n"
         "Zum Wechseln einfach die gewuenschten .info-Dateien aus diesem Ordner in das\n"
-        "Hauptverzeichnis 'VortexBrowser/' kopieren (oder im Workbench-Fenster\n"
+        "Hauptverzeichnis 'VortexRemoteBrowser/' kopieren (oder im Workbench-Fenster\n"
         "'Piktogramm -> Informationen...' per Drag & Drop austauschen).\n\n"
-        "- VortexBrowser.info          : Standard ReAction Edition\n"
-        "- VortexBrowser-AltiVec.info  : PowerPC AltiVec Edition (mit AltiVec-Badge)\n"
-        "- VortexBrowser_drawer.info   : Ordner-Icon (als VortexBrowser.info eine Ebene hoeher)\n"
+        "- VortexRemoteBrowser.info          : Standard ReAction Edition\n"
+        "- VortexRemoteBrowser-AltiVec.info  : PowerPC AltiVec Edition (mit AltiVec-Badge)\n"
+        "- VortexRemoteBrowser_drawer.info   : Ordner-Icon (als VortexRemoteBrowser.info eine Ebene hoeher)\n"
     )
     with open(os.path.join(ALT_ICONS_DST, "LIESMICH.txt"), "w", encoding="iso-8859-1") as f:
         f.write(alt_readme_txt)
@@ -965,11 +965,11 @@ if os.path.isdir(CATALOGS_SRC):
     if os.path.exists(KYVOS_DOCS_INFO):
         shutil.copy2(KYVOS_DOCS_INFO, os.path.join(AMIGA_DRAWER, "catalogs.info"))
 
-# Drawer Icon for VortexBrowser drawer
-if os.path.exists("amiga-client/VortexBrowser_drawer.info"):
-    shutil.copy2("amiga-client/VortexBrowser_drawer.info", os.path.join(STAGING_DIR, f"{APP_NAME}.info"))
+# Drawer Icon for VortexRemoteBrowser drawer
+if os.path.exists("amiga-client/VortexRemoteBrowser_drawer.info"):
+    shutil.copy2("amiga-client/VortexRemoteBrowser_drawer.info", os.path.join(STAGING_DIR, f"{APP_NAME}.info"))
 else:
-    with open("amiga-client/VortexBrowser.info", "rb") as f:
+    with open("amiga-client/VortexRemoteBrowser.info", "rb") as f:
         drawer_data = bytearray(f.read())
     drawer_data[48] = 2  # WBDRAWER
     with open(os.path.join(STAGING_DIR, f"{APP_NAME}.info"), "wb") as f:
@@ -982,7 +982,7 @@ print("=== [3/6] Packaging Rendering Server Files (Linux & Raspberry Pi 4) ===")
 
 SERVER_RUN_SH = """#!/usr/bin/env bash
 # ==============================================================================
-# VortexBrowser Server Startup Script
+# VortexRemoteBrowser Server Startup Script
 # ==============================================================================
 set -e
 
@@ -1004,7 +1004,7 @@ fi
 ENGINE="${VORTEX_ENGINE:-chromium}"
 
 echo "===================================================================="
-echo " Starting VortexBrowser Server (Port 7788)..."
+echo " Starting VortexRemoteBrowser Server (Port 7788)..."
 echo " Engine: ${ENGINE} | Codec: Auto (Turbo-MJPEG / LZ4) | Quality: 100"
 echo "===================================================================="
 
@@ -1017,7 +1017,7 @@ fi
 
 SERVER_INSTALL_SH = """#!/usr/bin/env bash
 # ==============================================================================
-# VortexBrowser Server - Automated 1-Click Installer
+# VortexRemoteBrowser Server - Automated 1-Click Installer
 # ==============================================================================
 set -e
 
@@ -1025,7 +1025,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 echo "===================================================================="
-echo "      VortexBrowser Server - Automatische Installation             "
+echo "      VortexRemoteBrowser Server - Automatische Installation             "
 echo "===================================================================="
 
 if ! command -v python3 &>/dev/null; then
@@ -1059,7 +1059,7 @@ IP_ADDR=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "Ihre-Server-IP")
 
 echo ""
 echo "===================================================================="
-echo "  VORTEXBROWSER SERVER ERFOLGREICH INSTALLIERT!"
+echo "  VORTEXREMOTEBROWSER SERVER ERFOLGREICH INSTALLIERT!"
 echo "===================================================================="
 echo "  Server-IP fuer AmigaOS 4 Client : ${IP_ADDR}"
 echo "  Server-Port                     : 7788"
@@ -1070,13 +1070,13 @@ echo "===================================================================="
 """
 
 SYSTEMD_SERVICE = """[Unit]
-Description=VortexBrowser Remote Web Rendering Server for AmigaOS 4
+Description=VortexRemoteBrowser Remote Web Rendering Server for AmigaOS 4
 After=network.target sound.target pipewire.service pulseaudio.service
 
 [Service]
 Type=simple
-WorkingDirectory=%h/VortexBrowser/Server
-ExecStart=%h/VortexBrowser/Server/run_server.sh
+WorkingDirectory=%h/VortexRemoteBrowser/Server
+ExecStart=%h/VortexRemoteBrowser/Server/run_server.sh
 KillMode=mixed
 TimeoutStopSec=15
 Restart=always

@@ -1,5 +1,5 @@
 services:
-  # Optimized VortexBrowser Companion Server for Docker Desktop on macOS
+  # Optimized VortexRemoteBrowser Companion Server for Docker Desktop on macOS
   # Works on both Apple Silicon (M1/M2/M3/M4 arm64) and Intel Macs (x86_64)
   vortex-macos:
     build:
@@ -7,8 +7,8 @@ services:
       dockerfile: Dockerfile
       args:
         VORTEX_TARGET: macos
-    image: vortexbrowser-server:macos
-    container_name: vortexbrowser-macos
+    image: vortexremotebrowser-server:macos
+    container_name: vortexremotebrowser-macos
     restart: unless-stopped
     shm_size: "2gb"
     ports:

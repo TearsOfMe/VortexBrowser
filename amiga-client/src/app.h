@@ -20,10 +20,10 @@
   #define DBG_LOG(...) do { } while (0)
 #endif
 
-#define VB_APP_NAME      "VortexBrowser"
+#define VB_APP_NAME      "VortexRemoteBrowser"
 #define VB_APP_VERSION   "1.1"
 #define VB_APP_DATE      "(27.11.2026)"
-#define VB_APP_TITLE     "VortexBrowser 1.1"
+#define VB_APP_TITLE     "VortexRemoteBrowser 1.1"
 #define VB_MAX_FAVORITES 64
 #ifndef VB_MAX_URL_LEN
 #define VB_MAX_URL_LEN   512

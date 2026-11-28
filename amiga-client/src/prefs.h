@@ -5,11 +5,11 @@
 #include <stdbool.h>
 #include <exec/types.h>
 
-#define VB_PREFS_ENV_DIR      "ENV:VortexBrowser"
-#define VB_PREFS_ENVARC_DIR   "ENVARC:VortexBrowser"
-#define VB_PREFS_ENV_FILE     "ENV:VortexBrowser/vortexbrowser.prefs"
-#define VB_PREFS_ENVARC_FILE  "ENVARC:VortexBrowser/vortexbrowser.prefs"
-#define VB_PREFS_PROGDIR_FILE "PROGDIR:vortexbrowser.prefs"
+#define VB_PREFS_ENV_DIR      "ENV:VortexRemoteBrowser"
+#define VB_PREFS_ENVARC_DIR   "ENVARC:VortexRemoteBrowser"
+#define VB_PREFS_ENV_FILE     "ENV:VortexRemoteBrowser/vortexremotebrowser.prefs"
+#define VB_PREFS_ENVARC_FILE  "ENVARC:VortexRemoteBrowser/vortexremotebrowser.prefs"
+#define VB_PREFS_PROGDIR_FILE "PROGDIR:vortexremotebrowser.prefs"
 
 #define DEFAULT_SERVER_HOST   ""
 #define DEFAULT_SERVER_PORT   7788

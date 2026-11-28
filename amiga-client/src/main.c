@@ -36,7 +36,7 @@
 #include "passwords.h"
 #include "locale_strings.h"
 
-static const char *used_verstag __attribute__((used)) = "\0$VER: VortexBrowser 1.1 (27.11.2026)";
+static const char *used_verstag __attribute__((used)) = "\0$VER: VortexRemoteBrowser 1.1 (27.11.2026)";
 static const char *used_stack   __attribute__((used)) = "\0$STACK:524288";
 uint32 __stack = 524288;
 
@@ -258,8 +258,8 @@ static void app_os4_register(VortexApp *app, int argc, char **argv)
     if (!app) return;
 
     if (IApplication) {
-        app->applib_id = IApplication->RegisterApplication("VortexBrowser",
-            REGAPP_URLIdentifier,     (Tag)"vortexbrowser.amiga",
+        app->applib_id = IApplication->RegisterApplication("VortexRemoteBrowser",
+            REGAPP_URLIdentifier,     (Tag)"vortexremotebrowser.amiga",
             REGAPP_Description,       (Tag)"Remote-rendered Web Browser for AmigaOS 4",
             REGAPP_UniqueApplication, FALSE,
             REGAPP_HasIconifyFeature, TRUE,
@@ -282,8 +282,8 @@ static void app_os4_register(VortexApp *app, int argc, char **argv)
             struct NewBroker nb;
             memset(&nb, 0, sizeof(nb));
             nb.nb_Version = NB_VERSION;
-            nb.nb_Name    = (STRPTR)"VortexBrowser";
-            nb.nb_Title   = (STRPTR)"VortexBrowser 1.1";
+            nb.nb_Name    = (STRPTR)"VortexRemoteBrowser";
+            nb.nb_Title   = (STRPTR)"VortexRemoteBrowser 1.1";
             nb.nb_Descr   = (STRPTR)"Remote-rendered Web Browser for AmigaOS 4";
             nb.nb_Unique  = 0;
             nb.nb_Flags   = COF_SHOW_HIDE;
@@ -529,7 +529,7 @@ int main(int argc, char **argv)
 #if defined(__ALTIVEC__)
     if (!has_altivec) {
         if (IDOS) {
-            IDOS->Printf("\n[VortexBrowser] ERROR: %s\n\n", GetVString(MSG_CPU_INCOMPAT_BODY));
+            IDOS->Printf("\n[VortexRemoteBrowser] ERROR: %s\n\n", GetVString(MSG_CPU_INCOMPAT_BODY));
         }
         if (IIntuition) {
             struct EasyStruct es = {

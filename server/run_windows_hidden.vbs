@@ -1,6 +1,6 @@
 ' ============================================================================
-' VortexBrowser Native Windows Invisible Background Launcher (Zero CMD Window)
-' Double-click to run VortexBrowser Server silently in the system tray.
+' VortexRemoteBrowser Native Windows Invisible Background Launcher (Zero CMD Window)
+' Double-click to run VortexRemoteBrowser Server silently in the system tray.
 ' Pass "--no-tray" to run 100% invisibly without even a system tray icon.
 ' Use stop_windows.bat (or tray menu -> Stop & Exit) to stop cleanly.
 ' ============================================================================

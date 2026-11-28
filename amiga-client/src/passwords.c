@@ -289,11 +289,11 @@ static void chacha20_crypt(const uint8 key[32], const uint8 nonce[12], uint32 co
 }
 
 /* Default key used when no custom master password was configured */
-static const char *s_default_internal_pass = "VortexBrowser-OS4-SecurePasswordStore-Key-2026";
+static const char *s_default_internal_pass = "VortexRemoteBrowser-OS4-SecurePasswordStore-Key-2026";
 
 /* File paths */
-#define VB_PW_PATH_ENVARC "ENVARC:VortexBrowser/passwords.enc"
-#define VB_PW_PATH_ENV    "ENV:VortexBrowser/passwords.enc"
+#define VB_PW_PATH_ENVARC "ENVARC:VortexRemoteBrowser/passwords.enc"
+#define VB_PW_PATH_ENV    "ENV:VortexRemoteBrowser/passwords.enc"
 #define VB_PW_PATH_LOCAL  "PROGDIR:passwords.enc"
 
 /* File header: "VBENC01\0" */
@@ -560,12 +560,12 @@ BOOL passwords_save(VortexApp *app)
     for (int p = 0; p < 2; p++) {
         FILE *fp = fopen(paths[p], "wb");
         if (!fp) {
-            /* Try to create directory if ENVARC:VortexBrowser does not exist */
+            /* Try to create directory if ENVARC:VortexRemoteBrowser does not exist */
             if (p == 0) {
-                IDOS->CreateDir("ENVARC:VortexBrowser");
+                IDOS->CreateDir("ENVARC:VortexRemoteBrowser");
                 fp = fopen(paths[p], "wb");
             } else if (p == 1) {
-                IDOS->CreateDir("ENV:VortexBrowser");
+                IDOS->CreateDir("ENV:VortexRemoteBrowser");
                 fp = fopen(paths[p], "wb");
             }
         }

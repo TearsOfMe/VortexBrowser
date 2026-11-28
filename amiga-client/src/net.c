@@ -575,7 +575,7 @@ BOOL net_handle_incoming(VortexApp *app)
                     ASL_FileRequest,
                     ASLFR_Window,        app->win,
                     ASLFR_SleepWindow,   TRUE,
-                    ASLFR_TitleText,     "VortexBrowser: Datei zum Hochladen waehlen...",
+                    ASLFR_TitleText,     "VortexRemoteBrowser: Datei zum Hochladen waehlen...",
                     ASLFR_PositiveText,  "Auswaehlen",
                     ASLFR_NegativeText,  "Abbrechen",
                     ASLFR_DoSaveMode,    FALSE,

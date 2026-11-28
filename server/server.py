@@ -530,7 +530,7 @@ class SilentTabAudioBridge:
     def _write_extension_files(self, ext_dir: str, ws_port: int) -> None:
         manifest = {
             "manifest_version": 3,
-            "name": "VortexBrowser Silent Audio Bridge",
+            "name": "VortexRemoteBrowser Silent Audio Bridge",
             "version": "1.1.0",
             "key": _VORTEX_AUDIO_EXT_PUBKEY_B64,
             "permissions": ["tabCapture", "offscreen", "tabs"],
@@ -1170,7 +1170,7 @@ DEFAULT_STARTPAGE_HTML = """<!DOCTYPE html>
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<title>VortexBrowser - Startseite</title>
+<title>VortexRemoteBrowser - Startseite</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'DejaVu Sans', Arial, sans-serif; background: #e6eaf0; color: #1e293b; padding: 20px; }
@@ -1201,7 +1201,7 @@ function doSearch() {
 </head>
 <body>
   <div class="box">
-    <h1>VortexBrowser &bull; Startseite</h1>
+    <h1>VortexRemoteBrowser &bull; Startseite</h1>
     <form onsubmit="return doSearch();">
       <input id="q" type="text" autofocus placeholder="Suchbegriff oder URL eingeben..." />
       <button type="submit">Suche</button>
@@ -2324,13 +2324,13 @@ class H264LiveStreamEncoder:
 # Persistent Profile, Session Storage & Security Helpers
 # ============================================================================
 def get_vortex_config_dir() -> str:
-    """Returns the user config/profile directory (~/.config/vortexbrowse, %APPDATA%\\VortexBrowser, or $VORTEX_PROFILE_DIR)."""
+    """Returns the user config/profile directory (~/.config/vortexbrowse, %APPDATA%\\VortexRemoteBrowser, or $VORTEX_PROFILE_DIR)."""
     env_dir = os.environ.get("VORTEX_PROFILE_DIR", "").strip()
     if env_dir:
         cfg_dir = os.path.expanduser(env_dir)
     elif _IS_WINDOWS:
         base = os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-        cfg_dir = os.path.join(base, "VortexBrowser")
+        cfg_dir = os.path.join(base, "VortexRemoteBrowser")
     else:
         cfg_dir = os.path.expanduser("~/.config/vortexbrowse")
     os.makedirs(cfg_dir, mode=0o700, exist_ok=True)
@@ -9877,7 +9877,7 @@ def _cleanup_existing_server_and_locks(port: int, profile_dir: str, config_dir: 
             other_pids.append(pid)
 
     if other_pids:
-        logger.info("Gracefully stopping previous VortexBrowser server instance(s) %s...", other_pids)
+        logger.info("Gracefully stopping previous VortexRemoteBrowser server instance(s) %s...", other_pids)
         for pid in other_pids:
             try:
                 if _IS_WINDOWS:
@@ -10087,7 +10087,7 @@ async def run_server(args: argparse.Namespace) -> None:
 
         if hasattr(os, "getuid") and os.getuid() == 0:
             logger.warning("=" * 68)
-            logger.warning(" HINWEIS: Der VortexBrowser Server laeuft als ROOT (UID 0)!")
+            logger.warning(" HINWEIS: Der VortexRemoteBrowser Server laeuft als ROOT (UID 0)!")
             logger.warning(" Es wird dringend empfohlen, den Server als normaler Benutzer")
             logger.warning(" (OHNE sudo) auszufuehren, um Berechtigungskonflikte zu vermeiden.")
             logger.warning("=" * 68)

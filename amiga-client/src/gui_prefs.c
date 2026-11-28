@@ -1500,7 +1500,7 @@ void gui_prefs_open(VortexApp *app)
 
     Object *win_obj = IIntuition->NewObject(NULL, "window.class",
         WA_Title,             (Tag)GetVString(MSG_PREFS_WIN_TITLE),
-        WA_ScreenTitle,       (Tag)"VortexBrowser",
+        WA_ScreenTitle,       (Tag)"VortexRemoteBrowser",
         target_scr ? WA_CustomScreen : TAG_IGNORE, (Tag)target_scr,
         WA_CloseGadget,       TRUE,
         WA_DepthGadget,       TRUE,

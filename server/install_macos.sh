@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ==============================================================================
-# VortexBrowser Native macOS Installer (Apple Silicon M1-M4 & Intel x86_64)
+# VortexRemoteBrowser Native macOS Installer (Apple Silicon M1-M4 & Intel x86_64)
 # ==============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -16,7 +16,7 @@ fi
 
 ARCH="$(uname -m)"
 echo "============================================================================"
-echo " VortexBrowser Native macOS Setup (${ARCH})"
+echo " VortexRemoteBrowser Native macOS Setup (${ARCH})"
 echo "============================================================================"
 
 # 1. Ensure Xcode Command Line Tools (Apple Clang)
@@ -90,7 +90,7 @@ python -m py_compile "$SCRIPT_DIR/server.py"
 
 echo ""
 echo "============================================================================"
-echo " ✅ VortexBrowser macOS Server installed successfully!"
+echo " ✅ VortexRemoteBrowser macOS Server installed successfully!"
 echo "    Start server with:  ./run_macos.sh"
 echo "    Hardware Encoder:   Apple VideoToolbox (h264_videotoolbox)"
 echo "    SIMD Pipeline:      $SCRIPT_DIR/fast_pixconv.dylib"

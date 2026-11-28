@@ -1,20 +1,20 @@
-; Catalog Description file for VortexBrowser
+; Catalog Description file for VortexRemoteBrowser
 ; Built-in language: English
 ;
 ; Format: MSG_ID (ID//)
 ; Default English String
 ;
 MSG_WIN_TITLE (1//)
-VortexBrowser
+VortexRemoteBrowser
 ;
 MSG_DL_WIN_TITLE (2//)
-Downloads - VortexBrowser
+Downloads - VortexRemoteBrowser
 ;
 MSG_PW_WIN_TITLE (3//)
-Password Manager - VortexBrowser
+Password Manager - VortexRemoteBrowser
 ;
 MSG_PREFS_WIN_TITLE (4//)
-Settings - VortexBrowser
+Settings - VortexRemoteBrowser
 ;
 MSG_MENU_PROJECT (10//)
 Project
@@ -32,7 +32,7 @@ MSG_MENU_PRINT (14//)
 Print Page...
 ;
 MSG_MENU_ABOUT (15//)
-About VortexBrowser...
+About VortexRemoteBrowser...
 ;
 MSG_MENU_QUIT (16//)
 Quit
@@ -416,13 +416,13 @@ MSG_MENU_TOGGLE_STATUSBAR (618//)
 Toggle Status Bar
 ;
 MSG_POPUP_MAIN_TITLE (619//)
-VortexBrowser Menu
+VortexRemoteBrowser Menu
 ;
 MSG_POPUP_SAVE_SETTINGS (620//)
 Save Settings
 ;
 MSG_POPUP_OPT_TITLE (621//)
-VortexBrowser Options
+VortexRemoteBrowser Options
 ;
 MSG_POPUP_OPT_PROMPT (622//)
 Choose action:
@@ -509,7 +509,7 @@ MSG_CTX_LIGHT_MODE_FULL (649//)
 Light Theme (Light Mode)
 ;
 MSG_CTX_REQ_TITLE (650//)
-VortexBrowser Context Menu
+VortexRemoteBrowser Context Menu
 ;
 MSG_CTX_REQ_LINK_TEXT (651//)
 Link: %s
@@ -527,10 +527,10 @@ MSG_SRV_DLG_TITLE (655//)
 Configure Server
 ;
 MSG_SRV_DLG_SCRTITLE (656//)
-VortexBrowser Settings
+VortexRemoteBrowser Settings
 ;
 MSG_SRV_DLG_PROMPT (657//)
-Enter VortexBrowser server address (IP:Port):
+Enter VortexRemoteBrowser server address (IP:Port):
 ;
 MSG_SRV_DLG_HINT (658//)
 Server IP and port (e.g. 127.0.0.1:7788)
@@ -563,7 +563,7 @@ MSG_ABOUT_ALTIVEC_NO (667//)
 Scalar Baseline (Safe for X5000/A1222+/Sam460/G3)
 ;
 MSG_ABOUT_SEC_SERVER (668//)
-VortexBrowser for AmigaOS 4\nVersion 1.1\n\n=== SERVER INFORMATION ===\nServer Address: %s:%u\nConnection Status: %s\nServer Engine: %s\n\n
+VortexRemoteBrowser for AmigaOS 4\nVersion 1.1\n\n=== SERVER INFORMATION ===\nServer Address: %s:%u\nConnection Status: %s\nServer Engine: %s\n\n
 ;
 MSG_ABOUT_SEC_GRAPHICS (669//)
 === RESOLUTION & GRAPHICS ===\nScreen: %ux%u (%u-bit, %s)\nWindow Size: %ux%u (Pos: %d,%d)\nBrowser Viewport: %ux%u px (1:1 Auto-Sync)\nServer Stream: %ux%u (%s)\nDecoded Frames: %u\nActive Language: %s\n\n
@@ -572,13 +572,13 @@ MSG_ABOUT_SEC_AUDIO (670//)
 === AUDIO & OPTIMIZATION ===\nAudio Engine: AHI 16-Bit Stereo (44100 Hz CD Quality PCM Low-Latency)\nCPU Target: PowerPC Universal (Dynamic CPU Detection)\nVector SIMD: %s\nCompression: LZ4 Realtime Stream Decompressor
 ;
 MSG_ABOUT_TITLE (671//)
-About VortexBrowser
+About VortexRemoteBrowser
 ;
 MSG_CPU_INCOMPAT_TITLE (672//)
-VortexBrowser - Incompatible CPU
+VortexRemoteBrowser - Incompatible CPU
 ;
 MSG_CPU_INCOMPAT_BODY (673//)
-This build ('VortexBrowser-AltiVec') requires a CPU with an AltiVec/VMX SIMD unit (e.g. AmigaOne X1000 or G4).\n\nOn systems such as AmigaOne X5000, A1222+, Sam460 or G3, please launch the standard 'VortexBrowser' build!
+This build ('VortexRemoteBrowser-AltiVec') requires a CPU with an AltiVec/VMX SIMD unit (e.g. AmigaOne X1000 or G4).\n\nOn systems such as AmigaOne X5000, A1222+, Sam460 or G3, please launch the standard 'VortexRemoteBrowser' build!
 ;
 MSG_STATUS_READY_STREAM (685//)
 Ready - Stream System: %s | %u kbps
@@ -746,7 +746,7 @@ MSG_STATUS_READY_SHORT (739//)
 Ready
 ;
 MSG_NET_UPLOAD_TITLE (740//)
-VortexBrowser: Select file to upload...
+VortexRemoteBrowser: Select file to upload...
 ;
 MSG_NET_UPLOAD_POS (741//)
 Select
@@ -776,7 +776,7 @@ MSG_NET_PW_SAVED (749//)
 Password saved for '%s'.
 ;
 MSG_DL_SAVE_TITLE (750//)
-VortexBrowser: Save download as...
+VortexRemoteBrowser: Save download as...
 ;
 MSG_DL_SAVE_POS (751//)
 Save
@@ -797,7 +797,7 @@ MSG_DL_ETA_CANCELLED (756//)
 Canc.
 ;
 MSG_FAV_DEFAULT_PORTAL (757//)
-VortexBrowser Portal (Home)
+VortexRemoteBrowser Portal (Home)
 ;
 MSG_FAV_GOOGLE_SEARCH (758//)
 Google Search

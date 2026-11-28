@@ -1,8 +1,8 @@
-# VortexBrowser – Ready-to-Flash SD Card Images for Raspberry Pi 3, 4 & 5
+# VortexRemoteBrowser – Ready-to-Flash SD Card Images for Raspberry Pi 3, 4 & 5
 
 [Zur deutschen Anleitung](#deutsch)
 
-With these prebuilt Raspberry Pi images, **no manual setup is required**: flash the image onto a microSD card, insert it, power on your Raspberry Pi, and the **VortexBrowser Server** starts automatically and is immediately ready for your AmigaOS 4 client.
+With these prebuilt Raspberry Pi images, **no manual setup is required**: flash the image onto a microSD card, insert it, power on your Raspberry Pi, and the **VortexRemoteBrowser Server** starts automatically and is immediately ready for your AmigaOS 4 client.
 
 ---
 
@@ -12,9 +12,9 @@ With these prebuilt Raspberry Pi images, **no manual setup is required**: flash 
 
 | Model | Image File | Optimization & Defaults | mDNS Hostname |
 | :--- | :--- | :--- | :--- |
-| **Raspberry Pi 3** (3B / 3B+ / 3A+) | `vortexbrowser-rpi3-arm64.img.xz` | Cortex-A53 (`fast_pixconv.so`), ZRAM (`zstd`), `1280x720 @ 20 FPS`, `3500` kbps | `vortexbrowser-rpi3.local` |
-| **Raspberry Pi 4** (4B / 400 / CM4) | `vortexbrowser-rpi4-arm64.img.xz` | Cortex-A72 (`fast_pixconv.so`), ZRAM (`zstd`), `1280x720 @ 25 FPS`, `4000` kbps | `vortexbrowser.local` |
-| **Raspberry Pi 5** (5 / 500) | `vortexbrowser-rpi5-arm64.img.xz` | Cortex-A76 (`fast_pixconv.so`), `1920x1080 @ 30 FPS`, `8000` kbps | `vortexbrowser-rpi5.local` |
+| **Raspberry Pi 3** (3B / 3B+ / 3A+) | `vortexremotebrowser-rpi3-arm64.img.xz` | Cortex-A53 (`fast_pixconv.so`), ZRAM (`zstd`), `1280x720 @ 20 FPS`, `3500` kbps | `vortexremotebrowser-rpi3.local` |
+| **Raspberry Pi 4** (4B / 400 / CM4) | `vortexremotebrowser-rpi4-arm64.img.xz` | Cortex-A72 (`fast_pixconv.so`), ZRAM (`zstd`), `1280x720 @ 25 FPS`, `4000` kbps | `vortexremotebrowser.local` |
+| **Raspberry Pi 5** (5 / 500) | `vortexremotebrowser-rpi5-arm64.img.xz` | Cortex-A76 (`fast_pixconv.so`), `1920x1080 @ 30 FPS`, `8000` kbps | `vortexremotebrowser-rpi5.local` |
 
 > **Recommended microSD size:** **16 GB** or larger. On first boot, the root filesystem automatically expands to fill the entire SD card.
 
@@ -26,11 +26,11 @@ With these prebuilt Raspberry Pi images, **no manual setup is required**: flash 
 * **Default Browser:** **Ungoogled-Chromium `156.0.8078.79`** (`/usr/bin/ungoogled-chromium`) with **Broadcom V3D ANGLE GLES/EGL** GPU acceleration (`libegl1`, `libegl-mesa0`, `libgles2`, `mesa-vulkan-drivers`)
 * **Alternative Browser Engine:** **Playwright Firefox** + **`firefox-esr 153.7.0esr`** pre-installed
 * **Automation Core:** **Rustwright** (`VORTEX_USE_RUSTWRIGHT=1`) for fast zero-overhead DirectCDP streaming
-* **VortexBrowser Server (`/home/pi/vortexbrowse/server`):**
+* **VortexRemoteBrowser Server (`/home/pi/vortexbrowse/server`):**
   * Python `.venv` with all dependencies (`rustwright`, `playwright`, `websockets`, `lz4`, `Pillow`, `PyTurboJPEG`)
   * Target-optimized native ARM64 `fast_pixconv.so` (TurboJPEG + LZ4 + OpenMP)
   * `pulseaudio` / `pulseaudio-utils` for AHI audio streaming to AmigaOS 4
-  * Enabled systemd services: `vortexbrowser.service`, `ssh.service`, `avahi-daemon.service`
+  * Enabled systemd services: `vortexremotebrowser.service`, `ssh.service`, `avahi-daemon.service`
 
 ---
 
@@ -50,11 +50,11 @@ With these prebuilt Raspberry Pi images, **no manual setup is required**: flash 
 #### Option C: Linux Terminal (`dd`)
 Optionally verify the checksum first:
 ```bash
-sha256sum -c vortexbrowser-rpi4-arm64.img.xz.sha256
+sha256sum -c vortexremotebrowser-rpi4-arm64.img.xz.sha256
 ```
 Then write to the target block device (check `lsblk` carefully before running!):
 ```bash
-xzcat vortexbrowser-rpi4-arm64.img.xz | sudo dd of=/dev/sdX bs=4M status=progress conv=fsync
+xzcat vortexremotebrowser-rpi4-arm64.img.xz | sudo dd of=/dev/sdX bs=4M status=progress conv=fsync
 sync
 ```
 
@@ -64,9 +64,9 @@ sync
 
 1. Insert the flashed microSD card into your Raspberry Pi.
 2. Connect an **Ethernet cable** (recommended for lowest latency) and power on the Pi.
-3. On the **very first boot**, wait about **60–90 seconds** while the filesystem expands automatically and `vortexbrowser.service` starts.
-4. In **VortexBrowser** on **AmigaOS 4.1**:
-   * Enter the Pi's hostname (`vortexbrowser.local`, `vortexbrowser-rpi3.local`, or `vortexbrowser-rpi5.local`) or its IP address from your router.
+3. On the **very first boot**, wait about **60–90 seconds** while the filesystem expands automatically and `vortexremotebrowser.service` starts.
+4. In **VortexRemoteBrowser** on **AmigaOS 4.1**:
+   * Enter the Pi's hostname (`vortexremotebrowser.local`, `vortexremotebrowser-rpi3.local`, or `vortexremotebrowser-rpi5.local`) or its IP address from your router.
    * Default ports: **7788** (Video / Control) and **9757** (Audio).
    * Click **Connect** — done!
 
@@ -80,7 +80,7 @@ SSH is enabled out of the box:
 
 Connect via SSH (Pi 4 example):
 ```bash
-ssh pi@vortexbrowser.local
+ssh pi@vortexremotebrowser.local
 ```
 *(For security, run `passwd` after your first login to set your own password.)*
 
@@ -99,9 +99,9 @@ sudo vortex-engine chromium
 ```
 
 #### Adjust Resolution, FPS & Bitrate
-All server defaults live in `/etc/default/vortexbrowser`:
+All server defaults live in `/etc/default/vortexremotebrowser`:
 ```bash
-sudo nano /etc/default/vortexbrowser
+sudo nano /etc/default/vortexremotebrowser
 ```
 Example:
 ```ini
@@ -115,7 +115,7 @@ VORTEX_LOG_LEVEL=INFO
 ```
 Restart the service after editing:
 ```bash
-sudo systemctl restart vortexbrowser.service
+sudo systemctl restart vortexremotebrowser.service
 ```
 
 ---
@@ -124,14 +124,14 @@ sudo systemctl restart vortexbrowser.service
 
 ```bash
 # Check server status:
-systemctl status vortexbrowser.service
+systemctl status vortexremotebrowser.service
 
 # Follow live logs:
-journalctl -u vortexbrowser.service -f
+journalctl -u vortexremotebrowser.service -f
 
 # Restart or stop the server:
-sudo systemctl restart vortexbrowser.service
-sudo systemctl stop vortexbrowser.service
+sudo systemctl restart vortexremotebrowser.service
+sudo systemctl stop vortexremotebrowser.service
 ```
 
 ---
@@ -152,7 +152,7 @@ cd server
 
 ## Deutsch
 
-Mit den fertigen Raspberry-Pi-Images benötigt dein Raspberry Pi **keine manuelle Installation** mehr: Image auf eine microSD-Karte schreiben, Karte einlegen, Raspberry Pi einschalten – der **VortexBrowser Server** startet automatisch und ist sofort für den AmigaOS-4-Client erreichbar.
+Mit den fertigen Raspberry-Pi-Images benötigt dein Raspberry Pi **keine manuelle Installation** mehr: Image auf eine microSD-Karte schreiben, Karte einlegen, Raspberry Pi einschalten – der **VortexRemoteBrowser Server** startet automatisch und ist sofort für den AmigaOS-4-Client erreichbar.
 
 ---
 
@@ -160,9 +160,9 @@ Mit den fertigen Raspberry-Pi-Images benötigt dein Raspberry Pi **keine manuell
 
 | Modell | Image-Datei | Optimierung & Standardwerte | mDNS-Hostname |
 | :--- | :--- | :--- | :--- |
-| **Raspberry Pi 3** (3B / 3B+ / 3A+) | `vortexbrowser-rpi3-arm64.img.xz` | Cortex-A53 (`fast_pixconv.so`), ZRAM (`zstd`), `1280x720 @ 20 FPS`, `3500` kbps | `vortexbrowser-rpi3.local` |
-| **Raspberry Pi 4** (4B / 400 / CM4) | `vortexbrowser-rpi4-arm64.img.xz` | Cortex-A72 (`fast_pixconv.so`), ZRAM (`zstd`), `1280x720 @ 25 FPS`, `4000` kbps | `vortexbrowser.local` |
-| **Raspberry Pi 5** (5 / 500) | `vortexbrowser-rpi5-arm64.img.xz` | Cortex-A76 (`fast_pixconv.so`), `1920x1080 @ 30 FPS`, `8000` kbps | `vortexbrowser-rpi5.local` |
+| **Raspberry Pi 3** (3B / 3B+ / 3A+) | `vortexremotebrowser-rpi3-arm64.img.xz` | Cortex-A53 (`fast_pixconv.so`), ZRAM (`zstd`), `1280x720 @ 20 FPS`, `3500` kbps | `vortexremotebrowser-rpi3.local` |
+| **Raspberry Pi 4** (4B / 400 / CM4) | `vortexremotebrowser-rpi4-arm64.img.xz` | Cortex-A72 (`fast_pixconv.so`), ZRAM (`zstd`), `1280x720 @ 25 FPS`, `4000` kbps | `vortexremotebrowser.local` |
+| **Raspberry Pi 5** (5 / 500) | `vortexremotebrowser-rpi5-arm64.img.xz` | Cortex-A76 (`fast_pixconv.so`), `1920x1080 @ 30 FPS`, `8000` kbps | `vortexremotebrowser-rpi5.local` |
 
 > **Empfohlene SD-Karten-Größe:** mindestens **16 GB** (oder größer). Beim ersten Boot vergrößert sich das Dateisystem automatisch auf den gesamten freien Speicherplatz der SD-Karte.
 
@@ -174,11 +174,11 @@ Mit den fertigen Raspberry-Pi-Images benötigt dein Raspberry Pi **keine manuell
 * **Standard-Browser:** **Ungoogled-Chromium `156.0.8078.79`** (`/usr/bin/ungoogled-chromium`) mit **Broadcom V3D ANGLE GLES/EGL** GPU-Beschleunigung (`libegl1`, `libegl-mesa0`, `libgles2`, `mesa-vulkan-drivers`)
 * **Alternative Browser-Engine:** **Playwright Firefox** + **`firefox-esr 153.7.0esr`** komplett vorinstalliert
 * **Automation-Core:** **Rustwright** (`VORTEX_USE_RUSTWRIGHT=1`) für schnelles DirectCDP-Streaming
-* **VortexBrowser Server (`/home/pi/vortexbrowse/server`):**
+* **VortexRemoteBrowser Server (`/home/pi/vortexbrowse/server`):**
   * Python-`.venv` mit allen Abhängigkeiten (`rustwright`, `playwright`, `websockets`, `lz4`, `Pillow`, `PyTurboJPEG`)
   * Nativ für das jeweilige Pi-Modell kompiliertes `fast_pixconv.so` (TurboJPEG + LZ4 + OpenMP)
   * `pulseaudio` / `pulseaudio-utils` für AHI-Audiostreaming an den Amiga
-  * Aktivierte Systemdienste: `vortexbrowser.service`, `ssh.service`, `avahi-daemon.service`
+  * Aktivierte Systemdienste: `vortexremotebrowser.service`, `ssh.service`, `avahi-daemon.service`
 
 ---
 
@@ -198,11 +198,11 @@ Mit den fertigen Raspberry-Pi-Images benötigt dein Raspberry Pi **keine manuell
 #### Variante C: Direkt im Linux-Terminal (`dd`)
 Zuerst optional die Prüfsumme kontrollieren:
 ```bash
-sha256sum -c vortexbrowser-rpi4-arm64.img.xz.sha256
+sha256sum -c vortexremotebrowser-rpi4-arm64.img.xz.sha256
 ```
 Dann das richtige Zielgerät (z. B. `/dev/sdX` oder `/dev/mmcblk0` – **unbedingt vorher mit `lsblk` prüfen!**) beschreiben:
 ```bash
-xzcat vortexbrowser-rpi4-arm64.img.xz | sudo dd of=/dev/sdX bs=4M status=progress conv=fsync
+xzcat vortexremotebrowser-rpi4-arm64.img.xz | sudo dd of=/dev/sdX bs=4M status=progress conv=fsync
 sync
 ```
 
@@ -212,9 +212,9 @@ sync
 
 1. Geflashte microSD-Karte in den Raspberry Pi einlegen.
 2. **LAN-Kabel** anschließen (empfohlen für minimale Latenz) und Strom verbinden.
-3. Beim **allerersten Start** ca. **60–90 Sekunden** warten (einmalige Dateisystem-Erweiterung auf die volle SD-Kartengröße + Start von `vortexbrowser.service`).
-4. Auf dem **AmigaOS 4.1**-System in **VortexBrowser**:
-   * Als Server-Adresse entweder den Hostnamen (`vortexbrowser.local`, `vortexbrowser-rpi3.local` oder `vortexbrowser-rpi5.local`) oder die IP-Adresse des Pi aus dem Router eintragen.
+3. Beim **allerersten Start** ca. **60–90 Sekunden** warten (einmalige Dateisystem-Erweiterung auf die volle SD-Kartengröße + Start von `vortexremotebrowser.service`).
+4. Auf dem **AmigaOS 4.1**-System in **VortexRemoteBrowser**:
+   * Als Server-Adresse entweder den Hostnamen (`vortexremotebrowser.local`, `vortexremotebrowser-rpi3.local` oder `vortexremotebrowser-rpi5.local`) oder die IP-Adresse des Pi aus dem Router eintragen.
    * Standard-Ports: **7788** (Video/Steuerung) und **9757** (Audio).
    * Auf **Verbinden** klicken – fertig!
 
@@ -228,7 +228,7 @@ SSH ist bereits ab Werk aktiviert:
 
 Verbindung herstellen (Beispiel für Pi 4):
 ```bash
-ssh pi@vortexbrowser.local
+ssh pi@vortexremotebrowser.local
 ```
 *(Aus Sicherheitsgründen nach dem ersten Login empfehlenswert: `passwd` ausführen, um ein eigenes Passwort zu setzen.)*
 
@@ -247,9 +247,9 @@ sudo vortex-engine chromium
 ```
 
 #### Auflösung, FPS & Bitrate anpassen
-Alle Startparameter stehen in `/etc/default/vortexbrowser`:
+Alle Startparameter stehen in `/etc/default/vortexremotebrowser`:
 ```bash
-sudo nano /etc/default/vortexbrowser
+sudo nano /etc/default/vortexremotebrowser
 ```
 Beispielinhalt:
 ```ini
@@ -263,7 +263,7 @@ VORTEX_LOG_LEVEL=INFO
 ```
 Nach einer Änderung den Dienst neu starten:
 ```bash
-sudo systemctl restart vortexbrowser.service
+sudo systemctl restart vortexremotebrowser.service
 ```
 
 ---
@@ -271,15 +271,15 @@ sudo systemctl restart vortexbrowser.service
 ### 7. Nützliche Diagnose-Befehle auf dem Pi
 
 ```bash
-# Läuft der VortexBrowser Server?
-systemctl status vortexbrowser.service
+# Läuft der VortexRemoteBrowser Server?
+systemctl status vortexremotebrowser.service
 
 # Live-Log ansehen:
-journalctl -u vortexbrowser.service -f
+journalctl -u vortexremotebrowser.service -f
 
 # Server neu starten / stoppen:
-sudo systemctl restart vortexbrowser.service
-sudo systemctl stop vortexbrowser.service
+sudo systemctl restart vortexremotebrowser.service
+sudo systemctl stop vortexremotebrowser.service
 ```
 
 ---

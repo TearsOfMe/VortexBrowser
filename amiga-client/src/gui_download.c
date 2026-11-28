@@ -409,7 +409,7 @@ void gui_open_download_manager(VortexApp *app)
 
     app->dl_win_obj = IIntuition->NewObject(NULL, "window.class",
         WA_Title,             (Tag)GetVString(MSG_DL_WIN_TITLE),
-        WA_ScreenTitle,       (Tag)"VortexBrowser",
+        WA_ScreenTitle,       (Tag)"VortexRemoteBrowser",
         target_scr ? WA_CustomScreen : TAG_IGNORE, (Tag)target_scr,
         WA_CloseGadget,       TRUE,
         WA_DepthGadget,       TRUE,

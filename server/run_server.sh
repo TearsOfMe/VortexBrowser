@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# VortexBrowser Universal Linux Companion Server - Startup Script
+# VortexRemoteBrowser Universal Linux Companion Server - Startup Script
 # Automatically adapts to the host hardware (Intel, AMD, Raspberry Pi, ARM64)
 # ==============================================================================
 set -e
@@ -10,7 +10,7 @@ cd "$SCRIPT_DIR"
 
 # If running interactively and a systemd service is active, stop it first to prevent port conflicts
 if [ -z "${INVOCATION_ID:-}" ]; then
-    for svc in vortexbrowser.service vortexbrowse-cachyos.service vortexbrowse.service; do
+    for svc in vortexremotebrowser.service vortexbrowse-cachyos.service vortexbrowse.service; do
         if systemctl --user is-active --quiet "$svc" 2>/dev/null; then
             echo "[VortexServer] Stopping background user service $svc..."
             systemctl --user stop "$svc" 2>/dev/null || true
@@ -73,7 +73,7 @@ VIDEO_BITRATE="${VORTEX_VIDEO_BITRATE:-$DEFAULT_BITRATE}"
 LOG_LEVEL="${VORTEX_LOG_LEVEL:-CRITICAL}"
 
 echo "============================================================================"
-echo " Starting VortexBrowser Universal Server"
+echo " Starting VortexRemoteBrowser Universal Server"
 echo " Resolution: ${WIDTH}x${HEIGHT} @ ${FPS} FPS | Format: YUV420P + 2D Dirty-Rect"
 echo " Engine: ${ENGINE} | Browser: ${SAVED_BIN:-System-Default}"
 echo " C-Native SIMD + TurboJPEG + LZ4 Pipeline Active"

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 r"""
-VortexBrowser Native Windows Invisible Background & System Tray Launcher
+VortexRemoteBrowser Native Windows Invisible Background & System Tray Launcher
 ========================================================================
 Runs server.py completely invisibly in the background (zero console window)
 with an optional native Win32 system tray icon (zero external dependencies).
@@ -31,9 +31,9 @@ from typing import List, Optional, Tuple
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SERVER_PY = os.path.join(SCRIPT_DIR, "server.py")
-TRAY_CLASS_NAME = "VortexBrowserTrayClass"
-TRAY_WINDOW_TITLE = "VortexBrowser Companion Server"
-MUTEX_NAME = "Local\\VortexBrowserServerTrayMutex"
+TRAY_CLASS_NAME = "VortexRemoteBrowserTrayClass"
+TRAY_WINDOW_TITLE = "VortexRemoteBrowser Companion Server"
+MUTEX_NAME = "Local\\VortexRemoteBrowserServerTrayMutex"
 
 
 def _get_config_dir() -> str:
@@ -42,7 +42,7 @@ def _get_config_dir() -> str:
         d = os.path.abspath(os.path.expanduser(env_dir))
     elif platform.system() == "Windows":
         appdata = os.environ.get("APPDATA") or os.path.expanduser("~\\AppData\\Roaming")
-        d = os.path.join(appdata, "VortexBrowser")
+        d = os.path.join(appdata, "VortexRemoteBrowser")
     else:
         d = os.path.expanduser("~/.config/vortexbrowse")
     os.makedirs(d, exist_ok=True)
@@ -139,7 +139,7 @@ def _open_log_file(log_path: str):
     except Exception:
         pass
     fp = open(log_path, "a", encoding="utf-8", errors="replace", buffering=1)
-    fp.write(f"\n=== VortexBrowser Background Server Launch ({time.strftime('%Y-%m-%d %H:%M:%S')}) ===\n")
+    fp.write(f"\n=== VortexRemoteBrowser Background Server Launch ({time.strftime('%Y-%m-%d %H:%M:%S')}) ===\n")
     fp.flush()
     return fp
 
@@ -209,7 +209,7 @@ def _stop_running_instance() -> int:
         WM_CLOSE = 0x0010
         hwnd = user32.FindWindowW(TRAY_CLASS_NAME, None)
         if hwnd:
-            print("[VortexBrowser] Sending clean shutdown signal to background tray server...")
+            print("[VortexRemoteBrowser] Sending clean shutdown signal to background tray server...")
             user32.PostMessageW(hwnd, WM_CLOSE, 0, 0)
             stopped_any = True
             deadline = time.monotonic() + 8.0
@@ -223,7 +223,7 @@ def _stop_running_instance() -> int:
         for label, pfile in (("server", srv_pid_file), ("tray", tray_pid_file)):
             pid = _read_pid(pfile)
             if pid and _is_pid_running_windows(pid):
-                print(f"[VortexBrowser] Stopping remaining {label} process (PID {pid})...")
+                print(f"[VortexRemoteBrowser] Stopping remaining {label} process (PID {pid})...")
                 stopped_any = True
                 try:
                     subprocess.run(
@@ -238,9 +238,9 @@ def _stop_running_instance() -> int:
             _remove_file_quiet(pfile)
 
     if stopped_any:
-        print("[VortexBrowser] Background server stopped.")
+        print("[VortexRemoteBrowser] Background server stopped.")
     else:
-        print("[VortexBrowser] No running VortexBrowser background server was found.")
+        print("[VortexRemoteBrowser] No running VortexRemoteBrowser background server was found.")
     return 0
 
 
@@ -467,8 +467,8 @@ def _run_tray_windows(ctrl: ServerProcessController, tray_pid_file: str) -> int:
         kernel32.CloseHandle(hmutex)
         user32.MessageBoxW(
             None,
-            "VortexBrowser Server is already running in the system tray.",
-            "VortexBrowser Server",
+            "VortexRemoteBrowser Server is already running in the system tray.",
+            "VortexRemoteBrowser Server",
             0x40,  # MB_ICONINFORMATION
         )
         return 0
@@ -664,7 +664,7 @@ def _run_tray_windows(ctrl: ServerProcessController, tray_pid_file: str) -> int:
         state["status"] = status_text
         if not state["nid_added"] or not state["hwnd"]:
             return
-        tip = f"VortexBrowser Server ({lan_ip}:{ctrl.port}) - {status_text}"
+        tip = f"VortexRemoteBrowser Server ({lan_ip}:{ctrl.port}) - {status_text}"
         nid = _make_nid(tip)
         shell32.Shell_NotifyIconW(NIM_MODIFY, ctypes.byref(nid))
 
@@ -688,7 +688,7 @@ def _run_tray_windows(ctrl: ServerProcessController, tray_pid_file: str) -> int:
         if not hmenu:
             return
         try:
-            user32.AppendMenuW(hmenu, MF_STRING | MF_GRAYED, ID_STATUS, f"VortexBrowser ({lan_ip}:{ctrl.port}) [{state['status']}]")
+            user32.AppendMenuW(hmenu, MF_STRING | MF_GRAYED, ID_STATUS, f"VortexRemoteBrowser ({lan_ip}:{ctrl.port}) [{state['status']}]")
             user32.AppendMenuW(hmenu, MF_SEPARATOR, 0, None)
             user32.AppendMenuW(hmenu, MF_STRING, ID_OPEN_LOG, "Open Server Log")
             user32.AppendMenuW(hmenu, MF_STRING, ID_OPEN_DIR, "Open Config / Profile Folder")
@@ -773,8 +773,8 @@ def _run_tray_windows(ctrl: ServerProcessController, tray_pid_file: str) -> int:
         ok = ctrl.start()
         state["status"] = "Running" if ok else "Failed to Start"
         nid = _make_nid(
-            f"VortexBrowser Server ({lan_ip}:{ctrl.port}) - {state['status']}",
-            "VortexBrowser Server",
+            f"VortexRemoteBrowser Server ({lan_ip}:{ctrl.port}) - {state['status']}",
+            "VortexRemoteBrowser Server",
             f"Running silently in background on {lan_ip}:{ctrl.port} (Amiga Audio: Silent TabCapture)",
         )
         if shell32.Shell_NotifyIconW(NIM_ADD, ctypes.byref(nid)):

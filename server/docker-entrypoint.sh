@@ -79,7 +79,7 @@ PORT="${VORTEX_PORT:-7788}"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-$DEFAULT_OMP}"
 
 echo "============================================================================"
-echo " VortexBrowser Universal Docker Server (${ARCH})"
+echo " VortexRemoteBrowser Universal Docker Server (${ARCH})"
 echo " Resolution: ${WIDTH}x${HEIGHT} @ ${FPS} FPS | Bitrate: ${VIDEO_BITRATE} kbps"
 echo " Engine: ${ENGINE} | Ports: ${PORT} (Stream) & 9757 (Audio)"
 echo "============================================================================"

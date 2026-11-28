@@ -4,8 +4,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: vortexbrowser-server:linux-amd64
-    container_name: vortexbrowser-server
+    image: vortexremotebrowser-server:linux-amd64
+    container_name: vortexremotebrowser-server
     restart: unless-stopped
     stop_grace_period: 15s
     shm_size: "2gb"
@@ -33,8 +33,8 @@ services:
       dockerfile: Dockerfile
       platforms:
         - linux/arm64
-    image: vortexbrowser-server:rpi-arm64
-    container_name: vortexbrowser-rpi
+    image: vortexremotebrowser-server:rpi-arm64
+    container_name: vortexremotebrowser-rpi
     restart: unless-stopped
     stop_grace_period: 15s
     shm_size: "1gb"
@@ -62,8 +62,8 @@ services:
       dockerfile: Dockerfile
       args:
         VORTEX_TARGET: macos
-    image: vortexbrowser-server:macos-arm64
-    container_name: vortexbrowser-macos
+    image: vortexremotebrowser-server:macos-arm64
+    container_name: vortexremotebrowser-macos
     restart: unless-stopped
     stop_grace_period: 15s
     shm_size: "2gb"

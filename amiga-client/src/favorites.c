@@ -99,7 +99,7 @@ static BOOL save_to_path(const VortexApp *app, const char *path)
     if (!fp) {
         return FALSE;
     }
-    fprintf(fp, "# VortexBrowser Favorites Preferences\n");
+    fprintf(fp, "# VortexRemoteBrowser Favorites Preferences\n");
     for (int i = 0; i < app->num_favorites; i++) {
         fprintf(fp, "%s|%s\n", app->favorites[i].title, app->favorites[i].url);
     }

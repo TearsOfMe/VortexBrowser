@@ -44,22 +44,22 @@ OBJS_UNIVERSAL = $(SRCS_ALL:.c=.o) src/renderer_altivec.o
 OBJS_ALTIVEC_DIR = obj_altivec
 OBJS_PURE_ALTIVEC = $(patsubst src/%.c,$(OBJS_ALTIVEC_DIR)/%.o,$(SRCS_ALL)) $(OBJS_ALTIVEC_DIR)/renderer_altivec.o
 
-TARGET_UNIVERSAL = VortexBrowser
-TARGET_ALTIVEC   = VortexBrowser-AltiVec
+TARGET_UNIVERSAL = VortexRemoteBrowser
+TARGET_ALTIVEC   = VortexRemoteBrowser-AltiVec
 
 all: catalogs $(TARGET_UNIVERSAL) $(TARGET_ALTIVEC)
 
 catalogs:
 	@mkdir -p catalogs/english catalogs/german catalogs/deutsch catalogs/french catalogs/francais catalogs/italian catalogs/italiano catalogs/spanish catalogs/espanol
-	flexcat catalogs/VortexBrowser.cd catalogs/english/VortexBrowser.ct CATALOG=catalogs/english/VortexBrowser.catalog NOOPTIM
-	flexcat catalogs/VortexBrowser.cd catalogs/german/VortexBrowser.ct CATALOG=catalogs/german/VortexBrowser.catalog NOOPTIM
-	flexcat catalogs/VortexBrowser.cd catalogs/deutsch/VortexBrowser.ct CATALOG=catalogs/deutsch/VortexBrowser.catalog NOOPTIM
-	flexcat catalogs/VortexBrowser.cd catalogs/french/VortexBrowser.ct CATALOG=catalogs/french/VortexBrowser.catalog NOOPTIM
-	flexcat catalogs/VortexBrowser.cd catalogs/francais/VortexBrowser.ct CATALOG=catalogs/francais/VortexBrowser.catalog NOOPTIM
-	flexcat catalogs/VortexBrowser.cd catalogs/italian/VortexBrowser.ct CATALOG=catalogs/italian/VortexBrowser.catalog NOOPTIM
-	flexcat catalogs/VortexBrowser.cd catalogs/italiano/VortexBrowser.ct CATALOG=catalogs/italiano/VortexBrowser.catalog NOOPTIM
-	flexcat catalogs/VortexBrowser.cd catalogs/spanish/VortexBrowser.ct CATALOG=catalogs/spanish/VortexBrowser.catalog NOOPTIM
-	flexcat catalogs/VortexBrowser.cd catalogs/espanol/VortexBrowser.ct CATALOG=catalogs/espanol/VortexBrowser.catalog NOOPTIM
+	flexcat catalogs/VortexRemoteBrowser.cd catalogs/english/VortexRemoteBrowser.ct CATALOG=catalogs/english/VortexRemoteBrowser.catalog NOOPTIM
+	flexcat catalogs/VortexRemoteBrowser.cd catalogs/german/VortexRemoteBrowser.ct CATALOG=catalogs/german/VortexRemoteBrowser.catalog NOOPTIM
+	flexcat catalogs/VortexRemoteBrowser.cd catalogs/deutsch/VortexRemoteBrowser.ct CATALOG=catalogs/deutsch/VortexRemoteBrowser.catalog NOOPTIM
+	flexcat catalogs/VortexRemoteBrowser.cd catalogs/french/VortexRemoteBrowser.ct CATALOG=catalogs/french/VortexRemoteBrowser.catalog NOOPTIM
+	flexcat catalogs/VortexRemoteBrowser.cd catalogs/francais/VortexRemoteBrowser.ct CATALOG=catalogs/francais/VortexRemoteBrowser.catalog NOOPTIM
+	flexcat catalogs/VortexRemoteBrowser.cd catalogs/italian/VortexRemoteBrowser.ct CATALOG=catalogs/italian/VortexRemoteBrowser.catalog NOOPTIM
+	flexcat catalogs/VortexRemoteBrowser.cd catalogs/italiano/VortexRemoteBrowser.ct CATALOG=catalogs/italiano/VortexRemoteBrowser.catalog NOOPTIM
+	flexcat catalogs/VortexRemoteBrowser.cd catalogs/spanish/VortexRemoteBrowser.ct CATALOG=catalogs/spanish/VortexRemoteBrowser.catalog NOOPTIM
+	flexcat catalogs/VortexRemoteBrowser.cd catalogs/espanol/VortexRemoteBrowser.ct CATALOG=catalogs/espanol/VortexRemoteBrowser.catalog NOOPTIM
 
 $(TARGET_UNIVERSAL): $(OBJS_UNIVERSAL)
 	$(CC) $(OBJS_UNIVERSAL) -o $(TARGET_UNIVERSAL) $(LDFLAGS)

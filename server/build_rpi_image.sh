@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# VortexBrowser Raspberry Pi 3 / 4 / 5 (ARM64) Complete SD-Card Image Builder
+# VortexRemoteBrowser Raspberry Pi 3 / 4 / 5 (ARM64) Complete SD-Card Image Builder
 # Builds ready-to-flash .img.xz images based on Raspberry Pi OS Lite (arm64)
 # with Ungoogled-Chromium (default), Firefox (Playwright + ESR alternative),
 # target-tuned ARM64 fast_pixconv.so, PulseAudio, ZRAM (Pi 3/4), and
@@ -34,7 +34,7 @@ docker volume create "$DOCKER_VOL" >/dev/null
 
 # Step 1: Build shared configured ARM64 base image (unless already cached in volume)
 if [ "${REBUILD_BASE:-0}" = "1" ] || ! docker run --rm -v "$DOCKER_VOL:/work" debian:trixie-slim test -f /work/base_vortex.img; then
-    echo "[+] Building shared ARM64 VortexBrowser base image..."
+    echo "[+] Building shared ARM64 VortexRemoteBrowser base image..."
     docker run -i --rm --privileged --platform linux/arm64 \
         -v "$DOCKER_VOL:/work" \
         -v "$SCRIPT_DIR:/src_server:ro" \
@@ -129,11 +129,11 @@ usermod -aG sudo,video,audio,render,input,plugdev,netdev pi 2>/dev/null || true
 echo "pi ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/010_pi-nopasswd
 chmod 0440 /etc/sudoers.d/010_pi-nopasswd
 
-echo "vortexbrowser" > /etc/hostname
+echo "vortexremotebrowser" > /etc/hostname
 if grep -q "127.0.1.1" /etc/hosts; then
-    sed -i "s/^127\.0\.1\.1.*/127.0.1.1\tvortexbrowser/" /etc/hosts
+    sed -i "s/^127\.0\.1\.1.*/127.0.1.1\tvortexremotebrowser/" /etc/hosts
 else
-    echo -e "127.0.1.1\tvortexbrowser" >> /etc/hosts
+    echo -e "127.0.1.1\tvortexremotebrowser" >> /etc/hosts
 fi
 
 apt-get update -qq
@@ -174,18 +174,18 @@ set -e
 ENG="${1:-}"
 if [ "$ENG" != "chromium" ] && [ "$ENG" != "firefox" ]; then
     echo "Usage: sudo vortex-engine [chromium|firefox]"
-    grep "^VORTEX_ENGINE=" /etc/default/vortexbrowser || true
+    grep "^VORTEX_ENGINE=" /etc/default/vortexremotebrowser || true
     exit 1
 fi
-sed -i "s/^VORTEX_ENGINE=.*/VORTEX_ENGINE=${ENG}/" /etc/default/vortexbrowser
-systemctl restart vortexbrowser.service
-echo "VortexBrowser engine switched to: $ENG"
+sed -i "s/^VORTEX_ENGINE=.*/VORTEX_ENGINE=${ENG}/" /etc/default/vortexremotebrowser
+systemctl restart vortexremotebrowser.service
+echo "VortexRemoteBrowser engine switched to: $ENG"
 SW_EOF
 chmod +x /usr/local/bin/vortex-engine
 
-cat << "SVC_EOF" > /etc/systemd/system/vortexbrowser.service
+cat << "SVC_EOF" > /etc/systemd/system/vortexremotebrowser.service
 [Unit]
-Description=VortexBrowser Universal Server for AmigaOS 4
+Description=VortexRemoteBrowser Universal Server for AmigaOS 4
 After=network-online.target sound.target avahi-daemon.service
 Wants=network-online.target
 
@@ -196,7 +196,7 @@ WorkingDirectory=/home/pi/vortexbrowse/server
 Environment=PYTHONUNBUFFERED=1
 Environment=OMP_NUM_THREADS=4
 Environment=XDG_RUNTIME_DIR=/run/user/1000
-EnvironmentFile=-/etc/default/vortexbrowser
+EnvironmentFile=-/etc/default/vortexremotebrowser
 ExecStart=/home/pi/vortexbrowse/server/run_server.sh
 KillMode=mixed
 TimeoutStopSec=15
@@ -210,7 +210,7 @@ SVC_EOF
 
 systemctl enable ssh || true
 systemctl enable avahi-daemon || true
-systemctl enable vortexbrowser.service
+systemctl enable vortexremotebrowser.service
 apt-get clean
 rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /root/.cache/pip /home/pi/.cache/pip
 CHROOT_EOF
@@ -227,7 +227,7 @@ fi
 
 # Step 2: Specialize per target & compress natively on host
 for T in "${TARGETS[@]}"; do
-    OUT_NAME="vortexbrowser-${T}-arm64.img"
+    OUT_NAME="vortexremotebrowser-${T}-arm64.img"
     echo "[+] Building target $T -> $OUT_DIR/${OUT_NAME}.xz ..."
 
     case "$T" in
@@ -288,8 +288,8 @@ chown -R 1000:1000 /mnt/rpi/home/pi/vortexbrowse/server
 chmod +x /mnt/rpi/home/pi/vortexbrowse/server/server.py /mnt/rpi/home/pi/vortexbrowse/server/run_server.sh /mnt/rpi/home/pi/vortexbrowse/server/install_server.sh
 
 chroot /mnt/rpi /bin/bash -e << CHROOT_EOF
-RPI_HOST="vortexbrowser"
-[ "${TARGET}" != "rpi4" ] && RPI_HOST="vortexbrowser-${TARGET}"
+RPI_HOST="vortexremotebrowser"
+[ "${TARGET}" != "rpi4" ] && RPI_HOST="vortexremotebrowser-${TARGET}"
 echo "\${RPI_HOST}" > /etc/hostname
 sed -i "s/^127\.0\.1\.1.*/127.0.1.1\t\${RPI_HOST}/" /etc/hosts
 
@@ -300,8 +300,8 @@ gcc -O3 ${CPU_FLAG} -fopenmp -DHAVE_TURBOJPEG_LZ4 -shared -fPIC fast_pixconv.c -
 .venv/bin/python -c \"import ctypes, playwright, rustwright, websockets, lz4, PIL, turbojpeg; ctypes.CDLL('./fast_pixconv.so'); print('${TARGET}_PYTHON_RUSTWRIGHT_PIXCONV_OK')\"
 "
 
-cat << ENV_EOF > /etc/default/vortexbrowser
-# VortexBrowser Server (${TARGET})
+cat << ENV_EOF > /etc/default/vortexremotebrowser
+# VortexRemoteBrowser Server (${TARGET})
 # Engine: "chromium" (Ungoogled-Chromium, default) or "firefox" (Playwright Firefox)
 VORTEX_ENGINE=chromium
 VORTEX_USE_RUSTWRIGHT=1
@@ -334,7 +334,7 @@ ldd /opt/ungoogled-chromium/chrome | grep "not found" && exit 1 || true
 PW_FF=\$(ls -d /home/pi/.cache/ms-playwright/firefox-*/firefox/firefox 2>/dev/null | tail -n 1 || true)
 [ -n "\$PW_FF" ] || exit 1
 ldd "\$PW_FF" | grep "not found" && exit 1 || true
-systemctl is-enabled vortexbrowser.service ssh.service avahi-daemon.service
+systemctl is-enabled vortexremotebrowser.service ssh.service avahi-daemon.service
 CHROOT_EOF
 
 echo "[+] Zeroing free blocks on ${TARGET}..."

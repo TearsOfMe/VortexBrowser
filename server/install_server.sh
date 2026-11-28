@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# VortexBrowser Universal Linux Companion Server - Universal Installer
+# VortexRemoteBrowser Universal Linux Companion Server - Universal Installer
 # Compatible with: CachyOS, Arch Linux, Debian, Ubuntu, Raspberry Pi OS (Pi 4/5),
 # Fedora, and all modern x86_64 and ARM64 / aarch64 Linux distributions.
 # ==============================================================================
@@ -10,7 +10,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 echo "============================================================================"
-echo "      VortexBrowser Universal Linux Server - Self-Configuring Setup         "
+echo "      VortexRemoteBrowser Universal Linux Server - Self-Configuring Setup         "
 echo "============================================================================"
 
 ARCH="$(uname -m)"
@@ -148,7 +148,7 @@ fi
 # ------------------------------------------------------------------------------
 echo ""
 echo "============================================================================"
-echo "  VortexBrowser - Browser-Engine Auswahl"
+echo "  VortexRemoteBrowser - Browser-Engine Auswahl"
 echo "============================================================================"
 
 CANDIDATE_PATHS=()
@@ -330,9 +330,9 @@ chmod +x run_server.sh sync_twitch_login.sh 2>/dev/null || true
 # 6. systemd Service Vorlage generieren
 # ------------------------------------------------------------------------------
 CURRENT_USER="${SUDO_USER:-$(id -un)}"
-cat <<EOF > vortexbrowser.service
+cat <<EOF > vortexremotebrowser.service
 [Unit]
-Description=VortexBrowser Universal Server for AmigaOS 4
+Description=VortexRemoteBrowser Universal Server for AmigaOS 4
 After=network-online.target sound.target pipewire.service pulseaudio.service
 Wants=network-online.target
 
@@ -358,7 +358,7 @@ IP_ADDR=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
 
 echo ""
 echo "============================================================================"
-echo "  VORTEXBROWSER UNIVERSAL SERVER ERFOLGREICH INSTALLIERT / AKTUALISIERT!    "
+echo "  VORTEXREMOTEBROWSER UNIVERSAL SERVER ERFOLGREICH INSTALLIERT / AKTUALISIERT!    "
 echo "============================================================================"
 echo "  Server-IP fuer AmigaOS 4 Client : ${IP_ADDR}"
 echo "  Server-Ports                    : 7788 (Stream) & 9757 (Audio)"
@@ -370,7 +370,7 @@ echo "  Starten Sie den Server manuell mit:"
 echo "    ./run_server.sh"
 echo ""
 echo "  Oder als systemd-Dienst aktivieren:"
-echo "    sudo cp vortexbrowser.service /etc/systemd/system/"
+echo "    sudo cp vortexremotebrowser.service /etc/systemd/system/"
 echo "    sudo systemctl daemon-reload"
-echo "    sudo systemctl enable --now vortexbrowser.service"
+echo "    sudo systemctl enable --now vortexremotebrowser.service"
 echo "============================================================================"

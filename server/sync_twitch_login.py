@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ==============================================================================
-# VortexBrowser - Automated Twitch Login & Session Sync Tool
+# VortexRemoteBrowser - Automated Twitch Login & Session Sync Tool
 # Restores and verifies Twitch authenticated session in Ungoogled-Chromium/Chromium
 # Completely portable: dynamically detects user home, system paths, and ownership.
 # ==============================================================================
@@ -230,7 +230,7 @@ async def sync_twitch(cookies_to_inject, token_val=None, login_user=None, cdp_ur
             browser = await pw.chromium.connect_over_cdp(cdp_url)
         except Exception as e:
             print(f"[ERROR] Could not connect to Chromium CDP on {cdp_url}: {e}")
-            print("        Make sure VortexBrowser server is running.")
+            print("        Make sure VortexRemoteBrowser server is running.")
             return False
 
         ctx = browser.contexts[0]
@@ -411,7 +411,7 @@ async def sync_twitch(cookies_to_inject, token_val=None, login_user=None, cdp_ur
 
 
 def main():
-    parser = argparse.ArgumentParser(description="VortexBrowser - Twitch Login & Session Sync Tool")
+    parser = argparse.ArgumentParser(description="VortexRemoteBrowser - Twitch Login & Session Sync Tool")
     parser.add_argument("--token", default=None, help="Twitch auth-token value")
     parser.add_argument("--user", default=None, help="Twitch username (default: auto-detected from session cookies)")
     parser.add_argument("--cookies", default=None, help="Path to twitch_cookies.json")
@@ -419,7 +419,7 @@ def main():
     args = parser.parse_args()
 
     print("==================================================================")
-    print(" VortexBrowser - Twitch Automatic Login & Session Synchronizer")
+    print(" VortexRemoteBrowser - Twitch Automatic Login & Session Synchronizer")
     print("==================================================================")
 
     cookies = None

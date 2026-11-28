@@ -1,5 +1,5 @@
 ﻿# ==============================================================================
-# VortexBrowser Native Windows 10/11 (x64) Companion Server Installer
+# VortexRemoteBrowser Native Windows 10/11 (x64) Companion Server Installer
 # - Installs/verifies Python 3.10+ venv, Rustwright, Playwright, PyAudioWPatch
 # - Checks/installs FFmpeg (NVENC / AMF / QSV / Media Foundation / libx264)
 # - Detects Chromium/Chrome/Edge or installs Playwright Chromium
@@ -20,7 +20,7 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ScriptDir
 
 Write-Host "============================================================================" -ForegroundColor Cyan
-Write-Host " VortexBrowser Native Windows 10/11 Companion Server Setup (x64)" -ForegroundColor Cyan
+Write-Host " VortexRemoteBrowser Native Windows 10/11 Companion Server Setup (x64)" -ForegroundColor Cyan
 Write-Host "============================================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -171,7 +171,7 @@ except Exception as e:
 if (-not $SkipFirewall) {
     Write-Host "[6/6] Checking Windows Firewall rule (TCP 7788, 9757)..." -ForegroundColor Yellow
     $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-    $RuleName = "VortexBrowser Amiga Companion Server (TCP 7788,9757)"
+    $RuleName = "VortexRemoteBrowser Amiga Companion Server (TCP 7788,9757)"
     $existing = Get-NetFirewallRule -DisplayName $RuleName -ErrorAction SilentlyContinue
     if ($existing) {
         Write-Host "  Firewall rule already exists: $RuleName" -ForegroundColor Green
@@ -187,13 +187,13 @@ if (-not $SkipFirewall) {
 if ($InstallAutostart) {
     try {
         $StartupDir = [Environment]::GetFolderPath("Startup")
-        $ShortcutPath = Join-Path $StartupDir "VortexBrowser Server.lnk"
+        $ShortcutPath = Join-Path $StartupDir "VortexRemoteBrowser Server.lnk"
         $WshShell = New-Object -ComObject WScript.Shell
         $Shortcut = $WshShell.CreateShortcut($ShortcutPath)
         $Shortcut.TargetPath = "$env:SystemRoot\System32\wscript.exe"
         $Shortcut.Arguments = "`"$(Join-Path $ScriptDir 'run_windows_hidden.vbs')`""
         $Shortcut.WorkingDirectory = $ScriptDir
-        $Shortcut.Description = "VortexBrowser Amiga Companion Server (Background Tray)"
+        $Shortcut.Description = "VortexRemoteBrowser Amiga Companion Server (Background Tray)"
         $Shortcut.Save()
         Write-Host "  Created Windows Startup autostart shortcut: $ShortcutPath" -ForegroundColor Green
     } catch {
@@ -208,7 +208,7 @@ $LanIPs = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
 
 Write-Host ""
 Write-Host "============================================================================" -ForegroundColor Green
-Write-Host " VortexBrowser Windows Server installation complete!" -ForegroundColor Green
+Write-Host " VortexRemoteBrowser Windows Server installation complete!" -ForegroundColor Green
 Write-Host " Start silently (background + tray): double-click run_windows_hidden.vbs" -ForegroundColor Green
 Write-Host " Start with console window:          double-click run_windows.bat" -ForegroundColor Green
 Write-Host " Stop background server:             double-click stop_windows.bat" -ForegroundColor Green

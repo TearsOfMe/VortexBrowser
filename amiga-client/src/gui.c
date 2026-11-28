@@ -227,11 +227,11 @@ static struct DiskObject *load_app_icon(void)
 
     struct DiskObject *dobj = NULL;
 #if defined(__ALTIVEC__)
-    dobj = IIcon->GetDiskObject("PROGDIR:VortexBrowser-AltiVec");
-    if (!dobj) dobj = IIcon->GetDiskObject("PROGDIR:VortexBrowser");
+    dobj = IIcon->GetDiskObject("PROGDIR:VortexRemoteBrowser-AltiVec");
+    if (!dobj) dobj = IIcon->GetDiskObject("PROGDIR:VortexRemoteBrowser");
 #else
-    dobj = IIcon->GetDiskObject("PROGDIR:VortexBrowser");
-    if (!dobj) dobj = IIcon->GetDiskObject("PROGDIR:VortexBrowser-AltiVec");
+    dobj = IIcon->GetDiskObject("PROGDIR:VortexRemoteBrowser");
+    if (!dobj) dobj = IIcon->GetDiskObject("PROGDIR:VortexRemoteBrowser-AltiVec");
 #endif
     if (dobj) {
         dobj->do_CurrentX = NO_ICON_POSITION;
@@ -260,7 +260,7 @@ static struct NewMenu s_main_menu[] = {
     { NM_ITEM,  (STRPTR)"Verbindung trennen",                          NULL,        0, 0, (APTR)MID_PROJ_DISCONNECT },
     { NM_ITEM,  NM_BARLABEL,                                           NULL,        0, 0, NULL },
     { NM_ITEM,  (STRPTR)"Einstellungen...",                            (STRPTR)"E", 0, 0, (APTR)MID_SETTINGS },
-    { NM_ITEM,  (STRPTR)"Über VortexBrowser...",                      (STRPTR)"?", 0, 0, (APTR)MID_PROJ_ABOUT },
+    { NM_ITEM,  (STRPTR)"Über VortexRemoteBrowser...",                      (STRPTR)"?", 0, 0, (APTR)MID_PROJ_ABOUT },
     { NM_ITEM,  NM_BARLABEL,                                           NULL,        0, 0, NULL },
     { NM_ITEM,  (STRPTR)"Beenden",                                     (STRPTR)"Q", 0, 0, (APTR)MID_PROJ_QUIT },
 
@@ -2170,8 +2170,8 @@ static void handle_menu_command(VortexApp *app, uint32 item_id)
             favorites_save(app);
             char port_str[16];
             snprintf(port_str, sizeof(port_str), "%u", (unsigned)app->server_port);
-            IDOS->SetVar("VortexBrowser/server_host", app->server_host, -1, GVF_GLOBAL_ONLY | GVF_SAVE_VAR);
-            IDOS->SetVar("VortexBrowser/server_port", port_str, -1, GVF_GLOBAL_ONLY | GVF_SAVE_VAR);
+            IDOS->SetVar("VortexRemoteBrowser/server_host", app->server_host, -1, GVF_GLOBAL_ONLY | GVF_SAVE_VAR);
+            IDOS->SetVar("VortexRemoteBrowser/server_port", port_str, -1, GVF_GLOBAL_ONLY | GVF_SAVE_VAR);
             app_set_status(GetVString(MSG_STATUS_SETTINGS_SAVED));
             break;
         }
@@ -2954,8 +2954,8 @@ BOOL gui_init(VortexApp *app)
     /* 0. Open custom Public Screen if configured */
     if (app->prefs.resolution.use_custom_screen) {
         if (!app->custom_screen) {
-            const char *pubname = "VORTEXBROWSER";
-            const char *title   = "VortexBrowser 1.1 (AmigaOS 4.1)";
+            const char *pubname = "VORTEXREMOTEBROWSER";
+            const char *title   = "VortexRemoteBrowser 1.1 (AmigaOS 4.1)";
             uint16 scr_w = app->prefs.resolution.width;
             uint16 scr_h = app->prefs.resolution.height;
             uint16 scr_d = app->prefs.resolution.depth;
@@ -3813,7 +3813,7 @@ BOOL gui_init(VortexApp *app)
     app->win_obj = IIntuition->NewObject(NULL, "window.class",
         WA_Title,             app->win_title,
         (app->custom_screen != NULL) ? WA_ScreenTitle : TAG_IGNORE,
-        (app->custom_screen != NULL) ? (Tag)"VortexBrowser 1.1 (AmigaOS 4.1)" : 0,
+        (app->custom_screen != NULL) ? (Tag)"VortexRemoteBrowser 1.1 (AmigaOS 4.1)" : 0,
         s_dark_pens.allocated ? WA_BackFill : TAG_IGNORE,  (Tag)&s_dark_backfill_hook,
         s_dark_pens.allocated ? WA_DetailPen : TAG_IGNORE, (uint32)s_dark_pens.txt_pen,
         s_dark_pens.allocated ? WA_BlockPen : TAG_IGNORE,  (uint32)s_dark_pens.btn_bg_pen,
@@ -3846,7 +3846,7 @@ BOOL gui_init(VortexApp *app)
         (app->app_port != NULL) ? WINDOW_AppPort       : TAG_IGNORE, (Tag)app->app_port,
         (app->app_port != NULL) ? WINDOW_Iconifiable   : TAG_IGNORE, TRUE,
         (app->app_port != NULL) ? WINDOW_IconifyGadget : TAG_IGNORE, TRUE,
-        (app->app_port != NULL) ? WINDOW_IconTitle     : TAG_IGNORE, (Tag)"VortexBrowser",
+        (app->app_port != NULL) ? WINDOW_IconTitle     : TAG_IGNORE, (Tag)"VortexRemoteBrowser",
         (app->app_port != NULL && win_icon != NULL) ? WINDOW_Icon : TAG_IGNORE, (Tag)win_icon,
         WINDOW_IDCMPHook,       &s_idcmp_hook,
         WINDOW_IDCMPHookBits,   IDCMP_MOUSEBUTTONS | IDCMP_EXTENDEDMOUSE | IDCMP_MOUSEMOVE |
@@ -4381,7 +4381,7 @@ void gui_iconify(VortexApp *app)
             struct DiskObject *dobj = load_app_icon();
             struct AppIcon *aicon = NULL;
             if (dobj) {
-                aicon = IWorkbench->AddAppIconA(1, 0, (CONST_STRPTR)"VortexBrowser",
+                aicon = IWorkbench->AddAppIconA(1, 0, (CONST_STRPTR)"VortexRemoteBrowser",
                                                 app->app_port, ZERO, dobj, NULL);
             }
             if (!aicon) {
@@ -4392,7 +4392,7 @@ void gui_iconify(VortexApp *app)
                 if (dobj) {
                     dobj->do_CurrentX = NO_ICON_POSITION;
                     dobj->do_CurrentY = NO_ICON_POSITION;
-                    aicon = IWorkbench->AddAppIconA(1, 0, (CONST_STRPTR)"VortexBrowser",
+                    aicon = IWorkbench->AddAppIconA(1, 0, (CONST_STRPTR)"VortexRemoteBrowser",
                                                     app->app_port, ZERO, dobj, NULL);
                 }
             }
@@ -5213,7 +5213,7 @@ void gui_handle_events(VortexApp *app)
             } else if (has_media) {
                 snprintf(hdr_buf, sizeof(hdr_buf), "%s", GetVString(MSG_CTX_HDR_MEDIA));
             } else {
-                snprintf(hdr_buf, sizeof(hdr_buf), "VortexBrowser");
+                snprintf(hdr_buf, sizeof(hdr_buf), "VortexRemoteBrowser");
             }
 
             uint32 selected_id = CTX_NONE;
@@ -5510,20 +5510,20 @@ void gui_update_url_bar(VortexApp *app, const char *url)
     /* Update clean AmigaOS style window title */
     if (app->prefs.show_status_bar) {
         if (disp[0] != '\0') {
-            snprintf(app->win_title, sizeof(app->win_title), "VortexBrowser: %s", disp);
+            snprintf(app->win_title, sizeof(app->win_title), "VortexRemoteBrowser: %s", disp);
         } else {
-            snprintf(app->win_title, sizeof(app->win_title), "VortexBrowser");
+            snprintf(app->win_title, sizeof(app->win_title), "VortexRemoteBrowser");
         }
     } else {
         const char *st = app->status_text[0] ? app->status_text : GetVString(MSG_STATUS_READY_SHORT);
         if (disp[0] != '\0') {
-            snprintf(app->win_title, sizeof(app->win_title), "VortexBrowser: %s [%s]", disp, st);
+            snprintf(app->win_title, sizeof(app->win_title), "VortexRemoteBrowser: %s [%s]", disp, st);
         } else {
-            snprintf(app->win_title, sizeof(app->win_title), "VortexBrowser [%s]", st);
+            snprintf(app->win_title, sizeof(app->win_title), "VortexRemoteBrowser [%s]", st);
         }
     }
     if (app->win) {
-        STRPTR scr_title = (app->custom_screen != NULL) ? (STRPTR)"VortexBrowser 1.1 (AmigaOS 4.1)" : (STRPTR)~0;
+        STRPTR scr_title = (app->custom_screen != NULL) ? (STRPTR)"VortexRemoteBrowser 1.1 (AmigaOS 4.1)" : (STRPTR)~0;
         IIntuition->SetWindowTitles(app->win, app->win_title, scr_title);
         if (app->prefs.dark_theme == 1) {
             gui_draw_dark_titlebar(app);

@@ -1,5 +1,5 @@
 /*
- * VortexBrowser - CachyOS HP EliteDesk 805 G6 (AMD Ryzen PRO / Radeon Vega)
+ * VortexRemoteBrowser - CachyOS HP EliteDesk 805 G6 (AMD Ryzen PRO / Radeon Vega)
  * Ultra-Fast AVX2 + OpenMP + libturbojpeg + liblz4 Native Streaming Pipeline
  *
  * Specifically tuned for AMD Zen 2 (znver2) 8-thread APU to deliver

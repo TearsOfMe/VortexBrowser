@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ==============================================================================
-# VortexBrowser Native macOS Launcher (Apple VideoToolbox + SIMD)
+# VortexRemoteBrowser Native macOS Launcher (Apple VideoToolbox + SIMD)
 # ==============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -24,7 +24,7 @@ CPU_CORES="$(sysctl -n hw.ncpu 2>/dev/null || echo 4)"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-$((CPU_CORES > 6 ? 6 : CPU_CORES))}"
 
 echo "============================================================================"
-echo " VortexBrowser macOS Companion Server (${ARCH})"
+echo " VortexRemoteBrowser macOS Companion Server (${ARCH})"
 echo " Video: Apple VideoToolbox (h264_videotoolbox) | SIMD: fast_pixconv.dylib"
 echo " Ports: 7788 (Stream) & 9757 (Audio)"
 echo "============================================================================"

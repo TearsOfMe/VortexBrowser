@@ -2,7 +2,7 @@
 setlocal EnableExtensions
 
 REM ============================================================================
-REM VortexBrowser Native Windows 10/11 Companion Server Launcher
+REM VortexRemoteBrowser Native Windows 10/11 Companion Server Launcher
 REM ============================================================================
 
 set "SCRIPT_DIR=%~dp0"
@@ -34,7 +34,7 @@ if "%VORTEX_ENGINE%"==""        set "VORTEX_ENGINE=chromium"
 if "%VORTEX_LOG_LEVEL%"==""     set "VORTEX_LOG_LEVEL=INFO"
 
 echo ============================================================================
-echo  VortexBrowser Native Windows Companion Server (x64)
+echo  VortexRemoteBrowser Native Windows Companion Server (x64)
 echo  Resolution: %VORTEX_WIDTH%x%VORTEX_HEIGHT% @ %VORTEX_FPS% FPS ^| Format: YUV420P
 echo  GPU H.264:  Auto (NVENC / AMF / QSV / Media Foundation / libx264)
 echo  Audio:      Auto (Silent Browser TabCapture -> AHI; Windows Speakers Muted)
@@ -62,7 +62,7 @@ if "%~1"=="" (
 set "EXIT_CODE=%ERRORLEVEL%"
 if not "%EXIT_CODE%"=="0" (
     echo.
-    echo [VortexBrowser] Server exited with code %EXIT_CODE%.
+    echo [VortexRemoteBrowser] Server exited with code %EXIT_CODE%.
     pause
 )
 exit /b %EXIT_CODE%

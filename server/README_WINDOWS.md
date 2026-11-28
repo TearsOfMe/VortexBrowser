@@ -1,7 +1,7 @@
-# VortexBrowser Companion Server — Native Windows 10 / 11 (x64)
+# VortexRemoteBrowser Companion Server — Native Windows 10 / 11 (x64)
 
-Nativer Windows-10/11-Server für **VortexBrowser (AmigaOS 4.1)** — ohne VM, ohne WSL2 und ohne Docker.  
-Native Windows 10/11 server for **VortexBrowser (AmigaOS 4.1)** — no VM, no WSL2, and no Docker required.
+Nativer Windows-10/11-Server für **VortexRemoteBrowser (AmigaOS 4.1)** — ohne VM, ohne WSL2 und ohne Docker.  
+Native Windows 10/11 server for **VortexRemoteBrowser (AmigaOS 4.1)** — no VM, no WSL2, and no Docker required.
 
 ## Highlights
 - **Direkte LAN-Verbindung:** Port `7788` (primär) & `9757` (LAN) ohne Port-Forwarding-Umwege.
@@ -20,7 +20,7 @@ Native Windows 10/11 server for **VortexBrowser (AmigaOS 4.1)** — no VM, no WS
 
 ## Schnellstart / Quick Start (Windows 10 / 11)
 
-1. Entpacke `VortexBrowser-1.1-Server-Windows.zip` in einen Ordner (z. B. `C:\VortexBrowser-Server\`).
+1. Entpacke `VortexRemoteBrowser-1.1-Server-Windows.zip` in einen Ordner (z. B. `C:\VortexRemoteBrowser-Server\`).
 2. Öffne **PowerShell** im Server-Ordner (für automatische Firewall-Regel idealerweise **als Administrator**):
    ```powershell
    powershell -ExecutionPolicy Bypass -File .\install_windows.ps1
@@ -49,7 +49,7 @@ Du kannst `run_windows.bat` oder `run_windows_hidden.vbs` direkt mit Argumenten 
 
 | Option / Variable | Beschreibung |
 |---|---|
-| `run_windows_hidden.vbs` | Unsichtbarer Hintergrundstart mit System-Tray-Icon (Logs unter `%APPDATA%\VortexBrowser\server.log`) |
+| `run_windows_hidden.vbs` | Unsichtbarer Hintergrundstart mit System-Tray-Icon (Logs unter `%APPDATA%\VortexRemoteBrowser\server.log`) |
 | `wscript run_windows_hidden.vbs --no-tray` | Vollständig unsichtbarer Hintergrundstart ohne Tray-Icon (beenden via `stop_windows.bat`) |
 | `--no-audio` / `VORTEX_NO_AUDIO=1` | Audio-Streaming deaktivieren |
 | `--audio-device tabcapture` | Standard unter Windows: Stummes Browser-TabCapture (Ton nur am Amiga, Windows-Lautsprecher stumm) |
@@ -59,7 +59,7 @@ Du kannst `run_windows.bat` oder `run_windows_hidden.vbs` direkt mit Argumenten 
 | `--browser-bin "C:\...\chrome.exe"` | Bestimmtes Chromium/Chrome/Edge-Binary erzwingen |
 | `--disable-gpu` | Software-Rasterisierung erzwingen (bei Treiberproblemen) |
 | `VORTEX_SHOW_BROWSER=1` | Chromium-Fenster sichtbar anzeigen (nur für Debugging) |
-| `VORTEX_PROFILE_DIR=D:\VortexProfile` | Eigenes Profil-/Cookie-Verzeichnis (Standard: `%APPDATA%\VortexBrowser`) |
+| `VORTEX_PROFILE_DIR=D:\VortexProfile` | Eigenes Profil-/Cookie-Verzeichnis (Standard: `%APPDATA%\VortexRemoteBrowser`) |
 
 ---
 
@@ -68,9 +68,9 @@ Du kannst `run_windows.bat` oder `run_windows_hidden.vbs` direkt mit Argumenten 
 - **Amiga kann sich nicht verbinden:**
   Prüfe, ob dein Windows-Netzwerkprofil auf **Privat** steht und die Firewall-Regel für TCP `7788` & `9757` aktiv ist (als Administrator in PowerShell):
   ```powershell
-  New-NetFirewallRule -DisplayName "VortexBrowser Amiga Companion Server (TCP 7788,9757)" -Direction Inbound -Protocol TCP -LocalPort 7788,9757 -Action Allow -Profile Private
+  New-NetFirewallRule -DisplayName "VortexRemoteBrowser Amiga Companion Server (TCP 7788,9757)" -Direction Inbound -Protocol TCP -LocalPort 7788,9757 -Action Allow -Profile Private
   ```
 - **Ton läuft noch aus den Windows-Lautsprechern (doppelter Ton):**
-  Prüfe `%APPDATA%\VortexBrowser\server.log`. Dort sollte `Audio: ON (Silent Browser TabCapture -> AHI; Host Speakers Muted)` sowie `SilentTabAudioBridge: MV3 TabCapture extension connected` stehen. Falls dein System zuvor gebrandetes Google Chrome 137+ genutzt hat (welches `--load-extension` sperrt), führe einmalig `.\install_windows.ps1 -InstallPlaywrightChromium` aus — der Server bevorzugt Playwright Chromium danach automatisch.
+  Prüfe `%APPDATA%\VortexRemoteBrowser\server.log`. Dort sollte `Audio: ON (Silent Browser TabCapture -> AHI; Host Speakers Muted)` sowie `SilentTabAudioBridge: MV3 TabCapture extension connected` stehen. Falls dein System zuvor gebrandetes Google Chrome 137+ genutzt hat (welches `--load-extension` sperrt), führe einmalig `.\install_windows.ps1 -InstallPlaywrightChromium` aus — der Server bevorzugt Playwright Chromium danach automatisch.
 - **Server-Logs im Hintergrundmodus ansehen:**
-  Rechtsklick auf das VortexBrowser-Tray-Icon → **Open Server Log** (öffnet `%APPDATA%\VortexBrowser\server.log`).
+  Rechtsklick auf das VortexRemoteBrowser-Tray-Icon → **Open Server Log** (öffnet `%APPDATA%\VortexRemoteBrowser\server.log`).

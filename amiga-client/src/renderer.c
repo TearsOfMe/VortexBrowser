@@ -39,7 +39,7 @@ void renderer_init(VortexApp *app)
     uint32 vec_unit = VECTORTYPE_NONE;
     IExec->GetCPUInfoTags(GCIT_VectorUnit, &vec_unit, TAG_DONE);
     app->renderer.has_altivec = (vec_unit == VECTORTYPE_ALTIVEC || vec_unit == 2);
-    DBG_LOG("[VortexBrowser] CPU Vector Unit: %lu -> AltiVec SIMD %s\n",
+    DBG_LOG("[VortexRemoteBrowser] CPU Vector Unit: %lu -> AltiVec SIMD %s\n",
             (unsigned long)vec_unit,
             app->renderer.has_altivec ? "ACTIVE (AmigaOne X1000 / G4 detected)" : "DISABLED (X5000 / A1222+ / Sam460 / G3 scalar mode)");
 
@@ -56,7 +56,7 @@ void renderer_init(VortexApp *app)
                 VAStatus st = iva->vaInitialize(app->renderer.va_display, &maj, &min);
                 if (st == VA_STATUS_SUCCESS) {
                     app->renderer.has_va = TRUE;
-                    DBG_LOG("[VortexBrowser] va.library %lu.%lu (VA-API %d.%d) -> Hardware Video Acceleration ACTIVE (Radeon UVD/VCN)\n",
+                    DBG_LOG("[VortexRemoteBrowser] va.library %lu.%lu (VA-API %d.%d) -> Hardware Video Acceleration ACTIVE (Radeon UVD/VCN)\n",
                             (unsigned long)app->renderer.va_lib->lib_Version,
                             (unsigned long)app->renderer.va_lib->lib_Revision,
                             maj, min);
@@ -76,7 +76,7 @@ void renderer_init(VortexApp *app)
         }
     } else {
         app->renderer.has_va = FALSE;
-        DBG_LOG("[VortexBrowser] va.library not detected -> Hardware video acceleration disabled\n");
+        DBG_LOG("[VortexRemoteBrowser] va.library not detected -> Hardware video acceleration disabled\n");
     }
 }
 
@@ -120,13 +120,13 @@ static BOOL init_h264_decoder(VortexApp *app)
 
     const AVCodec *codec = avcodec_find_decoder_by_name("h264");
     if (!codec) {
-        DBG_LOG("[VortexBrowser] FFmpeg H.264 decoder not found in libavcodec!\n");
+        DBG_LOG("[VortexRemoteBrowser] FFmpeg H.264 decoder not found in libavcodec!\n");
         return FALSE;
     }
 
     AVCodecContext *avctx = avcodec_alloc_context3(codec);
     if (!avctx) {
-        DBG_LOG("[VortexBrowser] Failed to allocate FFmpeg AVCodecContext\n");
+        DBG_LOG("[VortexRemoteBrowser] Failed to allocate FFmpeg AVCodecContext\n");
         return FALSE;
     }
 
@@ -141,10 +141,10 @@ static BOOL init_h264_decoder(VortexApp *app)
                 avctx->hw_device_ctx = av_buffer_ref(hw_device_ctx);
                 avctx->get_format = get_vaapi_format;
                 r->av_hw_device = (APTR)hw_device_ctx;
-                DBG_LOG("[VortexBrowser] FFmpeg H.264 VA-API Hardware Acceleration ACTIVE (Radeon UVD/VCN)\n");
+                DBG_LOG("[VortexRemoteBrowser] FFmpeg H.264 VA-API Hardware Acceleration ACTIVE (Radeon UVD/VCN)\n");
             } else {
                 av_buffer_unref(&hw_device_ctx);
-                DBG_LOG("[VortexBrowser] av_hwdevice_ctx_init failed -> falling back to software H.264\n");
+                DBG_LOG("[VortexRemoteBrowser] av_hwdevice_ctx_init failed -> falling back to software H.264\n");
             }
         }
     }
@@ -154,7 +154,7 @@ static BOOL init_h264_decoder(VortexApp *app)
     avctx->flags2 |= AV_CODEC_FLAG2_FAST;
 
     if (avcodec_open2(avctx, codec, NULL) < 0) {
-        DBG_LOG("[VortexBrowser] avcodec_open2 failed for H.264\n");
+        DBG_LOG("[VortexRemoteBrowser] avcodec_open2 failed for H.264\n");
         avcodec_free_context(&avctx);
         return FALSE;
     }
