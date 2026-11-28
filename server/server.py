@@ -4189,6 +4189,87 @@ class AmigaClientSession:
             except Exception as _te:
                 logger.debug("Twitch cookie load error: %s", _te)
 
+            # Pre-load Discord & extra site session cookies / Discord auth token from user profile dir
+            try:
+                cfg_dir = get_vortex_config_dir()
+                for extra_json_name in ("discord_cookies.json", "extra_cookies.json"):
+                    extra_candidates = list(dict.fromkeys([
+                        os.path.join(cfg_dir, extra_json_name),
+                        os.path.expanduser(f"~/.config/vortexremotebrowser/{extra_json_name}"),
+                    ]))
+                    for j_path in extra_candidates:
+                        if os.path.exists(j_path):
+                            try:
+                                with open(j_path, "r", encoding="utf-8") as f:
+                                    raw_cookies = json.load(f)
+                                clean_list = []
+                                for c in raw_cookies:
+                                    ck = {
+                                        "name": c["name"],
+                                        "value": c["value"],
+                                        "domain": c["domain"],
+                                        "path": c.get("path", "/"),
+                                        "secure": c.get("secure", True),
+                                        "httpOnly": c.get("httpOnly", False),
+                                    }
+                                    if "sameSite" in c and c["sameSite"] in ("Strict", "Lax", "None"):
+                                        ck["sameSite"] = c["sameSite"]
+                                    clean_list.append(ck)
+                                if clean_list:
+                                    await self.context.add_cookies(clean_list)
+                                    logger.info("Pre-loaded %d session cookies from %s", len(clean_list), j_path)
+                                    break
+                            except Exception as _dje:
+                                logger.debug("Extra cookie load error (%s): %s", j_path, _dje)
+
+                discord_tok_candidates = list(dict.fromkeys([
+                    os.path.join(cfg_dir, "discord_token.txt"),
+                    os.path.expanduser("~/.config/vortexremotebrowser/discord_token.txt"),
+                ]))
+                for dt_path in discord_tok_candidates:
+                    if os.path.exists(dt_path):
+                        with open(dt_path, "r", encoding="utf-8") as f:
+                            raw_dt = f.read().strip()
+                        if raw_dt:
+                            if ":" in raw_dt and raw_dt.split(":", 1)[0].isdigit():
+                                d_uid, d_tok = raw_dt.split(":", 1)
+                            else:
+                                d_uid, d_tok = "", raw_dt
+                            d_tok = d_tok.strip().strip('"')
+                            if d_tok:
+                                discord_init_js = (
+                                    "(() => {\n"
+                                    "  try {\n"
+                                    "    const h = (location && location.hostname) ? location.hostname.toLowerCase() : '';\n"
+                                    "    if (h === 'discord.com' || h.endsWith('.discord.com') || h === 'discordapp.com' || h.endsWith('.discordapp.com')) {\n"
+                                    f"      const tok = {json.dumps(d_tok)};\n"
+                                    f"      const uid = {json.dumps(d_uid)};\n"
+                                    "      const applyLs = (ls) => {\n"
+                                    "        if (!ls) return;\n"
+                                    "        ls.setItem('token', JSON.stringify(tok));\n"
+                                    "        if (uid) {\n"
+                                    "          ls.setItem('user_id_cache', JSON.stringify(uid));\n"
+                                    "          ls.setItem('tokens', JSON.stringify({ [uid]: tok }));\n"
+                                    "        }\n"
+                                    "      };\n"
+                                    "      try { applyLs(window.localStorage); } catch (e) {}\n"
+                                    "      try {\n"
+                                    "        const ifr = document.createElement('iframe');\n"
+                                    "        ifr.style.display = 'none';\n"
+                                    "        (document.documentElement || document.head || document.body).appendChild(ifr);\n"
+                                    "        applyLs(ifr.contentWindow.localStorage);\n"
+                                    "        ifr.remove();\n"
+                                    "      } catch (e) {}\n"
+                                    "    }\n"
+                                    "  } catch (e) {}\n"
+                                    "})();"
+                                )
+                                await self.context.add_init_script(discord_init_js)
+                                logger.info("Pre-loaded Discord session token init script from %s", dt_path)
+                                break
+            except Exception as _de:
+                logger.debug("Discord session preload error: %s", _de)
+
             # Anti-Bot & Anti-Detection Stealth + YouTube/Twitch Dirty-Rect Turbo Script
             nav_langs_json = json.dumps(build_navigator_languages(self.browser_locale))
             self._init_turbo_js = """(() => {

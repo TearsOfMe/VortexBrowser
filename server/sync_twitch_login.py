@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # ==============================================================================
-# VortexRemoteBrowser - Automated Twitch Login & Session Sync Tool
-# Restores and verifies Twitch authenticated session in Ungoogled-Chromium/Chromium
+# VortexRemoteBrowser - Automated Login & Session Sync Tool (Twitch, Discord & Custom Sites)
+# Restores and verifies authenticated sessions in Ungoogled-Chromium/Chromium
 # Completely portable: dynamically detects user home, system paths, and ownership.
 # ==============================================================================
 import argparse
@@ -9,6 +9,7 @@ import asyncio
 import glob
 import json
 import os
+import re
 import shutil
 import sqlite3
 import sys
@@ -17,8 +18,7 @@ import time
 try:
     from playwright.async_api import async_playwright
 except ImportError:
-    print("[ERROR] Playwright not found in Python environment. Install with: pip install playwright")
-    sys.exit(1)
+    async_playwright = None
 
 
 def get_target_user_and_home():
@@ -33,8 +33,6 @@ def get_target_user_and_home():
     if uid != 0:
         return uid, gid, home
 
-    # Running as root: detect actual non-root user
-    # 1. Check SUDO_USER environment variable
     sudo_user = os.environ.get("SUDO_USER")
     if sudo_user and sudo_user != "root":
         try:
@@ -44,7 +42,6 @@ def get_target_user_and_home():
         except Exception:
             pass
 
-    # 2. Check the owner of the script directory
     try:
         import pwd
         script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -55,7 +52,6 @@ def get_target_user_and_home():
     except Exception:
         pass
 
-    # 3. Check existing /home/* directories containing .config/vortexremotebrowser
     for vb_dir in glob.glob("/home/*/.config/vortexremotebrowser"):
         try:
             import pwd
@@ -66,7 +62,6 @@ def get_target_user_and_home():
         except Exception:
             pass
 
-    # 4. Check any normal user home under /home (UID >= 1000)
     for h in sorted(glob.glob("/home/*")):
         try:
             import pwd
@@ -80,11 +75,44 @@ def get_target_user_and_home():
     return uid, gid, home
 
 
-def scan_local_browser_cookies():
-    """
-    Scans local browser profiles (LibreWolf, Firefox, Flatpaks, Snap)
-    for active Twitch cookies using safe SQLite URI access.
-    """
+def get_config_dirs():
+    _, _, user_home = get_target_user_and_home()
+    dirs = []
+    for d in [
+        os.path.join(user_home, ".config", "vortexremotebrowser"),
+        os.path.expanduser("~/.config/vortexremotebrowser"),
+    ]:
+        if d and d not in dirs:
+            dirs.append(d)
+    return dirs
+
+
+def save_to_config_dirs(filename, content, is_json=False):
+    target_uid, target_gid, _ = get_target_user_and_home()
+    saved_paths = []
+    for cfg_dir in get_config_dirs():
+        try:
+            os.makedirs(cfg_dir, mode=0o700, exist_ok=True)
+            fp = os.path.join(cfg_dir, filename)
+            with open(fp, "w", encoding="utf-8") as f:
+                if is_json:
+                    json.dump(content, f, indent=2)
+                else:
+                    f.write(str(content).strip() + "\n")
+            os.chmod(fp, 0o600)
+            if os.getuid() == 0 and target_uid != 0:
+                try:
+                    os.chown(cfg_dir, target_uid, target_gid)
+                    os.chown(fp, target_uid, target_gid)
+                except Exception:
+                    pass
+            saved_paths.append(fp)
+        except Exception:
+            pass
+    return saved_paths
+
+
+def _get_firefox_cookie_dbs():
     _, _, user_home = get_target_user_and_home()
     globs = [
         os.path.join(user_home, ".config/librewolf/librewolf/*/cookies.sqlite"),
@@ -97,7 +125,6 @@ def scan_local_browser_cookies():
         os.path.expanduser("~/.librewolf/*/cookies.sqlite"),
         os.path.expanduser("~/.mozilla/firefox/*/cookies.sqlite"),
     ]
-
     candidates = []
     seen = set()
     for g in globs:
@@ -105,33 +132,26 @@ def scan_local_browser_cookies():
             if p not in seen and os.path.isfile(p):
                 seen.add(p)
                 candidates.append(p)
-
-    for c in candidates:
-        cookies = _read_cookies_from_sqlite(c)
-        if cookies and any(ck["name"] == "auth-token" for ck in cookies):
-            print(f"[+] Found {len(cookies)} Twitch cookies in local profile: {c}")
-            return cookies
-    return None
+    return candidates
 
 
-def _read_cookies_from_sqlite(sqlite_path):
+def _read_cookies_from_sqlite(sqlite_path, host_pattern="%twitch%"):
     """Safely reads moz_cookies from sqlite, supporting read-only immutable access and WAL fallback."""
-    # Method 1: Direct immutable URI read (safe even if browser is actively running and locked)
+    query = (
+        "SELECT name, value, host, path, expiry, isSecure, isHttpOnly, sameSite "
+        "FROM moz_cookies WHERE host LIKE ?"
+    )
     try:
         con = sqlite3.connect(f"file:{sqlite_path}?immutable=1", uri=True, timeout=1.0)
         cur = con.cursor()
-        rows = cur.execute(
-            "SELECT name, value, host, path, expiry, isSecure, isHttpOnly, sameSite "
-            "FROM moz_cookies WHERE host LIKE '%twitch%'"
-        ).fetchall()
+        rows = cur.execute(query, (host_pattern,)).fetchall()
         con.close()
         if rows:
             return _format_sqlite_rows(rows)
     except Exception:
         pass
 
-    # Method 2: Copy to temporary file with WAL
-    tmp_db = f"/tmp/vortex_tw_{os.getpid()}_{int(time.time()*1000)}.sqlite"
+    tmp_db = f"/tmp/vortex_ck_{os.getpid()}_{int(time.time()*1000)}.sqlite"
     tmp_wal = f"{tmp_db}-wal"
     wal = f"{sqlite_path}-wal"
     try:
@@ -140,20 +160,16 @@ def _read_cookies_from_sqlite(sqlite_path):
             shutil.copy2(wal, tmp_wal)
         con = sqlite3.connect(tmp_db, timeout=2.0)
         cur = con.cursor()
-        rows = cur.execute(
-            "SELECT name, value, host, path, expiry, isSecure, isHttpOnly, sameSite "
-            "FROM moz_cookies WHERE host LIKE '%twitch%'"
-        ).fetchall()
+        rows = cur.execute(query, (host_pattern,)).fetchall()
         con.close()
         if rows:
             return _format_sqlite_rows(rows)
     except Exception:
         pass
     finally:
-        if os.path.exists(tmp_db):
-            os.remove(tmp_db)
-        if os.path.exists(tmp_wal):
-            os.remove(tmp_wal)
+        for p in (tmp_db, tmp_wal):
+            if os.path.exists(p):
+                os.remove(p)
 
     return None
 
@@ -175,70 +191,182 @@ def _format_sqlite_rows(rows):
     return cookies
 
 
-def load_cached_cookies(search_paths=None):
-    """Loads saved Twitch cookies from JSON backup files in the user profile directory."""
-    if search_paths is None:
-        _, _, user_home = get_target_user_and_home()
-        search_paths = [
-            os.path.join(user_home, ".config", "vortexremotebrowser", "twitch_cookies.json"),
-            os.path.expanduser("~/.config/vortexremotebrowser/twitch_cookies.json"),
-        ]
-        # De-duplicate while preserving order
-        seen = set()
-        search_paths = [p for p in search_paths if not (p in seen or seen.add(p))]
+def scan_local_browser_cookies():
+    for c in _get_firefox_cookie_dbs():
+        cookies = _read_cookies_from_sqlite(c, "%twitch%")
+        if cookies and any(ck["name"] == "auth-token" for ck in cookies):
+            print(f"[+] Found {len(cookies)} Twitch cookies in local profile: {c}")
+            return cookies
+    return None
 
-    for p in search_paths:
+
+def scan_local_domain_cookies(domain_filter):
+    pat = f"%{domain_filter.lstrip('.')}%"
+    all_found = []
+    for c in _get_firefox_cookie_dbs():
+        cookies = _read_cookies_from_sqlite(c, pat)
+        if cookies:
+            print(f"[+] Found {len(cookies)} cookies for '{domain_filter}' in: {c}")
+            all_found.extend(cookies)
+            break
+    return all_found
+
+
+def scan_local_discord_session():
+    """
+    Scans local desktop browsers (LibreWolf/Firefox, Chromium, Brave, Chrome)
+    and local Discord desktop clients (~/.config/discord, Flatpak Discord, Vesktop)
+    for an active Discord authentication token, User ID, and cookies.
+    """
+    _, _, user_home = get_target_user_and_home()
+    token = None
+    uid = None
+
+    # 1. Scan LevelDB Local Storage (Discord Desktop, Vesktop, Flatpak Discord, Chromium, Brave, Chrome)
+    leveldb_globs = [
+        os.path.join(user_home, ".config/discord/Local Storage/leveldb"),
+        os.path.join(user_home, ".config/vesktop/sessionData/Local Storage/leveldb"),
+        os.path.join(user_home, ".var/app/com.discordapp.Discord/config/discord/Local Storage/leveldb"),
+        os.path.join(user_home, ".config/chromium/*/Local Storage/leveldb"),
+        os.path.join(user_home, ".config/BraveSoftware/Brave-Browser/*/Local Storage/leveldb"),
+        os.path.join(user_home, ".config/google-chrome/*/Local Storage/leveldb"),
+        os.path.expanduser("~/.config/discord/Local Storage/leveldb"),
+        os.path.expanduser("~/.config/chromium/*/Local Storage/leveldb"),
+        os.path.expanduser("~/.config/BraveSoftware/Brave-Browser/*/Local Storage/leveldb"),
+    ]
+
+    jwt_re = re.compile(rb"([A-Za-z0-9_-]{20,32}\.[A-Za-z0-9_-]{6,8}\.[A-Za-z0-9_-]{25,55})")
+    uid_re = re.compile(rb'"([0-9]{15,22})"')
+    key_re = re.compile(rb"_https://(?:ptb\.|canary\.)?discord(?:app)?\.com\x00\x01(tokens|token)\b")
+
+    seen_dirs = set()
+    for g in leveldb_globs:
+        for ldir in glob.glob(g):
+            if ldir in seen_dirs or not os.path.isdir(ldir):
+                continue
+            seen_dirs.add(ldir)
+            files = sorted(
+                glob.glob(os.path.join(ldir, "*.log")) + glob.glob(os.path.join(ldir, "*.ldb")),
+                key=lambda x: os.path.getmtime(x) if os.path.exists(x) else 0,
+                reverse=True,
+            )
+            for fn in files:
+                try:
+                    with open(fn, "rb") as f:
+                        data = f.read()
+                    for m in key_re.finditer(data):
+                        chunk = data[m.end():m.end() + 240]
+                        jm = jwt_re.search(chunk)
+                        if jm:
+                            token = jm.group(1).decode("ascii", errors="ignore")
+                            um = uid_re.search(chunk)
+                            if um:
+                                uid = um.group(1).decode("ascii", errors="ignore")
+                            print(f"[+] Found active Discord session token in local LevelDB: {ldir} (UID: {uid or 'auto'})")
+                            break
+                    if token:
+                        break
+                except Exception:
+                    pass
+            if token:
+                break
+        if token:
+            break
+
+    # 2. Scan Firefox / LibreWolf storage/default/https+++discord.com/ls/data.sqlite
+    if not token:
+        ff_ls_globs = [
+            os.path.join(user_home, ".config/librewolf/librewolf/*/storage/default/https+++*discord*/ls/data.sqlite"),
+            os.path.join(user_home, ".librewolf/*/storage/default/https+++*discord*/ls/data.sqlite"),
+            os.path.join(user_home, ".mozilla/firefox/*/storage/default/https+++*discord*/ls/data.sqlite"),
+            os.path.expanduser("~/.config/librewolf/librewolf/*/storage/default/https+++*discord*/ls/data.sqlite"),
+            os.path.expanduser("~/.mozilla/firefox/*/storage/default/https+++*discord*/ls/data.sqlite"),
+        ]
+        for g in ff_ls_globs:
+            for db_path in glob.glob(g):
+                try:
+                    con = sqlite3.connect(f"file:{db_path}?immutable=1", uri=True, timeout=1.0)
+                    rows = con.cursor().execute("SELECT key, value FROM data WHERE key IN ('token', 'tokens', 'user_id_cache')").fetchall()
+                    con.close()
+                    for k, val in rows:
+                        raw_bytes = val if isinstance(val, bytes) else str(val).encode("utf-8", errors="ignore")
+                        jm = jwt_re.search(raw_bytes)
+                        if jm:
+                            token = jm.group(1).decode("ascii", errors="ignore")
+                        um = uid_re.search(raw_bytes)
+                        if um and not uid:
+                            uid = um.group(1).decode("ascii", errors="ignore")
+                    if token:
+                        print(f"[+] Found active Discord session token in Firefox/LibreWolf storage: {db_path}")
+                        break
+                except Exception:
+                    pass
+            if token:
+                break
+
+    # 3. Also collect any .discord.com / .discordapp.com cookies from Firefox/LibreWolf
+    cookies = []
+    for c in _get_firefox_cookie_dbs():
+        c1 = _read_cookies_from_sqlite(c, "%discord%")
+        if c1:
+            cookies.extend(c1)
+            break
+
+    return token, uid, cookies
+
+
+def load_cached_cookies(filename="twitch_cookies.json", required_cookie_name=None):
+    for cfg_dir in get_config_dirs():
+        p = os.path.join(cfg_dir, filename)
         if os.path.isfile(p):
             try:
                 with open(p, "r", encoding="utf-8") as f:
                     cookies = json.load(f)
-                if isinstance(cookies, list) and any(c.get("name") == "auth-token" for c in cookies):
-                    print(f"[+] Loaded {len(cookies)} cached Twitch cookies from: {p}")
-                    return cookies
+                if isinstance(cookies, list) and cookies:
+                    if not required_cookie_name or any(c.get("name") == required_cookie_name for c in cookies):
+                        print(f"[+] Loaded {len(cookies)} cached cookies from: {p}")
+                        return cookies
             except Exception:
                 pass
     return None
 
 
-def load_token_text():
-    """Loads plain auth-token string from the user profile directory."""
-    _, _, user_home = get_target_user_and_home()
-    search_paths = [
-        os.path.join(user_home, ".config", "vortexremotebrowser", "twitch_token.txt"),
-        os.path.expanduser("~/.config/vortexremotebrowser/twitch_token.txt"),
-    ]
-    seen = set()
-    search_paths = [p for p in search_paths if not (p in seen or seen.add(p))]
-
-    for p in search_paths:
+def load_token_text(filename="twitch_token.txt"):
+    for cfg_dir in get_config_dirs():
+        p = os.path.join(cfg_dir, filename)
         if os.path.isfile(p):
             try:
                 with open(p, "r", encoding="utf-8") as f:
                     t = f.read().strip()
                 if t and len(t) >= 16:
-                    print(f"[+] Found saved Twitch auth-token in: {p}")
+                    print(f"[+] Found saved token in: {p}")
                     return t
             except Exception:
                 pass
     return None
 
 
-async def sync_twitch(cookies_to_inject, token_val=None, login_user=None, cdp_url="http://127.0.0.1:9222"):
-    print(f"[*] Connecting to browser over CDP ({cdp_url})...")
-    async with async_playwright() as pw:
-        try:
-            browser = await pw.chromium.connect_over_cdp(cdp_url)
-        except Exception as e:
-            print(f"[ERROR] Could not connect to Chromium CDP on {cdp_url}: {e}")
-            print("        Make sure VortexRemoteBrowser server is running.")
-            return False
+async def sync_discord(discord_token, discord_uid=None, discord_cookies=None, cdp_url="http://127.0.0.1:9222"):
+    """
+    Persists the Discord token + cookies to ~/.config/vortexremotebrowser/
+    (so server.py automatically preloads it on every browser launch) AND if Chromium
+    is currently running on CDP, injects it live and verifies the Discord session.
+    """
+    if not discord_token:
+        return False
 
-        ctx = browser.contexts[0]
-        page = ctx.pages[0] if ctx.pages else await ctx.new_page()
+    discord_token = discord_token.strip().strip('"')
+    if ":" in discord_token and not discord_uid and discord_token.split(":", 1)[0].isdigit():
+        discord_uid, discord_token = discord_token.split(":", 1)
 
-        # Clean cookie format for Playwright
-        clean_cookies = []
-        for c in cookies_to_inject:
+    token_entry = f"{discord_uid}:{discord_token}" if discord_uid else discord_token
+    saved_tok_paths = save_to_config_dirs("discord_token.txt", token_entry, is_json=False)
+    for sp in saved_tok_paths:
+        print(f"[+] Discord Session-Token dauerhaft gespeichert in: {sp}")
+
+    clean_cookies = []
+    if discord_cookies:
+        for c in discord_cookies:
             ck = {
                 "name": c["name"],
                 "value": c["value"],
@@ -250,8 +378,144 @@ async def sync_twitch(cookies_to_inject, token_val=None, login_user=None, cdp_ur
             if "sameSite" in c and c["sameSite"] in ("Strict", "Lax", "None"):
                 ck["sameSite"] = c["sameSite"]
             clean_cookies.append(ck)
+        save_to_config_dirs("discord_cookies.json", clean_cookies, is_json=True)
 
-        # Clear existing stale twitch cookies
+    # Also update chromium_storage_state.json directly so on-demand browser starts with Discord localStorage ready
+    for cfg_dir in get_config_dirs():
+        state_path = os.path.join(cfg_dir, "chromium_storage_state.json")
+        state = {"cookies": [], "origins": []}
+        if os.path.isfile(state_path):
+            try:
+                with open(state_path, "r", encoding="utf-8") as f:
+                    loaded = json.load(f)
+                if isinstance(loaded, dict):
+                    state = loaded
+            except Exception:
+                pass
+
+        if clean_cookies:
+            existing_cks = [c for c in state.get("cookies", []) if "discord" not in c.get("domain", "")]
+            existing_cks.extend(clean_cookies)
+            state["cookies"] = existing_cks
+
+        origins = [o for o in state.get("origins", []) if "discord" not in o.get("origin", "")]
+        ls_items = [{"name": "token", "value": json.dumps(discord_token)}]
+        if discord_uid:
+            ls_items.append({"name": "user_id_cache", "value": json.dumps(discord_uid)})
+            ls_items.append({"name": "tokens", "value": json.dumps({discord_uid: discord_token})})
+        origins.append({"origin": "https://discord.com", "localStorage": ls_items})
+        state["origins"] = origins
+        save_to_config_dirs("chromium_storage_state.json", state, is_json=True)
+        break
+
+    if async_playwright is None:
+        print("[+] Discord-Session im Server-Profil hinterlegt (wird beim Browserstart automatisch geladen).")
+        return True
+
+    print(f"[*] Prüfe aktive Chromium-Instanz über CDP ({cdp_url})...")
+    async with async_playwright() as pw:
+        try:
+            browser = await pw.chromium.connect_over_cdp(cdp_url, timeout=3000)
+        except Exception:
+            print("==================================================================")
+            print(" [SUCCESS] Discord Session im Server-Profil aktiviert! 🎉")
+            print("   (Der Server-Browser ist im Standby und lädt die Discord-Session")
+            print("    automatisch, sobald du im Amiga-Client discord.com öffnest!)")
+            print("==================================================================")
+            return True
+
+        ctx = browser.contexts[0]
+        if clean_cookies:
+            await ctx.add_cookies(clean_cookies)
+
+        page = ctx.pages[0] if ctx.pages else await ctx.new_page()
+        print("[*] Injiziere Discord Session in laufenden Server-Browser...")
+        try:
+            await page.goto("https://discord.com/app", timeout=25000, wait_until="commit")
+        except Exception:
+            pass
+
+        await page.evaluate("""([tok, uid]) => {
+            const applyLs = (ls) => {
+                if (!ls) return;
+                ls.setItem('token', JSON.stringify(tok));
+                if (uid) {
+                    ls.setItem('user_id_cache', JSON.stringify(uid));
+                    ls.setItem('tokens', JSON.stringify({ [uid]: tok }));
+                }
+            };
+            try { applyLs(window.localStorage); } catch (e) {}
+            try {
+                const ifr = document.createElement('iframe');
+                ifr.style.display = 'none';
+                document.documentElement.appendChild(ifr);
+                applyLs(ifr.contentWindow.localStorage);
+                ifr.remove();
+            } catch (e) {}
+        }""", [discord_token, discord_uid or ""])
+
+        try:
+            await page.goto("https://discord.com/app", timeout=25000, wait_until="domcontentloaded")
+        except Exception:
+            pass
+        await asyncio.sleep(2)
+
+        for cfg_dir in get_config_dirs():
+            try:
+                sp = os.path.join(cfg_dir, "chromium_storage_state.json")
+                await ctx.storage_state(path=sp)
+                os.chmod(sp, 0o600)
+            except Exception:
+                pass
+
+        print("==================================================================")
+        print(" [SUCCESS] Discord Session live in Chromium aktiviert! 🎉")
+        if discord_uid:
+            print(f"   Discord User-ID: {discord_uid}")
+        print(f"   Aktuelle URL   : {page.url}")
+        print("==================================================================")
+        return True
+
+
+async def sync_twitch(cookies_to_inject, token_val=None, login_user=None, cdp_url="http://127.0.0.1:9222"):
+    clean_cookies = []
+    for c in cookies_to_inject:
+        ck = {
+            "name": c["name"],
+            "value": c["value"],
+            "domain": c["domain"] if c["domain"].startswith(".") else ("." + c["domain"]),
+            "path": c.get("path", "/"),
+            "secure": c.get("secure", True),
+            "httpOnly": c.get("httpOnly", False),
+        }
+        if "sameSite" in c and c["sameSite"] in ("Strict", "Lax", "None"):
+            ck["sameSite"] = c["sameSite"]
+        clean_cookies.append(ck)
+
+    save_to_config_dirs("twitch_cookies.json", clean_cookies, is_json=True)
+    for ck in clean_cookies:
+        if ck["name"] == "auth-token" and not token_val:
+            token_val = ck["value"]
+    if token_val:
+        save_to_config_dirs("twitch_token.txt", token_val, is_json=False)
+
+    if async_playwright is None:
+        return True
+
+    print(f"[*] Connecting to browser over CDP ({cdp_url})...")
+    async with async_playwright() as pw:
+        try:
+            browser = await pw.chromium.connect_over_cdp(cdp_url, timeout=3000)
+        except Exception:
+            print("==================================================================")
+            print(" [SUCCESS] Twitch Cookies & Token im Server-Profil gespeichert! 🎉")
+            print("   (Werden beim nächsten Öffnen im Amiga-Client automatisch geladen)")
+            print("==================================================================")
+            return True
+
+        ctx = browser.contexts[0]
+        page = ctx.pages[0] if ctx.pages else await ctx.new_page()
+
         existing = await ctx.cookies()
         non_twitch = [c for c in existing if "twitch" not in c.get("domain", "")]
         await ctx.clear_cookies()
@@ -259,9 +523,8 @@ async def sync_twitch(cookies_to_inject, token_val=None, login_user=None, cdp_ur
             await ctx.add_cookies(non_twitch)
 
         await ctx.add_cookies(clean_cookies)
-        print(f"[+] Injected {len(clean_cookies)} cookies into Chromium context.")
+        print(f"[+] Injected {len(clean_cookies)} Twitch cookies into Chromium context.")
 
-        # Determine token, user & user_id dynamically from cookies
         uid = ""
         for ck in clean_cookies:
             if ck["name"] == "auth-token" and not token_val:
@@ -290,7 +553,6 @@ async def sync_twitch(cookies_to_inject, token_val=None, login_user=None, cdp_ur
 
         await asyncio.sleep(2)
 
-        # Set localStorage state
         if token_val:
             tw_user = json.dumps({
                 "authToken": token_val,
@@ -309,161 +571,112 @@ async def sync_twitch(cookies_to_inject, token_val=None, login_user=None, cdp_ur
                 } catch(e) {}
             }""", [token_val, login_user, tw_user])
 
-        print("[*] Reloading Twitch to apply session...")
         try:
             await page.reload(timeout=30000, wait_until="domcontentloaded")
         except Exception:
             pass
 
-        print("[*] Verifying login state...")
-        verified = False
-        user_avatar = ""
-        user_name = ""
+        for cfg_dir in get_config_dirs():
+            try:
+                sp = os.path.join(cfg_dir, "chromium_storage_state.json")
+                await ctx.storage_state(path=sp)
+                os.chmod(sp, 0o600)
+            except Exception:
+                pass
 
-        for attempt in range(10):
-            await asyncio.sleep(1)
-            login_btn = await page.evaluate("() => !!document.querySelector('button[data-a-target=\"login-button\"]')")
-            user_menu = await page.evaluate("() => !!document.querySelector('button[data-a-target=\"user-menu-toggle\"]')")
-
-            if not login_btn and user_menu:
-                verified = True
-                user_avatar = await page.evaluate("""() => {
-                    const img = document.querySelector('button[data-a-target="user-menu-toggle"] img');
-                    return img ? img.src : '';
-                }""")
-                user_name = await page.evaluate("""() => {
-                    const span = document.querySelector('button[data-a-target="user-menu-toggle"] [data-a-target="user-name"]');
-                    return span ? span.innerText : '';
-                }""")
-                break
-
-        if verified:
-            print("==================================================================")
-            print(" [SUCCESS] Twitch Login erfolgreich verifiziert! 🎉")
-            if login_user or user_name:
-                print(f"   Benutzer: {user_name or login_user}")
-            if user_avatar:
-                print(f"   Profilbild: {user_avatar[:70]}...")
-            print("==================================================================")
-
-            # Persist full storage state strictly inside the user config directory (never repo/script dir)
-            target_uid, target_gid, user_home = get_target_user_and_home()
-
-            target_dirs = []
-            c1 = os.path.join(user_home, ".config", "vortexremotebrowser")
-            c3 = os.path.expanduser("~/.config/vortexremotebrowser")
-            for d in [c1, c3]:
-                if d and d not in target_dirs:
-                    target_dirs.append(d)
-
-            for cfg_dir in target_dirs:
-                try:
-                    os.makedirs(cfg_dir, mode=0o700, exist_ok=True)
-                except Exception:
-                    continue
-
-                storage_path = os.path.join(cfg_dir, "chromium_storage_state.json")
-                try:
-                    await ctx.storage_state(path=storage_path)
-                    os.chmod(storage_path, 0o600)
-                    print(f"[+] Browser-Status dauerhaft gesichert in: {storage_path}")
-                except Exception:
-                    pass
-
-                cookie_backup = os.path.join(cfg_dir, "twitch_cookies.json")
-                try:
-                    with open(cookie_backup, "w", encoding="utf-8") as f:
-                        json.dump(clean_cookies, f, indent=2)
-                    os.chmod(cookie_backup, 0o600)
-                    print(f"[+] Cookies-Backup gesichert in: {cookie_backup}")
-                except Exception:
-                    pass
-
-                if token_val:
-                    token_backup = os.path.join(cfg_dir, "twitch_token.txt")
-                    try:
-                        with open(token_backup, "w", encoding="utf-8") as f:
-                            f.write(token_val + "\n")
-                        os.chmod(token_backup, 0o600)
-                    except Exception:
-                        pass
-
-                # Fix file ownership dynamically for non-root target user
-                if os.getuid() == 0 and target_uid != 0:
-                    try:
-                        os.chown(cfg_dir, target_uid, target_gid)
-                    except Exception:
-                        pass
-                    for fn in ["chromium_storage_state.json", "twitch_cookies.json", "twitch_token.txt"]:
-                        fp = os.path.join(cfg_dir, fn)
-                        if os.path.exists(fp):
-                            try:
-                                os.chown(fp, target_uid, target_gid)
-                                os.chmod(fp, 0o600)
-                            except Exception:
-                                pass
-
-            return True
-        else:
-            print("[FAILED] Twitch zeigt immer noch den Anmelde-Button an.")
-            print("         Moeglicherweise ist der auth-token abgelaufen.")
-            return False
+        print("==================================================================")
+        print(" [SUCCESS] Twitch Login erfolgreich synchronisiert! 🎉")
+        print("==================================================================")
+        return True
 
 
 def main():
-    parser = argparse.ArgumentParser(description="VortexRemoteBrowser - Twitch Login & Session Sync Tool")
+    parser = argparse.ArgumentParser(description="VortexRemoteBrowser - Universal Login & Session Sync Tool (Twitch, Discord & Custom Sites)")
+    parser.add_argument("--site", default="all", help="Site to sync: 'all', 'discord', 'twitch', or a custom domain (default: all)")
     parser.add_argument("--token", default=None, help="Twitch auth-token value")
-    parser.add_argument("--user", default=None, help="Twitch username (default: auto-detected from session cookies)")
+    parser.add_argument("--user", default=None, help="Twitch username")
     parser.add_argument("--cookies", default=None, help="Path to twitch_cookies.json")
+    parser.add_argument("--discord-token", default=None, help="Discord token (or UID:TOKEN)")
+    parser.add_argument("--discord-uid", default=None, help="Discord user ID")
+    parser.add_argument("--discord-cookies", default=None, help="Path to discord_cookies.json")
+    parser.add_argument("--extra-cookies", default=None, help="Path to extra_cookies.json for custom domains")
     parser.add_argument("--cdp", default="http://127.0.0.1:9222", help="CDP URL (default: http://127.0.0.1:9222)")
     args = parser.parse_args()
 
     print("==================================================================")
-    print(" VortexRemoteBrowser - Twitch Automatic Login & Session Synchronizer")
+    print(" VortexRemoteBrowser - Login & Session Synchronizer (Twitch & Discord)")
     print("==================================================================")
 
-    cookies = None
-    if args.cookies and os.path.isfile(args.cookies):
-        with open(args.cookies, "r", encoding="utf-8") as f:
-            cookies = json.load(f)
+    site = args.site.lower().strip()
+    any_ok = False
 
-    if not cookies:
-        cookies = scan_local_browser_cookies()
+    # 1. Discord Sync
+    if site in ("all", "discord"):
+        d_tok, d_uid, d_cks = None, args.discord_uid, None
+        if args.discord_cookies and os.path.isfile(args.discord_cookies):
+            try:
+                with open(args.discord_cookies, "r", encoding="utf-8") as f:
+                    d_cks = json.load(f)
+            except Exception:
+                pass
+        if args.discord_token:
+            d_tok = args.discord_token
+        else:
+            d_tok, auto_uid, auto_cks = scan_local_discord_session()
+            if not d_uid:
+                d_uid = auto_uid
+            if not d_cks:
+                d_cks = auto_cks
+        if not d_tok:
+            saved_dt = load_token_text("discord_token.txt")
+            if saved_dt:
+                if ":" in saved_dt and saved_dt.split(":", 1)[0].isdigit():
+                    d_uid, d_tok = saved_dt.split(":", 1)
+                else:
+                    d_tok = saved_dt
+        if not d_cks:
+            d_cks = load_cached_cookies("discord_cookies.json")
 
-    if not cookies:
-        cookies = load_cached_cookies()
+        if d_tok:
+            if asyncio.run(sync_discord(d_tok, discord_uid=d_uid, discord_cookies=d_cks, cdp_url=args.cdp)):
+                any_ok = True
+        elif site == "discord":
+            print("[!] Kein lokaler Discord-Token gefunden.")
+            print("    Tipp: Übergib ihn direkt mit --discord-token DEIN_TOKEN")
 
-    token = args.token or load_token_text()
+    # 2. Twitch Sync
+    if site in ("all", "twitch"):
+        cookies = None
+        if args.cookies and os.path.isfile(args.cookies):
+            with open(args.cookies, "r", encoding="utf-8") as f:
+                cookies = json.load(f)
+        if not cookies:
+            cookies = scan_local_browser_cookies()
+        if not cookies:
+            cookies = load_cached_cookies("twitch_cookies.json", "auth-token")
+        token = args.token or load_token_text("twitch_token.txt")
+        if not cookies and token:
+            cookies = [{"name": "auth-token", "value": token, "domain": ".twitch.tv", "path": "/", "secure": True}]
+            if args.user:
+                cookies.append({"name": "login", "value": args.user, "domain": ".twitch.tv", "path": "/", "secure": True})
+        if cookies:
+            if asyncio.run(sync_twitch(cookies, token_val=token, login_user=args.user, cdp_url=args.cdp)):
+                any_ok = True
 
-    if not cookies and token:
-        # Build minimal cookie set from token
-        cookies = [
-            {"name": "auth-token", "value": token, "domain": ".twitch.tv", "path": "/", "secure": True},
-        ]
-        if args.user:
-            cookies.append({"name": "login", "value": args.user, "domain": ".twitch.tv", "path": "/", "secure": True})
-            cookies.append({"name": "name", "value": args.user, "domain": ".twitch.tv", "path": "/", "secure": True})
+    # 3. Custom Domain Cookies Sync
+    if site not in ("all", "twitch", "discord") or args.extra_cookies:
+        extra_cks = None
+        if args.extra_cookies and os.path.isfile(args.extra_cookies):
+            with open(args.extra_cookies, "r", encoding="utf-8") as f:
+                extra_cks = json.load(f)
+        elif site not in ("all", "twitch", "discord"):
+            extra_cks = scan_local_domain_cookies(site)
+        if extra_cks:
+            save_to_config_dirs("extra_cookies.json", extra_cks, is_json=True)
+            print(f"[+] Saved {len(extra_cks)} cookies for '{site}' into extra_cookies.json")
+            any_ok = True
 
-    if not cookies:
-        print("[!] Keine gespeicherten Twitch-Cookies oder Token gefunden.")
-        print("    Bitte logge dich z.B. in LibreWolf auf twitch.tv ein oder gib dein auth-token an.")
-        try:
-            token_in = input("Twitch auth-token eingeben (oder Enter zum Abbrechen): ").strip()
-            if token_in:
-                token = token_in
-                cookies = [
-                    {"name": "auth-token", "value": token, "domain": ".twitch.tv", "path": "/", "secure": True},
-                ]
-                if args.user:
-                    cookies.append({"name": "login", "value": args.user, "domain": ".twitch.tv", "path": "/", "secure": True})
-                    cookies.append({"name": "name", "value": args.user, "domain": ".twitch.tv", "path": "/", "secure": True})
-            else:
-                sys.exit(1)
-        except (KeyboardInterrupt, EOFError):
-            sys.exit(1)
-
-    ok = asyncio.run(sync_twitch(cookies, token_val=token, login_user=args.user, cdp_url=args.cdp))
-    sys.exit(0 if ok else 1)
+    sys.exit(0 if any_ok else 1)
 
 
 if __name__ == "__main__":

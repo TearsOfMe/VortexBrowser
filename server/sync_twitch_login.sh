@@ -1,22 +1,30 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# VortexRemoteBrowser - Twitch Automatic Login & Session Synchronizer
+# VortexRemoteBrowser - Universal Login & Session Synchronizer (Twitch, Discord & Web)
 # Usage:
-#   ./sync_twitch_login.sh [--server IP] [--token TOKEN] [--user USER]
+#   ./sync_twitch_login.sh [--server IP] [--site all|discord|twitch|DOMAIN]
+#                          [--discord-token TOKEN] [--token TWITCH_TOKEN]
 #   ./sync_twitch_login.sh --restore-pc
 # ==============================================================================
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SERVER_IP="${VORTEX_SERVER_IP:-127.0.0.1}"
+SERVER_IP="${VORTEX_SERVER_IP:-192.168.178.2}"
+SITE="all"
 TOKEN=""
 TW_USER=""
+DISCORD_TOKEN=""
+DISCORD_UID=""
 RESTORE_PC=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --server|--host)
             SERVER_IP="$2"
+            shift 2
+            ;;
+        --site|--domain)
+            SITE="$2"
             shift 2
             ;;
         --token)
@@ -27,15 +35,25 @@ while [[ $# -gt 0 ]]; do
             TW_USER="$2"
             shift 2
             ;;
+        --discord-token)
+            DISCORD_TOKEN="$2"
+            shift 2
+            ;;
+        --discord-uid)
+            DISCORD_UID="$2"
+            shift 2
+            ;;
         --restore-pc)
             RESTORE_PC=1
             shift
             ;;
         --help|-h)
-            echo "VortexRemoteBrowser Twitch Synchronizer"
+            echo "VortexRemoteBrowser Session Synchronizer (Twitch, Discord & Custom Domains)"
             echo "Usage:"
-            echo "  ./sync_twitch_login.sh [--server IP] [--token TOKEN] [--user USER]"
-            echo "  ./sync_twitch_login.sh --restore-pc   (Restore login into PC LibreWolf/Firefox)"
+            echo "  ./sync_twitch_login.sh [--server IP] [--site all|discord|twitch|DOMAIN]"
+            echo "  ./sync_twitch_login.sh [--server IP] --discord-token TOKEN"
+            echo "  ./sync_twitch_login.sh [--server IP] --token TWITCH_TOKEN [--user USER]"
+            echo "  ./sync_twitch_login.sh --restore-pc"
             exit 0
             ;;
         *)
@@ -45,11 +63,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 echo "=================================================================="
-echo " VortexRemoteBrowser - Twitch Automatic Login & Session Synchronizer"
-echo " Target Server: ${SERVER_IP}"
+echo " VortexRemoteBrowser - Login & Session Synchronizer (Twitch & Discord)"
+echo " Target Server: ${SERVER_IP} | Site: ${SITE}"
 echo "=================================================================="
 
-# Function to locate local Python script
 find_local_script() {
     for cand in \
         "${SCRIPT_DIR}/server/sync_twitch_login.py" \
@@ -68,100 +85,14 @@ if [ -z "$LOCAL_PY_SCRIPT" ]; then
     exit 1
 fi
 
-# Restore PC option
-if [ "$RESTORE_PC" -eq 1 ]; then
-    echo "[*] Abrufen des aktiven Twitch-Tokens..."
-    FETCHED_TOKEN="$TOKEN"
-    if [ -z "$FETCHED_TOKEN" ]; then
-        if ssh "root@${SERVER_IP}" "test -f ~/.config/vortexremotebrowser/twitch_token.txt" 2>/dev/null; then
-            FETCHED_TOKEN=$(ssh "root@${SERVER_IP}" "cat ~/.config/vortexremotebrowser/twitch_token.txt" 2>/dev/null || true)
-        elif [ -f "${HOME}/.config/vortexremotebrowser/twitch_token.txt" ]; then
-            FETCHED_TOKEN=$(cat "${HOME}/.config/vortexremotebrowser/twitch_token.txt")
-        fi
-    fi
-
-    if [ -n "$FETCHED_TOKEN" ]; then
-        echo ""
-        # Try direct sqlite injection if browser is closed
-        INJECTED=$(python3 -c "
-import glob, os, sqlite3, time, sys
-
-token = sys.argv[1]
-globs = [
-    os.path.expanduser('~/.config/librewolf/librewolf/*/cookies.sqlite'),
-    os.path.expanduser('~/.librewolf/*/cookies.sqlite'),
-    os.path.expanduser('~/.mozilla/firefox/*/cookies.sqlite'),
-    os.path.expanduser('~/.var/app/io.gitlab.librewolf-community/.librewolf/*/cookies.sqlite'),
-    os.path.expanduser('~/.var/app/org.mozilla.firefox/.mozilla/firefox/*/cookies.sqlite'),
-]
-
-candidates = []
-for g in globs:
-    for p in glob.glob(g):
-        if os.path.isfile(p) and p not in candidates:
-            candidates.append(p)
-
-success = False
-for c in candidates:
-    try:
-        con = sqlite3.connect(c, timeout=0.5)
-        now_us = int(time.time() * 1000000)
-        exp = int(time.time() + 31536000)
-        con.execute('''
-            INSERT OR REPLACE INTO moz_cookies
-            (originAttributes, name, value, host, path, expiry, lastAccessed, creationTime, isSecure, isHttpOnly, inBrowserElement, sameSite, schemeMap, isPartitionedAttributeSet, updateTime)
-            VALUES ('', 'auth-token', ?, '.twitch.tv', '/', ?, ?, ?, 1, 0, 0, 0, 2, 0, ?)
-        ''', (token, exp, now_us, now_us, now_us))
-        con.commit()
-        con.close()
-        print(f'[+] auth-token direkt in Datenbank geschrieben: {c}')
-        success = True
-    except Exception:
-        pass
-
-if success:
-    print('DIRECT_OK')
-" "$FETCHED_TOKEN" 2>/dev/null || true)
-
-        echo "=================================================================="
-        echo " [SOFORT-LOGIN IM PC-BROWSER / LIBREWOLF]"
-        echo "=================================================================="
-        echo " Dein aktiver Twitch auth-token lautet:"
-        echo "   ${FETCHED_TOKEN}"
-        echo ""
-
-        if echo "$INJECTED" | grep -q "DIRECT_OK"; then
-            echo "[OK] Cookie wurde direkt in das Profil geschrieben!"
-            echo "     Starte LibreWolf neu oder oeffne https://www.twitch.tv"
-        else
-            echo " Da LibreWolf gerade geoeffnet ist (Datenbank gesperrt) und Twitch"
-            echo " das Anmeldeformular in LibreWolf mit Anti-Bot-Checks blockiert:"
-            echo ""
-            echo " 1. Oeffne in LibreWolf: https://www.twitch.tv"
-            echo " 2. Druecke F12 (Entwicklerwerkzeuge) und klicke auf 'Konsole'"
-            echo " 3. Fuege diese Zeile ein und druecke Enter:"
-            echo ""
-            echo "document.cookie = 'auth-token=${FETCHED_TOKEN}; path=/; domain=.twitch.tv; secure; max-age=31536000'; location.reload();"
-            echo ""
-            echo " Der Browser laedt neu und du bist sofort wieder eingeloggt!"
-            echo " (Alternativ: LibreWolf schliessen und './sync_twitch_login.sh --restore-pc' erneut ausfuehren)"
-        fi
-        echo "=================================================================="
-        exit 0
-    else
-        echo "[!] Kein gespeicherter Token gefunden. Bitte zuerst auf dem Server synchronisieren."
-        exit 1
-    fi
-fi
-
-# Check if we are running directly on the server
+# Check if we are running directly on the target server
 MY_IPS=$(hostname -I 2>/dev/null || echo "")
 IS_LOCAL=0
 if [[ "$SERVER_IP" == "127.0.0.1" || "$SERVER_IP" == "localhost" ]] || [[ "$MY_IPS" =~ "$SERVER_IP" ]]; then
     IS_LOCAL=1
 fi
 
-if [ "$IS_LOCAL" -eq 1 ]; then
+if [ "$IS_LOCAL" -eq 1 ] && [ "$RESTORE_PC" -eq 0 ]; then
     echo "[*] Running locally on server..."
     cd "$SCRIPT_DIR"
     if [ -d ".venv" ]; then
@@ -171,76 +102,66 @@ if [ "$IS_LOCAL" -eq 1 ]; then
     else
         PYTHON="python3"
     fi
-    ARGS=()
-    if [ -n "$TOKEN" ]; then
-        ARGS+=("--token" "$TOKEN")
-    fi
-    if [ -n "$TW_USER" ]; then
-        ARGS+=("--user" "$TW_USER")
-    fi
+    ARGS=("--site" "$SITE")
+    [ -n "$TOKEN" ] && ARGS+=("--token" "$TOKEN")
+    [ -n "$TW_USER" ] && ARGS+=("--user" "$TW_USER")
+    [ -n "$DISCORD_TOKEN" ] && ARGS+=("--discord-token" "$DISCORD_TOKEN")
+    [ -n "$DISCORD_UID" ] && ARGS+=("--discord-uid" "$DISCORD_UID")
     exec "$PYTHON" "$LOCAL_PY_SCRIPT" "${ARGS[@]}"
 fi
 
-# We are on the workstation/client machine connecting to remote server
 echo "[*] Checking connectivity to remote server ${SERVER_IP}..."
 if ! ping -c 1 -W 2 "$SERVER_IP" >/dev/null 2>&1; then
     echo "[ERROR] Server ${SERVER_IP} ist nicht erreichbar!"
     exit 1
 fi
 
-# 1. Check if local LibreWolf/Firefox has active cookies to upload
-echo "[*] Checking local browser profiles for fresh Twitch cookies..."
-TMP_COOKIES="$(mktemp)"
-chmod 600 "$TMP_COOKIES"
-trap 'rm -f "$TMP_COOKIES"' EXIT
+# 1. Extract local Twitch cookies, Discord token/cookies, and custom domain cookies on the workstation
+TMP_TWITCH_CK="$(mktemp)"
+TMP_DISCORD_CK="$(mktemp)"
+TMP_DISCORD_TOK="$(mktemp)"
+TMP_EXTRA_CK="$(mktemp)"
+chmod 600 "$TMP_TWITCH_CK" "$TMP_DISCORD_CK" "$TMP_DISCORD_TOK" "$TMP_EXTRA_CK"
+trap 'rm -f "$TMP_TWITCH_CK" "$TMP_DISCORD_CK" "$TMP_DISCORD_TOK" "$TMP_EXTRA_CK"' EXIT
 
-TMP_COOKIES="$TMP_COOKIES" python3 -c "
-import glob, os, sqlite3, json
+python3 - "$LOCAL_PY_SCRIPT" "$SITE" "$TMP_TWITCH_CK" "$TMP_DISCORD_CK" "$TMP_DISCORD_TOK" "$TMP_EXTRA_CK" "$DISCORD_TOKEN" "$DISCORD_UID" <<'PYEOF'
+import importlib.util, json, os, sys
 
-out_path = os.environ['TMP_COOKIES']
-globs = [
-    os.path.expanduser('~/.config/librewolf/librewolf/*/cookies.sqlite'),
-    os.path.expanduser('~/.librewolf/*/cookies.sqlite'),
-    os.path.expanduser('~/.mozilla/firefox/*/cookies.sqlite'),
-    os.path.expanduser('~/.var/app/io.gitlab.librewolf-community/.librewolf/*/cookies.sqlite'),
-    os.path.expanduser('~/.var/app/org.mozilla.firefox/.mozilla/firefox/*/cookies.sqlite'),
-]
+script_path, site, out_tw_ck, out_dc_ck, out_dc_tok, out_ex_ck, cli_dc_tok, cli_dc_uid = sys.argv[1:9]
+spec = importlib.util.spec_from_file_location("sync_mod", script_path)
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
 
-candidates = []
-for g in globs:
-    for p in glob.glob(g):
-        if os.path.isfile(p) and p not in candidates:
-            candidates.append(p)
+if site in ("all", "twitch"):
+    tw_cks = mod.scan_local_browser_cookies()
+    if tw_cks:
+        with open(out_tw_ck, "w", encoding="utf-8") as f:
+            json.dump(tw_cks, f, indent=2)
 
-found = False
-for c in candidates:
-    try:
-        con = sqlite3.connect(f'file:{c}?immutable=1', uri=True, timeout=1.0)
-        rows = con.cursor().execute('SELECT name, value, host, path, expiry, isSecure, isHttpOnly, sameSite FROM moz_cookies WHERE host LIKE \"%twitch%\";').fetchall()
-        con.close()
-        if rows and any(r[0] == 'auth-token' for r in rows):
-            same_site_map = {0: 'None', 1: 'Lax', 2: 'Strict'}
-            cookies = [{'name': r[0], 'value': r[1], 'domain': r[2], 'path': r[3] or '/', 'expires': float(r[4]) if r[4] else None, 'secure': bool(r[5]), 'httpOnly': bool(r[6]), 'sameSite': same_site_map.get(r[7], 'None')} for r in rows]
-            with open(out_path, 'w', encoding='utf-8') as f:
-                json.dump(cookies, f, indent=2)
-            print(f'[+] Frische Cookies aus lokalem Profil gefunden: {c} ({len(cookies)} Cookies)')
-            found = True
-            break
-    except Exception:
-        pass
+if site in ("all", "discord"):
+    d_tok, d_uid, d_cks = mod.scan_local_discord_session()
+    if cli_dc_tok:
+        d_tok = cli_dc_tok
+    if cli_dc_uid:
+        d_uid = cli_dc_uid
+    if d_tok:
+        entry = f"{d_uid}:{d_tok}" if d_uid else d_tok
+        with open(out_dc_tok, "w", encoding="utf-8") as f:
+            f.write(entry + "\n")
+    if d_cks:
+        with open(out_dc_ck, "w", encoding="utf-8") as f:
+            json.dump(d_cks, f, indent=2)
 
-if not found:
-    try:
-        os.unlink(out_path)
-    except Exception:
-        pass
-    print('[-] Keine aktiven Cookies im lokalen Browser gefunden (nutze Server-Cache oder --token).')
-"
+if site not in ("all", "twitch", "discord"):
+    ex_cks = mod.scan_local_domain_cookies(site)
+    if ex_cks:
+        with open(out_ex_ck, "w", encoding="utf-8") as f:
+            json.dump(ex_cks, f, indent=2)
+PYEOF
 
-# 2. Dynamically determine remote server directory & Python environment
+# 2. Detect remote server directory & Python environment
 echo "[*] Detecting remote server installation and Python environment..."
 REMOTE_INFO=$(ssh -o ConnectTimeout=5 "root@${SERVER_IP}" '
-    # 1. Process directory of currently running server.py
     PID_DIR=$(pgrep -f "server.py" | head -n1 | xargs -I{} readlink -f /proc/{}/cwd 2>/dev/null || true)
     if [ -n "$PID_DIR" ] && [ -f "$PID_DIR/server.py" ]; then
         DIR="$PID_DIR"
@@ -254,65 +175,66 @@ REMOTE_INFO=$(ssh -o ConnectTimeout=5 "root@${SERVER_IP}" '
             fi
         done
     fi
-    DIR="${DIR:-/tmp}"
+    DIR="${DIR:-/home/tears/Server-Linux}"
     PY="python3"
     if [ -x "${DIR}/.venv/bin/python" ]; then
         PY="${DIR}/.venv/bin/python"
     elif [ -x "/root/.venv/bin/python" ]; then
         PY="/root/.venv/bin/python"
     fi
-    echo "${DIR}|${PY}"
+    SVC_USER=$(stat -c "%U" "${DIR}/server.py" 2>/dev/null || echo "root")
+    SVC_HOME=$(getent passwd "$SVC_USER" | cut -d: -f6)
+    [ -n "$SVC_HOME" ] || SVC_HOME="/root"
+    CFG="${SVC_HOME}/.config/vortexremotebrowser"
+    mkdir -p "$CFG"
+    chown "$SVC_USER:$SVC_USER" "${SVC_HOME}/.config" "$CFG" 2>/dev/null || true
+    chmod 700 "$CFG"
+    echo "${DIR}|${PY}|${CFG}|${SVC_USER}"
 ')
 
-REMOTE_DIR="${REMOTE_INFO%%|*}"
-REMOTE_PY="${REMOTE_INFO##*|}"
-
-if [ -z "$REMOTE_DIR" ] || [ "$REMOTE_DIR" = "/tmp" ]; then
-    echo "[!] Remote server directory not detected from process; searching..."
-    REMOTE_DIR=$(ssh "root@${SERVER_IP}" 'find /home -maxdepth 3 -name "server.py" -exec dirname {} \; 2>/dev/null | head -n 1 || echo "/tmp"')
-fi
-
+IFS='|' read -r REMOTE_DIR REMOTE_PY REMOTE_CFG_DIR REMOTE_SVC_USER <<< "$REMOTE_INFO"
 echo "[+] Remote server directory : ${REMOTE_DIR}"
-echo "[+] Remote Python binary    : ${REMOTE_PY}"
+echo "[+] Remote config directory : ${REMOTE_CFG_DIR} (User: ${REMOTE_SVC_USER})"
 
-# Upload fresh cookies strictly into the user config dir (~/.config/vortexremotebrowser, 0600)
-REMOTE_COOKIES_ARG=""
-if [ -s "$TMP_COOKIES" ]; then
-    echo "[*] Uploading fresh Twitch cookies to secure user config on ${SERVER_IP}..."
-    REMOTE_CFG=$(ssh "root@${SERVER_IP}" "
-        SVC_USER=\$(stat -c '%U' '${REMOTE_DIR}/server.py' 2>/dev/null || echo 'root')
-        SVC_HOME=\$(getent passwd \"\$SVC_USER\" | cut -d: -f6)
-        [ -n \"\$SVC_HOME\" ] || SVC_HOME='/root'
-        CFG=\"\${SVC_HOME}/.config/vortexremotebrowser\"
-        mkdir -p \"\$CFG\"
-        chown \"\$SVC_USER:\$SVC_USER\" \"\${SVC_HOME}/.config\" \"\$CFG\" 2>/dev/null || true
-        chmod 700 \"\$CFG\"
-        rm -f /tmp/twitch_cookies.json '${REMOTE_DIR}/twitch_cookies.json' 2>/dev/null || true
-        echo \"\${CFG}|\${SVC_USER}\"
-    ")
-    REMOTE_CFG_DIR="${REMOTE_CFG%%|*}"
-    REMOTE_SVC_USER="${REMOTE_CFG##*|}"
-    scp "$TMP_COOKIES" "root@${SERVER_IP}:${REMOTE_CFG_DIR}/twitch_cookies.json" >/dev/null 2>&1 || true
-    ssh "root@${SERVER_IP}" "chmod 600 '${REMOTE_CFG_DIR}/twitch_cookies.json' && chown '${REMOTE_SVC_USER}:${REMOTE_SVC_USER}' '${REMOTE_CFG_DIR}/twitch_cookies.json'" 2>/dev/null || true
-    rm -f "$TMP_COOKIES"
-    REMOTE_COOKIES_ARG="--cookies '${REMOTE_CFG_DIR}/twitch_cookies.json'"
+REMOTE_ARGS=("--site" "$SITE")
+
+if [ -s "$TMP_TWITCH_CK" ]; then
+    echo "[*] Uploading local Twitch cookies to ${SERVER_IP}..."
+    scp -q "$TMP_TWITCH_CK" "root@${SERVER_IP}:${REMOTE_CFG_DIR}/twitch_cookies.json"
+    ssh "root@${SERVER_IP}" "chmod 600 '${REMOTE_CFG_DIR}/twitch_cookies.json' && chown '${REMOTE_SVC_USER}:${REMOTE_SVC_USER}' '${REMOTE_CFG_DIR}/twitch_cookies.json'"
+    REMOTE_ARGS+=("--cookies" "${REMOTE_CFG_DIR}/twitch_cookies.json")
 fi
 
-# 3. Synchronize sync_twitch_login.py to server
-echo "[*] Synchronizing sync script to remote server..."
-scp "$LOCAL_PY_SCRIPT" "root@${SERVER_IP}:${REMOTE_DIR}/sync_twitch_login.py" >/dev/null
+if [ -s "$TMP_DISCORD_CK" ]; then
+    echo "[*] Uploading local Discord cookies to ${SERVER_IP}..."
+    scp -q "$TMP_DISCORD_CK" "root@${SERVER_IP}:${REMOTE_CFG_DIR}/discord_cookies.json"
+    ssh "root@${SERVER_IP}" "chmod 600 '${REMOTE_CFG_DIR}/discord_cookies.json' && chown '${REMOTE_SVC_USER}:${REMOTE_SVC_USER}' '${REMOTE_CFG_DIR}/discord_cookies.json'"
+    REMOTE_ARGS+=("--discord-cookies" "${REMOTE_CFG_DIR}/discord_cookies.json")
+fi
 
-# 4. Execute login synchronization on server
-echo "[*] Executing login synchronization on server..."
+if [ -s "$TMP_DISCORD_TOK" ]; then
+    echo "[*] Uploading local Discord session token to ${SERVER_IP}..."
+    scp -q "$TMP_DISCORD_TOK" "root@${SERVER_IP}:${REMOTE_CFG_DIR}/discord_token.txt"
+    ssh "root@${SERVER_IP}" "chmod 600 '${REMOTE_CFG_DIR}/discord_token.txt' && chown '${REMOTE_SVC_USER}:${REMOTE_SVC_USER}' '${REMOTE_CFG_DIR}/discord_token.txt'"
+fi
+
+if [ -s "$TMP_EXTRA_CK" ]; then
+    echo "[*] Uploading custom domain cookies (${SITE}) to ${SERVER_IP}..."
+    scp -q "$TMP_EXTRA_CK" "root@${SERVER_IP}:${REMOTE_CFG_DIR}/extra_cookies.json"
+    ssh "root@${SERVER_IP}" "chmod 600 '${REMOTE_CFG_DIR}/extra_cookies.json' && chown '${REMOTE_SVC_USER}:${REMOTE_SVC_USER}' '${REMOTE_CFG_DIR}/extra_cookies.json'"
+    REMOTE_ARGS+=("--extra-cookies" "${REMOTE_CFG_DIR}/extra_cookies.json")
+fi
+
+[ -n "$TOKEN" ] && REMOTE_ARGS+=("--token" "$TOKEN")
+[ -n "$TW_USER" ] && REMOTE_ARGS+=("--user" "$TW_USER")
+
+# 3. Upload updated sync_twitch_login.py and execute on remote server
+scp -q "$LOCAL_PY_SCRIPT" "root@${SERVER_IP}:${REMOTE_DIR}/sync_twitch_login.py"
+ssh "root@${SERVER_IP}" "chown '${REMOTE_SVC_USER}:${REMOTE_SVC_USER}' '${REMOTE_DIR}/sync_twitch_login.py' && chmod +x '${REMOTE_DIR}/sync_twitch_login.py'"
+
 REMOTE_CMD="${REMOTE_PY} '${REMOTE_DIR}/sync_twitch_login.py'"
-if [ -n "$REMOTE_COOKIES_ARG" ]; then
-    REMOTE_CMD="${REMOTE_CMD} ${REMOTE_COOKIES_ARG}"
-fi
-if [ -n "$TOKEN" ]; then
-    REMOTE_CMD="${REMOTE_CMD} --token '${TOKEN}'"
-fi
-if [ -n "$TW_USER" ]; then
-    REMOTE_CMD="${REMOTE_CMD} --user '${TW_USER}'"
-fi
+for arg in "${REMOTE_ARGS[@]}"; do
+    REMOTE_CMD="${REMOTE_CMD} '${arg}'"
+done
 
-ssh -t "root@${SERVER_IP}" "$REMOTE_CMD"
+ssh "root@${SERVER_IP}" "$REMOTE_CMD"
