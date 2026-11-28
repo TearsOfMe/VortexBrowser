@@ -94,6 +94,8 @@ enum {
     GID_P_DL_DIR = 90,
     GID_P_DL_DIR_REQ,
     GID_P_DL_ALWAYS_ASK,
+    GID_P_DL_AUTO_CLOSE,
+    GID_P_EXT_PLAYER,
     GID_P_DL_OPEN_MGR
 };
 
@@ -1365,6 +1367,25 @@ void gui_prefs_open(VortexApp *app)
         CHECKBOX_Checked, app->prefs.always_ask_download,
         TAG_DONE);
 
+    Object *gad_dl_auto_close = IIntuition->NewObject(NULL, "checkbox.gadget",
+        GA_ID,            GID_P_DL_AUTO_CLOSE,
+        GA_RelVerify,     TRUE,
+        GA_Text,          (Tag)GetVString(MSG_DL_CHK_AUTOCLOSE),
+        CHECKBOX_Checked, app->prefs.auto_close_download,
+        TAG_DONE);
+
+    const char *init_ext_player = app->prefs.external_player_cmd[0]
+                                  ? app->prefs.external_player_cmd
+                                  : "APPDIR:V-MPlayer \"%s\"";
+    Object *gad_ext_player = IIntuition->NewObject(NULL, "string.gadget",
+        GA_ID,            GID_P_EXT_PLAYER,
+        GA_RelVerify,     TRUE,
+        GA_TabCycle,      TRUE,
+        GA_HintInfo,      (Tag)GetVString(MSG_PREFS_DL_HINT_PLAYER),
+        STRINGA_MaxChars, 255,
+        STRINGA_TextVal,  (Tag)init_ext_player,
+        TAG_DONE);
+
     Object *btn_dl_open_mgr = IIntuition->NewObject(NULL, "button.gadget",
         GA_ID,        GID_P_DL_OPEN_MGR,
         GA_RelVerify, TRUE,
@@ -1401,6 +1422,30 @@ void gui_prefs_open(VortexApp *app)
                                                             TAG_DONE),
                                   CHILD_WeightedWidth,  25,
                                   LAYOUT_AddChild,      gad_dl_always_ask,
+                                  CHILD_WeightedWidth,  75,
+                                  TAG_DONE),
+        CHILD_WeightedHeight, 0,
+        LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
+                                  LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
+                                  LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_DL_LBL_AUTOCLOSE),
+                                                            GA_ReadOnly,          TRUE,
+                                                            BUTTON_Justification, BCJ_RIGHT,
+                                                            TAG_DONE),
+                                  CHILD_WeightedWidth,  25,
+                                  LAYOUT_AddChild,      gad_dl_auto_close,
+                                  CHILD_WeightedWidth,  75,
+                                  TAG_DONE),
+        CHILD_WeightedHeight, 0,
+        LAYOUT_AddChild,      IIntuition->NewObject(NULL, "layout.gadget",
+                                  LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
+                                  LAYOUT_AddChild,      IIntuition->NewObject(NULL, "button.gadget",
+                                                            GA_Text,              (Tag)GetVString(MSG_PREFS_DL_LBL_PLAYER),
+                                                            GA_ReadOnly,          TRUE,
+                                                            BUTTON_Justification, BCJ_RIGHT,
+                                                            TAG_DONE),
+                                  CHILD_WeightedWidth,  25,
+                                  LAYOUT_AddChild,      gad_ext_player,
                                   CHILD_WeightedWidth,  75,
                                   TAG_DONE),
         CHILD_WeightedHeight, 0,
@@ -1994,6 +2039,22 @@ void gui_prefs_open(VortexApp *app)
         uint32 dl_ask_val = 0;
         IIntuition->GetAttr(CHECKBOX_Checked, gad_dl_always_ask, &dl_ask_val);
         app->prefs.always_ask_download = (dl_ask_val != 0);
+
+        uint32 dl_ac_val = 0;
+        IIntuition->GetAttr(CHECKBOX_Checked, gad_dl_auto_close, &dl_ac_val);
+        app->prefs.auto_close_download = (dl_ac_val != 0);
+        if (app->dl_win && app->dl_gad_chk_autoclose) {
+            IIntuition->SetGadgetAttrs((struct Gadget *)app->dl_gad_chk_autoclose, app->dl_win, NULL,
+                                       CHECKBOX_Checked, app->prefs.auto_close_download,
+                                       TAG_DONE);
+        }
+
+        char ext_pl_buf[256];
+        get_string_text(gad_ext_player, ext_pl_buf, sizeof(ext_pl_buf));
+        if (ext_pl_buf[0] != '\0') {
+            strncpy(app->prefs.external_player_cmd, ext_pl_buf, sizeof(app->prefs.external_player_cmd) - 1);
+            app->prefs.external_player_cmd[sizeof(app->prefs.external_player_cmd) - 1] = '\0';
+        }
 
         /* If user explicitly picked a fixed window resolution preset, resize window now */
         if (!screen_reopen_needed && res_changed && res_sel != 5) {

@@ -1316,3 +1316,21 @@ Finestra salvata: %ux%u a (%d, %d)
 MSG_STATUS_WIN_UNSNAPSHOTTED
 Blocco finestra rimosso (salvataggio automatico attivo).
 ;
+MSG_DL_CHK_AUTOCLOSE
+Chiudi automaticamente la finestra al termine dei download
+;
+MSG_PREFS_DL_LBL_AUTOCLOSE
+Chiusura auto:
+;
+MSG_PREFS_DL_LBL_PLAYER
+Lettore video:
+;
+MSG_PREFS_DL_HINT_PLAYER
+Comando del lettore video esterno (es. APPDIR:V-MPlayer "%s")
+;
+MSG_CTX_PLAY_EXTERNAL
+Riproduci video nel lettore esterno (V-MPlayer)
+;
+MSG_STATUS_EXT_PLAYER
+Avvio del lettore video esterno: %s
+;

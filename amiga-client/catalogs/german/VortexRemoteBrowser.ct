@@ -1316,3 +1316,21 @@ Fenster fixiert: %ux%u an (%d, %d)
 MSG_STATUS_WIN_UNSNAPSHOTTED
 Fenster-Fixierung aufgehoben (automatisch speichern aktiv).
 ;
+MSG_DL_CHK_AUTOCLOSE
+Fenster nach Abschluss automatisch schlieﬂen
+;
+MSG_PREFS_DL_LBL_AUTOCLOSE
+Auto-Schlieﬂen:
+;
+MSG_PREFS_DL_LBL_PLAYER
+Video-Player:
+;
+MSG_PREFS_DL_HINT_PLAYER
+Externer Video-Player Befehl (z.B. APPDIR:V-MPlayer "%s")
+;
+MSG_CTX_PLAY_EXTERNAL
+Video im externen Player abspielen (V-MPlayer)
+;
+MSG_STATUS_EXT_PLAYER
+Starte externen Video-Player: %s
+;

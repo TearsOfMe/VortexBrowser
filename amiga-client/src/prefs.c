@@ -106,6 +106,9 @@ void prefs_init(VortexApp *app)
     strncpy(app->prefs.download_dir, "RAM:", sizeof(app->prefs.download_dir) - 1);
     app->prefs.download_dir[sizeof(app->prefs.download_dir) - 1] = '\0';
     app->prefs.always_ask_download          = TRUE;
+    app->prefs.auto_close_download          = FALSE;
+    strncpy(app->prefs.external_player_cmd, "APPDIR:V-MPlayer \"%s\"", sizeof(app->prefs.external_player_cmd) - 1);
+    app->prefs.external_player_cmd[sizeof(app->prefs.external_player_cmd) - 1] = '\0';
     app->prefs.has_dl_win_pos               = FALSE;
     app->prefs.dl_win_x                     = 0;
     app->prefs.dl_win_y                     = 0;
@@ -289,6 +292,13 @@ static BOOL load_from_file(VortexApp *app, const char *path)
             app->prefs.download_dir[sizeof(app->prefs.download_dir) - 1] = '\0';
         } else if (strcmp(key, "always_ask_download") == 0) {
             app->prefs.always_ask_download = (atoi(val) != 0);
+        } else if (strcmp(key, "auto_close_download") == 0) {
+            app->prefs.auto_close_download = (atoi(val) != 0);
+        } else if (strcmp(key, "external_player_cmd") == 0) {
+            if (val[0] != '\0') {
+                strncpy(app->prefs.external_player_cmd, val, sizeof(app->prefs.external_player_cmd) - 1);
+                app->prefs.external_player_cmd[sizeof(app->prefs.external_player_cmd) - 1] = '\0';
+            }
         } else if (strcmp(key, "has_dl_win_pos") == 0) {
             app->prefs.has_dl_win_pos = (atoi(val) != 0);
         } else if (strcmp(key, "dl_win_x") == 0) {
@@ -681,6 +691,8 @@ static BOOL save_to_file(const VortexApp *app, const char *path)
     fprintf(fp, "# Download Manager Configuration\n");
     fprintf(fp, "download_dir=%s\n", app->prefs.download_dir[0] ? app->prefs.download_dir : "RAM:");
     fprintf(fp, "always_ask_download=%d\n", app->prefs.always_ask_download ? 1 : 0);
+    fprintf(fp, "auto_close_download=%d\n", app->prefs.auto_close_download ? 1 : 0);
+    fprintf(fp, "external_player_cmd=%s\n", app->prefs.external_player_cmd[0] ? app->prefs.external_player_cmd : "APPDIR:V-MPlayer \"%s\"");
     fprintf(fp, "has_dl_win_pos=%d\n", app->prefs.has_dl_win_pos ? 1 : 0);
     fprintf(fp, "dl_win_x=%d\n",       (int)app->prefs.dl_win_x);
     fprintf(fp, "dl_win_y=%d\n",       (int)app->prefs.dl_win_y);

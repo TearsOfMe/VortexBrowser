@@ -1316,3 +1316,21 @@ Position de la fenêtre enregistrée : %ux%u à (%d, %d)
 MSG_STATUS_WIN_UNSNAPSHOTTED
 Position figée effacée (sauvegarde automatique rétablie).
 ;
+MSG_DL_CHK_AUTOCLOSE
+Fermer automatiquement la fenêtre à la fin des téléchargements
+;
+MSG_PREFS_DL_LBL_AUTOCLOSE
+Fermeture auto :
+;
+MSG_PREFS_DL_LBL_PLAYER
+Lecteur vidéo :
+;
+MSG_PREFS_DL_HINT_PLAYER
+Commande du lecteur vidéo externe (ex. APPDIR:V-MPlayer "%s")
+;
+MSG_CTX_PLAY_EXTERNAL
+Lire la vidéo dans le lecteur externe (V-MPlayer)
+;
+MSG_STATUS_EXT_PLAYER
+Lancement du lecteur vidéo externe : %s
+;

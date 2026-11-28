@@ -5199,7 +5199,8 @@ void gui_handle_events(VortexApp *app)
                 CTX_TOGGLE_DARK_THEME,
                 CTX_EDIT_CUT,
                 CTX_EDIT_COPY,
-                CTX_EDIT_PASTE
+                CTX_EDIT_PASTE,
+                CTX_PLAY_EXTERNAL
             };
 
             BOOL has_link  = (app->ctx_menu.link_url[0] != '\0');
@@ -5233,6 +5234,7 @@ void gui_handle_events(VortexApp *app)
                         PMITEM(GetVString(MSG_CTX_DOWNLOAD_LINK)), PMIA_ID, CTX_DOWNLOAD_LINK, PMEND,
                         PMITEM(GetVString(MSG_CTX_COPY_LINK)), PMIA_ID, CTX_COPY_LINK_URL, PMEND,
                         PMITEM(GetVString(MSG_CTX_FAV_LINK)), PMIA_ID, CTX_FAV_LINK, PMEND,
+                        PMITEM(GetVString(MSG_CTX_PLAY_EXTERNAL)), PMIA_ID, CTX_PLAY_EXTERNAL, PMEND,
                         PMBAR(), PMEND,
                         PMITEM(GetVString(MSG_MENU_CUT)), PMIA_ID, CTX_EDIT_CUT, PMEND,
                         PMITEM(GetVString(MSG_MENU_COPY)), PMIA_ID, CTX_EDIT_COPY, PMEND,
@@ -5253,6 +5255,7 @@ void gui_handle_events(VortexApp *app)
                         PMA_MenuHandler, &pm_hook,
                         PMITEM(GetVString(MSG_CTX_OPEN_MEDIA)), PMIA_ID, CTX_OPEN_MEDIA, PMEND,
                         PMITEM(GetVString(MSG_CTX_DOWNLOAD_IMAGE)), PMIA_ID, CTX_DOWNLOAD_MEDIA, PMEND,
+                        PMITEM(GetVString(MSG_CTX_PLAY_EXTERNAL)), PMIA_ID, CTX_PLAY_EXTERNAL, PMEND,
                         PMBAR(), PMEND,
                         PMITEM(GetVString(MSG_MENU_CUT)), PMIA_ID, CTX_EDIT_CUT, PMEND,
                         PMITEM(GetVString(MSG_MENU_COPY)), PMIA_ID, CTX_EDIT_COPY, PMEND,
@@ -5272,6 +5275,8 @@ void gui_handle_events(VortexApp *app)
                 } else {
                     menu_obj = PMMENU(hdr_buf),
                         PMA_MenuHandler, &pm_hook,
+                        PMITEM(GetVString(MSG_CTX_PLAY_EXTERNAL)), PMIA_ID, CTX_PLAY_EXTERNAL, PMEND,
+                        PMBAR(), PMEND,
                         PMITEM(GetVString(MSG_MENU_CUT)), PMIA_ID, CTX_EDIT_CUT, PMEND,
                         PMITEM(GetVString(MSG_MENU_COPY)), PMIA_ID, CTX_EDIT_COPY, PMEND,
                         PMITEM(GetVString(MSG_MENU_PASTE)), PMIA_ID, CTX_EDIT_PASTE, PMEND,
@@ -5410,6 +5415,29 @@ void gui_handle_events(VortexApp *app)
                     snprintf(dl_cmd, sizeof(dl_cmd), "@DOWNLOAD:%s", app->ctx_menu.media_url);
                     app_set_status(GetVString(MSG_STATUS_START_MEDIA_DL), app->ctx_menu.media_url);
                     net_send_url(app, dl_cmd);
+                    break;
+                }
+
+                case CTX_PLAY_EXTERNAL: {
+                    const char *vurl = NULL;
+                    if (has_link && app->ctx_menu.link_url[0]) {
+                        vurl = app->ctx_menu.link_url;
+                    } else if (has_media && app->ctx_menu.media_url[0] &&
+                               strncmp(app->ctx_menu.media_url, "blob:", 5) != 0) {
+                        vurl = app->ctx_menu.media_url;
+                    } else if (app->current_url[0]) {
+                        vurl = app->current_url;
+                    }
+                    if (vurl && vurl[0]) {
+                        if (app->connected) {
+                            char ext_cmd[VB_MAX_URL_LEN + 16];
+                            snprintf(ext_cmd, sizeof(ext_cmd), "@EXTPLAY:%s", vurl);
+                            app_set_status(GetVString(MSG_STATUS_EXT_PLAYER), vurl);
+                            net_send_url(app, ext_cmd);
+                        } else {
+                            gui_launch_external_player(app, vurl);
+                        }
+                    }
                     break;
                 }
 
@@ -5575,3 +5603,71 @@ void app_set_gauge(int percent)
                                    TAG_DONE);
     }
 }
+
+void gui_launch_external_player(VortexApp *app, const char *video_url)
+{
+    if (!app || !video_url || !video_url[0]) return;
+
+    const char *tpl = app->prefs.external_player_cmd;
+    if (!tpl || !tpl[0]) {
+        tpl = "APPDIR:V-MPlayer \"%s\"";
+    }
+
+    /* If user kept default APPDIR:V-MPlayer, probe common AmigaOS 4 players as fallbacks */
+    char resolved_tpl[300];
+    strncpy(resolved_tpl, tpl, sizeof(resolved_tpl) - 1);
+    resolved_tpl[sizeof(resolved_tpl) - 1] = '\0';
+
+    if (strncmp(resolved_tpl, "APPDIR:V-MPlayer", 16) == 0) {
+        BPTR lock = IDOS->Lock("APPDIR:V-MPlayer", SHARED_LOCK);
+        if (lock) {
+            IDOS->UnLock(lock);
+        } else {
+            static const char * const fallbacks[] = {
+                "APPDIR:MPlayer",
+                "APPDIR:MickJT-MPlayer",
+                "APPDIR:Emotion",
+                "C:V-MPlayer",
+                "C:MPlayer",
+                NULL
+            };
+            for (int i = 0; fallbacks[i] != NULL; i++) {
+                BPTR flock = IDOS->Lock(fallbacks[i], SHARED_LOCK);
+                if (flock) {
+                    IDOS->UnLock(flock);
+                    snprintf(resolved_tpl, sizeof(resolved_tpl), "%s \"%%s\"", fallbacks[i]);
+                    break;
+                }
+            }
+        }
+    }
+
+    char cmd[2400];
+    const char *placeholder = strstr(resolved_tpl, "%s");
+    if (placeholder) {
+        size_t prefix_len = (size_t)(placeholder - resolved_tpl);
+        if (prefix_len > sizeof(cmd) - 1) prefix_len = sizeof(cmd) - 1;
+        memcpy(cmd, resolved_tpl, prefix_len);
+        cmd[prefix_len] = '\0';
+        snprintf(cmd + prefix_len, sizeof(cmd) - prefix_len, "%s%s",
+                 video_url, placeholder + 2);
+    } else {
+        snprintf(cmd, sizeof(cmd), "%s \"%s\"", resolved_tpl, video_url);
+    }
+
+    app_set_status("%s: %.96s", GetVString(MSG_STATUS_EXT_PLAYER), video_url);
+
+    BPTR nil_in  = IDOS->Open("NIL:", MODE_OLDFILE);
+    BPTR nil_out = IDOS->Open("NIL:", MODE_NEWFILE);
+    int32 rc = IDOS->SystemTags(cmd,
+                                SYS_Asynch,    TRUE,
+                                SYS_Input,     nil_in,
+                                SYS_Output,    nil_out,
+                                NP_StackSize,  524288,
+                                TAG_DONE);
+    if (rc != 0) {
+        if (nil_in)  IDOS->Close(nil_in);
+        if (nil_out) IDOS->Close(nil_out);
+    }
+}
+

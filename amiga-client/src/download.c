@@ -408,6 +408,19 @@ void download_handle_complete(VortexApp *app, const MsgDownloadComplete *msg)
            (unsigned)id, e->dest_path, (unsigned long long)e->received_size);
 
     gui_download_manager_update(app);
+
+    if (app->prefs.auto_close_download && app->dl_win_obj) {
+        BOOL any_active = FALSE;
+        for (int i = 0; i < app->download_mgr.count; i++) {
+            if (app->download_mgr.entries[i].status == DL_STATUS_DOWNLOADING) {
+                any_active = TRUE;
+                break;
+            }
+        }
+        if (!any_active) {
+            gui_close_download_manager(app);
+        }
+    }
 }
 
 void download_cancel(VortexApp *app, uint32_t download_id)

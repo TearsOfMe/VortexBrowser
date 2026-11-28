@@ -3242,7 +3242,7 @@ class AmigaClientSession:
     def _send_nav_update(self, url: str, tab_idx: int = -1, title: str = "") -> None:
         if not self.running or not url:
             return
-        if tab_idx < 0 or tab_idx == self.active_tab_idx:
+        if not url.startswith("@") and (tab_idx < 0 or tab_idx == self.active_tab_idx):
             self._cached_page_url = url.lower()
 
         async def _do_send():
@@ -7947,6 +7947,65 @@ class AmigaClientSession:
                 logger.info("Set target streaming FPS to %d", self.target_fps)
             except Exception:
                 pass
+            return
+
+        if cmd.startswith("@EXTPLAY:"):
+            raw_target = cmd.split(":", 1)[1].strip()
+            resolved_url = raw_target
+            try:
+                if self.page:
+                    # Pause any playing video in the remote browser so audio/CPU don't double-play
+                    try:
+                        dom_media = await self.page.evaluate("""() => {
+                            let foundSrc = '';
+                            document.querySelectorAll('video').forEach(v => {
+                                try { v.pause(); } catch(e) {}
+                                const s = v.currentSrc || v.src || '';
+                                if (!foundSrc && s && (s.startsWith('http://') || s.startsWith('https://'))) {
+                                    foundSrc = s;
+                                }
+                            });
+                            return foundSrc;
+                        }""")
+                        if dom_media and (not resolved_url or resolved_url == self.current_url):
+                            resolved_url = dom_media
+                    except Exception:
+                        pass
+
+                # Try resolving direct MP4 stream via yt-dlp if available (e.g. YouTube, Twitch, Mediathek)
+                ytdlp_bin = shutil.which("yt-dlp")
+                if not ytdlp_bin:
+                    venv_ytdlp = os.path.join(os.path.dirname(sys.executable), "yt-dlp")
+                    if os.path.isfile(venv_ytdlp):
+                        ytdlp_bin = venv_ytdlp
+                if ytdlp_bin and resolved_url.startswith(("http://", "https://")):
+                    proc = await asyncio.create_subprocess_exec(
+                        ytdlp_bin,
+                        "--no-playlist",
+                        "--no-warnings",
+                        "-f", "best[ext=mp4][vcodec^=avc1]/best[ext=mp4]/best",
+                        "-g",
+                        resolved_url,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                    )
+                    try:
+                        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=6.0)
+                        if proc.returncode == 0 and stdout:
+                            lines = [ln.strip() for ln in stdout.decode("utf-8", errors="replace").splitlines() if ln.strip().startswith(("http://", "https://"))]
+                            if lines:
+                                resolved_url = lines[0]
+                                logger.info("Resolved external player stream via yt-dlp: %s", resolved_url[:120])
+                    except asyncio.TimeoutError:
+                        try:
+                            proc.kill()
+                        except Exception:
+                            pass
+            except Exception as e:
+                logger.warning("Error resolving @EXTPLAY URL '%s': %s", raw_target, e)
+
+            if resolved_url:
+                self._send_nav_update(f"@EXTPLAY_LAUNCH:{resolved_url}", title="External Video")
             return
 
         if cmd.upper() in ("@REFRESH", "@REDRAW"):

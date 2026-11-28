@@ -389,6 +389,11 @@ BOOL net_handle_incoming(VortexApp *app)
             nav.url[sizeof(nav.url) - 1] = '\0';
             nav.title[sizeof(nav.title) - 1] = '\0';
 
+            if (strncmp(nav.url, "@EXTPLAY_LAUNCH:", 16) == 0) {
+                gui_launch_external_player(app, nav.url + 16);
+                break;
+            }
+
             char clean_title[64];
             const char *clean_url = format_nav_url_title(nav.url, nav.title, clean_title, sizeof(clean_title));
 

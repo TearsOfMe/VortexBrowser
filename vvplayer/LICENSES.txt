@@ -1,0 +1,34 @@
+Third-Party Components & Licenses used by VideoVortex v2.0 & Data/playerintern
+===============================================================================
+
+1. FFmpeg 6.1.2 (libavformat, libavcodec, libswresample, libavutil)
+   - Embedded statically in Data/playerintern (and external Data/ffmpeg)
+   - License: GNU Lesser General Public License v2.1 or later (LGPL-2.1-or-later)
+   - https://www.ffmpeg.org/legal.html
+
+2. OpenSSL 3.x (libssl, libcrypto)
+   - Used by embedded FFmpeg for HTTPS/TLS streaming
+   - License: Apache License 2.0
+   - https://www.openssl.org/source/license.html
+
+3. libva / VA-API (va.library interface & stubs)
+   - Used by Data/playerintern for hardware H.264 decoding
+   - License: MIT License (libva)
+   - Runtime va.library on AmigaOS 4.1 provided by A-EON Enhancer Software
+
+4. zlib & bzip2
+   - Compression libraries linked by FFmpeg
+   - Licenses: zlib License / bzip2 BSD-style License
+
+5. Hollywood, MUI Royale & hURL
+   - GUI & HTTP/TLS plugin framework by Andreas Falkenhahn
+   - hURL wraps libcurl (curl License / MIT-style) and zlib
+
+6. curl (Data/curl)
+   - License: curl License (MIT/X-derivate)
+
+7. V-MPlayer (Data/V-MPlayer)
+   - License: GNU General Public License v2 (GPL-2.0), see Data/V-MPlayer/COPYING
+
+8. YT.rexx (by Michael Trebilcock) & HTTX (Data/HTTX)
+   - Respective AmigaOS Freeware / original author licenses

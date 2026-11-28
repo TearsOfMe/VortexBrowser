@@ -137,6 +137,7 @@ void gui_iconify(VortexApp *app);
 void gui_uniconify(VortexApp *app);
 void gui_to_front(VortexApp *app);
 void gui_try_close_pending_screen(VortexApp *app);
+void gui_launch_external_player(VortexApp *app, const char *video_url);
 
 #endif /* VORTEXREMOTEBROWSER_GUI_H */
 

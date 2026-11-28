@@ -1,0 +1,14 @@
+prefix=/src/vvplayer/ffout
+exec_prefix=${prefix}
+libdir=/src/vvplayer/ffout/lib
+includedir=/src/vvplayer/ffout/include
+
+Name: libavcodec
+Description: FFmpeg codec library
+Version: 60.31.102
+Requires: libswresample >= 4.12.100, libavutil >= 58.29.100
+Requires.private: 
+Conflicts:
+Libs: -L${libdir}  -lavcodec -pthread -lm -latomic -L/sdk_va -lva
+Libs.private: 
+Cflags: -I${includedir}

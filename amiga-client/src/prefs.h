@@ -114,6 +114,8 @@ typedef struct VortexPrefs {
     BOOL             save_server_on_exit;   /* TRUE = Aktuellen Server beim Beenden merken (Default: TRUE) */
     char             download_dir[256];     /* Standard Download-Ordner (Default: "RAM:") */
     BOOL             always_ask_download;  /* TRUE = Immer nach Zielordner fragen (ASL-Requester) */
+    BOOL             auto_close_download;  /* TRUE = Download-Fenster nach Abschluss automatisch schliessen */
+    char             external_player_cmd[256]; /* Externer Video-Player (Default: "APPDIR:V-MPlayer \"%s\"") */
     BOOL             has_dl_win_pos;       /* TRUE = Gespeicherte Download-Fensterposition vorhanden */
     int16_t          dl_win_x;             /* LeftEdge des Download-Fensters */
     int16_t          dl_win_y;             /* TopEdge des Download-Fensters */

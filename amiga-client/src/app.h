@@ -263,6 +263,7 @@ typedef struct VortexApp {
     Object             *dl_gad_btn_remove;
     Object             *dl_gad_btn_clear;
     Object             *dl_gad_btn_close;
+    Object             *dl_gad_chk_autoclose;
     int                 dl_cur_sel;
 
     /* Mouse throttling & instant wakeup */

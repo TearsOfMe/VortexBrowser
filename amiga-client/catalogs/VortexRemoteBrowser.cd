@@ -1318,3 +1318,21 @@ Window snapshot saved: %ux%u at (%d, %d)
 MSG_STATUS_WIN_UNSNAPSHOTTED (954//)
 Window snapshot cleared (auto-save restored).
 ;
+MSG_DL_CHK_AUTOCLOSE (955//)
+Close window automatically when downloads finish
+;
+MSG_PREFS_DL_LBL_AUTOCLOSE (956//)
+Auto-Close:
+;
+MSG_PREFS_DL_LBL_PLAYER (957//)
+Video Player:
+;
+MSG_PREFS_DL_HINT_PLAYER (958//)
+External video player command (e.g. APPDIR:V-MPlayer "%s")
+;
+MSG_CTX_PLAY_EXTERNAL (959//)
+Play Video in External Player (V-MPlayer)
+;
+MSG_STATUS_EXT_PLAYER (960//)
+Launching external video player: %s
+;

@@ -1316,3 +1316,21 @@ Ventana guardada: %ux%u en (%d, %d)
 MSG_STATUS_WIN_UNSNAPSHOTTED
 Fijación de ventana eliminada (autoguardado activo).
 ;
+MSG_DL_CHK_AUTOCLOSE
+Cerrar la ventana automáticamente al finalizar las descargas
+;
+MSG_PREFS_DL_LBL_AUTOCLOSE
+Cierre auto:
+;
+MSG_PREFS_DL_LBL_PLAYER
+Reproductor de vídeo:
+;
+MSG_PREFS_DL_HINT_PLAYER
+Comando del reproductor de vídeo externo (ej. APPDIR:V-MPlayer "%s")
+;
+MSG_CTX_PLAY_EXTERNAL
+Reproducir vídeo en reproductor externo (V-MPlayer)
+;
+MSG_STATUS_EXT_PLAYER
+Iniciando reproductor de vídeo externo: %s
+;

@@ -74,6 +74,9 @@ if [ -z "$AMIGA_FTP_AUTH" ]; then
     elif [ -f "${HOME}/.config/vortexremotebrowser/ftp_auth.env" ]; then
         # shellcheck disable=SC1090
         source "${HOME}/.config/vortexremotebrowser/ftp_auth.env"
+    elif [ -f "${HOME}/.config/vortexbrowse/ftp_auth.env" ]; then
+        # shellcheck disable=SC1090
+        source "${HOME}/.config/vortexbrowse/ftp_auth.env"
     fi
 fi
 
@@ -112,4 +115,4 @@ if [ -n "$AMIGA_FTP_AUTH" ] && [ -n "$AMIGA_FTP_HOST" ]; then
     fi
 fi
 
-echo "Build complete: VortexRemoteBrowser 1.1 (Universal + AltiVec) created!"
+echo "Build complete: VortexRemoteBrowser (Universal + AltiVec) created!"

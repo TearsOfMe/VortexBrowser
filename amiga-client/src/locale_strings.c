@@ -541,6 +541,12 @@ static const StringEntry s_builtins[] = {
     { MSG_MENU_WIN_UNSNAPSHOT,    "Reset Window Snapshot" },
     { MSG_STATUS_WIN_SNAPSHOTTED,   "Window snapshot saved: %ux%u at (%d, %d)" },
     { MSG_STATUS_WIN_UNSNAPSHOTTED, "Window snapshot cleared (auto-save restored)." },
+    { MSG_DL_CHK_AUTOCLOSE,         "Close window automatically when downloads finish" },
+    { MSG_PREFS_DL_LBL_AUTOCLOSE,   "Auto-Close:" },
+    { MSG_PREFS_DL_LBL_PLAYER,      "Video Player:" },
+    { MSG_PREFS_DL_HINT_PLAYER,     "External video player command (e.g. APPDIR:V-MPlayer \"%s\")" },
+    { MSG_CTX_PLAY_EXTERNAL,        "Play Video in External Player (V-MPlayer)" },
+    { MSG_STATUS_EXT_PLAYER,        "Launching external video player: %s" },
 };
 
 #define NUM_BUILTINS (sizeof(s_builtins) / sizeof(s_builtins[0]))

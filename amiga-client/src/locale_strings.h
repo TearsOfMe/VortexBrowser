@@ -476,6 +476,12 @@ extern "C" {
 #define MSG_MENU_WIN_UNSNAPSHOT   952
 #define MSG_STATUS_WIN_SNAPSHOTTED   953
 #define MSG_STATUS_WIN_UNSNAPSHOTTED 954
+#define MSG_DL_CHK_AUTOCLOSE         955
+#define MSG_PREFS_DL_LBL_AUTOCLOSE   956
+#define MSG_PREFS_DL_LBL_PLAYER      957
+#define MSG_PREFS_DL_HINT_PLAYER     958
+#define MSG_CTX_PLAY_EXTERNAL        959
+#define MSG_STATUS_EXT_PLAYER        960
 
 /* Get localized string or built-in default */
 CONST_STRPTR GetVString(ULONG id);

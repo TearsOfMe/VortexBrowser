@@ -9,6 +9,7 @@
 #include <gadgets/listbrowser.h>
 #include <gadgets/layout.h>
 #include <gadgets/button.h>
+#include <gadgets/checkbox.h>
 #include <classes/window.h>
 
 #include "app.h"
@@ -26,7 +27,8 @@ enum {
     GID_DL_BTN_CANCEL,
     GID_DL_BTN_REMOVE,
     GID_DL_BTN_CLEAR,
-    GID_DL_BTN_CLOSE
+    GID_DL_BTN_CLOSE,
+    GID_DL_CHK_AUTOCLOSE
 };
 
 static void format_size(uint64_t bytes, char *out, size_t out_len)
@@ -355,6 +357,13 @@ void gui_open_download_manager(VortexApp *app)
         GA_HintInfo,  GetVString(MSG_DL_HINT_CLOSE),
         TAG_DONE);
 
+    app->dl_gad_chk_autoclose = IIntuition->NewObject(NULL, "checkbox.gadget",
+        GA_ID,            GID_DL_CHK_AUTOCLOSE,
+        GA_RelVerify,     TRUE,
+        GA_Text,          (Tag)GetVString(MSG_DL_CHK_AUTOCLOSE),
+        CHECKBOX_Checked, app->prefs.auto_close_download,
+        TAG_DONE);
+
     Object *btn_row = IIntuition->NewObject(NULL, "layout.gadget",
         LAYOUT_Orientation,   LAYOUT_ORIENT_HORIZ,
         LAYOUT_SpaceInner,    TRUE,
@@ -380,6 +389,8 @@ void gui_open_download_manager(VortexApp *app)
         LAYOUT_AddChild,      app->dl_gad_listbrowser,
         CHILD_WeightedHeight, 85,
         LAYOUT_AddChild,      app->dl_gad_status_txt,
+        CHILD_WeightedHeight, 0,
+        LAYOUT_AddChild,      app->dl_gad_chk_autoclose,
         CHILD_WeightedHeight, 0,
         LAYOUT_AddChild,      btn_row,
         CHILD_WeightedHeight, 0,
@@ -465,6 +476,7 @@ void gui_close_download_manager(VortexApp *app)
     app->dl_gad_btn_remove    = NULL;
     app->dl_gad_btn_clear     = NULL;
     app->dl_gad_btn_close     = NULL;
+    app->dl_gad_chk_autoclose = NULL;
 }
 
 void gui_handle_download_manager_events(VortexApp *app)
@@ -556,6 +568,11 @@ void gui_handle_download_manager_events(VortexApp *app)
                     }
                 } else if (gid == GID_DL_BTN_CLEAR) {
                     download_clear_completed(app);
+                } else if (gid == GID_DL_CHK_AUTOCLOSE) {
+                    uint32 chk = 0;
+                    IIntuition->GetAttr(CHECKBOX_Checked, app->dl_gad_chk_autoclose, &chk);
+                    app->prefs.auto_close_download = (chk != 0);
+                    prefs_save(app, TRUE);
                 } else if (gid == GID_DL_BTN_CLOSE) {
                     gui_close_download_manager(app);
                     return;
