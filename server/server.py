@@ -3459,14 +3459,26 @@ class AmigaClientSession:
                 except Exception:
                     pass
 
-            # Prefer the virtualenv yt-dlp (kept up to date) over older system yt-dlp
-            venv_ytdlp = os.path.join(os.path.dirname(sys.executable), "yt-dlp")
-            ytdlp_bin = venv_ytdlp if os.path.isfile(venv_ytdlp) else shutil.which("yt-dlp")
+            # Prefer the virtualenv yt-dlp / python -m yt_dlp (cross-platform: Linux, Windows .exe, macOS)
+            py_dir = os.path.dirname(sys.executable)
+            venv_ytdlp_win = os.path.join(py_dir, "yt-dlp.exe")
+            venv_ytdlp_unix = os.path.join(py_dir, "yt-dlp")
+            ytdlp_cmd: List[str] = []
+            if os.path.isfile(venv_ytdlp_win):
+                ytdlp_cmd = [venv_ytdlp_win]
+            elif os.path.isfile(venv_ytdlp_unix):
+                ytdlp_cmd = [venv_ytdlp_unix]
+            else:
+                sys_ytdlp = shutil.which("yt-dlp")
+                if sys_ytdlp:
+                    ytdlp_cmd = [sys_ytdlp]
+                else:
+                    ytdlp_cmd = [sys.executable, "-m", "yt_dlp"]
 
             upstream_urls: List[str] = []
-            if ytdlp_bin and resolved_url.startswith(("http://", "https://")):
+            if ytdlp_cmd and resolved_url.startswith(("http://", "https://")):
                 proc = await asyncio.create_subprocess_exec(
-                    ytdlp_bin,
+                    *ytdlp_cmd,
                     "--no-playlist",
                     "--no-warnings",
                     "--extractor-args", "youtube:player_client=android,ios,tv,web",

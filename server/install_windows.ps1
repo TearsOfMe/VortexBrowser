@@ -167,20 +167,20 @@ except Exception as e:
     print('  Windows WASAPI Loopback Audio: unavailable ->', e)
 "@
 
-# 6. Windows Defender Firewall rule for TCP 7788 & 9757
+# 6. Windows Defender Firewall rule for TCP 7788, 9757 & 7779 (External Video Player HTTP Relay)
 if (-not $SkipFirewall) {
-    Write-Host "[6/6] Checking Windows Firewall rule (TCP 7788, 9757)..." -ForegroundColor Yellow
+    Write-Host "[6/6] Checking Windows Firewall rule (TCP 7788, 9757, 7779)..." -ForegroundColor Yellow
     $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-    $RuleName = "VortexRemoteBrowser Amiga Companion Server (TCP 7788,9757)"
+    $RuleName = "VortexRemoteBrowser Amiga Companion Server (TCP 7788,9757,7779)"
     $existing = Get-NetFirewallRule -DisplayName $RuleName -ErrorAction SilentlyContinue
     if ($existing) {
         Write-Host "  Firewall rule already exists: $RuleName" -ForegroundColor Green
     } elseif ($isAdmin) {
-        New-NetFirewallRule -DisplayName $RuleName -Direction Inbound -Protocol TCP -LocalPort 7788,9757 -Action Allow -Profile Private | Out-Null
-        Write-Host "  Created inbound Private-network firewall rule for TCP 7788 & 9757." -ForegroundColor Green
+        New-NetFirewallRule -DisplayName $RuleName -Direction Inbound -Protocol TCP -LocalPort 7788,9757,7779 -Action Allow -Profile Private | Out-Null
+        Write-Host "  Created inbound Private-network firewall rule for TCP 7788, 9757 & 7779." -ForegroundColor Green
     } else {
         Write-Host "  Not running as Administrator - run this once in an Admin PowerShell so your Amiga can connect over LAN:" -ForegroundColor DarkYellow
-        Write-Host "    New-NetFirewallRule -DisplayName '$RuleName' -Direction Inbound -Protocol TCP -LocalPort 7788,9757 -Action Allow -Profile Private" -ForegroundColor White
+        Write-Host "    New-NetFirewallRule -DisplayName '$RuleName' -Direction Inbound -Protocol TCP -LocalPort 7788,9757,7779 -Action Allow -Profile Private" -ForegroundColor White
     }
 }
 
