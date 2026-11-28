@@ -5200,8 +5200,7 @@ void gui_handle_events(VortexApp *app)
                 CTX_EDIT_CUT,
                 CTX_EDIT_COPY,
                 CTX_EDIT_PASTE,
-                CTX_PLAY_EXTERNAL,
-                CTX_TOGGLE_AUTO_EXT_YT
+                CTX_PLAY_EXTERNAL
             };
 
             BOOL has_link  = (app->ctx_menu.link_url[0] != '\0');
@@ -5236,7 +5235,6 @@ void gui_handle_events(VortexApp *app)
                         PMITEM(GetVString(MSG_CTX_COPY_LINK)), PMIA_ID, CTX_COPY_LINK_URL, PMEND,
                         PMITEM(GetVString(MSG_CTX_FAV_LINK)), PMIA_ID, CTX_FAV_LINK, PMEND,
                         PMITEM(GetVString(MSG_CTX_PLAY_EXTERNAL)), PMIA_ID, CTX_PLAY_EXTERNAL, PMEND,
-                        PMITEM(app->prefs.auto_ext_youtube ? GetVString(MSG_CTX_AUTO_YT_ON) : GetVString(MSG_CTX_AUTO_YT_OFF)), PMIA_ID, CTX_TOGGLE_AUTO_EXT_YT, PMEND,
                         PMBAR(), PMEND,
                         PMITEM(GetVString(MSG_MENU_CUT)), PMIA_ID, CTX_EDIT_CUT, PMEND,
                         PMITEM(GetVString(MSG_MENU_COPY)), PMIA_ID, CTX_EDIT_COPY, PMEND,
@@ -5258,7 +5256,6 @@ void gui_handle_events(VortexApp *app)
                         PMITEM(GetVString(MSG_CTX_OPEN_MEDIA)), PMIA_ID, CTX_OPEN_MEDIA, PMEND,
                         PMITEM(GetVString(MSG_CTX_DOWNLOAD_IMAGE)), PMIA_ID, CTX_DOWNLOAD_MEDIA, PMEND,
                         PMITEM(GetVString(MSG_CTX_PLAY_EXTERNAL)), PMIA_ID, CTX_PLAY_EXTERNAL, PMEND,
-                        PMITEM(app->prefs.auto_ext_youtube ? GetVString(MSG_CTX_AUTO_YT_ON) : GetVString(MSG_CTX_AUTO_YT_OFF)), PMIA_ID, CTX_TOGGLE_AUTO_EXT_YT, PMEND,
                         PMBAR(), PMEND,
                         PMITEM(GetVString(MSG_MENU_CUT)), PMIA_ID, CTX_EDIT_CUT, PMEND,
                         PMITEM(GetVString(MSG_MENU_COPY)), PMIA_ID, CTX_EDIT_COPY, PMEND,
@@ -5279,7 +5276,6 @@ void gui_handle_events(VortexApp *app)
                     menu_obj = PMMENU(hdr_buf),
                         PMA_MenuHandler, &pm_hook,
                         PMITEM(GetVString(MSG_CTX_PLAY_EXTERNAL)), PMIA_ID, CTX_PLAY_EXTERNAL, PMEND,
-                        PMITEM(app->prefs.auto_ext_youtube ? GetVString(MSG_CTX_AUTO_YT_ON) : GetVString(MSG_CTX_AUTO_YT_OFF)), PMIA_ID, CTX_TOGGLE_AUTO_EXT_YT, PMEND,
                         PMBAR(), PMEND,
                         PMITEM(GetVString(MSG_MENU_CUT)), PMIA_ID, CTX_EDIT_CUT, PMEND,
                         PMITEM(GetVString(MSG_MENU_COPY)), PMIA_ID, CTX_EDIT_COPY, PMEND,
@@ -5446,18 +5442,6 @@ void gui_handle_events(VortexApp *app)
                             gui_launch_external_player(app, vurl);
                         }
                     }
-                    break;
-                }
-
-                case CTX_TOGGLE_AUTO_EXT_YT: {
-                    app->prefs.auto_ext_youtube = !app->prefs.auto_ext_youtube;
-                    prefs_save_keep_window_box(app, TRUE);
-                    if (app->connected) {
-                        char epcmd[32];
-                        snprintf(epcmd, sizeof(epcmd), "@EXTPLAY_AUTO:%d", app->prefs.auto_ext_youtube ? 1 : 0);
-                        net_send_url(app, epcmd);
-                    }
-                    app_set_status("%s", app->prefs.auto_ext_youtube ? GetVString(MSG_CTX_AUTO_YT_ON) : GetVString(MSG_CTX_AUTO_YT_OFF));
                     break;
                 }
 
@@ -5633,34 +5617,62 @@ void gui_launch_external_player(VortexApp *app, const char *video_url)
         tpl = "APPDIR:V-MPlayer \"%s\"";
     }
 
-    /* If user kept default APPDIR:V-MPlayer, probe common AmigaOS 4 players as fallbacks */
     char resolved_tpl[300];
     strncpy(resolved_tpl, tpl, sizeof(resolved_tpl) - 1);
     resolved_tpl[sizeof(resolved_tpl) - 1] = '\0';
 
-    if (strncmp(resolved_tpl, "APPDIR:V-MPlayer", 16) == 0) {
-        BPTR lock = IDOS->Lock("APPDIR:V-MPlayer", SHARED_LOCK);
-        if (lock) {
-            IDOS->UnLock(lock);
-        } else {
-            static const char * const fallbacks[] = {
-                "APPDIR:MPlayer",
-                "APPDIR:MickJT-MPlayer",
-                "APPDIR:Emotion",
-                "C:V-MPlayer",
-                "C:MPlayer",
-                NULL
-            };
-            for (int i = 0; fallbacks[i] != NULL; i++) {
-                BPTR flock = IDOS->Lock(fallbacks[i], SHARED_LOCK);
-                if (flock) {
-                    IDOS->UnLock(flock);
-                    snprintf(resolved_tpl, sizeof(resolved_tpl), "%s \"%%s\"", fallbacks[i]);
-                    break;
+    /* Suppress any AmigaDOS volume requester (e.g. if APPDIR: entry points to an old unmounted drive) */
+    APTR old_win = IDOS->SetProcWindow((APTR)-1);
+
+    /* Extract executable token from template to verify it actually exists on disk */
+    char exe_tok[256];
+    const char *p = resolved_tpl;
+    while (*p == ' ' || *p == '\t') p++;
+    size_t ei = 0;
+    if (*p == '"') {
+        p++;
+        while (*p && *p != '"' && ei < sizeof(exe_tok) - 1) exe_tok[ei++] = *p++;
+    } else {
+        while (*p && *p != ' ' && *p != '\t' && ei < sizeof(exe_tok) - 1) exe_tok[ei++] = *p++;
+    }
+    exe_tok[ei] = '\0';
+
+    BPTR lock = exe_tok[0] ? IDOS->Lock(exe_tok, SHARED_LOCK) : 0;
+    if (lock) {
+        IDOS->UnLock(lock);
+    } else {
+        static const char * const fallbacks[] = {
+            "Work2:VideoVortex/Data/V-MPlayer/V-MPlayer",
+            "Work:VideoVortex/Data/V-MPlayer/V-MPlayer",
+            "PROGDIR:../VideoVortex/Data/V-MPlayer/V-MPlayer",
+            "APPDIR:V-MPlayer",
+            "Work2:VideoVortex/Data/playerintern",
+            "Work2:VideoVortex/Data/MPlayer/MPlayer",
+            "APPDIR:MPlayer",
+            "APPDIR:MickJT-MPlayer",
+            "APPDIR:Emotion",
+            "C:V-MPlayer",
+            "C:MPlayer",
+            NULL
+        };
+        for (int i = 0; fallbacks[i] != NULL; i++) {
+            BPTR flock = IDOS->Lock(fallbacks[i], SHARED_LOCK);
+            if (flock) {
+                IDOS->UnLock(flock);
+                snprintf(resolved_tpl, sizeof(resolved_tpl), "%s \"%%s\"", fallbacks[i]);
+                /* Auto-repair stale ENV:AppDir/V-mplayer if we found V-MPlayer on Work2: */
+                if (i == 0) {
+                    FILE *af = fopen("ENV:AppDir/V-mplayer", "w");
+                    if (af) { fputs("WORK2:VideoVortex/Data/V-MPlayer", af); fclose(af); }
+                    FILE *afa = fopen("ENVARC:AppDir/V-mplayer", "w");
+                    if (afa) { fputs("WORK2:VideoVortex/Data/V-MPlayer", afa); fclose(afa); }
                 }
+                break;
             }
         }
     }
+
+    IDOS->SetProcWindow(old_win);
 
     char cmd[2400];
     const char *placeholder = strstr(resolved_tpl, "%s");
@@ -5675,7 +5687,7 @@ void gui_launch_external_player(VortexApp *app, const char *video_url)
         snprintf(cmd, sizeof(cmd), "%s \"%s\"", resolved_tpl, video_url);
     }
 
-    app_set_status("%s: %.96s", GetVString(MSG_STATUS_EXT_PLAYER), video_url);
+    app_set_status(GetVString(MSG_STATUS_EXT_PLAYER), video_url);
 
     BPTR nil_in  = IDOS->Open("NIL:", MODE_OLDFILE);
     BPTR nil_out = IDOS->Open("NIL:", MODE_NEWFILE);
@@ -5683,7 +5695,7 @@ void gui_launch_external_player(VortexApp *app, const char *video_url)
                                 SYS_Asynch,    TRUE,
                                 SYS_Input,     nil_in,
                                 SYS_Output,    nil_out,
-                                NP_StackSize,  524288,
+                                NP_StackSize,  2097152,
                                 TAG_DONE);
     if (rc != 0) {
         if (nil_in)  IDOS->Close(nil_in);
